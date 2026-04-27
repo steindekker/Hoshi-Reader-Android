@@ -63,7 +63,9 @@ git -C third_party/hoshidicts-gplv3 submodule update --init --recursive
 ## 迁移工作流
 
 - 不要尝试一次性把整个 SwiftUI 项目翻译成 Android。
+- 所有用户可见的交互逻辑和 UI 设计都以 iOS 版作为唯一真源。Android 代码、第三方库示例、POC、平台默认行为都不能覆盖 iOS 版行为。
 - 每个功能切片开始时，先查看 `reference/Hoshi-Reader-iOS` 下相关 iOS 文件，再总结行为，然后实现 Android 版本。
+- 如果用户指出 Android 行为或 UI 与 iOS 不一致，不要先写局部兼容代码或猜测性修复；应立即回到 iOS 实现，复刻对应逻辑，或明确找出 Android 当前实现与 iOS 的差异后再改。
 - iOS singleton 和 `@Observable` 只作为行为参考；Android 中应映射为 repository、ViewModel 和不可变 UI state。
 - 按垂直切片推进：model/storage、bookshelf import、reader、dictionary popup、Anki、sync、settings。
 - 不要从完整设置页开始。主路径是 bookshelf -> import EPUB -> open reader -> select text -> lookup。
@@ -71,12 +73,30 @@ git -C third_party/hoshidicts-gplv3 submodule update --init --recursive
 
 ## 阅读器方向
 
-- 在移植 iOS `EPUBKit` 之前，先评估 Readium Kotlin Toolkit 是否适合 EPUB 解析和资源处理。
-- 如果 Readium 与 Hoshi 特定行为冲突，可以让 Readium 负责 EPUB resource/model 处理，再用 Compose + Android WebView 实现 Hoshi 阅读器行为。
+- EPUB 解析优先沿用 `../Hoshi-POC/app/src/main/rust/hoshiepub` 的 Rust/UniFFI 方案；这部分是当前 Android 版对齐 iOS `EPUBKit` 行为的主要基础。
+- 不再优先接入 Readium。Readium 对当前目标过重，并且容易暴露多余能力导致 Android 行为与 iOS 版不一致。
+- 可以借鉴 `../Hoshi-POC` 的 EPUB 解析库和 Rust/UniFFI 构建方式，但不要借鉴它的阅读器 UI/交互实现，原作者已说明那部分不可靠。
+- EPUB parser 对外能力应尽量收敛到 iOS `EPUBKit` 已使用的模型：manifest、spine、toc、章节内容、资源读取、封面路径等。不要为了方便加入搜索、全文索引、额外导航 API 等 iOS 当前没有的能力。
+- Rust/UniFFI 集成时，Android 生成绑定需要 `uniffi.toml` 中的 `[bindings.kotlin] android = true`，JNA 在 Android 打包侧使用 AAR，在 JVM 单测侧需要 jar 运行时。
+- 使用 `cargo-ndk` 构建 Android native library 时只构建库目标，避免把 UniFFI bindgen 这类 host binary 也拿去交叉编译。
+- EPUB 导入应使用 Android Storage Access Framework，把 zip 解压到 app-specific storage 后交给 Rust parser；不要依赖外部存储 file URI 可读性。
 - Android WebView 可通过 Compose `AndroidView` 嵌入。
 - 本地章节内容优先使用 `WebViewAssetLoader` 或 `loadDataWithBaseURL()`。
 - 不要为了省事启用宽泛的 file URL 访问，例如 `allowUniversalAccessFromFileURLs`。
 - 阅读器实现必须考虑日文竖排、自定义 CSS、字体/主题变化、进度恢复、文本选择、高亮和辞典弹窗定位。
+- 阅读器渲染必须保留 WebView，因为后续查词依赖 WebView 和 JavaScript 侧选择、坐标、DOM 逻辑。
+- 翻页交互以 iOS `ReaderWebView` / `reader.js` 行为为准：页内翻页由 WebView 内 JS 滚动完成，只有到章节边界后才切换章节；反向跨章节时应进入上一章末尾，而不是上一章开头。
+- 竖排分页需要特别关注 Android WebView 与 WKWebView 的差异。图片页应使用稳定的 CSS 尺寸约束，必要时对基于页面宽高计算出的 CSS 变量取整，避免 fractional column overflow 导致章节末尾多出空白页。
+
+## 阅读器调试经验
+
+- 修复阅读器问题前，先查看 iOS 参考实现：`reference/Hoshi-Reader-iOS/Features/Reader/ReaderWebView/ReaderWebView.swift` 和对应的 reader JavaScript/CSS。不要每遇到一个症状就堆单点兼容逻辑；除非已经证明 iOS 行为在 Android WebView 上无法直接复刻，否则修复方向应是消除与 iOS 实现的差异。
+- 排查“滑动直接换章节”时，先确认 WebView 内 `scrollTop` / `scrollHeight` / `clientHeight` 是否真的还能继续页内滚动；如果还能滚动却切章节，说明 native 手势和 JS 分页边界判断不一致。
+- 排查“往后跨章节多出空白页”时，重点看当前章节末尾的 `scrollHeight` 是否比整页高度多出极小尾差，图片、封面、spacer、column gap 都可能触发 Android WebView 额外生成一页。
+- 图片渲染异常不要只看是否加载成功，还要检查竖排列宽下的 `max-width` / `max-height` / `object-fit` / physical size 是否会撑出额外 column。
+- 使用模拟器验证 EPUB 导入时，优先通过系统文件选择器选择 `test.epub`。直接 `file:///sdcard/...` 或 shell 拼出的 `content://` grant 不能代表真实 SAF 导入路径，容易被 Android 权限模型拦住。
+- 手工验证阅读器时，至少覆盖：封面图片页、包含多张图的图版页、长文本章节页内翻页、章节末尾往后翻、章节开头往前翻、反向跨章节落点。
+- 调试 WebView 分页可用 Chrome DevTools Protocol 或 WebView inspection 读取当前 DOM 状态，记录章节 id、`scrollTop`、`scrollHeight`、`clientHeight`，不要只凭截图判断。
 
 ## 集成注意事项
 
