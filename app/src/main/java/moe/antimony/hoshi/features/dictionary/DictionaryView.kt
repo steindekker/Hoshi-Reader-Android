@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -22,7 +23,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -44,15 +46,22 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -149,6 +158,64 @@ fun DictionaryView(
     }
 
     val currentDictionaries = dictionaries[selectedType].orEmpty()
+    val listState = rememberLazyListState()
+    var draggedFileName by remember { mutableStateOf<String?>(null) }
+    var dragStartIndex by remember { mutableIntStateOf(-1) }
+    var dragStartTop by remember { mutableFloatStateOf(0f) }
+    var dragStartHeight by remember { mutableFloatStateOf(0f) }
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    val dictionaryStartGlobalIndex = 1 + if (errorMessage != null) 1 else 0
+    val dragTargetIndex by remember(
+        listState,
+        currentDictionaries,
+        dictionaryStartGlobalIndex,
+        dragStartIndex,
+        dragStartTop,
+        dragStartHeight,
+        dragOffsetY,
+    ) {
+        derivedStateOf {
+            if (dragStartIndex !in currentDictionaries.indices) {
+                dragStartIndex
+            } else {
+                val visibleRows = listState.layoutInfo.visibleItemsInfo.mapNotNull { item ->
+                    val dictionaryIndex = item.index - dictionaryStartGlobalIndex
+                    if (dictionaryIndex in currentDictionaries.indices) {
+                        DictionaryDragReorder.RowBounds(
+                            index = dictionaryIndex,
+                            top = item.offset.toFloat(),
+                            bottom = (item.offset + item.size).toFloat(),
+                        )
+                    } else {
+                        null
+                    }
+                }
+                DictionaryDragReorder.targetIndex(
+                    startIndex = dragStartIndex,
+                    draggedCenterY = dragStartTop + dragStartHeight / 2f + dragOffsetY,
+                    visibleRows = visibleRows,
+                )
+            }
+        }
+    }
+
+    fun resetDrag() {
+        draggedFileName = null
+        dragStartIndex = -1
+        dragStartTop = 0f
+        dragStartHeight = 0f
+        dragOffsetY = 0f
+    }
+
+    fun startDrag(index: Int, fileName: String) {
+        val globalIndex = dictionaryStartGlobalIndex + index
+        val item = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == globalIndex } ?: return
+        draggedFileName = fileName
+        dragStartIndex = index
+        dragStartTop = item.offset.toFloat()
+        dragStartHeight = item.size.toFloat()
+        dragOffsetY = 0f
+    }
 
     LaunchedEffect(Unit) {
         reload()
@@ -226,6 +293,7 @@ fun DictionaryView(
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
+                state = listState,
             ) {
                 item {
                     Column(
@@ -294,19 +362,34 @@ fun DictionaryView(
                         }
                     }
                 } else {
-                    items(
+                    itemsIndexed(
                         items = currentDictionaries,
-                        key = { it.path.name },
-                    ) { dictionary ->
-                        val index = currentDictionaries.indexOfFirst { it.path.name == dictionary.path.name }
+                        key = { _, dictionary -> dictionary.path.name },
+                    ) { index, dictionary ->
+                        val isDragging = draggedFileName == dictionary.path.name
                         DictionaryRow(
                             dictionary = dictionary,
                             onEnabledChange = { setDictionaryEnabled(dictionary, it) },
                             onDelete = { deleteDictionary(dictionary) },
-                            canMoveUp = index > 0,
-                            canMoveDown = index in 0 until currentDictionaries.lastIndex,
-                            onMoveUp = { moveDictionary(index, index - 1) },
-                            onMoveDown = { moveDictionary(index, index + 1) },
+                            modifier = Modifier
+                                .zIndex(if (isDragging) 1f else 0f)
+                                .graphicsLayer {
+                                    translationY = if (isDragging) dragOffsetY else 0f
+                                    shadowElevation = if (isDragging) 16f else 0f
+                                },
+                            onDragStart = { startDrag(index, dictionary.path.name) },
+                            onDrag = { delta ->
+                                dragOffsetY += delta
+                            },
+                            onDragEnd = {
+                                if (dragStartIndex in currentDictionaries.indices &&
+                                    dragTargetIndex in currentDictionaries.indices &&
+                                    dragTargetIndex != dragStartIndex
+                                ) {
+                                    moveDictionary(dragStartIndex, dragTargetIndex)
+                                }
+                                resetDrag()
+                            },
                         )
                     }
                 }
@@ -349,10 +432,10 @@ private fun DictionaryRow(
     dictionary: DictionaryInfo,
     onEnabledChange: (Boolean) -> Unit,
     onDelete: () -> Unit,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
+    modifier: Modifier = Modifier,
+    onDragStart: () -> Unit,
+    onDrag: (Float) -> Unit,
+    onDragEnd: () -> Unit,
 ) {
     val dismissState = rememberSwipeToDismissBoxState()
 
@@ -365,6 +448,7 @@ private fun DictionaryRow(
     SwipeToDismissBox(
         state = dismissState,
         enableDismissFromStartToEnd = false,
+        modifier = modifier,
         backgroundContent = {
             Box(
                 modifier = Modifier
@@ -379,30 +463,23 @@ private fun DictionaryRow(
         },
     ) {
         ListItem(
+            modifier = Modifier.pointerInput(dictionary.path.name) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { _: Offset -> onDragStart() },
+                    onDragCancel = onDragEnd,
+                    onDragEnd = onDragEnd,
+                    onDrag = { _, dragAmount ->
+                        onDrag(dragAmount.y)
+                    },
+                )
+            },
             headlineContent = { Text(dictionary.index.title) },
             supportingContent = { Text(dictionary.index.revision) },
             trailingContent = {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TextButton(
-                        onClick = onMoveUp,
-                        enabled = canMoveUp,
-                    ) {
-                        Text("↑")
-                    }
-                    TextButton(
-                        onClick = onMoveDown,
-                        enabled = canMoveDown,
-                    ) {
-                        Text("↓")
-                    }
-                    Switch(
-                        checked = dictionary.isEnabled,
-                        onCheckedChange = onEnabledChange,
-                    )
-                }
+                Switch(
+                    checked = dictionary.isEnabled,
+                    onCheckedChange = onEnabledChange,
+                )
             },
         )
     }
