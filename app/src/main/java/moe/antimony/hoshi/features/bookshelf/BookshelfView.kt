@@ -325,6 +325,7 @@ fun BookshelfView(
                 onDeleteCandidate = { deleteCandidate = it },
             )
             MainTab.Dictionary -> DictionarySearchView(
+                readerSettings = readerSettings,
                 modifier = contentModifier.fillMaxSize(),
             )
             MainTab.Settings -> SettingsTab(

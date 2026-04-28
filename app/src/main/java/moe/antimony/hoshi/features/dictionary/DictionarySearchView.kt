@@ -55,6 +55,7 @@ import moe.antimony.hoshi.features.audio.AudioSettings
 import moe.antimony.hoshi.features.audio.AudioSettingsStore
 import moe.antimony.hoshi.features.audio.LocalAudioRepository
 import moe.antimony.hoshi.features.audio.WordAudioPlayer
+import moe.antimony.hoshi.features.reader.ReaderSettings
 
 private const val DictionarySearchTopSpacerPx = 118
 private const val DictionaryPopupTopInset = 118.0
@@ -112,8 +113,28 @@ internal object DictionarySearchContent {
     }
 }
 
+internal fun dictionarySearchPopupOptions(
+    readerSettings: ReaderSettings,
+    dictionarySettings: DictionarySettings,
+    darkMode: Boolean,
+    audioSettings: AudioSettings,
+): LookupPopupOptions = LookupPopupOptions(
+    isVertical = false,
+    isFullWidth = false,
+    width = readerSettings.popupWidth,
+    height = readerSettings.popupHeight,
+    swipeToDismiss = readerSettings.popupSwipeToDismiss,
+    swipeThreshold = readerSettings.popupSwipeThreshold,
+    topInset = DictionaryPopupTopInset,
+    bottomInset = DictionaryPopupBottomInset,
+    dictionarySettings = dictionarySettings,
+    darkMode = darkMode,
+    audioSettings = audioSettings,
+)
+
 @Composable
 fun DictionarySearchView(
+    readerSettings: ReaderSettings,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -132,10 +153,8 @@ fun DictionarySearchView(
     var audioSettings by remember { mutableStateOf(audioSettingsStore.load()) }
     var popups by remember { mutableStateOf<List<LookupPopupItem>>(emptyList()) }
     val popupDarkMode = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val popupOptions = LookupPopupOptions(
-        isVertical = false,
-        topInset = DictionaryPopupTopInset,
-        bottomInset = DictionaryPopupBottomInset,
+    val popupOptions = dictionarySearchPopupOptions(
+        readerSettings = readerSettings,
         dictionarySettings = dictionarySettings,
         darkMode = popupDarkMode,
         audioSettings = audioSettings,
