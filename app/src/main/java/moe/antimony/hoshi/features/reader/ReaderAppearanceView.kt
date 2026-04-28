@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenu
@@ -30,10 +32,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonColors
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
@@ -41,7 +45,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +58,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -68,6 +75,7 @@ internal fun ReaderAppearanceScreen(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val palette = appearancePalette(settings)
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -81,9 +89,14 @@ internal fun ReaderAppearanceScreen(
                         )
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = palette.background,
+                    titleContentColor = palette.onBackground,
+                    navigationIconContentColor = palette.onBackground,
+                ),
             )
         },
-        containerColor = appearanceBackground(settings),
+        containerColor = palette.background,
     ) { padding ->
         ReaderAppearanceContent(
             settings = settings,
@@ -108,9 +121,14 @@ internal fun ReaderAppearanceSheet(
     fontManager: ReaderFontManager,
     onDismiss: () -> Unit,
 ) {
+    val palette = appearancePalette(settings)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = appearanceBackground(settings),
+        containerColor = palette.background,
+        contentColor = palette.onBackground,
+        dragHandle = {
+            BottomSheetDefaults.DragHandle(color = palette.onMuted)
+        },
     ) {
         ReaderAppearanceContent(
             settings = settings,
@@ -160,39 +178,42 @@ private fun ReaderAppearanceContent(
             .filter { it.isNotBlank() }
             .distinct()
     }
-    val groupColor = appearanceGroupColor(settings)
+    val palette = appearancePalette(settings)
 
-    LazyColumn(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(appearanceBackground(settings)),
-        contentPadding = contentPadding,
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        item {
-            Text(
-                text = "Appearance",
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
-            )
-        }
-        item {
-            AppearanceSection(title = "Theme", color = groupColor) {
-                SegmentedRow(
-                    label = "Appearance",
-                    options = ReaderTheme.entries.map { it.label },
-                    selected = settings.theme.label,
-                    onSelected = { label ->
-                        ReaderTheme.entries.firstOrNull { it.label == label }?.let {
-                            onSettingsChange(settings.copy(theme = it))
-                        }
-                    },
+    CompositionLocalProvider(LocalContentColor provides palette.onBackground) {
+        LazyColumn(
+            modifier = modifier
+                .fillMaxWidth()
+                .background(palette.background),
+            contentPadding = contentPadding,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            item {
+                Text(
+                    text = "Appearance",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = palette.onBackground,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
                 )
             }
-        }
-        item {
-            AppearanceSection(title = "Text", color = groupColor) {
+            item {
+                AppearanceSection(title = "Theme", palette = palette) {
+                    SegmentedRow(
+                        label = "Appearance",
+                        options = ReaderTheme.entries.map { it.label },
+                        selected = settings.theme.label,
+                        onSelected = { label ->
+                            ReaderTheme.entries.firstOrNull { it.label == label }?.let {
+                                onSettingsChange(settings.copy(theme = it))
+                            }
+                        },
+                        palette = palette,
+                    )
+                }
+            }
+            item {
+                AppearanceSection(title = "Text", palette = palette) {
                 SegmentedRow(
                     label = "Text Orientation",
                     options = listOf("縦", "横"),
@@ -200,8 +221,9 @@ private fun ReaderAppearanceContent(
                     onSelected = { label ->
                         onSettingsChange(settings.copy(verticalWriting = label == "縦"))
                     },
+                    palette = palette,
                 )
-                AppearanceDivider()
+                AppearanceDivider(palette)
                 ReaderFontRow(
                     settings = settings,
                     fontOptions = fontOptions,
@@ -214,21 +236,22 @@ private fun ReaderAppearanceContent(
                     canDeleteFont = !fontManager.isDefaultFont(settings.selectedFont),
                     onDeleteFont = { fontToDelete = settings.selectedFont },
                 )
-                AppearanceDivider()
+                AppearanceDivider(palette)
                 ActionRow(
                     label = "Import Font",
                     button = if (isImportingFont) "Importing..." else "Import",
                     enabled = !isImportingFont,
                     onClick = { fontImporter.launch(fontMimeTypes) },
                 )
-                AppearanceDivider()
+                AppearanceDivider(palette)
                 StepperRow(
                     label = "Font Size",
                     value = settings.fontSize.toString(),
                     onDecrease = { onSettingsChange(settings.copy(fontSize = (settings.fontSize - 1).coerceAtLeast(16))) },
                     onIncrease = { onSettingsChange(settings.copy(fontSize = (settings.fontSize + 1).coerceAtMost(40))) },
+                    palette = palette,
                 )
-                AppearanceDivider()
+                AppearanceDivider(palette)
                 SwitchRow(
                     label = "Hide Furigana",
                     checked = settings.hideFurigana,
@@ -237,40 +260,42 @@ private fun ReaderAppearanceContent(
             }
         }
         item {
-            AppearanceSection(title = "Layout", color = groupColor) {
+            AppearanceSection(title = "Layout", palette = palette) {
                 StepperRow(
                     label = "Horizontal Padding",
                     value = "${settings.horizontalPadding}%",
                     onDecrease = { onSettingsChange(settings.copy(horizontalPadding = (settings.horizontalPadding - 1).coerceAtLeast(0))) },
                     onIncrease = { onSettingsChange(settings.copy(horizontalPadding = (settings.horizontalPadding + 1).coerceAtMost(50))) },
+                    palette = palette,
                 )
-                AppearanceDivider()
+                AppearanceDivider(palette)
                 StepperRow(
                     label = "Vertical Padding",
                     value = "${settings.verticalPadding}%",
                     onDecrease = { onSettingsChange(settings.copy(verticalPadding = (settings.verticalPadding - 1).coerceAtLeast(0))) },
                     onIncrease = { onSettingsChange(settings.copy(verticalPadding = (settings.verticalPadding + 1).coerceAtMost(50))) },
+                    palette = palette,
                 )
-                AppearanceDivider()
+                AppearanceDivider(palette)
                 SwitchRow(
                     label = "Avoid Page Break",
                     checked = settings.avoidPageBreak,
                     onCheckedChange = { onSettingsChange(settings.copy(avoidPageBreak = it)) },
                 )
-                AppearanceDivider()
+                AppearanceDivider(palette)
                 SwitchRow(
                     label = "Justify Text",
                     checked = settings.justifyText,
                     onCheckedChange = { onSettingsChange(settings.copy(justifyText = it)) },
                 )
-                AppearanceDivider()
+                AppearanceDivider(palette)
                 SwitchRow(
                     label = "Advanced",
                     checked = settings.layoutAdvanced,
                     onCheckedChange = { onSettingsChange(settings.copy(layoutAdvanced = it)) },
                 )
                 if (settings.layoutAdvanced) {
-                    AppearanceDivider()
+                    AppearanceDivider(palette)
                     SliderRow(
                         label = "Line Height",
                         value = String.format(Locale.US, "%.2f", settings.lineHeight),
@@ -281,7 +306,7 @@ private fun ReaderAppearanceContent(
                             onSettingsChange(settings.copy(lineHeight = round(value * 20) / 20.0))
                         },
                     )
-                    AppearanceDivider()
+                    AppearanceDivider(palette)
                     SliderRow(
                         label = "Character Spacing",
                         value = "${settings.characterSpacing.toInt()}%",
@@ -296,37 +321,38 @@ private fun ReaderAppearanceContent(
             }
         }
         item {
-            AppearanceSection(title = "Display", color = groupColor) {
+            AppearanceSection(title = "Display", palette = palette) {
                 SwitchRow(
                     label = "Show Title",
                     checked = settings.showTitle,
                     onCheckedChange = { onSettingsChange(settings.copy(showTitle = it)) },
                 )
-                AppearanceDivider()
+                AppearanceDivider(palette)
                 SwitchRow(
                     label = "Show Character Count",
                     checked = settings.showCharacters,
                     onCheckedChange = { onSettingsChange(settings.copy(showCharacters = it)) },
                 )
-                AppearanceDivider()
+                AppearanceDivider(palette)
                 SwitchRow(
                     label = "Show Percentage",
                     checked = settings.showPercentage,
                     onCheckedChange = { onSettingsChange(settings.copy(showPercentage = it)) },
                 )
                 if (settings.showCharacters || settings.showPercentage) {
-                    AppearanceDivider()
+                    AppearanceDivider(palette)
                     SegmentedRow(
                         label = "Progress Position",
                         options = listOf("Top", "Bottom"),
                         selected = if (settings.showProgressTop) "Top" else "Bottom",
                         onSelected = { label -> onSettingsChange(settings.copy(showProgressTop = label == "Top")) },
+                        palette = palette,
                     )
                 }
             }
         }
         item {
-            AppearanceSection(title = "Popup", color = groupColor) {
+            AppearanceSection(title = "Popup", palette = palette) {
                 SliderRow(
                     label = "Width",
                     value = settings.popupWidth.toString(),
@@ -337,7 +363,7 @@ private fun ReaderAppearanceContent(
                         onSettingsChange(settings.copy(popupWidth = (round(value / 10) * 10).toInt()))
                     },
                 )
-                AppearanceDivider()
+                AppearanceDivider(palette)
                 SliderRow(
                     label = "Height",
                     value = settings.popupHeight.toString(),
@@ -348,20 +374,20 @@ private fun ReaderAppearanceContent(
                         onSettingsChange(settings.copy(popupHeight = (round(value / 10) * 10).toInt()))
                     },
                 )
-                AppearanceDivider()
+                AppearanceDivider(palette)
                 SwitchRow(
                     label = "Full-width",
                     checked = settings.popupFullWidth,
                     onCheckedChange = { onSettingsChange(settings.copy(popupFullWidth = it)) },
                 )
-                AppearanceDivider()
+                AppearanceDivider(palette)
                 SwitchRow(
                     label = "Swipe to Dismiss",
                     checked = settings.popupSwipeToDismiss,
                     onCheckedChange = { onSettingsChange(settings.copy(popupSwipeToDismiss = it)) },
                 )
                 if (settings.popupSwipeToDismiss) {
-                    AppearanceDivider()
+                    AppearanceDivider(palette)
                     SliderRow(
                         label = "Swipe Threshold",
                         value = settings.popupSwipeThreshold.toString(),
@@ -375,13 +401,14 @@ private fun ReaderAppearanceContent(
                 }
             }
         }
-        if (showDone) {
-            item {
-                Button(
-                    onClick = onDone,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Done")
+            if (showDone) {
+                item {
+                    Button(
+                        onClick = onDone,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Done")
+                    }
                 }
             }
         }
@@ -425,7 +452,7 @@ private val fontMimeTypes = arrayOf(
 @Composable
 private fun AppearanceSection(
     title: String,
-    color: Color,
+    palette: AppearancePalette,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -433,13 +460,14 @@ private fun AppearanceSection(
             text = title,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = palette.onMuted,
             modifier = Modifier.padding(start = 12.dp),
         )
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(28.dp),
-            color = color,
+            color = palette.group,
+            contentColor = palette.onGroup,
             tonalElevation = 1.dp,
         ) {
             Column(content = content)
@@ -453,25 +481,48 @@ private fun SegmentedRow(
     options: List<String>,
     selected: String,
     onSelected: (String) -> Unit,
+    palette: AppearancePalette,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, style = MaterialTheme.typography.bodyLarge)
-        SingleChoiceSegmentedButtonRow {
+    val controls = @Composable {
+        SingleChoiceSegmentedButtonRow(
+            modifier = if (options.size <= 2) Modifier.width((options.size * 64).dp) else Modifier.fillMaxWidth(),
+        ) {
             options.forEachIndexed { index, option ->
                 SegmentedButton(
                     selected = option == selected,
                     onClick = { onSelected(option) },
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                    colors = segmentedButtonColors(palette),
                 ) {
-                    Text(option)
+                    Text(
+                        text = option,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
+        }
+    }
+    if (options.size > 2) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            controls()
+        }
+    } else {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            controls()
         }
     }
 }
@@ -592,6 +643,7 @@ private fun StepperRow(
     value: String,
     onDecrease: () -> Unit,
     onIncrease: () -> Unit,
+    palette: AppearancePalette,
 ) {
     Row(
         modifier = Modifier
@@ -608,7 +660,8 @@ private fun StepperRow(
             Text(value, style = MaterialTheme.typography.bodyLarge)
             Surface(
                 shape = RoundedCornerShape(24.dp),
-                color = Color(0xFFE2E1E7),
+                color = palette.stepperContainer,
+                contentColor = palette.onGroup,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDecrease) {
@@ -620,7 +673,7 @@ private fun StepperRow(
                     Box(
                         modifier = Modifier
                             .size(width = 1.dp, height = 28.dp)
-                            .background(Color(0xFF7D7A85).copy(alpha = 0.35f)),
+                            .background(palette.stepperDivider),
                     )
                     IconButton(onClick = onIncrease) {
                         Icon(
@@ -635,23 +688,74 @@ private fun StepperRow(
 }
 
 @Composable
-private fun AppearanceDivider() {
+private fun AppearanceDivider(palette: AppearancePalette) {
     HorizontalDivider(
         modifier = Modifier.padding(horizontal = 20.dp),
-        color = Color(0xFFE4E2E8),
+        color = palette.divider,
     )
 }
 
 @Composable
-private fun appearanceBackground(settings: ReaderSettings): Color = when (settings.theme) {
-    ReaderTheme.Dark -> Color(0xFF1E1E1E)
-    ReaderTheme.Sepia -> Color(0xFFF6EBD8)
-    ReaderTheme.Light, ReaderTheme.System -> Color(0xFFF7F6FA)
-}
+private fun segmentedButtonColors(palette: AppearancePalette): SegmentedButtonColors =
+    SegmentedButtonDefaults.colors(
+        activeContainerColor = palette.segmentSelected,
+        activeContentColor = palette.onGroup,
+        inactiveContainerColor = Color.Transparent,
+        inactiveContentColor = palette.onGroup,
+        activeBorderColor = palette.segmentBorder,
+        inactiveBorderColor = palette.segmentBorder,
+    )
 
-@Composable
-private fun appearanceGroupColor(settings: ReaderSettings): Color = when (settings.theme) {
-    ReaderTheme.Dark -> Color(0xFF2A2A2A)
-    ReaderTheme.Sepia -> Color(0xFFFFF8EC)
-    ReaderTheme.Light, ReaderTheme.System -> Color.White
+private data class AppearancePalette(
+    val background: Color,
+    val group: Color,
+    val onBackground: Color,
+    val onGroup: Color,
+    val onMuted: Color,
+    val divider: Color,
+    val stepperContainer: Color,
+    val stepperDivider: Color,
+    val segmentSelected: Color,
+    val segmentBorder: Color,
+)
+
+private fun appearancePalette(settings: ReaderSettings): AppearancePalette = when (settings.theme) {
+    ReaderTheme.Dark -> AppearancePalette(
+        background = Color(0xFF121212),
+        group = Color(0xFF242424),
+        onBackground = Color(0xFFF4F1EA),
+        onGroup = Color(0xFFF4F1EA),
+        onMuted = Color(0xFFAAA6A0),
+        divider = Color(0xFF3A3A3A),
+        stepperContainer = Color(0xFF383838),
+        stepperDivider = Color(0xFF666666),
+        segmentSelected = Color(0xFF3A3A3A),
+        segmentBorder = Color(0xFF888888),
+    )
+
+    ReaderTheme.Sepia -> AppearancePalette(
+        background = Color(0xFFF6EBD8),
+        group = Color(0xFFFFF8EC),
+        onBackground = Color(0xFF2E2618),
+        onGroup = Color(0xFF2E2618),
+        onMuted = Color(0xFF8A7D67),
+        divider = Color(0xFFE6D8BE),
+        stepperContainer = Color(0xFFE9D9BC),
+        stepperDivider = Color(0xFF9A8A70),
+        segmentSelected = Color(0xFFE9D9BC),
+        segmentBorder = Color(0xFF8A8173),
+    )
+
+    ReaderTheme.Light, ReaderTheme.System -> AppearancePalette(
+        background = Color(0xFFF7F6FA),
+        group = Color.White,
+        onBackground = Color(0xFF111111),
+        onGroup = Color(0xFF303038),
+        onMuted = Color(0xFF67646F),
+        divider = Color(0xFFE4E2E8),
+        stepperContainer = Color(0xFFE2E1E7),
+        stepperDivider = Color(0xFF9B98A2),
+        segmentSelected = Color(0xFFE2E7F7),
+        segmentBorder = Color(0xFF7B7D88),
+    )
 }
