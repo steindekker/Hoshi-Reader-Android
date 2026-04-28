@@ -1,27 +1,25 @@
 package moe.antimony.hoshi.features.dictionary
 
+import android.annotation.SuppressLint
+import android.view.MotionEvent
+import android.webkit.WebView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import de.manhhao.hoshi.LookupResult
 import moe.antimony.hoshi.features.reader.ReaderSelectionData
 
@@ -37,6 +35,7 @@ fun LookupPopupView(
     modifier: Modifier = Modifier,
 ) {
     if (state.results.isEmpty()) return
+    val html = remember(state.results) { LookupPopupHtml.render(state.results) }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val frame = LookupPopupLayout(
@@ -60,36 +59,71 @@ fun LookupPopupView(
             tonalElevation = 8.dp,
             shadowElevation = 8.dp,
         ) {
-            Column(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .verticalScroll(rememberScrollState())
-                    .padding(12.dp),
-            ) {
-                state.results.take(3).forEach { result ->
-                    Text(
-                        text = result.term.expression,
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    if (result.term.reading.isNotBlank() && result.term.reading != result.term.expression) {
-                        Text(
-                            text = result.term.reading,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    result.term.glossaries.take(4).forEach { glossary ->
-                        Text(
-                            text = glossary.glossary,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 6.dp),
-                        )
-                    }
-                    Box(Modifier.height(10.dp))
+            LookupPopupWebView(
+                html = html,
+                onSwipeDismiss = onSwipeDismiss,
+            )
+        }
+    }
+}
+
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun LookupPopupWebView(
+    html: String,
+    onSwipeDismiss: () -> Unit,
+) {
+    AndroidView(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Transparent),
+        factory = { context ->
+            WebView(context).apply {
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = false
+                settings.allowFileAccess = false
+                settings.allowContentAccess = false
+                isVerticalScrollBarEnabled = false
+                isHorizontalScrollBarEnabled = false
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                setOnTouchListener(PopupWebViewSwipeListener(onSwipeDismiss))
+            }
+        },
+        update = { webView ->
+            webView.loadDataWithBaseURL(
+                "https://hoshi.local/popup/",
+                html,
+                "text/html",
+                "UTF-8",
+                null,
+            )
+        },
+    )
+}
+
+private class PopupWebViewSwipeListener(
+    private val onSwipeDismiss: () -> Unit,
+) : android.view.View.OnTouchListener {
+    private var startX = 0f
+    private var startY = 0f
+
+    override fun onTouch(view: android.view.View, event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                startX = event.x
+                startY = event.y
+            }
+            MotionEvent.ACTION_UP -> {
+                val dx = event.x - startX
+                val dy = event.y - startY
+                if (kotlin.math.abs(dx) > POPUP_SWIPE_DISMISS_THRESHOLD_PX &&
+                    kotlin.math.abs(dy) < POPUP_SWIPE_VERTICAL_SLOP_PX
+                ) {
+                    onSwipeDismiss()
                 }
             }
         }
+        return false
     }
 }
 
