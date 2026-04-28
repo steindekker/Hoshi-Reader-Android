@@ -1,5 +1,6 @@
 package moe.antimony.hoshi.features.dictionary
 
+import moe.antimony.hoshi.features.reader.ReaderSelectionData
 import moe.antimony.hoshi.features.reader.ReaderSelectionRect
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -70,5 +71,26 @@ class LookupPopupTest {
         assertFalse(isPopupSwipeDismissTriggered(enabled = false, threshold = 40f, dx = 120f, dy = 0f))
         assertFalse(isPopupSwipeDismissTriggered(enabled = true, threshold = 40f, dx = 120f, dy = 60f))
         assertTrue(isPopupSwipeDismissTriggered(enabled = true, threshold = 40f, dx = 120f, dy = 0f))
+    }
+
+    @Test
+    fun dismissPopupAtClosesTheSelectedPopupAndItsChildren() {
+        val popups = listOf("root", "child", "grandchild").map { id ->
+            LookupPopupItem(
+                id = id,
+                state = LookupPopupState(
+                    selection = ReaderSelectionData(
+                        text = id,
+                        sentence = id,
+                        rect = ReaderSelectionRect(x = 0.0, y = 0.0, width = 1.0, height = 1.0),
+                        normalizedOffset = null,
+                    ),
+                    results = emptyList(),
+                ),
+            )
+        }
+
+        assertEquals(listOf("root"), dismissPopupAt(popups, 1).map { it.id })
+        assertEquals(emptyList<String>(), dismissPopupAt(popups, 0).map { it.id })
     }
 }

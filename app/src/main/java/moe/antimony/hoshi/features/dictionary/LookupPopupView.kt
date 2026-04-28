@@ -19,14 +19,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.zIndex
 import de.manhhao.hoshi.LookupResult
 import moe.antimony.hoshi.features.reader.ReaderSelectionData
-import kotlin.math.roundToInt
 
 data class LookupPopupState(
     val selection: ReaderSelectionData,
@@ -76,7 +73,6 @@ fun LookupPopupView(
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val density = LocalDensity.current
         val frame = LookupPopupLayout(
             selectionRect = state.selection.rect,
             screenWidth = maxWidth.value.toDouble(),
@@ -90,45 +86,36 @@ fun LookupPopupView(
         ).calculate()
         val frameX = frame.centerX - frame.width / 2
         val frameY = frame.centerY - frame.height / 2
-        Popup(
-            offset = with(density) {
-                androidx.compose.ui.unit.IntOffset(
-                    x = frameX.dp.toPx().roundToInt(),
-                    y = frameY.dp.toPx().roundToInt(),
+        Surface(
+            modifier = Modifier
+                .absoluteOffset(
+                    x = frameX.dp,
+                    y = frameY.dp,
                 )
-            },
-            properties = PopupProperties(
-                focusable = true,
-                dismissOnBackPress = false,
-                dismissOnClickOutside = false,
-            ),
+                .width(frame.width.dp)
+                .height(frame.height.dp)
+                .zIndex(2f)
+                .popupSwipeDismiss(
+                    enabled = state.swipeToDismiss,
+                    threshold = state.swipeThreshold.toFloat(),
+                    onSwipeDismiss = onSwipeDismiss,
+                ),
+            shape = RoundedCornerShape(8.dp),
+            tonalElevation = 8.dp,
+            shadowElevation = 8.dp,
         ) {
-            Surface(
-                modifier = Modifier
-                    .width(frame.width.dp)
-                    .height(frame.height.dp)
-                    .popupSwipeDismiss(
-                        enabled = state.swipeToDismiss,
-                        threshold = state.swipeThreshold.toFloat(),
-                        onSwipeDismiss = onSwipeDismiss,
-                    ),
-                shape = RoundedCornerShape(8.dp),
-                tonalElevation = 8.dp,
-                shadowElevation = 8.dp,
-            ) {
-                LookupPopupWebView(
-                    html = html,
-                    selectionOffsetX = frameX,
-                    selectionOffsetY = frameY,
-                    swipeToDismiss = state.swipeToDismiss,
-                    swipeThreshold = state.swipeThreshold.toFloat(),
-                    callbacks = PopupWebViewCallbacks(
-                        onTapOutside = onTapOutside,
-                        onSwipeDismiss = onSwipeDismiss,
-                        onTextSelected = onTextSelected,
-                    ),
-                )
-            }
+            LookupPopupWebView(
+                html = html,
+                selectionOffsetX = frameX,
+                selectionOffsetY = frameY,
+                swipeToDismiss = state.swipeToDismiss,
+                swipeThreshold = state.swipeThreshold.toFloat(),
+                callbacks = PopupWebViewCallbacks(
+                    onTapOutside = onTapOutside,
+                    onSwipeDismiss = onSwipeDismiss,
+                    onTextSelected = onTextSelected,
+                ),
+            )
         }
     }
 }

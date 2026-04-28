@@ -1,8 +1,10 @@
 package moe.antimony.hoshi.features.dictionary
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import moe.antimony.hoshi.dictionary.LookupEngine
 import moe.antimony.hoshi.features.reader.ReaderSelectionData
 import java.util.UUID
@@ -94,7 +96,9 @@ internal fun LookupPopupStackView(
                         highlightCount
                     }
                 },
-                modifier = modifier,
+                modifier = modifier
+                    .fillMaxSize()
+                    .zIndex(2f + index),
             )
         }
     }
