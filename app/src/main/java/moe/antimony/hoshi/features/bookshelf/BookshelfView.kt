@@ -53,7 +53,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -383,11 +382,6 @@ private fun BooksTab(
     val sections = remember(bookEntries) { bookshelfSections(bookEntries) }
 
     Box(modifier = modifier.fillMaxSize()) {
-        BooksBackdrop(
-            bookEntries = bookEntries,
-            bookStorage = bookStorage,
-            modifier = Modifier.align(Alignment.TopCenter),
-        )
         when {
             isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
@@ -452,7 +446,6 @@ private fun BooksTab(
         BooksTopChrome(
             sortOption = sortOption,
             sortMenuExpanded = sortMenuExpanded,
-            hasBackdrop = bookEntries.isNotEmpty(),
             onSortMenuExpandedChange = onSortMenuExpandedChange,
             onSortChange = onSortChange,
             onImport = onImport,
@@ -465,7 +458,6 @@ private fun BooksTab(
 private fun BooksTopChrome(
     sortOption: BookSortOption,
     sortMenuExpanded: Boolean,
-    hasBackdrop: Boolean,
     onSortMenuExpandedChange: (Boolean) -> Unit,
     onSortChange: (BookSortOption) -> Unit,
     onImport: () -> Unit,
@@ -505,7 +497,7 @@ private fun BooksTopChrome(
         Text(
             text = "Books",
             style = MaterialTheme.typography.headlineSmall,
-            color = if (hasBackdrop) Color.White else Color.Black,
+            color = Color.Black,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(top = 8.dp),
         )
@@ -518,52 +510,6 @@ private fun BooksTopChrome(
             PlusGlyph()
         }
     }
-}
-
-@Composable
-private fun BooksBackdrop(
-    bookEntries: List<BookEntry>,
-    bookStorage: BookStorage,
-    modifier: Modifier = Modifier,
-) {
-    if (bookEntries.isEmpty()) return
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(152.dp)
-            .blur(12.dp),
-    ) {
-        val backdropEntries = bookEntries.take(4).ifEmpty { bookEntries }
-        backdropEntries.forEach { entry ->
-            val coverFile = remember(entry) { bookStorage.coverFile(entry) }
-            val bitmap = remember(coverFile) {
-                coverFile?.absolutePath?.let(BitmapFactory::decodeFile)
-            }
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(152.dp),
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(152.dp)
-                        .background(Color(0xFFCED3DD)),
-                )
-            }
-        }
-    }
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(210.dp)
-            .background(Color.White.copy(alpha = 0.26f)),
-    )
 }
 
 @Composable
