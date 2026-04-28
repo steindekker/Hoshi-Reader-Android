@@ -42,6 +42,26 @@ class DictionaryRepository(
         }
     }
 
+    fun setDictionaryEnabled(type: DictionaryType, fileName: String, enabled: Boolean) {
+        val config = currentConfig().copyForType(type) { entries ->
+            entries.map { entry ->
+                if (entry.fileName == fileName) {
+                    entry.copy(isEnabled = enabled)
+                } else {
+                    entry
+                }
+            }
+        }
+        saveConfig(config)
+        rebuildLookupQuery()
+    }
+
+    fun deleteDictionary(type: DictionaryType, fileName: String) {
+        File(typeDirectory(type), fileName).deleteRecursively()
+        saveConfig(currentConfig())
+        rebuildLookupQuery()
+    }
+
     fun rebuildLookupQuery() {
         val termPaths = loadDictionaries(DictionaryType.Term).filter { it.isEnabled }.map { it.path.absolutePath }.toTypedArray()
         val freqPaths = loadDictionaries(DictionaryType.Frequency).filter { it.isEnabled }.map { it.path.absolutePath }.toTypedArray()
@@ -64,17 +84,21 @@ class DictionaryRepository(
     }
 
     private fun saveConfigFromStorage() {
-        val config = DictionaryConfig(
-            termDictionaries = dictionariesForType(DictionaryType.Term).mapIndexed { index, dictionary ->
-                DictionaryConfig.DictionaryEntry(dictionary.path.name, true, index)
-            },
-            frequencyDictionaries = dictionariesForType(DictionaryType.Frequency).mapIndexed { index, dictionary ->
-                DictionaryConfig.DictionaryEntry(dictionary.path.name, true, index)
-            },
-            pitchDictionaries = dictionariesForType(DictionaryType.Pitch).mapIndexed { index, dictionary ->
-                DictionaryConfig.DictionaryEntry(dictionary.path.name, true, index)
-            },
-        )
+        saveConfig(currentConfig())
+    }
+
+    private fun currentConfig(): DictionaryConfig = DictionaryConfig(
+        termDictionaries = configEntries(DictionaryType.Term),
+        frequencyDictionaries = configEntries(DictionaryType.Frequency),
+        pitchDictionaries = configEntries(DictionaryType.Pitch),
+    )
+
+    private fun configEntries(type: DictionaryType): List<DictionaryConfig.DictionaryEntry> =
+        loadDictionaries(type).mapIndexed { index, dictionary ->
+            DictionaryConfig.DictionaryEntry(dictionary.path.name, dictionary.isEnabled, index)
+        }
+
+    private fun saveConfig(config: DictionaryConfig) {
         dictionariesDir.mkdirs()
         configFile.writeText(json.encodeToString(config))
     }
@@ -87,4 +111,13 @@ class DictionaryRepository(
 
     private fun typeDirectory(type: DictionaryType): File =
         File(dictionariesDir, type.directoryName)
+}
+
+private fun DictionaryConfig.copyForType(
+    type: DictionaryType,
+    transform: (List<DictionaryConfig.DictionaryEntry>) -> List<DictionaryConfig.DictionaryEntry>,
+): DictionaryConfig = when (type) {
+    DictionaryType.Term -> copy(termDictionaries = transform(termDictionaries))
+    DictionaryType.Frequency -> copy(frequencyDictionaries = transform(frequencyDictionaries))
+    DictionaryType.Pitch -> copy(pitchDictionaries = transform(pitchDictionaries))
 }

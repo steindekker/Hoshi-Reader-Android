@@ -59,9 +59,11 @@
    - `done` - Build Android native `hoshidicts_jni` from `third_party/hoshidicts-kotlin-bridge` while linking to `third_party/hoshidicts-gplv3`.
    - `done` - Import `testdata/JMdict_english.zip` through the GPLv3 `hoshidicts` bridge.
    - `done` - Persist iOS-shaped `Dictionaries/config.json` and list imported term dictionaries.
-   - `todo` - Align enable/disable, delete, type picker, reordering, and import state with iOS `DictionaryView`.
+   - `done` - Align term dictionary enable/disable and swipe-to-delete with iOS `DictionaryView` list behavior.
+   - `todo` - Align type picker, reordering, and detailed import/update state with iOS `DictionaryView`.
    - Do not reimplement Yomitan import or dictionary media handling outside the bridge.
    - Verified on emulator with `testdata/JMdict_english.zip`: imported through DocumentsUI, confirmed dictionary list shows `JMdict [2026-04-27]`, confirmed private files `Dictionaries/Term/JMdict [2026-04-27]/index.json`, `blobs.bin`, `hash.table`, and `Dictionaries/config.json`, and temporarily verified native lookup query returned `猫` for lookup text `猫` before removing the debug UI.
+   - Verified on emulator with `testdata/JMdict_english.zip`: toggled `JMdict [2026-04-27]` off and confirmed `Dictionaries/config.json` wrote `"isEnabled": false`, swiped the row from right to left and confirmed `Dictionaries/Term` was empty with an empty config, then reimported the zip through DocumentsUI and confirmed the row and enabled config were restored.
 
 7. `todo` - Highlights and notes foundation
    - Store highlight anchors based on WebView range data.
