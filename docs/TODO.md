@@ -28,11 +28,13 @@
    - `done` - Align basic bookshelf sorting with iOS `Recent` / `Title`.
    - `done` - Align single-book delete flow with iOS long-press context action plus confirmation.
    - `done` - Align the main Books/Dictionary/Settings shell with iOS: floating Books chrome, cover-grid bookshelf, grouped Settings list, and bottom capsule tab bar.
+   - `done` - Align EPUB import deduplication with iOS title-based `Books/<safeTitle>` storage and calculate bookshelf progress from `bookmark.characterCount / bookinfo.characterCount`.
    - `todo` - Align multi-select, shelves, and batch actions with iOS.
    - Verified on emulator with `testdata/test.epub`: cleared app data, imported the EPUB twice through DocumentsUI, confirmed two shelf rows and two independent `files/Books/<uuid>/metadata.json` files, then opened a listed book into the reader.
    - Verified cover thumbnails on emulator with `testdata/test.epub`: imported through DocumentsUI, confirmed `metadata.cover` is `item/image/cover.jpg`, and visually checked the real cover image renders in the shelf row.
    - Verified sorting/deletion on emulator: opened sort menu, switched from `Recent` to `Title`, long-pressed a book row, used `Delete`, confirmed the dialog, and checked `files/Books` metadata count decreased.
    - Verified main shell UI on emulator with `testdata/test.epub`: imported through Android DocumentsUI from `testdata`, opened the reader, returned to Books, confirmed the `Unshelved` cover grid with two imported books, checked the Settings tab renders iOS-ordered grouped cards above the bottom capsule tab bar, confirmed the Books page no longer renders an artificial fixed blurred cover strip at the top, and confirmed custom toolbar/tab icons no longer carry fixed pink/blue/ripple color artifacts.
+   - Verified import deduplication and full-book progress on emulator with `testdata/test.epub`: cleared app data, imported the same EPUB twice through Android DocumentsUI, confirmed `files/Books` contains only `屍人荘の殺人`, swiped to正文, confirmed `bookmark.json` saved `characterCount=90`, reader chrome showed `90 / 169326 0.05%`, and the bookshelf showed `0.1%`.
 
 3. `in_progress` - Reader settings
    - `done` - Implement iOS-aligned reader Appearance sheet entry from the reader.

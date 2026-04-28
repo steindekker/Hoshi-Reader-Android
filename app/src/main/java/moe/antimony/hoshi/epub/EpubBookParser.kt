@@ -11,6 +11,8 @@ data class EpubBook(
     private val resources: Map<String, EpubResource> = emptyMap(),
     private val rootDirectory: File? = null,
 ) {
+    val bookInfo: BookInfo = chapters.toBookInfo()
+
     fun readResource(path: String): ByteArray? {
         val normalized = path.normalizeResourceHref()
         return resources[normalized]?.readBytes()
@@ -22,6 +24,13 @@ data class EpubBook(
 
     fun mediaType(path: String): String =
         resources[path.normalizeResourceHref()]?.mediaType ?: path.fallbackMimeType()
+
+    fun characterCountAt(chapterIndex: Int, progress: Double): Int {
+        val chapter = chapters.getOrNull(chapterIndex) ?: return 0
+        val info = bookInfo.chapterInfo[chapter.href] ?: return 0
+        val chapterOffset = (info.chapterCount.toDouble() * progress.coerceIn(0.0, 1.0)).toInt()
+        return (info.currentTotal + chapterOffset).coerceIn(0, bookInfo.characterCount)
+    }
 }
 
 data class EpubChapter(
@@ -124,3 +133,37 @@ private fun String.fallbackMimeType(): String = when (substringAfterLast('.', ""
     "xhtml", "html" -> "application/xhtml+xml"
     else -> "application/octet-stream"
 }
+
+private fun List<EpubChapter>.toBookInfo(): BookInfo {
+    var total = 0
+    val chapterInfo = linkedMapOf<String, BookInfo.ChapterInfo>()
+    forEachIndexed { index, chapter ->
+        val count = chapter.html.filteredReaderText().codePointCount()
+        chapterInfo[chapter.href] = BookInfo.ChapterInfo(
+            spineIndex = index,
+            currentTotal = total,
+            chapterCount = count,
+        )
+        total += count
+    }
+    return BookInfo(characterCount = total, chapterInfo = chapterInfo)
+}
+
+private fun String.filteredReaderText(): String {
+    var text = Regex("(?s)<body.*?</body>").find(this)?.value ?: this
+    text = text.replace(Regex("(?s)<rt[^>]*>.*?</rt>"), "")
+    text = text.replace(Regex("(?s)<(script|style)[^>]*>.*?</\\1>"), "")
+    text = text.replace(Regex("<[^>]+>"), "")
+    text = text
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+    return text.replace(
+        Regex("[^0-9A-Za-z○◯々-〇〻ぁ-ゖゝ-ゞァ-ヺー０-９Ａ-Ｚａ-ｚｦ-ﾝ\\u2E80-\\u2FDF\\p{IsHan}]"),
+        "",
+    )
+}
+
+private fun String.codePointCount(): Int =
+    codePointCount(0, length)

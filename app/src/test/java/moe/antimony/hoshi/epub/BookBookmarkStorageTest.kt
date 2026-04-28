@@ -68,4 +68,29 @@ class BookBookmarkStorageTest {
             storage.loadBookmark(bookRoot),
         )
     }
+
+    @Test
+    fun bookProgressUsesBookmarkCharacterCountOverBookInfoCharacterCount() {
+        val root = Files.createTempDirectory("hoshi-book-progress").toFile()
+        val storage = BookStorage(root)
+        val bookRoot = storage.currentBookFile.apply { mkdirs() }
+        storage.saveBookmark(
+            bookRoot,
+            Bookmark(
+                chapterIndex = 1,
+                progress = 0.25,
+                characterCount = 40,
+                lastModified = 798717600.0,
+            ),
+        )
+        storage.saveBookInfo(
+            bookRoot,
+            BookInfo(
+                characterCount = 200,
+                chapterInfo = emptyMap(),
+            ),
+        )
+
+        assertEquals(0.2, storage.loadReadingProgress(bookRoot), 0.0)
+    }
 }

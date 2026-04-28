@@ -58,7 +58,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
-import kotlin.math.roundToInt
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import moe.antimony.hoshi.dictionary.LookupEngine
@@ -114,13 +113,13 @@ fun ReaderWebView(
             ),
         )
     }
+    var displayedChapterPosition by remember(book) { mutableStateOf(chapterPosition) }
     var webView by remember { mutableStateOf<WebView?>(null) }
-    val chromeState = remember(book, chapterPosition) {
-        val chapterUnits = 1000
+    val chromeState = remember(book, displayedChapterPosition) {
         ReaderChromeState(
             title = book.title,
-            currentCharacter = ((chapterPosition.index + chapterPosition.progress) * chapterUnits).roundToInt(),
-            totalCharacters = (book.chapters.size * chapterUnits).coerceAtLeast(chapterUnits),
+            currentCharacter = book.characterCountAt(displayedChapterPosition.index, displayedChapterPosition.progress),
+            totalCharacters = book.bookInfo.characterCount,
         )
     }
 
@@ -156,6 +155,7 @@ fun ReaderWebView(
                 val next = chapterPosition.nextOrNull(book.chapters.lastIndex)
                 if (next != null) {
                     chapterPosition = next
+                    displayedChapterPosition = next
                     onSaveBookmark(next.index, next.progress)
                     true
                 } else {
@@ -166,6 +166,7 @@ fun ReaderWebView(
                 val previous = chapterPosition.previousOrNull()
                 if (previous != null) {
                     chapterPosition = previous
+                    displayedChapterPosition = previous
                     onSaveBookmark(previous.index, previous.progress)
                     true
                 } else {
@@ -173,6 +174,7 @@ fun ReaderWebView(
                 }
             },
             onSaveBookmark = { progress ->
+                displayedChapterPosition = chapterPosition.copy(progress = progress)
                 onSaveBookmark(chapterPosition.index, progress)
             },
             readerSettings = effectiveSettings,

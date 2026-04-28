@@ -126,6 +126,10 @@ fun BookshelfView(
         bookStorage.saveMetadata(root, metadata)
     }
 
+    fun saveBookInfo(root: File, parsedBook: EpubBook) {
+        bookStorage.saveBookInfo(root, parsedBook.bookInfo)
+    }
+
     fun parseBook(file: File, openReader: Boolean, refreshAccess: Boolean) {
         scope.launch {
             isLoading = true
@@ -136,6 +140,7 @@ fun BookshelfView(
                     if (refreshAccess) {
                         saveMetadata(file, parsedBook, bookStorage.loadMetadata(file))
                     }
+                    saveBookInfo(file, parsedBook)
                     parsedBook
                 }
             }.onSuccess { parsedBook ->
@@ -159,7 +164,8 @@ fun BookshelfView(
                 withContext(Dispatchers.IO) {
                     val root = bookStorage.importBook(context.contentResolver, uri)
                     val parsedBook = EpubBookParser().parse(root)
-                    saveMetadata(root, parsedBook)
+                    saveMetadata(root, parsedBook, bookStorage.loadMetadata(root))
+                    saveBookInfo(root, parsedBook)
                     root to parsedBook
                 }
             }.onSuccess { (root, parsedBook) ->
@@ -219,10 +225,11 @@ fun BookshelfView(
             },
             onSaveBookmark = { chapterIndex, progress ->
                 val file = selectedBookRoot ?: return@ReaderWebView
+                val parsedBook = book ?: return@ReaderWebView
                 val savedBookmark = Bookmark(
                     chapterIndex = chapterIndex,
                     progress = progress,
-                    characterCount = 0,
+                    characterCount = parsedBook.characterCountAt(chapterIndex, progress),
                     lastModified = bookStorage.currentAppleReferenceDateSeconds(),
                 )
                 bookmark = savedBookmark
@@ -590,7 +597,7 @@ private fun BookCoverCard(entry: BookEntry, bookStorage: BookStorage) {
             )
         }
         ReadingProgressPill(
-            progress = remember(entry) { bookStorage.loadBookmark(entry.root)?.progress ?: 0.0 },
+            progress = remember(entry) { bookStorage.loadReadingProgress(entry.root) },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(horizontal = 10.dp, vertical = 8.dp),

@@ -19,6 +19,19 @@ data class Bookmark(
 )
 
 @Serializable
+data class BookInfo(
+    val characterCount: Int,
+    val chapterInfo: Map<String, ChapterInfo>,
+) {
+    @Serializable
+    data class ChapterInfo(
+        val spineIndex: Int?,
+        val currentTotal: Int,
+        val chapterCount: Int,
+    )
+}
+
+@Serializable
 data class BookMetadata(
     val id: String,
     val title: String?,
@@ -50,7 +63,7 @@ class BookStorage(private val filesDir: File) {
     fun loadAllBooks(): List<File> =
         booksDirectory
             .listFiles()
-            ?.filter { it.isDirectory }
+            ?.filter { it.isDirectory && !it.name.startsWith(".") }
             ?.sortedByDescending { it.lastModified() }
             .orEmpty()
 
@@ -77,6 +90,12 @@ class BookStorage(private val filesDir: File) {
         }
         root.mkdirs()
         return root
+    }
+
+    fun createBookDirectoryForImportedTitle(title: String): File {
+        val safeTitle = title.sanitizeImportedBookTitle()
+        require(safeTitle.isNotBlank()) { "EPUB title is empty" }
+        return createBookDirectory(safeTitle)
     }
 
     fun loadMetadata(bookRoot: File): BookMetadata? {
@@ -120,21 +139,40 @@ class BookStorage(private val filesDir: File) {
         bookRoot.resolve(BOOKMARK_FILE_NAME).writeText(json.encodeToString(bookmark))
     }
 
+    fun loadBookInfo(bookRoot: File): BookInfo? {
+        val file = bookRoot.resolve(BOOKINFO_FILE_NAME)
+        if (!file.isFile) return null
+        return runCatching { json.decodeFromString<BookInfo>(file.readText()) }.getOrNull()
+    }
+
+    fun saveBookInfo(bookRoot: File, bookInfo: BookInfo) {
+        bookRoot.mkdirs()
+        bookRoot.resolve(BOOKINFO_FILE_NAME).writeText(json.encodeToString(bookInfo))
+    }
+
+    fun loadReadingProgress(bookRoot: File): Double {
+        val total = loadBookInfo(bookRoot)?.characterCount ?: return 0.0
+        if (total <= 0) return 0.0
+        val current = loadBookmark(bookRoot)?.characterCount ?: return 0.0
+        return current.toDouble().div(total.toDouble()).coerceIn(0.0, 1.0)
+    }
+
     fun currentAppleReferenceDateSeconds(): Double {
         val now = Instant.now()
         return now.epochSecond.toDouble() + (now.nano.toDouble() / 1_000_000_000.0) - APPLE_REFERENCE_EPOCH_SECONDS
     }
 
     fun importBook(contentResolver: ContentResolver, uri: Uri): File {
-        val bookRoot = createBookDirectory()
+        val tempRoot = File(filesDir, "ImportTemp/${UUID.randomUUID()}").canonicalFile
         contentResolver.openInputStream(uri).use { input ->
             requireNotNull(input) { "Unable to open selected EPUB" }
             runCatching {
+                tempRoot.mkdirs()
                 ZipInputStream(input).use { zip ->
                     var entry = zip.nextEntry
                     while (entry != null) {
-                        val output = bookRoot.resolve(entry.name).canonicalFile
-                        val root = bookRoot.canonicalFile
+                        val output = tempRoot.resolve(entry.name).canonicalFile
+                        val root = tempRoot.canonicalFile
                         require(output.path == root.path || output.path.startsWith(root.path + File.separator)) {
                             "Unsafe EPUB entry: ${entry.name}"
                         }
@@ -149,16 +187,27 @@ class BookStorage(private val filesDir: File) {
                     }
                 }
             }.onFailure {
-                bookRoot.deleteRecursively()
+                tempRoot.deleteRecursively()
                 throw it
             }
         }
-        return bookRoot
+        val parsedBook = runCatching { EpubBookParser().parse(tempRoot) }
+            .onFailure { tempRoot.deleteRecursively() }
+            .getOrThrow()
+        val targetRoot = createBookDirectoryForImportedTitle(parsedBook.title)
+        if (targetRoot.listFiles()?.isNotEmpty() == true) {
+            tempRoot.deleteRecursively()
+            return targetRoot
+        }
+        targetRoot.deleteRecursively()
+        check(tempRoot.renameTo(targetRoot)) { "Unable to move imported EPUB into Books/${targetRoot.name}" }
+        return targetRoot
     }
 
     private companion object {
         const val METADATA_FILE_NAME = "metadata.json"
         const val BOOKMARK_FILE_NAME = "bookmark.json"
+        const val BOOKINFO_FILE_NAME = "bookinfo.json"
         const val APPLE_REFERENCE_EPOCH_SECONDS = 978_307_200.0
     }
 
@@ -171,3 +220,8 @@ class BookStorage(private val filesDir: File) {
             lastAccess = (lastModified().toDouble() / 1000.0) - APPLE_REFERENCE_EPOCH_SECONDS,
         )
 }
+
+private fun String.sanitizeImportedBookTitle(): String =
+    split(Regex("[\\\\/:*?\"<>|\\n\\r\\u0000-\\u001F]"))
+        .joinToString("_")
+        .trim()

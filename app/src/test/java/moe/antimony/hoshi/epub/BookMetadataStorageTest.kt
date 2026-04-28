@@ -82,4 +82,16 @@ class BookMetadataStorageTest {
         assertFalse(root.exists())
         assertEquals(emptyList<BookEntry>(), storage.loadBookEntries())
     }
+
+    @Test
+    fun importedBookDirectoryNameMatchesIosSanitizedTitleAndDeduplicates() {
+        val storage = BookStorage(Files.createTempDirectory("hoshi-metadata-dedupe").toFile())
+
+        val first = storage.createBookDirectoryForImportedTitle("屍人荘/の:殺人")
+        first.resolve("metadata.json").writeText("{}")
+        val second = storage.createBookDirectoryForImportedTitle("屍人荘/の:殺人")
+
+        assertEquals("屍人荘_の_殺人", first.name)
+        assertEquals(first.canonicalFile, second.canonicalFile)
+    }
 }
