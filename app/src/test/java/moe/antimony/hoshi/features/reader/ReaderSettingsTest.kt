@@ -57,6 +57,15 @@ class ReaderSettingsTest {
     }
 
     @Test
+    fun appInterfaceThemeMatchesIosColorSchemeMapping() {
+        assertFalse(ReaderSettings(theme = ReaderTheme.Light).usesDarkInterface(systemDark = true))
+        assertTrue(ReaderSettings(theme = ReaderTheme.Dark).usesDarkInterface(systemDark = false))
+        assertFalse(ReaderSettings(theme = ReaderTheme.Sepia).usesDarkInterface(systemDark = true))
+        assertTrue(ReaderSettings(theme = ReaderTheme.System).usesDarkInterface(systemDark = true))
+        assertFalse(ReaderSettings(theme = ReaderTheme.System).usesDarkInterface(systemDark = false))
+    }
+
+    @Test
     fun readerCssUsesIosAppearanceFlags() {
         val css = ReaderContentStyles.styleTag(
             ReaderSettings(

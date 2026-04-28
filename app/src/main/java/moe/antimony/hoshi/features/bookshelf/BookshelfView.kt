@@ -6,7 +6,6 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -36,11 +35,26 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Inventory2
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.ReportProblem
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -56,12 +70,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -84,7 +94,6 @@ import moe.antimony.hoshi.features.dictionary.DictionarySettingsStore
 import moe.antimony.hoshi.features.reader.ReaderAppearanceScreen
 import moe.antimony.hoshi.features.reader.ReaderFontManager
 import moe.antimony.hoshi.features.reader.ReaderSettings
-import moe.antimony.hoshi.features.reader.ReaderSettingsStore
 import moe.antimony.hoshi.features.reader.ReaderWebView
 import java.io.File
 
@@ -93,6 +102,8 @@ import java.io.File
 fun BookshelfView(
     pendingImportUri: Uri? = null,
     onPendingImportConsumed: () -> Unit = {},
+    readerSettings: ReaderSettings,
+    onReaderSettingsChange: (ReaderSettings) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -100,9 +111,7 @@ fun BookshelfView(
     val bookStorage = remember { BookStorage(context.filesDir) }
     val dictionaryRepository = remember { DictionaryRepository(context.filesDir, context.cacheDir) }
     val dictionarySettingsStore = remember { DictionarySettingsStore(context) }
-    val readerSettingsStore = remember { ReaderSettingsStore(context) }
     val readerFontManager = remember { ReaderFontManager(context.filesDir) }
-    var readerSettings by remember { mutableStateOf(readerSettingsStore.load()) }
     var selectedTab by remember {
         mutableStateOf(
             if (dictionarySettingsStore.load().dictionaryTabDefault) {
@@ -215,8 +224,7 @@ fun BookshelfView(
     }
 
     fun updateReaderSettings(settings: ReaderSettings) {
-        readerSettings = settings
-        readerSettingsStore.save(settings)
+        onReaderSettingsChange(settings)
     }
 
     LaunchedEffect(Unit) {
@@ -385,7 +393,7 @@ private fun HoshiMainShell(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFFF5F5F8)),
+            .background(MaterialTheme.colorScheme.background),
     ) {
         content(Modifier.fillMaxSize())
         HoshiBottomTabs(
@@ -507,7 +515,7 @@ private fun BooksTopChrome(
         FrostedCapsule {
             Box {
                 ChromeIconButton(onClick = { onSortMenuExpandedChange(true) }) {
-                    SortGlyph()
+                    SortGlyph(MaterialTheme.colorScheme.onSurface)
                 }
                 DropdownMenu(
                     expanded = sortMenuExpanded,
@@ -524,24 +532,24 @@ private fun BooksTopChrome(
                 }
             }
             ChromeIconButton(onClick = { onSortChange(if (sortOption == BookSortOption.Recent) BookSortOption.Title else BookSortOption.Recent) }) {
-                ListCheckGlyph()
+                ListCheckGlyph(MaterialTheme.colorScheme.onSurface)
             }
         }
         Spacer(Modifier.weight(1f))
         Text(
             text = "Books",
             style = MaterialTheme.typography.headlineSmall,
-            color = Color.Black,
+            color = MaterialTheme.colorScheme.onBackground,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(top = 8.dp),
         )
         Spacer(Modifier.weight(1f))
         FrostedCircle(onClick = {}) {
-            FolderGearGlyph()
+            FolderGlyph(MaterialTheme.colorScheme.onSurface)
         }
         Spacer(Modifier.width(14.dp))
         FrostedCircle(onClick = onImport) {
-            PlusGlyph()
+            PlusGlyph(MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -558,7 +566,7 @@ private fun BookshelfSectionHeader(title: String, count: Int) {
             text = title,
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Black,
-            color = Color.Black,
+            color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(Modifier.width(12.dp))
         Text(
@@ -567,7 +575,7 @@ private fun BookshelfSectionHeader(title: String, count: Int) {
             color = Color(0xFF8C8C92),
         )
         Spacer(Modifier.width(8.dp))
-        ChevronRightGlyph(Color.Black, Modifier.size(20.dp))
+        ChevronRightGlyph(MaterialTheme.colorScheme.onBackground, Modifier.size(20.dp))
     }
 }
 
@@ -594,7 +602,7 @@ private fun BookGridCell(
             text = entry.metadata.title ?: entry.root.name,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold,
-            color = Color.Black,
+            color = MaterialTheme.colorScheme.onBackground,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
@@ -671,7 +679,7 @@ private fun SettingsTab(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFFF5F5F8)),
+            .background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(start = 28.dp, end = 28.dp, top = 112.dp, bottom = 230.dp),
         verticalArrangement = Arrangement.spacedBy(34.dp),
     ) {
@@ -680,7 +688,7 @@ private fun SettingsTab(
                 text = "Settings",
                 style = MaterialTheme.typography.displayMedium,
                 fontWeight = FontWeight.Black,
-                color = Color.Black,
+                color = MaterialTheme.colorScheme.onBackground,
             )
         }
         settingsGroups().forEach { group ->
@@ -698,7 +706,7 @@ private fun SettingsGroupCard(
 ) {
     Surface(
         shape = RoundedCornerShape(32.dp),
-        color = Color.White,
+        color = MaterialTheme.colorScheme.surface,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
@@ -712,7 +720,7 @@ private fun SettingsGroupCard(
                             .padding(start = 94.dp, end = 34.dp)
                             .height(1.dp)
                             .fillMaxWidth()
-                            .background(Color(0xFFE3E3E6)),
+                            .background(MaterialTheme.colorScheme.outlineVariant),
                     )
                 }
             }
@@ -722,7 +730,11 @@ private fun SettingsGroupCard(
 
 @Composable
 private fun SettingsRow(row: SettingsRowModel, onClick: () -> Unit) {
-    val tint = if (row.destination == SettingsDestination.ReportIssue) Color(0xFF007AFF) else Color.Black
+    val tint = if (row.destination == SettingsDestination.ReportIssue) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -752,8 +764,8 @@ private fun HoshiBottomTabs(
             .padding(bottom = 20.dp)
             .shadow(22.dp, RoundedCornerShape(38.dp), ambientColor = Color.Black.copy(alpha = 0.12f), spotColor = Color.Black.copy(alpha = 0.12f)),
         shape = RoundedCornerShape(38.dp),
-        color = Color.White.copy(alpha = 0.82f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.9f)),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
     ) {
         Row(
             modifier = Modifier.padding(7.dp),
@@ -765,7 +777,13 @@ private fun HoshiBottomTabs(
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(34.dp))
-                        .background(if (selected) Color(0xFFDADDE3).copy(alpha = 0.75f) else Color.Transparent)
+                        .background(
+                            if (selected) {
+                                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f)
+                            } else {
+                                Color.Transparent
+                            },
+                        )
                         .clickable(
                             interactionSource = interactionSource,
                             indication = null,
@@ -775,12 +793,12 @@ private fun HoshiBottomTabs(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        BottomTabGlyph(tab, selected, Modifier.size(28.dp))
+                        BottomTabGlyph(tab, Modifier.size(28.dp))
                         Text(
                             text = tab.label,
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                            color = Color.Black,
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
                 }
@@ -793,8 +811,8 @@ private fun HoshiBottomTabs(
 private fun FrostedCapsule(content: @Composable RowScope.() -> Unit) {
     Surface(
         shape = RoundedCornerShape(34.dp),
-        color = Color.White.copy(alpha = 0.76f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.85f)),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
         shadowElevation = 12.dp,
     ) {
         Row(
@@ -822,8 +840,8 @@ private fun FrostedCircle(
                 onClick = onClick,
             ),
         shape = CircleShape,
-        color = Color.White.copy(alpha = 0.78f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.9f)),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
         shadowElevation = 12.dp,
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -885,207 +903,94 @@ private fun EmptyBooksView(
 }
 
 @Composable
-private fun BottomTabGlyph(tab: MainTab, selected: Boolean, modifier: Modifier = Modifier) {
-    val color = if (selected) Color.Black else Color(0xFF111111)
-    when (tab) {
-        MainTab.Books -> BooksGlyph(color, modifier)
-        MainTab.Dictionary -> DictionaryGlyph(color, modifier)
-        MainTab.Settings -> GearGlyph(color, modifier)
+private fun BottomTabGlyph(tab: MainTab, modifier: Modifier = Modifier) {
+    val icon = when (tab) {
+        MainTab.Books -> Icons.AutoMirrored.Rounded.MenuBook
+        MainTab.Dictionary -> Icons.Rounded.Translate
+        MainTab.Settings -> Icons.Rounded.Settings
     }
+    Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.onSurface,
+        modifier = modifier,
+    )
 }
 
 @Composable
 private fun SettingsGlyph(destination: SettingsDestination, color: Color, modifier: Modifier = Modifier) {
-    when (destination) {
-        SettingsDestination.Dictionaries -> DictionaryBookGlyph(color, modifier)
-        SettingsDestination.Anki -> TrayGlyph(color, modifier)
-        SettingsDestination.Appearance -> PaletteGlyph(color, modifier)
-        SettingsDestination.Advanced -> DoubleGearGlyph(color, modifier)
-        SettingsDestination.ReportIssue -> BubbleGlyph(color, modifier)
-        SettingsDestination.About -> InfoGlyph(color, modifier)
+    val icon = when (destination) {
+        SettingsDestination.Dictionaries -> Icons.AutoMirrored.Rounded.MenuBook
+        SettingsDestination.Anki -> Icons.Rounded.Inventory2
+        SettingsDestination.Appearance -> Icons.Rounded.Palette
+        SettingsDestination.Advanced -> Icons.Rounded.Settings
+        SettingsDestination.ReportIssue -> Icons.Rounded.ReportProblem
+        SettingsDestination.About -> Icons.Rounded.Info
+    }
+    Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = color,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun SortGlyph(color: Color) {
+    Row(horizontalArrangement = Arrangement.spacedBy((-10).dp)) {
+        Icon(
+            imageVector = Icons.Rounded.ArrowUpward,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(26.dp),
+        )
+        Icon(
+            imageVector = Icons.Rounded.ArrowDownward,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(26.dp),
+        )
     }
 }
 
 @Composable
-private fun BooksGlyph(color: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val stroke = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
-        val w = size.width
-        val h = size.height
-        listOf(0.22f, 0.45f, 0.68f).forEach { x ->
-            drawLine(color, Offset(w * x, h * 0.18f), Offset(w * x, h * 0.82f), stroke.width, StrokeCap.Round)
-            drawLine(color, Offset(w * (x + 0.12f), h * 0.82f), Offset(w * (x + 0.12f), h * 0.32f), stroke.width, StrokeCap.Round)
-        }
-    }
+private fun ListCheckGlyph(color: Color) {
+    Icon(
+        imageVector = Icons.Rounded.Checklist,
+        contentDescription = null,
+        tint = color,
+        modifier = Modifier.size(30.dp),
+    )
 }
 
 @Composable
-private fun DictionaryGlyph(color: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val stroke = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-        drawCircle(color, radius = size.minDimension * 0.28f, center = Offset(size.width * 0.38f, size.height * 0.42f), style = stroke)
-        drawLine(color, Offset(size.width * 0.55f, size.height * 0.58f), Offset(size.width * 0.78f, size.height * 0.78f), stroke.width, StrokeCap.Round)
-        drawLine(color, Offset(size.width * 0.25f, size.height * 0.45f), Offset(size.width * 0.60f, size.height * 0.30f), stroke.width, StrokeCap.Round)
-        drawLine(color, Offset(size.width * 0.30f, size.height * 0.65f), Offset(size.width * 0.67f, size.height * 0.18f), stroke.width, StrokeCap.Round)
-    }
+private fun FolderGlyph(color: Color) {
+    Icon(
+        imageVector = Icons.Rounded.FolderOpen,
+        contentDescription = null,
+        tint = color,
+        modifier = Modifier.size(30.dp),
+    )
 }
 
 @Composable
-private fun GearGlyph(color: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val stroke = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
-        val c = Offset(size.width / 2, size.height / 2)
-        drawCircle(color, radius = size.minDimension * 0.20f, center = c, style = stroke)
-        for (i in 0 until 8) {
-            val angle = Math.PI * 2 * i / 8
-            val start = Offset(
-                x = c.x + kotlin.math.cos(angle).toFloat() * size.minDimension * 0.32f,
-                y = c.y + kotlin.math.sin(angle).toFloat() * size.minDimension * 0.32f,
-            )
-            val end = Offset(
-                x = c.x + kotlin.math.cos(angle).toFloat() * size.minDimension * 0.42f,
-                y = c.y + kotlin.math.sin(angle).toFloat() * size.minDimension * 0.42f,
-            )
-            drawLine(color, start, end, stroke.width, StrokeCap.Round)
-        }
-    }
-}
-
-@Composable
-private fun SortGlyph() {
-    Canvas(Modifier.size(30.dp)) {
-        val stroke = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-        drawLine(Color.Black, Offset(size.width * 0.30f, size.height * 0.18f), Offset(size.width * 0.30f, size.height * 0.82f), stroke.width, StrokeCap.Round)
-        drawLine(Color.Black, Offset(size.width * 0.16f, size.height * 0.32f), Offset(size.width * 0.30f, size.height * 0.18f), stroke.width, StrokeCap.Round)
-        drawLine(Color.Black, Offset(size.width * 0.44f, size.height * 0.32f), Offset(size.width * 0.30f, size.height * 0.18f), stroke.width, StrokeCap.Round)
-        drawLine(Color.Black, Offset(size.width * 0.70f, size.height * 0.18f), Offset(size.width * 0.70f, size.height * 0.82f), stroke.width, StrokeCap.Round)
-        drawLine(Color.Black, Offset(size.width * 0.56f, size.height * 0.68f), Offset(size.width * 0.70f, size.height * 0.82f), stroke.width, StrokeCap.Round)
-        drawLine(Color.Black, Offset(size.width * 0.84f, size.height * 0.68f), Offset(size.width * 0.70f, size.height * 0.82f), stroke.width, StrokeCap.Round)
-    }
-}
-
-@Composable
-private fun ListCheckGlyph() {
-    Canvas(Modifier.size(30.dp)) {
-        val stroke = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-        listOf(0.30f, 0.62f).forEach { y ->
-            drawCircle(Color.Black, radius = 4.dp.toPx(), center = Offset(size.width * 0.24f, size.height * y), style = stroke)
-            drawLine(Color.Black, Offset(size.width * 0.42f, size.height * y), Offset(size.width * 0.82f, size.height * y), stroke.width, StrokeCap.Round)
-        }
-        drawLine(Color.Black, Offset(size.width * 0.19f, size.height * 0.30f), Offset(size.width * 0.23f, size.height * 0.35f), 1.5.dp.toPx(), StrokeCap.Round)
-        drawLine(Color.Black, Offset(size.width * 0.23f, size.height * 0.35f), Offset(size.width * 0.31f, size.height * 0.23f), 1.5.dp.toPx(), StrokeCap.Round)
-    }
-}
-
-@Composable
-private fun FolderGearGlyph() {
-    Canvas(Modifier.size(30.dp)) {
-        val stroke = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-        val path = Path().apply {
-            moveTo(size.width * 0.12f, size.height * 0.34f)
-            lineTo(size.width * 0.38f, size.height * 0.34f)
-            lineTo(size.width * 0.46f, size.height * 0.44f)
-            lineTo(size.width * 0.86f, size.height * 0.44f)
-            lineTo(size.width * 0.86f, size.height * 0.80f)
-            lineTo(size.width * 0.12f, size.height * 0.80f)
-            close()
-        }
-        drawPath(path, Color.Black, style = stroke)
-        drawCircle(Color.Black, size.minDimension * 0.13f, Offset(size.width * 0.78f, size.height * 0.28f), style = stroke)
-    }
-}
-
-@Composable
-private fun PlusGlyph() {
-    Canvas(Modifier.size(30.dp)) {
-        val stroke = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-        drawLine(Color.Black, Offset(size.width * 0.5f, size.height * 0.18f), Offset(size.width * 0.5f, size.height * 0.82f), stroke.width, StrokeCap.Round)
-        drawLine(Color.Black, Offset(size.width * 0.18f, size.height * 0.5f), Offset(size.width * 0.82f, size.height * 0.5f), stroke.width, StrokeCap.Round)
-    }
+private fun PlusGlyph(color: Color) {
+    Icon(
+        imageVector = Icons.Rounded.Add,
+        contentDescription = null,
+        tint = color,
+        modifier = Modifier.size(32.dp),
+    )
 }
 
 @Composable
 private fun ChevronRightGlyph(color: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val stroke = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-        val path = Path().apply {
-            moveTo(size.width * 0.35f, size.height * 0.18f)
-            lineTo(size.width * 0.66f, size.height * 0.50f)
-            lineTo(size.width * 0.35f, size.height * 0.82f)
-        }
-        drawPath(path, color, style = stroke)
-    }
-}
-
-@Composable
-private fun DictionaryBookGlyph(color: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val stroke = Stroke(width = 2.6.dp.toPx(), cap = StrokeCap.Round)
-        drawRoundRect(color, topLeft = Offset(size.width * 0.18f, size.height * 0.12f), size = androidx.compose.ui.geometry.Size(size.width * 0.62f, size.height * 0.76f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()), style = stroke)
-        drawLine(color, Offset(size.width * 0.32f, size.height * 0.24f), Offset(size.width * 0.66f, size.height * 0.24f), stroke.width, StrokeCap.Round)
-        drawLine(color, Offset(size.width * 0.48f, size.height * 0.18f), Offset(size.width * 0.48f, size.height * 0.70f), stroke.width, StrokeCap.Round)
-        drawLine(color, Offset(size.width * 0.34f, size.height * 0.44f), Offset(size.width * 0.62f, size.height * 0.44f), stroke.width, StrokeCap.Round)
-    }
-}
-
-@Composable
-private fun TrayGlyph(color: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val stroke = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-        val path = Path().apply {
-            moveTo(size.width * 0.18f, size.height * 0.46f)
-            lineTo(size.width * 0.30f, size.height * 0.24f)
-            lineTo(size.width * 0.70f, size.height * 0.24f)
-            lineTo(size.width * 0.82f, size.height * 0.46f)
-            lineTo(size.width * 0.82f, size.height * 0.78f)
-            lineTo(size.width * 0.18f, size.height * 0.78f)
-            close()
-        }
-        drawPath(path, color, style = stroke)
-        drawLine(color, Offset(size.width * 0.32f, size.height * 0.50f), Offset(size.width * 0.68f, size.height * 0.50f), stroke.width, StrokeCap.Round)
-    }
-}
-
-@Composable
-private fun PaletteGlyph(color: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val stroke = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-        drawOval(color, topLeft = Offset(size.width * 0.12f, size.height * 0.20f), size = androidx.compose.ui.geometry.Size(size.width * 0.76f, size.height * 0.58f), style = stroke)
-        listOf(0.30f to 0.40f, 0.46f to 0.30f, 0.62f to 0.38f).forEach { (x, y) ->
-            drawCircle(color, radius = 2.5.dp.toPx(), center = Offset(size.width * x, size.height * y))
-        }
-        drawCircle(Color(0xFFF5F5F8), radius = 5.dp.toPx(), center = Offset(size.width * 0.66f, size.height * 0.62f))
-    }
-}
-
-@Composable
-private fun DoubleGearGlyph(color: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val stroke = Stroke(width = 2.6.dp.toPx(), cap = StrokeCap.Round)
-        drawCircle(color, radius = size.minDimension * 0.18f, center = Offset(size.width * 0.38f, size.height * 0.40f), style = stroke)
-        drawCircle(color, radius = size.minDimension * 0.16f, center = Offset(size.width * 0.64f, size.height * 0.66f), style = stroke)
-    }
-}
-
-@Composable
-private fun BubbleGlyph(color: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val stroke = Stroke(width = 2.8.dp.toPx(), cap = StrokeCap.Round)
-        drawRoundRect(color, topLeft = Offset(size.width * 0.14f, size.height * 0.14f), size = androidx.compose.ui.geometry.Size(size.width * 0.72f, size.height * 0.58f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx()), style = stroke)
-        drawLine(color, Offset(size.width * 0.38f, size.height * 0.72f), Offset(size.width * 0.32f, size.height * 0.88f), stroke.width, StrokeCap.Round)
-        drawLine(color, Offset(size.width * 0.50f, size.height * 0.30f), Offset(size.width * 0.50f, size.height * 0.50f), stroke.width, StrokeCap.Round)
-        drawCircle(color, radius = 2.dp.toPx(), center = Offset(size.width * 0.50f, size.height * 0.60f))
-    }
-}
-
-@Composable
-private fun InfoGlyph(color: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val stroke = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-        drawCircle(color, radius = size.minDimension * 0.37f, center = Offset(size.width * 0.5f, size.height * 0.5f), style = stroke)
-        drawLine(color, Offset(size.width * 0.5f, size.height * 0.45f), Offset(size.width * 0.5f, size.height * 0.67f), stroke.width, StrokeCap.Round)
-        drawCircle(color, radius = 2.dp.toPx(), center = Offset(size.width * 0.5f, size.height * 0.32f))
-    }
+    Icon(
+        imageVector = Icons.Rounded.ChevronRight,
+        contentDescription = null,
+        tint = color,
+        modifier = modifier,
+    )
 }
 
 private fun SettingsDestination.placeholderTitle(): String = when (this) {

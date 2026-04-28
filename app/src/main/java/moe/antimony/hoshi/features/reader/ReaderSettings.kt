@@ -87,6 +87,13 @@ enum class ReaderTheme(val label: String) {
     Sepia("Sepia"),
 }
 
+fun ReaderSettings.usesDarkInterface(systemDark: Boolean): Boolean = when (theme) {
+    ReaderTheme.System -> systemDark
+    ReaderTheme.Light -> false
+    ReaderTheme.Dark -> true
+    ReaderTheme.Sepia -> false
+}
+
 class ReaderSettingsStore(context: Context) {
     private val preferences = context.getSharedPreferences("reader-settings", Context.MODE_PRIVATE)
 

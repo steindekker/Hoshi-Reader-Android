@@ -75,7 +75,7 @@ internal fun ReaderAppearanceScreen(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val palette = appearancePalette(settings)
+    val palette = appearancePalette()
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -121,7 +121,7 @@ internal fun ReaderAppearanceSheet(
     fontManager: ReaderFontManager,
     onDismiss: () -> Unit,
 ) {
-    val palette = appearancePalette(settings)
+    val palette = appearancePalette()
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = palette.background,
@@ -178,7 +178,7 @@ private fun ReaderAppearanceContent(
             .filter { it.isNotBlank() }
             .distinct()
     }
-    val palette = appearancePalette(settings)
+    val palette = appearancePalette()
 
     CompositionLocalProvider(LocalContentColor provides palette.onBackground) {
         LazyColumn(
@@ -719,43 +719,19 @@ private data class AppearancePalette(
     val segmentBorder: Color,
 )
 
-private fun appearancePalette(settings: ReaderSettings): AppearancePalette = when (settings.theme) {
-    ReaderTheme.Dark -> AppearancePalette(
-        background = Color(0xFF121212),
-        group = Color(0xFF242424),
-        onBackground = Color(0xFFF4F1EA),
-        onGroup = Color(0xFFF4F1EA),
-        onMuted = Color(0xFFAAA6A0),
-        divider = Color(0xFF3A3A3A),
-        stepperContainer = Color(0xFF383838),
-        stepperDivider = Color(0xFF666666),
-        segmentSelected = Color(0xFF3A3A3A),
-        segmentBorder = Color(0xFF888888),
-    )
-
-    ReaderTheme.Sepia -> AppearancePalette(
-        background = Color(0xFFF6EBD8),
-        group = Color(0xFFFFF8EC),
-        onBackground = Color(0xFF2E2618),
-        onGroup = Color(0xFF2E2618),
-        onMuted = Color(0xFF8A7D67),
-        divider = Color(0xFFE6D8BE),
-        stepperContainer = Color(0xFFE9D9BC),
-        stepperDivider = Color(0xFF9A8A70),
-        segmentSelected = Color(0xFFE9D9BC),
-        segmentBorder = Color(0xFF8A8173),
-    )
-
-    ReaderTheme.Light, ReaderTheme.System -> AppearancePalette(
-        background = Color(0xFFF7F6FA),
-        group = Color.White,
-        onBackground = Color(0xFF111111),
-        onGroup = Color(0xFF303038),
-        onMuted = Color(0xFF67646F),
-        divider = Color(0xFFE4E2E8),
-        stepperContainer = Color(0xFFE2E1E7),
-        stepperDivider = Color(0xFF9B98A2),
-        segmentSelected = Color(0xFFE2E7F7),
-        segmentBorder = Color(0xFF7B7D88),
+@Composable
+private fun appearancePalette(): AppearancePalette {
+    val colorScheme = MaterialTheme.colorScheme
+    return AppearancePalette(
+        background = colorScheme.background,
+        group = colorScheme.surface,
+        onBackground = colorScheme.onBackground,
+        onGroup = colorScheme.onSurface,
+        onMuted = colorScheme.onSurfaceVariant,
+        divider = colorScheme.outlineVariant,
+        stepperContainer = colorScheme.surfaceVariant,
+        stepperDivider = colorScheme.outline,
+        segmentSelected = colorScheme.secondaryContainer,
+        segmentBorder = colorScheme.outline,
     )
 }

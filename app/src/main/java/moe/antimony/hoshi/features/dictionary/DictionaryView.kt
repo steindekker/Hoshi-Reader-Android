@@ -84,12 +84,6 @@ import moe.antimony.hoshi.dictionary.DictionaryInfo
 import moe.antimony.hoshi.dictionary.DictionaryRepository
 import moe.antimony.hoshi.dictionary.DictionaryType
 
-private val DictionaryScreenBackground = Color(0xFFF7F6FA)
-private val DictionaryGroupColor = Color.White
-private val DictionaryDividerColor = Color(0xFFE4E2E8)
-private val DictionarySecondaryTextColor = Color(0xFF7D7A85)
-private val DictionaryDestructiveColor = Color(0xFFBA1A1A)
-private val DictionaryControlTrackColor = Color(0xFFE2E1E7)
 private val DictionarySwitchColor = Color(0xFF34C759)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -267,15 +261,19 @@ fun DictionaryView(
     }
 
     BackHandler(onBack = onClose)
+    val colorScheme = MaterialTheme.colorScheme
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = DictionaryScreenBackground,
+        containerColor = colorScheme.background,
         topBar = {
             LargeTopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DictionaryScreenBackground,
-                    scrolledContainerColor = DictionaryScreenBackground,
+                    containerColor = colorScheme.background,
+                    scrolledContainerColor = colorScheme.background,
+                    titleContentColor = colorScheme.onBackground,
+                    navigationIconContentColor = colorScheme.onBackground,
+                    actionIconContentColor = colorScheme.onBackground,
                 ),
                 title = {
                     Text(
@@ -341,7 +339,7 @@ fun DictionaryView(
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(24.dp),
-                            color = DictionaryGroupColor,
+                            color = colorScheme.surface,
                             tonalElevation = 1.dp,
                         ) {
                             Column {
@@ -360,7 +358,7 @@ fun DictionaryView(
                                 )
                                 HorizontalDivider(
                                     modifier = Modifier.padding(horizontal = 16.dp),
-                                    color = DictionaryDividerColor,
+                                    color = colorScheme.outlineVariant,
                                 )
                                 ListItem(
                                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -368,7 +366,7 @@ fun DictionaryView(
                                         Icon(
                                             imageVector = Icons.Rounded.Tune,
                                             contentDescription = null,
-                                            tint = DictionarySecondaryTextColor,
+                                            tint = colorScheme.onSurfaceVariant,
                                         )
                                     },
                                     headlineContent = { Text("Settings") },
@@ -376,7 +374,7 @@ fun DictionaryView(
                                         Icon(
                                             imageVector = Icons.Rounded.ChevronRight,
                                             contentDescription = null,
-                                            tint = DictionarySecondaryTextColor,
+                                            tint = colorScheme.onSurfaceVariant,
                                         )
                                     },
                                     modifier = Modifier.clickable { destination = DictionaryDestination.Settings },
@@ -396,12 +394,12 @@ fun DictionaryView(
                                         count = DictionaryType.entries.size,
                                     ),
                                     colors = SegmentedButtonDefaults.colors(
-                                        activeContainerColor = Color.White,
-                                        activeContentColor = MaterialTheme.colorScheme.onSurface,
-                                        activeBorderColor = DictionarySecondaryTextColor,
+                                        activeContainerColor = colorScheme.secondaryContainer,
+                                        activeContentColor = colorScheme.onSecondaryContainer,
+                                        activeBorderColor = colorScheme.outline,
                                         inactiveContainerColor = Color.Transparent,
-                                        inactiveContentColor = MaterialTheme.colorScheme.onSurface,
-                                        inactiveBorderColor = DictionarySecondaryTextColor,
+                                        inactiveContentColor = colorScheme.onSurface,
+                                        inactiveBorderColor = colorScheme.outline,
                                     ),
                                 ) {
                                     Text(type.displayName)
@@ -410,7 +408,7 @@ fun DictionaryView(
                         }
                         Text(
                             text = "Yomitan term, frequency and pitch dictionaries (.zip) are supported",
-                            color = DictionarySecondaryTextColor,
+                            color = colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(top = 10.dp),
                         )
@@ -465,7 +463,7 @@ fun DictionaryView(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.12f)),
+                        .background(colorScheme.scrim.copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(48.dp))
@@ -504,6 +502,7 @@ private fun DictionaryRow(
     onDrag: (Float) -> Unit,
     onDragEnd: () -> Unit,
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     val dismissState = rememberSwipeToDismissBoxState()
 
     LaunchedEffect(dismissState.currentValue) {
@@ -522,7 +521,7 @@ private fun DictionaryRow(
                     .fillMaxWidth()
                     .fillMaxHeight(),
                 shape = RoundedCornerShape(20.dp),
-                color = DictionaryDestructiveColor,
+                color = colorScheme.error,
             ) {
                 Row(
                     modifier = Modifier
@@ -534,10 +533,10 @@ private fun DictionaryRow(
                     Icon(
                         imageVector = Icons.Rounded.Delete,
                         contentDescription = null,
-                        tint = Color.White,
+                        tint = colorScheme.onError,
                     )
                     Spacer(modifier = Modifier.size(8.dp))
-                    Text("Delete", color = Color.White)
+                    Text("Delete", color = colorScheme.onError)
                 }
             }
         },
@@ -554,7 +553,7 @@ private fun DictionaryRow(
                 )
             },
             shape = RoundedCornerShape(20.dp),
-            color = DictionaryGroupColor,
+            color = colorScheme.surface,
             tonalElevation = 1.dp,
         ) {
             ListItem(
@@ -569,7 +568,7 @@ private fun DictionaryRow(
                 supportingContent = {
                     Text(
                         text = dictionary.index.revision.ifBlank { dictionary.path.name },
-                        color = DictionarySecondaryTextColor,
+                        color = colorScheme.onSurfaceVariant,
                     )
                 },
                 trailingContent = {
@@ -599,9 +598,9 @@ private fun HoshiSwitch(
 private fun hoshiSwitchColors() = SwitchDefaults.colors(
     checkedThumbColor = Color.White,
     checkedTrackColor = DictionarySwitchColor,
-    uncheckedThumbColor = DictionarySecondaryTextColor,
-    uncheckedTrackColor = Color(0xFFE9E8EE),
-    uncheckedBorderColor = DictionarySecondaryTextColor,
+    uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+    uncheckedBorderColor = MaterialTheme.colorScheme.outline,
 )
 
 @Composable
@@ -618,7 +617,7 @@ private fun HoshiIconBackButton(onClick: () -> Unit) {
 private fun GroupDivider() {
     HorizontalDivider(
         modifier = Modifier.padding(horizontal = 16.dp),
-        color = DictionaryDividerColor,
+        color = MaterialTheme.colorScheme.outlineVariant,
     )
 }
 
@@ -631,14 +630,17 @@ private fun DictionarySettingsView(
     modifier: Modifier = Modifier,
 ) {
     BackHandler(onBack = onClose)
+    val colorScheme = MaterialTheme.colorScheme
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = DictionaryScreenBackground,
+        containerColor = colorScheme.background,
         topBar = {
             CenterAlignedTopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DictionaryScreenBackground,
-                    scrolledContainerColor = DictionaryScreenBackground,
+                    containerColor = colorScheme.background,
+                    scrolledContainerColor = colorScheme.background,
+                    titleContentColor = colorScheme.onBackground,
+                    navigationIconContentColor = colorScheme.onBackground,
                 ),
                 title = { Text("Settings") },
                 navigationIcon = { HoshiIconBackButton(onClose) },
@@ -648,7 +650,7 @@ private fun DictionarySettingsView(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .background(DictionaryScreenBackground)
+                .background(colorScheme.background)
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp),
         ) {
@@ -717,14 +719,17 @@ private fun DictionaryCustomCssView(
     modifier: Modifier = Modifier,
 ) {
     BackHandler(onBack = onClose)
+    val colorScheme = MaterialTheme.colorScheme
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = DictionaryScreenBackground,
+        containerColor = colorScheme.background,
         topBar = {
             CenterAlignedTopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DictionaryScreenBackground,
-                    scrolledContainerColor = DictionaryScreenBackground,
+                    containerColor = colorScheme.background,
+                    scrolledContainerColor = colorScheme.background,
+                    titleContentColor = colorScheme.onBackground,
+                    navigationIconContentColor = colorScheme.onBackground,
                 ),
                 title = { Text("Custom CSS") },
                 navigationIcon = { HoshiIconBackButton(onClose) },
@@ -742,7 +747,7 @@ private fun DictionaryCustomCssView(
                 .padding(innerPadding)
                 .padding(16.dp),
             shape = RoundedCornerShape(18.dp),
-            color = DictionaryGroupColor,
+            color = colorScheme.surface,
             tonalElevation = 1.dp,
         ) {
             BasicTextField(
@@ -750,7 +755,7 @@ private fun DictionaryCustomCssView(
                 onValueChange = { value ->
                     onSettingsChange { it.copy(customCSS = value) }
                 },
-                textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color.Black),
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = colorScheme.onSurface),
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(16.dp),
@@ -763,7 +768,7 @@ private fun DictionaryCustomCssView(
 private fun SectionLabel(text: String) {
     Text(
         text = text,
-        color = DictionarySecondaryTextColor,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.titleLarge,
         modifier = Modifier.padding(start = 8.dp, top = 24.dp, bottom = 8.dp),
     )
@@ -774,7 +779,7 @@ private fun SettingsGroup(content: @Composable ColumnScope.() -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
-        color = DictionaryGroupColor,
+        color = MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp,
     ) {
         Column(content = content)
@@ -790,6 +795,7 @@ private fun StepperRow(
     canDecrease: Boolean,
     canIncrease: Boolean,
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     ListItem(
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         headlineContent = { Text(title) },
@@ -801,7 +807,7 @@ private fun StepperRow(
                 Text(value.toString())
                 Surface(
                     shape = RoundedCornerShape(24.dp),
-                    color = DictionaryControlTrackColor,
+                    color = colorScheme.surfaceVariant,
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onDecrease, enabled = canDecrease) {
@@ -809,25 +815,25 @@ private fun StepperRow(
                                 imageVector = Icons.Rounded.Remove,
                                 contentDescription = "Decrease",
                                 tint = if (canDecrease) {
-                                    MaterialTheme.colorScheme.onSurface
+                                    colorScheme.onSurface
                                 } else {
-                                    DictionarySecondaryTextColor.copy(alpha = 0.38f)
+                                    colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
                                 },
                             )
                         }
                         Box(
                             modifier = Modifier
                                 .size(width = 1.dp, height = 28.dp)
-                                .background(DictionarySecondaryTextColor.copy(alpha = 0.35f)),
+                                .background(colorScheme.onSurfaceVariant.copy(alpha = 0.35f)),
                         )
                         IconButton(onClick = onIncrease, enabled = canIncrease) {
                             Icon(
                                 imageVector = Icons.Rounded.Add,
                                 contentDescription = "Increase",
                                 tint = if (canIncrease) {
-                                    MaterialTheme.colorScheme.onSurface
+                                    colorScheme.onSurface
                                 } else {
-                                    DictionarySecondaryTextColor.copy(alpha = 0.38f)
+                                    colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
                                 },
                             )
                         }
