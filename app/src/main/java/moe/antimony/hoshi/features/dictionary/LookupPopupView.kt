@@ -1,10 +1,8 @@
 package moe.antimony.hoshi.features.dictionary
 
 import android.annotation.SuppressLint
-import android.view.MotionEvent
 import android.webkit.WebView
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,8 +14,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -102,12 +98,7 @@ fun LookupPopupView(
                 )
                 .width(frame.width.dp)
                 .height(frame.height.dp)
-                .zIndex(2f)
-                .popupSwipeDismiss(
-                    enabled = state.swipeToDismiss,
-                    threshold = state.swipeThreshold.toFloat(),
-                    onSwipeDismiss = onSwipeDismiss,
-                ),
+                .zIndex(2f),
             shape = RoundedCornerShape(8.dp),
             color = popupBackground,
             tonalElevation = 8.dp,
@@ -118,8 +109,6 @@ fun LookupPopupView(
                 darkMode = state.darkMode,
                 selectionOffsetX = frameX,
                 selectionOffsetY = frameY,
-                swipeToDismiss = state.swipeToDismiss,
-                swipeThreshold = state.swipeThreshold.toFloat(),
                 callbacks = PopupWebViewCallbacks(
                     onTapOutside = onTapOutside,
                     onSwipeDismiss = onSwipeDismiss,
@@ -140,8 +129,6 @@ private fun LookupPopupWebView(
     darkMode: Boolean,
     selectionOffsetX: Double,
     selectionOffsetY: Double,
-    swipeToDismiss: Boolean,
-    swipeThreshold: Float,
     callbacks: PopupWebViewCallbacks,
 ) {
     AndroidView(
@@ -168,7 +155,6 @@ private fun LookupPopupWebView(
                     "HoshiPopup",
                 )
                 webViewClient = PopupMessageWebViewClient(callbacks, audioRequestHandler)
-                setOnTouchListener(PopupWebViewSwipeListener(swipeToDismiss, swipeThreshold, callbacks.onSwipeDismiss))
             }
         },
         update = { webView ->
@@ -183,71 +169,3 @@ private fun LookupPopupWebView(
         },
     )
 }
-
-private class PopupWebViewSwipeListener(
-    private val enabled: Boolean,
-    private val threshold: Float,
-    private val onSwipeDismiss: () -> Unit,
-) : android.view.View.OnTouchListener {
-    private var startX = 0f
-    private var startY = 0f
-
-    override fun onTouch(view: android.view.View, event: MotionEvent): Boolean {
-        view.onTouchEvent(event)
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                startX = event.x
-                startY = event.y
-            }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                val dx = event.x - startX
-                val dy = event.y - startY
-                if (isPopupSwipeDismissTriggered(enabled, threshold, dx, dy)) {
-                    onSwipeDismiss()
-                }
-            }
-        }
-        return true
-    }
-}
-
-internal fun isPopupSwipeDismissTriggered(
-    enabled: Boolean,
-    threshold: Float,
-    dx: Float,
-    dy: Float,
-): Boolean =
-    enabled &&
-        kotlin.math.abs(dx) > threshold &&
-        kotlin.math.abs(dy) < POPUP_SWIPE_VERTICAL_SLOP_PX
-
-private fun Modifier.popupSwipeDismiss(
-    enabled: Boolean,
-    threshold: Float,
-    onSwipeDismiss: () -> Unit,
-): Modifier {
-    if (!enabled) return this
-    return pointerInput(onSwipeDismiss, threshold) {
-        var totalX = 0f
-        var totalY = 0f
-        detectHorizontalDragGestures(
-            onDragStart = {
-                totalX = 0f
-                totalY = 0f
-            },
-            onHorizontalDrag = { change, dragAmount ->
-                totalX += dragAmount
-                totalY += change.positionChange().y
-            },
-            onDragEnd = {
-                if (kotlin.math.abs(totalX) > threshold &&
-                    kotlin.math.abs(totalY) < POPUP_SWIPE_VERTICAL_SLOP_PX
-                ) {
-                    onSwipeDismiss()
-                }
-            },
-        )
-    }
-}
-
-private const val POPUP_SWIPE_VERTICAL_SLOP_PX = 40f

@@ -97,6 +97,7 @@
    - Verified on emulator with imported `testdata/MK3.zip` and `testdata/test.epub`: opened the reader, tapped vertical正文 `える`, confirmed the first popup WebView bounds are `[18,390][817,1140]` while the chapter WebView bounds are `[0,372][1280,2496]`, and confirmed a nested popup still opens from `簡にして要を得る`.
    - Verified on emulator with imported `testdata/MK3.zip` and `testdata/test.epub`: opened the reader, tapped vertical正文 `える`, confirmed the reader text behind the popup shows the same gray `hoshi-selection` highlight as iOS and popup nested lookups.
    - Verified on emulator without clearing app data: in Dark reader theme, selected vertical正文 `て`, confirmed the popup renders JMdict glossary body text in readable light color while Jiten/Meikyo-style dictionary content remains readable.
+   - Verified on emulator without clearing app data after the popup WebView touch fix: searched `たべる` in Dictionary, confirmed the result WebView scrolls through a long JMdict/Jiten result list with repeated long vertical swipes and crash log remains empty; the popup-specific fix removes Android native touch interception so popup vertical scrolling is handled by WebView like iOS `WKWebView`, while swipe dismissal remains in the shared iOS-style popup JavaScript.
 
 6. `in_progress` - Dictionary import and management
    - `done` - Build Android native `hoshidicts_jni` from `third_party/hoshidicts-kotlin-bridge` while linking to `third_party/hoshidicts-gplv3`.
