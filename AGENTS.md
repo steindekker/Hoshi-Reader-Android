@@ -111,6 +111,28 @@ git -C third_party/hoshidicts-gplv3 submodule update --init --recursive
 - 调试导入流程时，应通过 Android 系统文件选择器选择 `testdata` 中的文件；需要命令行辅助时，先把样本推送到模拟器 Downloads，再通过 DocumentsUI 选择。
 - 模拟器交互测试默认保留已有 app 数据，尤其是已导入的 EPUB、辞典和字体。除非测试目标明确要求首启、空库、重复导入、迁移或损坏数据恢复，否则不要清除 app 数据，也不要为了省事反复重新导入这些测试资源。
 
+## 查词模拟器测试技巧
+
+- 不要简单断言“adb 不能输入日文”。先检查当前输入法和 subtype：
+
+```bash
+$ANDROID_HOME/platform-tools/adb -s emulator-5554 shell ime list -s
+$ANDROID_HOME/platform-tools/adb -s emulator-5554 shell dumpsys input_method | rg -n "mCurrentSubtype|Subtype|RotationList" -C 2
+```
+
+- 如果当前是 Gboard 日文 QWERTY（例如 `日本語（QWERTY）`），可以用 adb 输入罗马字触发日文组合：在 Dictionary 搜索框聚焦后执行 `adb shell input text taberu`，通常会得到 `たべる`；再发送 Enter 触发查词：
+
+```bash
+$ANDROID_HOME/platform-tools/adb -s emulator-5554 shell input tap <search_x> <search_y>
+$ANDROID_HOME/platform-tools/adb -s emulator-5554 shell input text taberu
+$ANDROID_HOME/platform-tools/adb -s emulator-5554 shell input keyevent 66
+```
+
+- 直接执行 `adb shell input text '食べる'` 可能失败、输入为空、或被当前输入法转换成意外字符；这反映的是当前 shell/input method 组合限制，不代表应用查词失败。
+- 测试日语辞典时优先使用已知命中的词：`食べる` / `たべる`。若需要 ASCII 查询，可使用 `testdata/MK3.zip` 导入后查 `test`，但要确认当前输入法没有把 ASCII 转成全角或假名。
+- 如果自动输入仍受输入法状态影响，允许让用户手动输入查询词；用户输入完成后，继续基于当前模拟器状态完成点击、截图、WebView、logcat 验证，不要重新清数据或重新导入辞典。
+- 查词结果页和 popup 内的 WebView 可用 WebView DevTools / Chrome DevTools Protocol 检查 DOM、按钮状态、JS 变量和 console log。验证音频按钮时，可用 `input motionevent DOWN/UP` 捕捉按下态截图，再查 logcat 中的 `MediaPlayer` / `MediaHTTPService` / `audio/mpeg` 记录。
+
 ## 集成注意事项
 
 - Anki 行为不能直接照搬 iOS。iOS app 使用 AnkiMobile x-callback 和 AnkiConnect 风格路径；Android 实现前必须调查 AnkiDroid API、intent 或 Android 可用的 AnkiConnect 路径。
