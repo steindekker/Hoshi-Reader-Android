@@ -40,6 +40,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Palette
@@ -120,6 +121,7 @@ fun ReaderWebView(
 ) {
     var effectiveSettings by remember(readerSettings) { mutableStateOf(readerSettings) }
     var showAppearance by remember { mutableStateOf(false) }
+    var showChapters by remember { mutableStateOf(false) }
     var showReaderMenu by remember { mutableStateOf(false) }
     var lookupPopups by remember { mutableStateOf<List<LookupPopupItem>>(emptyList()) }
     val context = LocalContext.current
@@ -261,6 +263,10 @@ fun ReaderWebView(
             onMenu = { showReaderMenu = true },
             menuExpanded = showReaderMenu,
             onDismissMenu = { showReaderMenu = false },
+            onChapters = {
+                showReaderMenu = false
+                showChapters = true
+            },
             onAppearance = {
                 showReaderMenu = false
                 showAppearance = true
@@ -278,6 +284,20 @@ fun ReaderWebView(
             },
             fontManager = fontManager,
             onDismiss = { showAppearance = false },
+        )
+    }
+    if (showChapters) {
+        ReaderChapterSheet(
+            book = book,
+            currentPosition = displayedChapterPosition,
+            onJump = { target ->
+                lookupPopups = emptyList()
+                chapterPosition = target
+                displayedChapterPosition = target
+                onSaveBookmark(target.index, target.progress)
+                showChapters = false
+            },
+            onDismiss = { showChapters = false },
         )
     }
 }
@@ -314,6 +334,7 @@ private fun BoxScope.ReaderBottomChrome(
     onMenu: () -> Unit,
     menuExpanded: Boolean,
     onDismissMenu: () -> Unit,
+    onChapters: () -> Unit,
     onAppearance: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -327,6 +348,7 @@ private fun BoxScope.ReaderBottomChrome(
         )
         ReaderMenuCard(
             colors = colors,
+            onChapters = onChapters,
             onAppearance = onAppearance,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -364,6 +386,7 @@ private fun BoxScope.ReaderBottomChrome(
 @Composable
 private fun ReaderMenuCard(
     colors: ReaderChromeColors,
+    onChapters: () -> Unit,
     onAppearance: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -385,6 +408,22 @@ private fun ReaderMenuCard(
         Column(
             modifier = Modifier.padding(vertical = 10.dp),
         ) {
+            ReaderMenuItem(
+                text = "Chapters",
+                icon = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.List,
+                        contentDescription = null,
+                        tint = Color(colors.menuContent),
+                    )
+                },
+                colors = colors,
+                onClick = onChapters,
+            )
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 22.dp),
+                color = Color(colors.menuBorder),
+            )
             ReaderMenuItem(
                 text = "Appearance",
                 icon = {

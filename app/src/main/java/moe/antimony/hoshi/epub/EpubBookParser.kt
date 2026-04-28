@@ -1,12 +1,14 @@
 package moe.antimony.hoshi.epub
 
 import uniffi.hoshiepub.EpubBook as NativeEpubBook
+import uniffi.hoshiepub.TocNode as NativeTocNode
 import uniffi.hoshiepub.parseExtractedEpub
 import java.io.File
 
 data class EpubBook(
     val title: String,
     val chapters: List<EpubChapter>,
+    val toc: List<EpubTocItem> = emptyList(),
     val coverHref: String? = null,
     private val resources: Map<String, EpubResource> = emptyMap(),
     private val rootDirectory: File? = null,
@@ -38,6 +40,12 @@ data class EpubChapter(
     val href: String,
     val mediaType: String,
     val html: String,
+)
+
+data class EpubTocItem(
+    val label: String,
+    val href: String?,
+    val children: List<EpubTocItem> = emptyList(),
 )
 
 data class EpubResource(
@@ -96,11 +104,29 @@ class EpubBookParser {
             coverHref = coverHref()
                 ?.let { contentDirectory.resolve(it).relativeHref(root) }
                 ?: resources.entries.firstOrNull { (_, resource) -> resource.mediaType.startsWith("image/") }?.key,
+            toc = toc().children.map { it.toReaderTocItem(root, contentDirectory) },
             chapters = chapters,
             resources = resources,
             rootDirectory = root,
         )
     }
+}
+
+private fun NativeTocNode.toReaderTocItem(root: File, contentDirectory: File): EpubTocItem =
+    EpubTocItem(
+        label = label,
+        href = href?.normalizeTocHref(root, contentDirectory),
+        children = children.map { it.toReaderTocItem(root, contentDirectory) },
+    )
+
+private fun String.normalizeTocHref(root: File, contentDirectory: File): String {
+    val raw = trim().replace('\\', '/').removePrefix("/")
+    if (raw.isBlank()) return raw
+    val fragment = raw.substringAfter('#', "")
+    val base = raw.substringBefore('#').substringBefore('?')
+    val href = contentDirectory.resolve(base).relativeHref(root)
+        ?: base.normalizeResourceHref()
+    return if (fragment.isBlank()) href else "$href#$fragment"
 }
 
 private fun File.relativeHref(root: File): String? {
