@@ -31,6 +31,10 @@ data class LookupPopupState(
     val dictionarySettings: DictionarySettings = DictionarySettings(),
     val isVertical: Boolean = true,
     val isFullWidth: Boolean = false,
+    val width: Int = 320,
+    val height: Int = 250,
+    val swipeToDismiss: Boolean = false,
+    val swipeThreshold: Int = 40,
     val topInset: Double = 0.0,
     val bottomInset: Double = 0.0,
 )
@@ -60,8 +64,8 @@ fun LookupPopupView(
             selectionRect = state.selection.rect,
             screenWidth = maxWidth.value.toDouble(),
             screenHeight = maxHeight.value.toDouble(),
-            maxWidth = 320.0,
-            maxHeight = 250.0,
+            maxWidth = state.width.toDouble(),
+            maxHeight = state.height.toDouble(),
             isVertical = state.isVertical,
             isFullWidth = state.isFullWidth,
             topInset = state.topInset,
@@ -77,7 +81,11 @@ fun LookupPopupView(
                 )
                 .width(frame.width.dp)
                 .height(frame.height.dp)
-                .popupSwipeDismiss(onSwipeDismiss),
+                .popupSwipeDismiss(
+                    enabled = state.swipeToDismiss,
+                    threshold = state.swipeThreshold.toFloat(),
+                    onSwipeDismiss = onSwipeDismiss,
+                ),
             shape = RoundedCornerShape(8.dp),
             tonalElevation = 8.dp,
             shadowElevation = 8.dp,
@@ -86,6 +94,8 @@ fun LookupPopupView(
                 html = html,
                 selectionOffsetX = frameX,
                 selectionOffsetY = frameY,
+                swipeToDismiss = state.swipeToDismiss,
+                swipeThreshold = state.swipeThreshold.toFloat(),
                 callbacks = PopupWebViewCallbacks(
                     onTapOutside = onTapOutside,
                     onSwipeDismiss = onSwipeDismiss,
@@ -102,6 +112,8 @@ private fun LookupPopupWebView(
     html: String,
     selectionOffsetX: Double,
     selectionOffsetY: Double,
+    swipeToDismiss: Boolean,
+    swipeThreshold: Float,
     callbacks: PopupWebViewCallbacks,
 ) {
     AndroidView(
@@ -127,7 +139,7 @@ private fun LookupPopupWebView(
                     "HoshiPopup",
                 )
                 webViewClient = PopupMessageWebViewClient(callbacks)
-                setOnTouchListener(PopupWebViewSwipeListener(callbacks.onSwipeDismiss))
+                setOnTouchListener(PopupWebViewSwipeListener(swipeToDismiss, swipeThreshold, callbacks.onSwipeDismiss))
             }
         },
         update = { webView ->
@@ -143,12 +155,15 @@ private fun LookupPopupWebView(
 }
 
 private class PopupWebViewSwipeListener(
+    private val enabled: Boolean,
+    private val threshold: Float,
     private val onSwipeDismiss: () -> Unit,
 ) : android.view.View.OnTouchListener {
     private var startX = 0f
     private var startY = 0f
 
     override fun onTouch(view: android.view.View, event: MotionEvent): Boolean {
+        if (!enabled) return false
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 startX = event.x
@@ -157,7 +172,7 @@ private class PopupWebViewSwipeListener(
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 val dx = event.x - startX
                 val dy = event.y - startY
-                if (kotlin.math.abs(dx) > POPUP_SWIPE_DISMISS_THRESHOLD_PX &&
+                if (kotlin.math.abs(dx) > threshold &&
                     kotlin.math.abs(dy) < POPUP_SWIPE_VERTICAL_SLOP_PX
                 ) {
                     onSwipeDismiss()
@@ -168,8 +183,13 @@ private class PopupWebViewSwipeListener(
     }
 }
 
-private fun Modifier.popupSwipeDismiss(onSwipeDismiss: () -> Unit): Modifier =
-    pointerInput(onSwipeDismiss) {
+private fun Modifier.popupSwipeDismiss(
+    enabled: Boolean,
+    threshold: Float,
+    onSwipeDismiss: () -> Unit,
+): Modifier {
+    if (!enabled) return this
+    return pointerInput(onSwipeDismiss, threshold) {
         var totalX = 0f
         var totalY = 0f
         detectHorizontalDragGestures(
@@ -182,7 +202,7 @@ private fun Modifier.popupSwipeDismiss(onSwipeDismiss: () -> Unit): Modifier =
                 totalY += change.positionChange().y
             },
             onDragEnd = {
-                if (kotlin.math.abs(totalX) > POPUP_SWIPE_DISMISS_THRESHOLD_PX &&
+                if (kotlin.math.abs(totalX) > threshold &&
                     kotlin.math.abs(totalY) < POPUP_SWIPE_VERTICAL_SLOP_PX
                 ) {
                     onSwipeDismiss()
@@ -190,6 +210,6 @@ private fun Modifier.popupSwipeDismiss(onSwipeDismiss: () -> Unit): Modifier =
             },
         )
     }
+}
 
-private const val POPUP_SWIPE_DISMISS_THRESHOLD_PX = 80f
 private const val POPUP_SWIPE_VERTICAL_SLOP_PX = 40f

@@ -8,9 +8,23 @@ data class ReaderSettings(
     val verticalWriting: Boolean = true,
     val selectedFont: String = "Hiragino Mincho ProN",
     val fontSize: Int = 22,
+    val hideFurigana: Boolean = false,
     val horizontalPadding: Int = 5,
     val verticalPadding: Int = 0,
+    val avoidPageBreak: Boolean = false,
+    val justifyText: Boolean = false,
+    val layoutAdvanced: Boolean = false,
     val lineHeight: Double = 1.65,
+    val characterSpacing: Double = 0.0,
+    val showTitle: Boolean = true,
+    val showCharacters: Boolean = true,
+    val showPercentage: Boolean = true,
+    val showProgressTop: Boolean = true,
+    val popupWidth: Int = 320,
+    val popupHeight: Int = 250,
+    val popupFullWidth: Boolean = false,
+    val popupSwipeToDismiss: Boolean = false,
+    val popupSwipeThreshold: Int = 40,
 ) {
     val bottomOverlapPx: Int
         get() = if (verticalWriting) fontSize else 0
@@ -83,9 +97,23 @@ class ReaderSettingsStore(context: Context) {
         verticalWriting = preferences.getBoolean("verticalWriting", true),
         selectedFont = preferences.getString("selectedFont", null) ?: "Hiragino Mincho ProN",
         fontSize = preferences.getInt("fontSize", 22),
+        hideFurigana = preferences.getBoolean("readerHideFurigana", false),
         horizontalPadding = preferences.getInt("layoutHorizontalPadding", 5),
         verticalPadding = preferences.getInt("layoutVerticalPadding", 0),
+        avoidPageBreak = preferences.getBoolean("avoidPageBreak", false),
+        justifyText = preferences.getBoolean("justifyText", false),
+        layoutAdvanced = preferences.getBoolean("layoutAdvanced", false),
         lineHeight = preferences.getFloat("lineHeight", 1.65f).toDouble(),
+        characterSpacing = preferences.getFloat("characterSpacing", 0f).toDouble(),
+        showTitle = preferences.getBoolean("readerShowTitle", true),
+        showCharacters = preferences.getBoolean("readerShowCharacters", true),
+        showPercentage = preferences.getBoolean("readerShowPercentage", true),
+        showProgressTop = preferences.getBoolean("readerShowProgressTop", true),
+        popupWidth = preferences.getInt("popupWidth", 320),
+        popupHeight = preferences.getInt("popupHeight", 250),
+        popupFullWidth = preferences.getBoolean("popupFullWidth", false),
+        popupSwipeToDismiss = preferences.getBoolean("popupSwipeToDismiss", false),
+        popupSwipeThreshold = preferences.getInt("popupSwipeThreshold", 40),
     )
 
     fun save(settings: ReaderSettings) {
@@ -94,9 +122,23 @@ class ReaderSettingsStore(context: Context) {
             .putBoolean("verticalWriting", settings.verticalWriting)
             .putString("selectedFont", settings.selectedFont)
             .putInt("fontSize", settings.fontSize)
+            .putBoolean("readerHideFurigana", settings.hideFurigana)
             .putInt("layoutHorizontalPadding", settings.horizontalPadding)
             .putInt("layoutVerticalPadding", settings.verticalPadding)
+            .putBoolean("avoidPageBreak", settings.avoidPageBreak)
+            .putBoolean("justifyText", settings.justifyText)
+            .putBoolean("layoutAdvanced", settings.layoutAdvanced)
             .putFloat("lineHeight", settings.lineHeight.toFloat())
+            .putFloat("characterSpacing", settings.characterSpacing.toFloat())
+            .putBoolean("readerShowTitle", settings.showTitle)
+            .putBoolean("readerShowCharacters", settings.showCharacters)
+            .putBoolean("readerShowPercentage", settings.showPercentage)
+            .putBoolean("readerShowProgressTop", settings.showProgressTop)
+            .putInt("popupWidth", settings.popupWidth)
+            .putInt("popupHeight", settings.popupHeight)
+            .putBoolean("popupFullWidth", settings.popupFullWidth)
+            .putBoolean("popupSwipeToDismiss", settings.popupSwipeToDismiss)
+            .putInt("popupSwipeThreshold", settings.popupSwipeThreshold)
             .apply()
     }
 }

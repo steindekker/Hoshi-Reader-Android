@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
-import android.content.Intent
 import android.net.Uri
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
@@ -12,8 +11,6 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,8 +20,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -35,39 +30,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.List
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,13 +56,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import moe.antimony.hoshi.epub.EpubBook
@@ -134,6 +111,11 @@ fun ReaderWebView(
             selection = selection,
             options = LookupPopupOptions(
                 isVertical = effectiveSettings.verticalWriting,
+                isFullWidth = effectiveSettings.popupFullWidth,
+                width = effectiveSettings.popupWidth,
+                height = effectiveSettings.popupHeight,
+                swipeToDismiss = effectiveSettings.popupSwipeToDismiss,
+                swipeThreshold = effectiveSettings.popupSwipeThreshold,
                 dictionarySettings = dictionarySettingsStore.load(),
             ),
         )
@@ -142,6 +124,11 @@ fun ReaderWebView(
             selection = selection,
             options = LookupPopupOptions(
                 isVertical = false,
+                isFullWidth = effectiveSettings.popupFullWidth,
+                width = effectiveSettings.popupWidth,
+                height = effectiveSettings.popupHeight,
+                swipeToDismiss = effectiveSettings.popupSwipeToDismiss,
+                swipeThreshold = effectiveSettings.popupSwipeThreshold,
                 dictionarySettings = dictionarySettingsStore.load(),
             ),
         )
@@ -251,12 +238,24 @@ fun ReaderWebView(
         }
         ReaderTopInfo(
             state = chromeState,
+            settings = effectiveSettings,
             colors = readerChromeColors(effectiveSettings),
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .statusBarsPadding()
                 .padding(top = 22.dp, start = 96.dp, end = 96.dp),
         )
+        if (!effectiveSettings.showProgressTop) {
+            ReaderBottomProgress(
+                state = chromeState,
+                settings = effectiveSettings,
+                colors = readerChromeColors(effectiveSettings),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 62.dp),
+            )
+        }
         ReaderBottomChrome(
             settings = effectiveSettings,
             onClose = onClose,
@@ -305,26 +304,50 @@ fun ReaderWebView(
 @Composable
 private fun ReaderTopInfo(
     state: ReaderChromeState,
+    settings: ReaderSettings,
     colors: ReaderChromeColors,
     modifier: Modifier = Modifier,
 ) {
+    val progress = state.progressText(settings)
+    if (!settings.showTitle && (progress.isBlank() || !settings.showProgressTop)) return
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Text(
-            text = state.title,
-            color = Color(colors.infoText),
-            style = MaterialTheme.typography.labelLarge,
-            maxLines = 1,
-        )
-        Text(
-            text = state.progressText(),
-            color = Color(colors.infoText),
-            style = MaterialTheme.typography.labelMedium,
-        )
+        if (settings.showTitle) {
+            Text(
+                text = state.title,
+                color = Color(colors.infoText),
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+            )
+        }
+        if (settings.showProgressTop && progress.isNotBlank()) {
+            Text(
+                text = progress,
+                color = Color(colors.infoText),
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
     }
+}
+
+@Composable
+private fun ReaderBottomProgress(
+    state: ReaderChromeState,
+    settings: ReaderSettings,
+    colors: ReaderChromeColors,
+    modifier: Modifier = Modifier,
+) {
+    val progress = state.progressText(settings)
+    if (progress.isBlank()) return
+    Text(
+        text = progress,
+        color = Color(colors.infoText),
+        style = MaterialTheme.typography.labelMedium,
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -579,368 +602,6 @@ private fun ChapterWebView(
             }
         },
     )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ReaderAppearanceSheet(
-    settings: ReaderSettings,
-    onSettingsChange: (ReaderSettings) -> Unit,
-    fontManager: ReaderFontManager,
-    onDismiss: () -> Unit,
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var importedFonts by remember { mutableStateOf(fontManager.storedFonts()) }
-    var fontMenuExpanded by remember { mutableStateOf(false) }
-    var fontToDelete by remember { mutableStateOf<String?>(null) }
-    var isImportingFont by remember { mutableStateOf(false) }
-    val fontImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        runCatching {
-            context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        scope.launch {
-            isImportingFont = true
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    fontManager.importFont(context.contentResolver, uri)
-                }
-            }
-            importedFonts = fontManager.storedFonts()
-            isImportingFont = false
-        }
-    }
-    val fontOptions = remember(importedFonts, settings.selectedFont) {
-        (ReaderFontManager.defaultFonts + importedFonts.map { it.name } + settings.selectedFont)
-            .filter { it.isNotBlank() }
-            .distinct()
-    }
-    val sheetBackground = when (settings.theme) {
-        ReaderTheme.Dark -> Color(0xFF1E1E1E)
-        ReaderTheme.Sepia -> Color(0xFFF6EBD8)
-        ReaderTheme.Light, ReaderTheme.System -> Color(0xFFF7F6FA)
-    }
-    val groupColor = when (settings.theme) {
-        ReaderTheme.Dark -> Color(0xFF2A2A2A)
-        ReaderTheme.Sepia -> Color(0xFFFFF8EC)
-        ReaderTheme.Light, ReaderTheme.System -> Color.White
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = sheetBackground,
-    ) {
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            item {
-                Text(
-                    text = "Appearance",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
-                )
-            }
-            item {
-                ReaderAppearanceGroup(color = groupColor) {
-                    SegmentedRow(
-                        label = "Theme",
-                        options = ReaderTheme.entries.map { it.label },
-                        selected = settings.theme.label,
-                        onSelected = { label ->
-                            ReaderTheme.entries.firstOrNull { it.label == label }?.let {
-                                onSettingsChange(settings.copy(theme = it))
-                            }
-                        },
-                    )
-                    ReaderAppearanceDivider()
-                    SegmentedRow(
-                        label = "Text Orientation",
-                        options = listOf("縦", "横"),
-                        selected = if (settings.verticalWriting) "縦" else "横",
-                        onSelected = { label ->
-                            onSettingsChange(settings.copy(verticalWriting = label == "縦"))
-                        },
-                    )
-                }
-            }
-            item {
-                ReaderAppearanceGroup(color = groupColor) {
-                    ReaderFontRow(
-                        settings = settings,
-                        fontOptions = fontOptions,
-                        fontMenuExpanded = fontMenuExpanded,
-                        onFontMenuExpandedChange = { fontMenuExpanded = it },
-                        onFontSelected = { fontName ->
-                            fontMenuExpanded = false
-                            onSettingsChange(settings.copy(selectedFont = fontName))
-                        },
-                        canDeleteFont = !fontManager.isDefaultFont(settings.selectedFont),
-                        onDeleteFont = { fontToDelete = settings.selectedFont },
-                    )
-                    ReaderAppearanceDivider()
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text("Import Font", style = MaterialTheme.typography.bodyLarge)
-                        Button(
-                            onClick = { fontImporter.launch(fontMimeTypes) },
-                            enabled = !isImportingFont,
-                        ) {
-                            Text(if (isImportingFont) "Importing..." else "Import")
-                        }
-                    }
-                }
-            }
-            item {
-                ReaderAppearanceGroup(color = groupColor) {
-                    StepperRow(
-                        label = "Font Size",
-                        value = settings.fontSize.toString(),
-                        onDecrease = {
-                            onSettingsChange(settings.copy(fontSize = (settings.fontSize - 1).coerceAtLeast(16)))
-                        },
-                        onIncrease = {
-                            onSettingsChange(settings.copy(fontSize = (settings.fontSize + 1).coerceAtMost(40)))
-                        },
-                    )
-                    ReaderAppearanceDivider()
-                    StepperRow(
-                        label = "Horizontal Padding",
-                        value = "${settings.horizontalPadding}%",
-                        onDecrease = {
-                            onSettingsChange(settings.copy(horizontalPadding = (settings.horizontalPadding - 1).coerceAtLeast(0)))
-                        },
-                        onIncrease = {
-                            onSettingsChange(settings.copy(horizontalPadding = (settings.horizontalPadding + 1).coerceAtMost(50)))
-                        },
-                    )
-                    ReaderAppearanceDivider()
-                    StepperRow(
-                        label = "Vertical Padding",
-                        value = "${settings.verticalPadding}%",
-                        onDecrease = {
-                            onSettingsChange(settings.copy(verticalPadding = (settings.verticalPadding - 1).coerceAtLeast(0)))
-                        },
-                        onIncrease = {
-                            onSettingsChange(settings.copy(verticalPadding = (settings.verticalPadding + 1).coerceAtMost(50)))
-                        },
-                    )
-                    ReaderAppearanceDivider()
-                    Column(
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Line Height", style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                String.format(java.util.Locale.US, "%.2f", settings.lineHeight),
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
-                        }
-                        Slider(
-                            value = settings.lineHeight.toFloat(),
-                            onValueChange = { value ->
-                                onSettingsChange(settings.copy(lineHeight = (kotlin.math.round(value * 20) / 20.0)))
-                            },
-                            valueRange = 1.0f..2.5f,
-                            steps = 29,
-                        )
-                    }
-                }
-            }
-            item {
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Done")
-                }
-            }
-        }
-    }
-    fontToDelete?.let { fontName ->
-        AlertDialog(
-            onDismissRequest = { fontToDelete = null },
-            title = { Text("Delete \"$fontName\"?") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        fontManager.deleteFont(fontName)
-                        importedFonts = fontManager.storedFonts()
-                        onSettingsChange(settings.copy(selectedFont = ReaderFontManager.defaultFonts.first()))
-                        fontToDelete = null
-                    },
-                ) {
-                    Text("Delete")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { fontToDelete = null }) {
-                    Text("Cancel")
-                }
-            },
-        )
-    }
-}
-
-private val fontMimeTypes = arrayOf(
-    "font/ttf",
-    "font/otf",
-    "application/x-font-ttf",
-    "application/x-font-otf",
-    "application/vnd.ms-opentype",
-    "application/octet-stream",
-    "*/*",
-)
-
-@Composable
-private fun SegmentedRow(
-    label: String,
-    options: List<String>,
-    selected: String,
-    onSelected: (String) -> Unit,
-) {
-    Column(
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text(label, style = MaterialTheme.typography.bodyLarge)
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            options.forEachIndexed { index, option ->
-                SegmentedButton(
-                    selected = option == selected,
-                    onClick = { onSelected(option) },
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                ) {
-                    Text(option)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReaderFontRow(
-    settings: ReaderSettings,
-    fontOptions: List<String>,
-    fontMenuExpanded: Boolean,
-    onFontMenuExpandedChange: (Boolean) -> Unit,
-    onFontSelected: (String) -> Unit,
-    canDeleteFont: Boolean,
-    onDeleteFont: () -> Unit,
-) {
-    Column(
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text("Font", style = MaterialTheme.typography.bodyLarge)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(modifier = Modifier.weight(1f)) {
-                TextButton(onClick = { onFontMenuExpandedChange(true) }) {
-                    Text(settings.selectedFont)
-                }
-                DropdownMenu(
-                    expanded = fontMenuExpanded,
-                    onDismissRequest = { onFontMenuExpandedChange(false) },
-                ) {
-                    fontOptions.forEach { fontName ->
-                        DropdownMenuItem(
-                            text = { Text(fontName) },
-                            onClick = { onFontSelected(fontName) },
-                        )
-                    }
-                }
-            }
-            if (canDeleteFont) {
-                TextButton(onClick = onDeleteFont) {
-                    Text("Delete")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReaderAppearanceGroup(
-    color: Color,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
-        color = color,
-        tonalElevation = 1.dp,
-    ) {
-        Column(content = content)
-    }
-}
-
-@Composable
-private fun ReaderAppearanceDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(horizontal = 20.dp),
-        color = Color(0xFFE4E2E8),
-    )
-}
-
-@Composable
-private fun StepperRow(
-    label: String,
-    value: String,
-    onDecrease: () -> Unit,
-    onIncrease: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, style = MaterialTheme.typography.bodyLarge)
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(value, style = MaterialTheme.typography.bodyLarge)
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = Color(0xFFE2E1E7),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onDecrease) {
-                        Icon(
-                            imageVector = Icons.Rounded.Remove,
-                            contentDescription = "Decrease",
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .size(width = 1.dp, height = 28.dp)
-                            .background(Color(0xFF7D7A85).copy(alpha = 0.35f)),
-                    )
-                    IconButton(onClick = onIncrease) {
-                        Icon(
-                            imageVector = Icons.Rounded.Add,
-                            contentDescription = "Increase",
-                        )
-                    }
-                }
-            }
-        }
-    }
 }
 
 private class EpubWebViewClient(

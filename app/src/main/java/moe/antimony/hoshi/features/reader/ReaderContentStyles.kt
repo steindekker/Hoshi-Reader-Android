@@ -37,9 +37,50 @@ internal object ReaderContentStyles {
             }
             """.trimIndent()
         }.orEmpty()
+        val textSpacingCss = if (settings.layoutAdvanced) {
+            """
+            line-height: ${settings.lineHeight} !important;
+            letter-spacing: ${settings.characterSpacing.cssLetterSpacingEm()}em !important;
+            """.trimIndent()
+        } else {
+            ""
+        }
+        val gridCss = if (!settings.justifyText) {
+            """
+            text-align: start !important;
+            hanging-punctuation: allow-end !important;
+            line-break: strict !important;
+            """.trimIndent()
+        } else {
+            ""
+        }
+        val pageBreakCss = if (settings.avoidPageBreak) {
+            """
+            p {
+                break-inside: avoid !important;
+                -webkit-column-break-inside: avoid !important;
+            }
+            """.trimIndent()
+        } else {
+            ""
+        }
+        val furiganaCss = if (settings.hideFurigana) {
+            """
+            rt {
+                display: none !important;
+            }
+            """.trimIndent()
+        } else {
+            """
+            rt {
+                font-size: 0.45em;
+            }
+            """.trimIndent()
+        }
         return """
         <style>
         $fontFaceCss
+        $pageBreakCss
         @media (prefers-color-scheme: light) { :root { --hoshi-system-text-color: #000; } }
         @media (prefers-color-scheme: dark) { :root { --hoshi-system-text-color: #fff; } }
         html, body {
@@ -55,15 +96,13 @@ internal object ReaderContentStyles {
         body {
             font-family: $fontFamily, serif !important;
             font-size: ${settings.fontSize}px !important;
-            line-height: ${settings.lineHeight} !important;
+            $textSpacingCss
             box-sizing: border-box !important;
             column-width: var(--page-width, 100vw) !important;
             column-gap: ${settings.columnGapCss};
             padding: ${settings.pagePaddingCss} !important;
             padding-bottom: ${settings.bottomPaddingCss} !important;
-            text-align: start !important;
-            hanging-punctuation: allow-end !important;
-            line-break: strict !important;
+            $gridCss
             text-orientation: mixed;
         }
         img.block-img {
@@ -87,9 +126,7 @@ internal object ReaderContentStyles {
             break-inside: avoid !important;
             -webkit-column-break-inside: avoid !important;
         }
-        rt {
-            font-size: 0.45em;
-        }
+        $furiganaCss
         ::highlight(hoshi-selection) {
             background-color: rgba(160, 160, 160, 0.4) !important;
             color: inherit;
@@ -107,3 +144,6 @@ private fun String.cssString(): String =
 
 private fun String.cssSingleQuotedUrl(): String =
     replace("\\", "\\\\").replace("'", "\\'")
+
+private fun Double.cssLetterSpacingEm(): String =
+    String.format(java.util.Locale.US, "%.2f", this / 100.0)

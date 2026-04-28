@@ -1,6 +1,7 @@
 package moe.antimony.hoshi.features.reader
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -25,7 +26,9 @@ class ReaderSettingsTest {
             selectedFont = "KleeOne-SemiBold",
             horizontalPadding = 12,
             verticalPadding = 8,
+            layoutAdvanced = true,
             lineHeight = 1.85,
+            characterSpacing = 2.0,
         )
 
         val css = ReaderContentStyles.styleTag(
@@ -40,6 +43,7 @@ class ReaderSettingsTest {
         assertTrue(css.contains("font-family: 'KleeOne-SemiBold', serif !important;"))
         assertTrue(css.contains("font-size: 28px !important;"))
         assertTrue(css.contains("line-height: 1.85 !important;"))
+        assertTrue(css.contains("letter-spacing: 0.02em !important;"))
         assertTrue(css.contains("column-gap: calc(8vh + 28px);"))
         assertTrue(css.contains("padding: 4.0vh 6.0vw !important;"))
         assertTrue(css.contains("padding-bottom: calc(4.0vh + 28px) !important;"))
@@ -50,5 +54,20 @@ class ReaderSettingsTest {
         val css = ReaderContentStyles.styleTag(ReaderSettings(verticalWriting = false))
 
         assertTrue(css.contains("writing-mode: horizontal-tb !important;"))
+    }
+
+    @Test
+    fun readerCssUsesIosAppearanceFlags() {
+        val css = ReaderContentStyles.styleTag(
+            ReaderSettings(
+                hideFurigana = true,
+                avoidPageBreak = true,
+                justifyText = true,
+            ),
+        )
+
+        assertTrue(css.contains("display: none !important;"))
+        assertTrue(css.contains("break-inside: avoid !important;"))
+        assertFalse(css.contains("text-align: start !important;"))
     }
 }

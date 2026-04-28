@@ -7,11 +7,25 @@ data class ReaderChromeState(
     val currentCharacter: Int,
     val totalCharacters: Int,
 ) {
-    fun progressText(): String {
-        if (totalCharacters <= 0) return currentCharacter.toString()
-        val percent = currentCharacter.toDouble() / totalCharacters.toDouble() * 100.0
-        return String.format(Locale.US, "%d / %d %.2f%%", currentCharacter, totalCharacters, percent)
+    fun progressText(settings: ReaderSettings): String {
+        val parts = mutableListOf<String>()
+        if (settings.showCharacters) {
+            parts += currentCharacter.toString()
+            if (totalCharacters > 0) {
+                parts[parts.lastIndex] = "$currentCharacter / $totalCharacters"
+            }
+        }
+        if (settings.showPercentage) {
+            val percent = if (totalCharacters > 0) {
+                currentCharacter.toDouble() / totalCharacters.toDouble() * 100.0
+            } else {
+                0.0
+            }
+            parts += String.format(Locale.US, "%.2f%%", percent)
+        }
+        return parts.joinToString(separator = " ")
     }
+
 }
 
 data class ReaderChromeColors(

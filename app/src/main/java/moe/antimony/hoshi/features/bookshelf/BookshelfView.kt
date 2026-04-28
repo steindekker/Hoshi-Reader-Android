@@ -81,6 +81,8 @@ import moe.antimony.hoshi.epub.EpubBookParser
 import moe.antimony.hoshi.features.dictionary.DictionaryView
 import moe.antimony.hoshi.features.dictionary.DictionarySearchView
 import moe.antimony.hoshi.features.dictionary.DictionarySettingsStore
+import moe.antimony.hoshi.features.reader.ReaderAppearanceScreen
+import moe.antimony.hoshi.features.reader.ReaderFontManager
 import moe.antimony.hoshi.features.reader.ReaderSettings
 import moe.antimony.hoshi.features.reader.ReaderSettingsStore
 import moe.antimony.hoshi.features.reader.ReaderWebView
@@ -99,6 +101,7 @@ fun BookshelfView(
     val dictionaryRepository = remember { DictionaryRepository(context.filesDir, context.cacheDir) }
     val dictionarySettingsStore = remember { DictionarySettingsStore(context) }
     val readerSettingsStore = remember { ReaderSettingsStore(context) }
+    val readerFontManager = remember { ReaderFontManager(context.filesDir) }
     var readerSettings by remember { mutableStateOf(readerSettingsStore.load()) }
     var selectedTab by remember {
         mutableStateOf(
@@ -211,6 +214,11 @@ fun BookshelfView(
         importer.launch(arrayOf("application/epub+zip", "application/octet-stream"))
     }
 
+    fun updateReaderSettings(settings: ReaderSettings) {
+        readerSettings = settings
+        readerSettingsStore.save(settings)
+    }
+
     LaunchedEffect(Unit) {
         reloadBookEntries()
         withContext(Dispatchers.IO) {
@@ -230,10 +238,7 @@ fun BookshelfView(
             initialChapterIndex = bookmark?.chapterIndex ?: 0,
             initialProgress = bookmark?.progress ?: 0.0,
             readerSettings = readerSettings,
-            onReaderSettingsChange = { settings: ReaderSettings ->
-                readerSettings = settings
-                readerSettingsStore.save(settings)
-            },
+            onReaderSettingsChange = ::updateReaderSettings,
             onSaveBookmark = { chapterIndex, progress ->
                 val file = selectedBookRoot ?: return@ReaderWebView
                 val parsedBook = book ?: return@ReaderWebView
@@ -256,6 +261,17 @@ fun BookshelfView(
 
     if (settingsDestination == SettingsDestination.Dictionaries) {
         DictionaryView(
+            onClose = { settingsDestination = null },
+            modifier = modifier.fillMaxSize(),
+        )
+        return
+    }
+
+    if (settingsDestination == SettingsDestination.Appearance) {
+        ReaderAppearanceScreen(
+            settings = readerSettings,
+            onSettingsChange = ::updateReaderSettings,
+            fontManager = readerFontManager,
             onClose = { settingsDestination = null },
             modifier = modifier.fillMaxSize(),
         )
@@ -312,7 +328,7 @@ fun BookshelfView(
         }
     }
 
-    settingsDestination?.takeIf { it != SettingsDestination.Dictionaries }?.let { destination ->
+    settingsDestination?.takeIf { it != SettingsDestination.Dictionaries && it != SettingsDestination.Appearance }?.let { destination ->
         AlertDialog(
             onDismissRequest = { settingsDestination = null },
             title = { Text(destination.placeholderTitle()) },
