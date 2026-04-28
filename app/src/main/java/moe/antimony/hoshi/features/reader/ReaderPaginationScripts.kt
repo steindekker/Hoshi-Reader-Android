@@ -45,6 +45,11 @@ internal object ReaderPaginationScripts {
           isMatchableChar: function(char) {
             return this.ttuRegex.test(char || '');
           },
+          notifyRestoreComplete: function() {
+            if (window.HoshiReaderRestore && window.HoshiReaderRestore.postMessage) {
+              window.HoshiReaderRestore.postMessage('restoreCompleted');
+            }
+          },
           createWalker: function(rootNode) {
             var root = rootNode || document.body;
             return document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
@@ -113,11 +118,13 @@ internal object ReaderPaginationScripts {
             var context = this.getScrollContext();
             if (context.pageSize <= 0 || progress <= 0) {
               this.setPagePosition(context, 0);
+              this.notifyRestoreComplete();
               return;
             }
             if (progress >= 0.99) {
               var lastPage = Math.floor(context.maxScroll / context.pageSize) * context.pageSize;
               this.setPagePosition(context, Math.max(0, lastPage));
+              this.notifyRestoreComplete();
               return;
             }
             var walker = this.createWalker();
@@ -149,6 +156,7 @@ internal object ReaderPaginationScripts {
             } else {
               this.setPagePosition(context, 0);
             }
+            this.notifyRestoreComplete();
           },
           paginate: function(direction) {
             var context = this.getScrollContext();

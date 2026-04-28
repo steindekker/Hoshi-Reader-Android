@@ -42,9 +42,11 @@
    - `done` - Apply theme, text orientation, font size, horizontal padding, vertical padding, and line height through WebView CSS without changing reader page-turn logic.
    - `done` - Persist reader Appearance settings across app restart.
    - `done` - Align reader chrome with iOS `ReaderView`: remove solid top/bottom bars, render title/progress as an overlay, use theme-aware floating circular controls, reserve transparent WebView space behind chrome, and set Android system bar icon contrast from the reader theme.
+   - `done` - Align reader restore display timing with iOS: keep the WebView transparent while saved progress is restored, then fade it in after JS reports restore completion.
    - `todo` - Align font family selection/import with iOS `FontManager`.
    - Verified on emulator with `testdata/test.epub`: opened reader, opened Appearance from the reader, changed font size from 22 to 23 and theme to Dark, confirmed WebView computed CSS changed to `fontSize=23px`, black background, white text, and confirmed those settings persisted after force-stopping and reopening the app.
    - Verified on emulator with `testdata/test.epub`: opened an imported book, confirmed the WebView bounds are inset below the top overlay and above the bottom controls, confirmed no solid title bar or white bottom bar is present, confirmed status/navigation icons switch to light on dark reader theme, and confirmed the Appearance menu is anchored to the right floating control.
+   - Verified on emulator with `testdata/test.epub`: force-stopped the app from a saved reader position, opened the book from the shelf, captured 16 rapid screenshots during launch, and confirmed the sequence goes from shelf to a blank reader background/chrome to the saved page without ever showing the chapter beginning.
 
 4. `done` - WebView selection bridge
    - `done` - Implement JS-side text selection, selected text extraction, range data, and popup anchor rectangles.

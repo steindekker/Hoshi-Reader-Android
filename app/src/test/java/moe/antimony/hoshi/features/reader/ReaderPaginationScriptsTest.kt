@@ -89,6 +89,8 @@ class ReaderPaginationScriptsTest {
     fun restoresProgressByCharacterPositionLikeIos() {
         val script = ReaderPaginationScripts.shellScript()
 
+        assertTrue(script.contains("notifyRestoreComplete: function()"))
+        assertTrue(script.contains("window.HoshiReaderRestore.postMessage('restoreCompleted')"))
         assertTrue(script.contains("var targetCharCount = Math.ceil(totalChars * progress)"))
         assertTrue(script.contains("if (runningSum > targetCharCount)"))
         assertTrue(script.contains("range.setStart(targetNode, 0)"))

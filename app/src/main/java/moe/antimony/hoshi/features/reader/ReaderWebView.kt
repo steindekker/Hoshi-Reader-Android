@@ -394,8 +394,10 @@ private fun ChapterWebView(
                 settings.allowContentAccess = false
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
+                alpha = 0f
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 addJavascriptInterface(ReaderSelectionBridge(this, onTextSelected), "HoshiTextSelection")
+                addJavascriptInterface(ReaderRestoreBridge(this), "HoshiReaderRestore")
                 webViewClient = EpubWebViewClient(book)
                 setOnTouchListener(object : SwipePageTouchListener(context) {
                     override fun onTap(x: Float, y: Float) {
@@ -427,8 +429,14 @@ private fun ChapterWebView(
             }
         },
         update = { webView ->
-            webView.webViewClient = EpubWebViewClient(book)
-            webView.loadDataWithBaseURL(baseUrl, html, "text/html", "UTF-8", null)
+            val loadKey = "$baseUrl#${html.hashCode()}"
+            if (webView.tag != loadKey) {
+                webView.tag = loadKey
+                webView.animate().cancel()
+                webView.alpha = 0f
+                webView.webViewClient = EpubWebViewClient(book)
+                webView.loadDataWithBaseURL(baseUrl, html, "text/html", "UTF-8", null)
+            }
         },
     )
 }
@@ -628,6 +636,20 @@ private class ReaderSelectionBridge(
         webView.post {
             val highlightCount = onTextSelected(data) ?: return@post
             webView.evaluateJavascript(ReaderSelectionScripts.highlightInvocation(highlightCount), null)
+        }
+    }
+}
+
+private class ReaderRestoreBridge(
+    private val webView: WebView,
+) {
+    @JavascriptInterface
+    fun postMessage(@Suppress("UNUSED_PARAMETER") message: String) {
+        webView.post {
+            webView.animate()
+                .alpha(1f)
+                .setDuration(250L)
+                .start()
         }
     }
 }
