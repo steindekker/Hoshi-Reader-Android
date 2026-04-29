@@ -30,3 +30,10 @@
 
 # UniFFI's generated Kotlin/JNA bindings are part of the native ABI boundary.
 -keep class uniffi.hoshiepub.** { *; }
+
+# JNA's own native dispatcher looks up internal classes and fields such as
+# com.sun.jna.Pointer.peer by their original JVM names.
+-keep class com.sun.jna.** { *; }
+
+# JNA also ships desktop AWT integration classes that are unused on Android.
+-dontwarn java.awt.**

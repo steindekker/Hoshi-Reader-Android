@@ -156,8 +156,10 @@
     - `done` - Add GitHub Actions signed APK release workflow for `v*` tags and manual dispatch, using repository signing secrets and uploading the APK plus GPLv3 `LICENSE` to the GitHub Release.
     - `done` - Give debug builds a distinct application id so debug and release installs can coexist on physical devices.
     - `done` - Enable R8 code/resource optimization for release APKs and make release CI initialize the recursive dictionary bridge submodules used by native builds.
+    - `done` - Fix optimized release JNA/UniFFI startup so EPUB import/open does not fail after R8 obfuscates JNA internals.
     - Add EPUB fixtures for cover, images, vertical text, horizontal text, complex spine, and broken resources.
     - Expand WebView pagination regression checks.
     - Keep Gradle `test`, `assembleDebug`, and `lint` passing before release-facing changes.
     - Verified Gradle manifest processing: `:app:processDebugMainManifest` writes package `moe.antimony.hoshi.debug` for debug builds, while `:app:processReleaseMainManifest` keeps release at `moe.antimony.hoshi`.
     - Verified release optimization with `:app:assembleRelease`: Gradle ran `minifyReleaseWithR8`, `convertShrunkResourcesToBinaryRelease`, and `optimizeReleaseResources` successfully.
+    - Verified optimized release JNA fix on `emulator-5554`: installed `app-release.apk`, imported `testdata/test.epub` through DocumentsUI, returned to Books, tapped `屍人荘の殺人`, and confirmed the reader opened without `Can't obtain peer field ID for class com.sun.jna.Pointer`, `com.sun.jna.Native`, or crash-buffer entries.
