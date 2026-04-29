@@ -98,6 +98,8 @@ import moe.antimony.hoshi.features.reader.ReaderSettings
 import moe.antimony.hoshi.features.reader.ReaderWebView
 import java.io.File
 
+private const val ReportIssueUrl = "https://github.com/HuangAntimony/Hoshi-Reader-Android/issues"
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun BookshelfView(
@@ -336,7 +338,7 @@ fun BookshelfView(
                         SettingsDestination.ReportIssue -> context.startActivity(
                             Intent(
                                 Intent.ACTION_VIEW,
-                                Uri.parse("https://github.com/Manhhao/Hoshi-Reader/issues"),
+                                Uri.parse(ReportIssueUrl),
                             ),
                         )
                         else -> settingsDestination = destination

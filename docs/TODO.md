@@ -30,6 +30,7 @@
    - `done` - Align basic bookshelf sorting with iOS `Recent` / `Title`.
    - `done` - Align single-book delete flow with iOS long-press context action plus confirmation.
    - `done` - Align the main Books/Dictionary/Settings shell with iOS: floating Books chrome, cover-grid bookshelf, grouped Settings list, and bottom capsule tab bar.
+   - `done` - Point Settings -> Report an Issue at the Android GitHub issue tracker instead of the iOS upstream tracker.
    - `done` - Align EPUB import deduplication with iOS title-based `Books/<safeTitle>` storage and calculate bookshelf progress from `bookmark.characterCount / bookinfo.characterCount`.
    - `todo` - Align multi-select, shelves, and batch actions with iOS.
    - Verified on emulator with `testdata/test.epub`: cleared app data, imported the EPUB twice through DocumentsUI, confirmed two shelf rows and two independent `files/Books/<uuid>/metadata.json` files, then opened a listed book into the reader.
