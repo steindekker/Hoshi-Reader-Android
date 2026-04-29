@@ -13,6 +13,7 @@
 - 完成需求时先更新 `docs/TODO.md`，再把代码和 TODO 放进同一个 commit；用户明确要求不 commit 时不要提交。
 - Commit message 使用 Conventional Commits。
 - 修复 GitHub Issue 时，在 commit message 中使用 closing keyword（如 `Closes #123`）。
+- 小型 GitHub Issue 修复（如文案、链接、配置等低风险单点修改）直接在 `main` 分支完成并提交；较大功能、跨模块重构或高风险改动再开 `codex/` 前缀分支。
 
 ## 参考源码
 
