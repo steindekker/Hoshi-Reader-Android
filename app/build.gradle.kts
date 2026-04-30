@@ -13,6 +13,11 @@ val releaseKeystorePath = providers.environmentVariable("ANDROID_KEYSTORE_FILE")
 val releaseKeystorePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull
 val releaseKeyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").orNull
 val releaseKeyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull
+val releaseVersionName = providers.gradleProperty("releaseVersionName").orNull
+val releaseVersionCode = providers.gradleProperty("releaseVersionCode").orNull?.toIntOrNull()
+if (providers.gradleProperty("releaseVersionCode").isPresent && releaseVersionCode == null) {
+    throw GradleException("releaseVersionCode must be an integer.")
+}
 val releaseSigningValues = listOf(
     releaseKeystorePath,
     releaseKeystorePassword,
@@ -50,6 +55,8 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        releaseVersionCode?.let { versionCode = it }
+        releaseVersionName?.let { versionName = it }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {

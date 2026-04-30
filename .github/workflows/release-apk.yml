@@ -21,9 +21,47 @@ permissions:
   contents: write
 
 jobs:
+  resolve-release:
+    name: Resolve release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release_tag.outputs.tag }}
+      version_name: ${{ steps.release_tag.outputs.version_name }}
+      version_code: ${{ steps.release_tag.outputs.version_code }}
+    steps:
+      - name: Resolve release tag
+        id: release_tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            input_tag="${{ inputs.tag_name }}"
+          else
+            input_tag="${GITHUB_REF_NAME}"
+          fi
+
+          version_name="${input_tag#v}"
+          if [[ ! "${version_name}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Release tag must be semantic, for example v1.2.3. Got: ${input_tag}" >&2
+            exit 1
+          fi
+
+          tag="v${version_name}"
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          patch="${BASH_REMATCH[3]}"
+          version_code=$((major * 10000 + minor * 100 + patch))
+
+          {
+            echo "tag=${tag}"
+            echo "version_name=${version_name}"
+            echo "version_code=${version_code}"
+          } >> "${GITHUB_OUTPUT}"
+
   release-apk:
     name: Build signed release APK
     runs-on: ubuntu-latest
+    needs: resolve-release
     timeout-minutes: 90
 
     env:
@@ -34,28 +72,10 @@ jobs:
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
     steps:
-      - name: Resolve release tag
-        id: release_tag
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            tag="${{ inputs.tag_name }}"
-          else
-            tag="${GITHUB_REF_NAME}"
-          fi
-
-          if [[ ! "${tag}" =~ ^v.+ ]]; then
-            echo "Release tag must start with v: ${tag}" >&2
-            exit 1
-          fi
-
-          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
-
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ steps.release_tag.outputs.tag }}
+          ref: ${{ needs.resolve-release.outputs.tag }}
           submodules: recursive
           fetch-depth: 0
 
@@ -117,16 +137,61 @@ jobs:
             | base64 --decode > "${keystore}"
           echo "ANDROID_KEYSTORE_FILE=${keystore}" >> "${GITHUB_ENV}"
 
+      - name: Warn if Gradle defaults differ from tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          version_name="${{ needs.resolve-release.outputs.version_name }}"
+          version_code="${{ needs.resolve-release.outputs.version_code }}"
+
+          actual_name="$(sed -n 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)"
+          actual_code="$(sed -n 's/^[[:space:]]*versionCode[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' app/build.gradle.kts | head -n 1)"
+
+          if [[ "${actual_name}" != "${version_name}" ]]; then
+            echo "::warning::app/build.gradle.kts versionName=${actual_name}, expected ${version_name}"
+          fi
+
+          if [[ "${actual_code}" != "${version_code}" ]]; then
+            echo "::warning::app/build.gradle.kts versionCode=${actual_code}, expected ${version_code}"
+          fi
+
       - name: Build and check release APK
         shell: bash
-        run: ./gradlew --no-daemon test lint assembleRelease
+        run: |
+          ./gradlew --no-daemon test lint assembleRelease \
+            -PreleaseVersionName=${{ needs.resolve-release.outputs.version_name }} \
+            -PreleaseVersionCode=${{ needs.resolve-release.outputs.version_code }}
+
+      - name: Verify APK metadata matches tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          expected_name = "${{ needs.resolve-release.outputs.version_name }}"
+          expected_code = int("${{ needs.resolve-release.outputs.version_code }}")
+          metadata_path = Path("app/build/outputs/apk/release/output-metadata.json")
+          metadata = json.loads(metadata_path.read_text())
+          element = metadata["elements"][0]
+          actual_name = element["versionName"]
+          actual_code = element["versionCode"]
+
+          if actual_name != expected_name or actual_code != expected_code:
+              raise SystemExit(
+                  f"Release APK metadata mismatch: "
+                  f"versionName={actual_name}, versionCode={actual_code}; "
+                  f"expected versionName={expected_name}, versionCode={expected_code}"
+              )
+          PY
 
       - name: Prepare release assets
         id: assets
         shell: bash
         run: |
           set -euo pipefail
-          tag="${{ steps.release_tag.outputs.tag }}"
+          tag="${{ needs.resolve-release.outputs.tag }}"
           apk_source="app/build/outputs/apk/release/app-release.apk"
           apk_asset="Hoshi-Reader-${tag}.apk"
 
@@ -142,13 +207,44 @@ jobs:
 
           echo "apk_asset=${apk_asset}" >> "${GITHUB_OUTPUT}"
 
+      - name: Generate release notes from CHANGELOG
+        shell: bash
+        run: |
+          set -euo pipefail
+          version_name="${{ needs.resolve-release.outputs.version_name }}"
+          changelog="docs/CHANGELOG.md"
+
+          changelog_section="$(awk -v v="${version_name}" '
+            $0 ~ "^## \\[(v?" v ")\\]" { found = 1; next }
+            found && $0 ~ "^## \\[" { exit }
+            found { print }
+          ' "${changelog}")"
+
+          if [[ -z "${changelog_section//[[:space:]]/}" ]]; then
+            changelog_section="$(awk '
+              $0 ~ "^## \\[Unreleased\\]" { found = 1; next }
+              found && $0 ~ "^## \\[" { exit }
+              found { print }
+            ' "${changelog}")"
+          fi
+
+          if [[ -n "${changelog_section//[[:space:]]/}" ]]; then
+            printf '%s\n' "${changelog_section}" > release_notes.md
+          else
+            {
+              echo "Release ${{ needs.resolve-release.outputs.tag }}"
+              echo
+              echo "No matching section found in docs/CHANGELOG.md for ${version_name}."
+            } > release_notes.md
+          fi
+
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          tag="${{ steps.release_tag.outputs.tag }}"
+          tag="${{ needs.resolve-release.outputs.tag }}"
           apk_asset="${{ steps.assets.outputs.apk_asset }}"
           prerelease_flag=()
 
@@ -158,13 +254,14 @@ jobs:
           fi
 
           if gh release view "${tag}" >/dev/null 2>&1; then
+            gh release edit "${tag}" --notes-file release_notes.md
             if [[ ${#prerelease_flag[@]} -gt 0 ]]; then
               gh release edit "${tag}" "${prerelease_flag[@]}"
             fi
           else
             gh release create "${tag}" \
-              --title "${tag}" \
-              --notes "Automated Android APK release for ${tag}." \
+              --title "Hoshi Reader ${tag}" \
+              --notes-file release_notes.md \
               "${prerelease_flag[@]}"
           fi
 

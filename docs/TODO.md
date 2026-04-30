@@ -161,6 +161,7 @@
 
 11. `todo` - Regression coverage and release hardening
     - `done` - Add GitHub Actions signed APK release workflow for `v*` tags and manual dispatch, using repository signing secrets and uploading the APK plus GPLv3 `LICENSE` to the GitHub Release.
+    - `done` - Add structured `docs/CHANGELOG.md` maintenance to the agent workflow, a private release skill with Gradle version sync, and release CI changelog extraction for GitHub Release notes.
     - `done` - Give debug builds a distinct application id so debug and release installs can coexist on physical devices.
     - `done` - Enable R8 code/resource optimization for release APKs and make release CI initialize the recursive dictionary bridge submodules used by native builds.
     - `done` - Fix optimized release JNA/UniFFI startup so EPUB import/open does not fail after R8 obfuscates JNA internals.
