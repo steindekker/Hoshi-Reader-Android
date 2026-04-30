@@ -60,6 +60,14 @@ class ReaderPaginationScriptsTest {
     }
 
     @Test
+    fun normalizesCalibreCoverSvgAspectRatio() {
+        val script = ReaderPaginationScripts.shellScript()
+
+        assertTrue(script.contains("svg.querySelector('image')"))
+        assertTrue(script.contains("svg.setAttribute('preserveAspectRatio', 'xMidYMid meet')"))
+    }
+
+    @Test
     fun verticalPageHeightIncludesIosBottomOverlap() {
         val script = ReaderPaginationScripts.shellScript()
 

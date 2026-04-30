@@ -195,6 +195,11 @@ internal object ReaderPaginationScripts {
           document.documentElement.style.setProperty('--hoshi-image-max-height', Math.max(1, pageHeight - ${settings.bottomOverlapPx}) + 'px');
           window.hoshiReader.pageHeight = pageHeight;
           window.hoshiReader.pageWidth = pageWidth;
+          Array.from(document.querySelectorAll('svg')).forEach(function(svg) {
+            if (svg.querySelector('image') && svg.getAttribute('preserveAspectRatio') === 'none') {
+              svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+            }
+          });
           var imagePromises = Array.from(document.querySelectorAll('img')).map(function(img) {
             return new Promise(function(resolve) {
               var isGaiji = img.classList.contains('gaiji') || img.classList.contains('gaiji-line');
