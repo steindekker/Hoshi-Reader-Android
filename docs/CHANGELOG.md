@@ -8,6 +8,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 ### Fixed
 
 - Preserve embedded cover image ratios for Calibre SVG cover wrappers instead of stretching the cover image. #4
+- Make Android system Back return from Settings -> Appearance to Settings instead of closing the app. #21
 
 ## [v0.1.1] - 2026-04-30
 

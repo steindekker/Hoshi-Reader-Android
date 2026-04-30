@@ -57,6 +57,7 @@
    - `done` - Align popup sizing, swipe dismissal, and dark rendering with iOS `PopupView` / `PopupWebView`: root reader popups honor Full-width, Swipe to Dismiss injects a zero threshold when disabled, popup touch handling stays inside the popup WebView, and Android WebView receives explicit iOS-equivalent light/dark popup color variables.
    - `done` - Disable Android native WebView overscroll stretch in reader and popup surfaces so dragging does not zoom or rubber-band the WebView.
    - `done` - Fix issue #4 by normalizing Calibre cover SVG wrappers that set `preserveAspectRatio="none"`, preserving the embedded cover image ratio in the reader.
+   - `done` - Fix issue #21 so Android system Back from Settings -> Appearance returns to Settings, matching the toolbar back button and other settings subpages.
    - Verified on emulator with `testdata/test2.epub`: imported through DocumentsUI, opened `かがみの孤城`, and confirmed the Calibre SVG cover keeps the embedded 507x751 image ratio instead of stretching to the WebView page box.
    - Verified on emulator with `testdata/test.epub` and `testdata/test2.epub`: checked cover and frontispiece/image pages for both books; `test2.epub` cover keeps the correct aspect ratio and `text/part0005.html` stays vertically centered in the reader.
    - Verified on emulator with `testdata/test.epub`: opened reader, opened Appearance from the reader, changed font size from 22 to 23 and theme to Dark, confirmed WebView computed CSS changed to `fontSize=23px`, black background, white text, and confirmed those settings persisted after force-stopping and reopening the app.
@@ -75,6 +76,7 @@
    - Verified reader bottom control scaling on emulator without clearing app data: opened an existing EPUB, confirmed the bottom Back/Menu floating controls render smaller with reduced bottom safe-area spacing, and tapped the resized Menu control to open the existing Chapters/Appearance reader menu using the user-requested `58.dp` menu bottom offset.
    - Verified popup background stabilization on emulator without clearing app data: opened Dictionary and searched `たべる`, confirmed the popup/result WebView uses a pure white light background after fixing HTML body, WebView, and Compose popup `Surface` backgrounds to explicit white/black instead of transparent/dynamic Material colors. Dark-mode real-device verification remains user-side because the mismatch only reproduced on physical hardware.
    - Verified WebView overscroll on emulator without clearing app data: opened an imported EPUB reader, dragged at the WebView edge, and confirmed Android stretch/zoom overscroll no longer appears; also ran an instrumentation check that the shared reader/popup WebView helper sets `View.OVER_SCROLL_NEVER`.
+   - Verified issue #21 on emulator without clearing app data: opened Settings -> Appearance, pressed Android system Back, confirmed the app returned to the Settings list instead of closing, and confirmed the app process stayed alive with an empty crash buffer.
 
 4. `done` - WebView selection bridge
    - `done` - Implement JS-side text selection, selected text extraction, range data, and popup anchor rectangles.

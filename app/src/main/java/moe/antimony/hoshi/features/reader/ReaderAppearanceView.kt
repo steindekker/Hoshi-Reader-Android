@@ -2,6 +2,7 @@ package moe.antimony.hoshi.features.reader
 
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -76,6 +77,7 @@ internal fun ReaderAppearanceScreen(
     modifier: Modifier = Modifier,
 ) {
     val palette = appearancePalette()
+    BackHandler(onBack = onClose)
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {

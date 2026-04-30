@@ -25,4 +25,13 @@ class IssueOneContrastRegressionTest {
         assertTrue(sheet.contains("containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f)"))
         assertTrue(sheet.contains("contentColor = MaterialTheme.colorScheme.onSurface"))
     }
+
+    @Test
+    fun appearanceSettingsScreenHandlesSystemBackLikeToolbarBack() {
+        val source = File("src/main/java/moe/antimony/hoshi/features/reader/ReaderAppearanceView.kt").readText()
+        val screen = source.substringAfter("internal fun ReaderAppearanceScreen(")
+            .substringBefore("@OptIn(ExperimentalMaterial3Api::class)\n@Composable\ninternal fun ReaderAppearanceSheet(")
+
+        assertTrue(screen.contains("BackHandler(onBack = onClose)"))
+    }
 }
