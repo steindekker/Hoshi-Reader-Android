@@ -5,12 +5,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
-### Fixed
-
-- Keep the reader open when the device display orientation changes, instead of returning to the bookshelf. #27
-- Import large local audio databases in the background with progress, require deleting the existing `android.db` before importing another one, and explain the extra free-space requirement for the copied database. #28
-
-## [v0.1.3] - 2026-05-01
+## [v0.1.4] - 2026-05-01
 
 ### Changed
 
@@ -26,6 +21,8 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 - Fix EPUBs with XHTML self-closing script tags rendering blank in the reader by loading chapter XHTML directly before injecting reader assets, matching iOS image sizing, and skipping blank pages produced by malformed short/image chapters. #24
 - Clear reader and nested popup word highlights when dismissing lookup popups, so tapping the same word again opens a fresh popup instead of only clearing stale highlight state. #25
 - Replace iOS-only reader font presets with Android Japanese Mincho and Gothic system font presets so switching fonts changes reader rendering. #26
+- Keep the reader open when the device display orientation changes, instead of returning to the bookshelf. #27
+- Import large local audio databases in the background with progress, require deleting the existing `android.db` before importing another one, and explain the extra free-space requirement for the copied database. #28
 
 ## [v0.1.2] - 2026-04-30
 
