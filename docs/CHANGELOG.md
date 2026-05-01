@@ -5,6 +5,10 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep the reader open when the device display orientation changes, instead of returning to the bookshelf. #27
+
 ## [v0.1.3] - 2026-05-01
 
 ### Changed

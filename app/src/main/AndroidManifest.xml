@@ -15,6 +15,7 @@
         android:theme="@style/Theme.HoshiReader">
         <activity
             android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.HoshiReader">
