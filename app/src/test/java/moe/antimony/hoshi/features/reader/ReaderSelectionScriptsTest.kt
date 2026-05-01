@@ -16,6 +16,11 @@ class ReaderSelectionScriptsTest {
     }
 
     @Test
+    fun exposesClearSelectionInvocationForNativeDismissPaths() {
+        assertEquals("window.hoshiSelection.clearSelection()", ReaderSelectionScripts.clearInvocation())
+    }
+
+    @Test
     fun postsSelectionDataToAndroidBridge() {
         val script = ReaderSelectionScripts.script()
 

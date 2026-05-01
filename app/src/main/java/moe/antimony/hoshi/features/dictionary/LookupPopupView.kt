@@ -51,6 +51,7 @@ fun LookupPopupView(
     state: LookupPopupState,
     onSwipeDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    clearSelectionSignal: Int = 0,
     onTapOutside: () -> Unit = onSwipeDismiss,
     onTextSelected: (ReaderSelectionData) -> Int? = { null },
 ) {
@@ -113,6 +114,7 @@ fun LookupPopupView(
                 darkMode = state.darkMode,
                 selectionOffsetX = frameX,
                 selectionOffsetY = frameY,
+                clearSelectionSignal = clearSelectionSignal,
                 callbacks = PopupWebViewCallbacks(
                     onTapOutside = onTapOutside,
                     onSwipeDismiss = onSwipeDismiss,
@@ -133,11 +135,13 @@ private fun LookupPopupWebView(
     darkMode: Boolean,
     selectionOffsetX: Double,
     selectionOffsetY: Double,
+    clearSelectionSignal: Int,
     callbacks: PopupWebViewCallbacks,
 ) {
     val callbackHolder = remember { PopupWebViewCallbackHolder(callbacks) }
     callbackHolder.callbacks = callbacks
     var loadedHtml by remember { mutableStateOf<String?>(null) }
+    var appliedClearSelectionSignal by remember { mutableStateOf(clearSelectionSignal) }
     AndroidView(
         modifier = Modifier
             .fillMaxSize()
@@ -177,6 +181,10 @@ private fun LookupPopupWebView(
                     "UTF-8",
                     null,
                 )
+            }
+            if (appliedClearSelectionSignal != clearSelectionSignal) {
+                appliedClearSelectionSignal = clearSelectionSignal
+                webView.evaluateJavascript("window.hoshiSelection.clearSelection()", null)
             }
         },
     )

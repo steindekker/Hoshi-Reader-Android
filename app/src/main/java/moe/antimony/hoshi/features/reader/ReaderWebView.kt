@@ -104,6 +104,7 @@ fun ReaderWebView(
     var showChapters by remember { mutableStateOf(false) }
     var showReaderMenu by remember { mutableStateOf(false) }
     var lookupPopups by remember { mutableStateOf<List<LookupPopupItem>>(emptyList()) }
+    var webView by remember { mutableStateOf<WebView?>(null) }
     val context = LocalContext.current
     val fontManager = remember { ReaderFontManager(context.filesDir) }
     val dictionarySettingsStore = remember { DictionarySettingsStore(context) }
@@ -140,6 +141,13 @@ fun ReaderWebView(
                 audioSettings = audioSettingsStore.load(),
             ),
         )
+    fun clearReaderSelection() {
+        webView?.evaluateJavascript(ReaderSelectionScripts.clearInvocation(), null)
+    }
+    fun closeLookupPopupsAndSelection() {
+        clearReaderSelection()
+        lookupPopups = emptyList()
+    }
     val handleTextSelected: (ReaderSelectionData) -> Int? = { selection ->
         lookupPopups = emptyList()
         val lookup = lookupRootPopup(selection)
@@ -162,7 +170,6 @@ fun ReaderWebView(
             ),
         )
     }
-    var webView by remember { mutableStateOf<WebView?>(null) }
     val chromeState = remember(book, readerPosition.displayedPosition) {
         ReaderChromeState(
             title = book.title,
@@ -233,7 +240,7 @@ fun ReaderWebView(
                 },
                 readerSettings = effectiveSettings,
                 onTextSelected = handleTextSelected,
-                onClearLookupPopup = { lookupPopups = emptyList() },
+                onClearLookupPopup = ::closeLookupPopupsAndSelection,
                 fontManager = fontManager,
                 systemDark = systemDarkTheme,
                 modifier = Modifier.fillMaxSize(),
@@ -242,6 +249,7 @@ fun ReaderWebView(
                 popups = lookupPopups,
                 onPopupsChange = { lookupPopups = it },
                 lookupChildPopup = ::lookupChildPopup,
+                onRootPopupDismissed = ::clearReaderSelection,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -301,7 +309,7 @@ fun ReaderWebView(
             book = book,
             currentPosition = readerPosition.displayedPosition,
             onJump = { target ->
-                lookupPopups = emptyList()
+                closeLookupPopupsAndSelection()
                 readerPosition = readerPosition.jumpTo(target)
                 onSaveBookmark(target.index, target.progress)
                 showChapters = false

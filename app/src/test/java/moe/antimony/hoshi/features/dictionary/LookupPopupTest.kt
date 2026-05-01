@@ -84,4 +84,28 @@ class LookupPopupTest {
         assertEquals(listOf("root"), dismissPopupAt(popups, 1).map { it.id })
         assertEquals(emptyList<String>(), dismissPopupAt(popups, 0).map { it.id })
     }
+
+    @Test
+    fun dismissingChildPopupSignalsParentSelectionClearLikeIos() {
+        val popups = listOf("root", "child", "grandchild").map { id ->
+            LookupPopupItem(
+                id = id,
+                state = LookupPopupState(
+                    selection = ReaderSelectionData(
+                        text = id,
+                        sentence = id,
+                        rect = ReaderSelectionRect(x = 0.0, y = 0.0, width = 1.0, height = 1.0),
+                        normalizedOffset = null,
+                    ),
+                    results = emptyList(),
+                ),
+            )
+        }
+
+        val afterDismissingChild = dismissPopupAt(popups, 1)
+        val afterDismissingGrandchild = dismissPopupAt(popups, 2)
+
+        assertEquals(1, afterDismissingChild.single { it.id == "root" }.clearSelectionSignal)
+        assertEquals(1, afterDismissingGrandchild.single { it.id == "child" }.clearSelectionSignal)
+    }
 }

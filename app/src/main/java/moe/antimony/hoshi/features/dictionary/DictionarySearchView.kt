@@ -153,6 +153,7 @@ fun DictionarySearchView(
     var dictionarySettings by remember { mutableStateOf(dictionarySettingsStore.load()) }
     var audioSettings by remember { mutableStateOf(audioSettingsStore.load()) }
     var popups by remember { mutableStateOf<List<LookupPopupItem>>(emptyList()) }
+    var resultClearSelectionSignal by remember { mutableStateOf(0) }
     val popupDarkMode = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val popupOptions = dictionarySearchPopupOptions(
         readerSettings = readerSettings,
@@ -194,11 +195,13 @@ fun DictionarySearchView(
                 dictionarySettings = dictionarySettingsStore.load()
                 audioSettings = audioSettingsStore.load()
                 popups = emptyList()
+                resultClearSelectionSignal = 0
                 hasSearched = true
             }.onFailure {
                 html = ""
                 dictionaryStyles = emptyMap()
                 popups = emptyList()
+                resultClearSelectionSignal = 0
                 hasSearched = true
                 errorMessage = it.localizedMessage ?: "Lookup failed."
             }
@@ -222,6 +225,7 @@ fun DictionarySearchView(
         when {
             html.isNotBlank() -> DictionaryResultWebView(
                 html = html,
+                clearSelectionSignal = resultClearSelectionSignal,
                 callbacks = PopupWebViewCallbacks(
                     onTapOutside = { popups = emptyList() },
                     onSwipeDismiss = { popups = emptyList() },
@@ -261,6 +265,7 @@ fun DictionarySearchView(
             popups = popups,
             onPopupsChange = { popups = it },
             lookupChildPopup = lookupPopup,
+            onRootPopupDismissed = { resultClearSelectionSignal += 1 },
             modifier = Modifier.fillMaxSize(),
         )
     }
@@ -364,12 +369,14 @@ private fun DictionarySearchMessage(text: String, modifier: Modifier = Modifier)
 @Composable
 private fun DictionaryResultWebView(
     html: String,
+    clearSelectionSignal: Int,
     callbacks: PopupWebViewCallbacks,
     modifier: Modifier = Modifier,
 ) {
     val callbackHolder = remember { PopupWebViewCallbackHolder(callbacks) }
     callbackHolder.callbacks = callbacks
     var loadedHtml by remember { mutableStateOf<String?>(null) }
+    var appliedClearSelectionSignal by remember { mutableStateOf(clearSelectionSignal) }
     AndroidView(
         modifier = modifier.fillMaxSize(),
         factory = { context ->
@@ -401,6 +408,10 @@ private fun DictionaryResultWebView(
                     "UTF-8",
                     null,
                 )
+            }
+            if (appliedClearSelectionSignal != clearSelectionSignal) {
+                appliedClearSelectionSignal = clearSelectionSignal
+                webView.evaluateJavascript("window.hoshiSelection.clearSelection()", null)
             }
         },
     )

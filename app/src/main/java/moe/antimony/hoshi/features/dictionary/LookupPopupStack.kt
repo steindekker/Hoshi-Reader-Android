@@ -27,6 +27,7 @@ internal data class LookupPopupOptions(
 internal data class LookupPopupItem(
     val id: String = UUID.randomUUID().toString(),
     val state: LookupPopupState,
+    val clearSelectionSignal: Int = 0,
 )
 
 internal fun createLookupPopupItem(
@@ -73,7 +74,17 @@ internal fun dismissPopupAt(
     popups: List<LookupPopupItem>,
     index: Int,
 ): List<LookupPopupItem> =
-    if (index == 0) emptyList() else closeChildPopups(popups, index - 1)
+    if (index == 0) {
+        emptyList()
+    } else {
+        closeChildPopups(popups, index - 1).mapIndexed { popupIndex, popup ->
+            if (popupIndex == index - 1) {
+                popup.copy(clearSelectionSignal = popup.clearSelectionSignal + 1)
+            } else {
+                popup
+            }
+        }
+    }
 
 @Composable
 internal fun LookupPopupStackView(
@@ -81,15 +92,18 @@ internal fun LookupPopupStackView(
     onPopupsChange: (List<LookupPopupItem>) -> Unit,
     lookupChildPopup: (ReaderSelectionData) -> Pair<LookupPopupItem, Int>?,
     modifier: Modifier = Modifier,
+    onRootPopupDismissed: () -> Unit = {},
 ) {
     popups.forEachIndexed { index, popup ->
         key(popup.id) {
             LookupPopupView(
                 state = popup.state,
+                clearSelectionSignal = popup.clearSelectionSignal,
                 onTapOutside = {
                     onPopupsChange(closeChildPopups(popups, index))
                 },
                 onSwipeDismiss = {
+                    if (index == 0) onRootPopupDismissed()
                     onPopupsChange(dismissPopupAt(popups, index))
                 },
                 onTextSelected = { selection ->
