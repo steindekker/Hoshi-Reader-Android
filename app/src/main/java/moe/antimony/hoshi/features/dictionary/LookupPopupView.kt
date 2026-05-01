@@ -114,6 +114,7 @@ fun LookupPopupView(
         ) {
             LookupPopupWebView(
                 html = html,
+                audioSettings = state.audioSettings,
                 darkMode = state.darkMode,
                 selectionOffsetX = frameX,
                 selectionOffsetY = frameY,
@@ -135,6 +136,7 @@ fun LookupPopupView(
 @Composable
 private fun LookupPopupWebView(
     html: String,
+    audioSettings: AudioSettings,
     darkMode: Boolean,
     selectionOffsetX: Double,
     selectionOffsetY: Double,
@@ -151,7 +153,7 @@ private fun LookupPopupWebView(
             .background(if (darkMode) Color.Black else Color.White),
         factory = { context ->
             val audioRequestHandler = AudioRequestHandler(
-                LocalAudioRepository(context.filesDir, context.getExternalFilesDir(null)),
+                LocalAudioRepository.fromContext(context),
             )
             WebView(context).apply {
                 settings.javaScriptEnabled = true

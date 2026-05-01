@@ -2,6 +2,7 @@ package moe.antimony.hoshi.features.audio
 
 import android.text.format.Formatter
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +33,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +50,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,6 +58,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import moe.antimony.hoshi.importing.FileImportContent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -122,12 +129,17 @@ fun AudioSettingsView(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val store = remember { AudioSettingsStore(context) }
-    val repository = remember { LocalAudioRepository(context.filesDir, context.getExternalFilesDir(null)) }
     var settings by remember { mutableStateOf(store.load()) }
+    val repository = remember { LocalAudioRepository.fromContext(context) }
     var nameInput by remember { mutableStateOf("") }
     var urlInput by remember { mutableStateOf("") }
     var importedSize by remember { mutableStateOf(repository.databaseSizeBytes()) }
+    var importProgress by remember { mutableStateOf<LocalAudioImportProgress?>(null) }
+    var importError by remember { mutableStateOf<String?>(null) }
+    var isImporting by remember { mutableStateOf(false) }
+    val hasImportedDatabase = importedSize != null
 
     fun save(next: AudioSettings) {
         settings = next
@@ -140,6 +152,35 @@ fun AudioSettingsView(
         val source = sources.removeAt(from)
         sources.add(to, source)
         save(settings.copy(audioSources = sources))
+    }
+
+    val importer = rememberLauncherForActivityResult(FileImportContent()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        if (isImporting || hasImportedDatabase) return@rememberLauncherForActivityResult
+        isImporting = true
+        importError = null
+        importProgress = LocalAudioImportProgress(copiedBytes = 0, totalBytes = null)
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    var lastProgressUpdate = 0L
+                    repository.importDatabase(context.contentResolver, uri) { progress ->
+                        val shouldUpdate = progress.totalBytes == progress.copiedBytes ||
+                            progress.copiedBytes - lastProgressUpdate >= ProgressUpdateBytes
+                        if (shouldUpdate) {
+                            lastProgressUpdate = progress.copiedBytes
+                            scope.launch { importProgress = progress }
+                        }
+                    }
+                }
+            }.onSuccess { size ->
+                importedSize = size
+            }.onFailure { error ->
+                importError = error.message ?: "Unable to import android.db."
+            }
+            importProgress = null
+            isImporting = false
+        }
     }
 
     BackHandler(onBack = onClose)
@@ -284,30 +325,66 @@ fun AudioSettingsView(
                     )
                     if (settings.enableLocalAudio) {
                         GroupDivider()
-                        ListItem(
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            headlineContent = { Text("android.db folder") },
-                            supportingContent = {
-                                Text(repository.dropInDbFile?.absolutePath ?: "External app folder unavailable")
-                            },
-                            trailingContent = {
-                                Button(onClick = { importedSize = repository.databaseSizeBytes() }) {
-                                    Text("Refresh")
-                                }
-                            },
-                        )
+                        if (!hasImportedDatabase) {
+                            ListItem(
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                headlineContent = { Text("Import android.db") },
+                                supportingContent = {
+                                    Text("Copies the selected database in the background")
+                                },
+                                trailingContent = {
+                                    Button(
+                                        enabled = !isImporting,
+                                        onClick = { importer.launch(arrayOf("*/*")) },
+                                    ) {
+                                        Text(if (isImporting) "Importing" else "Import")
+                                    }
+                                },
+                            )
+                            importProgress?.let { progress ->
+                                GroupDivider()
+                                ListItem(
+                                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                    headlineContent = { Text("Copying android.db") },
+                                    supportingContent = {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            if (progress.totalBytes == null) {
+                                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                            } else {
+                                                LinearProgressIndicator(
+                                                    progress = { progress.fraction },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                )
+                                            }
+                                            Text(progress.label(context))
+                                        }
+                                    },
+                                )
+                            }
+                            importError?.let { message ->
+                                GroupDivider()
+                                ListItem(
+                                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                    headlineContent = { Text("Import failed") },
+                                    supportingContent = { Text(message) },
+                                )
+                            }
+                        }
                         importedSize?.let { size ->
                             GroupDivider()
                             ListItem(
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                                 headlineContent = {
-                                    Text("Delete android.db (${Formatter.formatFileSize(context, size)})")
+                                    Text("android.db (${Formatter.formatFileSize(context, size)})")
                                 },
                                 trailingContent = {
                                     OutlinedButton(
+                                        enabled = !isImporting,
                                         onClick = {
                                             repository.deleteDatabase()
                                             importedSize = null
+                                            importError = null
+                                            importProgress = null
                                         },
                                     ) {
                                         Text("Delete")
@@ -318,7 +395,8 @@ fun AudioSettingsView(
                     }
                 }
                 Text(
-                    text = "Place android.db in the app folder for offline dictionary audio. The local audio source is automatically added when enabled.",
+                    text = "1. Import copies android.db into Hoshi's private storage, so keep enough free space for one extra copy before importing.\n" +
+                        "2. After import completes, you can safely delete the original external file to free space.",
                     color = colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 24.dp),
@@ -432,4 +510,15 @@ private fun BackIconButton(onClick: () -> Unit) {
 
 private enum class AdvancedDestination {
     Audio,
+}
+
+private const val ProgressUpdateBytes = 64L * 1024L * 1024L
+
+private val LocalAudioImportProgress.fraction: Float
+    get() = totalBytes?.takeIf { it > 0 }?.let { (copiedBytes.toFloat() / it.toFloat()).coerceIn(0f, 1f) } ?: 0f
+
+private fun LocalAudioImportProgress.label(context: android.content.Context): String {
+    val copied = Formatter.formatFileSize(context, copiedBytes)
+    val total = totalBytes?.let { Formatter.formatFileSize(context, it) }
+    return if (total == null) copied else "$copied of $total"
 }

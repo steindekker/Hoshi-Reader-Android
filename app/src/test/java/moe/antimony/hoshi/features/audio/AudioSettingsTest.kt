@@ -47,4 +47,5 @@ class AudioSettingsTest {
 
         assertEquals(listOf(AudioSettings.DefaultAudioSource), settings.audioSources)
     }
+
 }

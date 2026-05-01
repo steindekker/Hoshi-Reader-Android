@@ -96,6 +96,7 @@ class AudioSettingsStore(context: Context) {
         preferences.edit()
             .putString(KEY_AUDIO_SOURCES, json.encodeToString(ListSerializer(AudioSource.serializer()), settings.audioSources))
             .putBoolean(KEY_ENABLE_LOCAL_AUDIO, settings.enableLocalAudio)
+            .remove(KEY_LOCAL_AUDIO_DATABASE_URI)
             .putBoolean(KEY_AUDIO_ENABLE_AUTOPLAY, settings.enableAutoplay)
             .putString(KEY_AUDIO_PLAYBACK_MODE, settings.playbackMode.rawValue)
             .apply()
@@ -104,6 +105,7 @@ class AudioSettingsStore(context: Context) {
     private companion object {
         const val KEY_AUDIO_SOURCES = "audioSources"
         const val KEY_ENABLE_LOCAL_AUDIO = "enableLocalAudio"
+        const val KEY_LOCAL_AUDIO_DATABASE_URI = "localAudioDatabaseUri"
         const val KEY_AUDIO_ENABLE_AUTOPLAY = "audioEnableAutoplay"
         const val KEY_AUDIO_PLAYBACK_MODE = "audioPlaybackMode"
     }

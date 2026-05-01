@@ -226,6 +226,7 @@ fun DictionarySearchView(
         when {
             html.isNotBlank() -> DictionaryResultWebView(
                 html = html,
+                audioSettings = audioSettings,
                 clearSelectionSignal = resultClearSelectionSignal,
                 callbacks = PopupWebViewCallbacks(
                     onTapOutside = { popups = emptyList() },
@@ -371,6 +372,7 @@ private fun DictionarySearchMessage(text: String, modifier: Modifier = Modifier)
 @Composable
 private fun DictionaryResultWebView(
     html: String,
+    audioSettings: AudioSettings,
     clearSelectionSignal: Int,
     callbacks: PopupWebViewCallbacks,
     modifier: Modifier = Modifier,
@@ -383,7 +385,7 @@ private fun DictionaryResultWebView(
         modifier = modifier.fillMaxSize(),
         factory = { context ->
             val audioRequestHandler = AudioRequestHandler(
-                LocalAudioRepository(context.filesDir, context.getExternalFilesDir(null)),
+                LocalAudioRepository.fromContext(context),
             )
             WebView(context).apply {
                 settings.javaScriptEnabled = true
@@ -402,7 +404,7 @@ private fun DictionaryResultWebView(
             webView.webViewClient = PopupMessageWebViewClient(
                 callbackHolder,
                 AudioRequestHandler(
-                    LocalAudioRepository(webView.context.filesDir, webView.context.getExternalFilesDir(null)),
+                    LocalAudioRepository.fromContext(webView.context),
                 ),
             )
             if (loadedHtml != html) {

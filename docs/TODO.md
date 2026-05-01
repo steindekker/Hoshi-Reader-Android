@@ -174,8 +174,8 @@
    - `done` - Align iOS `AudioView` under Settings -> Advanced with source ordering/toggles, custom source add/delete, auto-play, background audio mode, and Local Audio import/delete controls.
    - `done` - Inject iOS popup audio variables into the shared popup WebView renderer and route audio button taps through the same native playback bridge used by iOS `PopupWebView`.
    - `done` - Support iOS-compatible local `Audio/android.db` lookup semantics for `http://localhost:8765/localaudio/get/?term={term}&reading={reading}` and play returned local audio blobs.
-   - `done` - Supersede local audio picker imports with the app-folder drop-in path; shared transient import intents remain for EPUB, dictionary, and font imports.
-   - `done` - Fix issue #28 by replacing large `android.db` picker imports with an Ankiconnect-compatible app-folder drop-in path; Hoshi now reads `android.db` directly from app-specific external files when present and falls back to the legacy private copy.
+   - `done` - Fix issue #28 by moving large `android.db` picker imports off the UI thread; Hoshi copies the selected database in the background, reports progress, writes to `Audio/android.db.tmp`, only exposes the import action when no private `Audio/android.db` exists, and explains that users need free space for one extra copy before deleting the original external file after import.
+   - `done` - Verified the attempted SAF file-descriptor shortcut on a real SM-G9860 device with `testdata/android.db`: `SQLiteDatabase.openDatabase("/proc/self/fd/<fd>")` failed with `SQLITE_CANTOPEN_EACCES` because MediaProvider resolved the descriptor back to `/storage/emulated/0/Download/testdata/android.db`, so Android cannot reliably avoid the copy for this database.
    - `done` - Support configurable remote Yomitan audio source URLs, verified with `https://audiov2.animecards.site/audio/list?term={term}&reading={reading}&apiKey=04887404-aba9-43b8-abb8-0e3847038a76`.
    - `done` - Fix issue #3 by making the Background Audio segmented picker use one unified equal-size pill even when option labels wrap.
    - `todo` - Read dictionary media through the existing dictionary bridge.

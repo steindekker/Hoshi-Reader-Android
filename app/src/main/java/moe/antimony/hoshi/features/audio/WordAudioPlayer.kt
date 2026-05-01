@@ -11,7 +11,6 @@ import android.os.Build
 class WordAudioPlayer private constructor(context: Context) {
     private val appContext = context.applicationContext
     private val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    private val localAudioRepository = LocalAudioRepository(appContext.filesDir, appContext.getExternalFilesDir(null))
     private var mediaPlayer: MediaPlayer? = null
     private var focusRequest: AudioFocusRequest? = null
 
@@ -34,7 +33,8 @@ class WordAudioPlayer private constructor(context: Context) {
         runCatching {
             val localFile = LocalAudioResolver.parseAudioUrl(url)
             if (localFile != null) {
-                val data = localAudioRepository.loadAudio(localFile) ?: error("Local audio not found.")
+                val data = LocalAudioRepository.fromContext(appContext).loadAudio(localFile)
+                    ?: error("Local audio not found.")
                 player.setDataSource(ByteArrayAudioDataSource(data))
             } else {
                 player.setDataSource(url)
