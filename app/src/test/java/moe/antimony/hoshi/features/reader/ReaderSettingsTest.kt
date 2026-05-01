@@ -8,7 +8,7 @@ import java.io.File
 
 class ReaderSettingsTest {
     @Test
-    fun defaultsMatchIosUserConfigFirstRunValues() {
+    fun defaultsMatchIosUserConfigFirstRunValuesWithAndroidFontPreset() {
         val settings = ReaderSettings()
 
         assertEquals(true, settings.verticalWriting)
@@ -16,7 +16,7 @@ class ReaderSettingsTest {
         assertEquals(5, settings.horizontalPadding)
         assertEquals(0, settings.verticalPadding)
         assertEquals(1.65, settings.lineHeight, 0.0)
-        assertEquals("Hiragino Mincho ProN", settings.selectedFont)
+        assertEquals("Noto Serif CJK JP", settings.selectedFont)
         assertTrue(settings.popupSwipeToDismiss)
         assertEquals(30, settings.popupSwipeThreshold)
     }
@@ -50,6 +50,42 @@ class ReaderSettingsTest {
         assertTrue(css.contains("column-gap: calc(8vh + 28px);"))
         assertTrue(css.contains("padding: 4.0vh 6.0vw !important;"))
         assertTrue(css.contains("padding-bottom: calc(4.0vh + 28px) !important;"))
+    }
+
+    @Test
+    fun readerCssMapsAndroidJapanesePresetsToSystemFallbackFamilies() {
+        val minchoCss = ReaderContentStyles.styleTag(
+            ReaderSettings(selectedFont = "Noto Serif CJK JP"),
+        )
+        val gothicCss = ReaderContentStyles.styleTag(
+            ReaderSettings(selectedFont = "Noto Sans CJK JP"),
+        )
+
+        assertTrue(
+            minchoCss.contains(
+                "font-family: 'Noto Serif CJK JP', 'NotoSerifCJKjp-Regular', serif !important;",
+            ),
+        )
+        assertTrue(
+            gothicCss.contains(
+                "font-family: 'Noto Sans CJK JP', 'NotoSansCJKJP-Regular', sans-serif !important;",
+            ),
+        )
+    }
+
+    @Test
+    fun readerCssMigratesLegacyIosPresetNamesToAndroidJapaneseFallbacks() {
+        val legacyMinchoCss = ReaderContentStyles.styleTag(
+            ReaderSettings(selectedFont = "Hiragino Mincho ProN"),
+        )
+        val legacyGothicCss = ReaderContentStyles.styleTag(
+            ReaderSettings(selectedFont = "Hiragino Kaku Gothic ProN"),
+        )
+
+        assertTrue(legacyMinchoCss.contains("'Noto Serif CJK JP'"))
+        assertFalse(legacyMinchoCss.contains("Hiragino Mincho ProN"))
+        assertTrue(legacyGothicCss.contains("'Noto Sans CJK JP'"))
+        assertFalse(legacyGothicCss.contains("Hiragino Kaku Gothic ProN"))
     }
 
     @Test

@@ -54,7 +54,7 @@ class ReaderFontManager(private val filesDir: File) {
     }
 
     fun isDefaultFont(name: String): Boolean =
-        name in defaultFonts
+        normalizeDefaultFont(name) in defaultFonts
 
     fun webViewFontUrl(name: String): String? =
         storedFont(name)?.let { "https://hoshi.local/fonts/${Uri.encode(it.fileName)}" }
@@ -68,7 +68,15 @@ class ReaderFontManager(private val filesDir: File) {
     }
 
     companion object {
-        val defaultFonts = listOf("Hiragino Mincho ProN", "Hiragino Kaku Gothic ProN")
+        const val defaultMinchoFont = "Noto Serif CJK JP"
+        const val defaultGothicFont = "Noto Sans CJK JP"
+        val defaultFonts = listOf(defaultMinchoFont, defaultGothicFont)
+
+        fun normalizeDefaultFont(name: String): String = when (name) {
+            "Hiragino Mincho ProN" -> defaultMinchoFont
+            "Hiragino Kaku Gothic ProN" -> defaultGothicFont
+            else -> name
+        }
     }
 }
 

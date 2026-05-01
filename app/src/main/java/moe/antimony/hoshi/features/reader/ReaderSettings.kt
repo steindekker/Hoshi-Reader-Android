@@ -6,7 +6,7 @@ import java.util.Locale
 data class ReaderSettings(
     val theme: ReaderTheme = ReaderTheme.System,
     val verticalWriting: Boolean = true,
-    val selectedFont: String = "Hiragino Mincho ProN",
+    val selectedFont: String = ReaderFontManager.defaultMinchoFont,
     val fontSize: Int = 22,
     val hideFurigana: Boolean = false,
     val horizontalPadding: Int = 5,
@@ -101,7 +101,9 @@ class ReaderSettingsStore(context: Context) {
             ?.let { saved -> ReaderTheme.entries.firstOrNull { it.label == saved } }
             ?: ReaderTheme.System,
         verticalWriting = preferences.getBoolean("verticalWriting", true),
-        selectedFont = preferences.getString("selectedFont", null) ?: "Hiragino Mincho ProN",
+        selectedFont = ReaderFontManager.normalizeDefaultFont(
+            preferences.getString("selectedFont", null) ?: ReaderFontManager.defaultMinchoFont,
+        ),
         fontSize = preferences.getInt("fontSize", 22),
         hideFurigana = preferences.getBoolean("readerHideFurigana", false),
         horizontalPadding = preferences.getInt("layoutHorizontalPadding", 5),

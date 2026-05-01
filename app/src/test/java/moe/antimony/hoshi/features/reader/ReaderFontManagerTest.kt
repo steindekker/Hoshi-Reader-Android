@@ -33,8 +33,13 @@ class ReaderFontManagerTest {
         manager.deleteFont("KleeOne-SemiBold")
 
         assertTrue(manager.storedFonts().isEmpty())
-        assertTrue(manager.isDefaultFont("Hiragino Mincho ProN"))
+        assertTrue(manager.isDefaultFont("Noto Serif CJK JP"))
         assertFalse(manager.isDefaultFont("KleeOne-SemiBold"))
+    }
+
+    @Test
+    fun defaultFontsAreAndroidJapaneseMinchoAndGothicPresets() {
+        assertEquals(listOf("Noto Serif CJK JP", "Noto Sans CJK JP"), ReaderFontManager.defaultFonts)
     }
 
     @Test

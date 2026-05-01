@@ -31,11 +31,13 @@ internal object ReaderContentStyles {
     ): String {
         val textColor = settings.textColorCss(systemDark)
         val backgroundColor = settings.backgroundColor(systemDark).toReaderCssColor()
-        val fontFamily = settings.selectedFont.cssString()
+        val normalizedFont = ReaderFontManager.normalizeDefaultFont(settings.selectedFont)
+        val fontFaceFamily = normalizedFont.cssString()
+        val bodyFontFamily = normalizedFont.readerCssFontFamily()
         val fontFaceCss = fontFaceUrl?.let { url ->
             """
             @font-face {
-                font-family: $fontFamily;
+                font-family: $fontFaceFamily;
                 src: url('${url.cssSingleQuotedUrl()}');
             }
             """.trimIndent()
@@ -96,7 +98,7 @@ internal object ReaderContentStyles {
             writing-mode: ${settings.writingModeCss} !important;
         }
         body {
-            font-family: $fontFamily, serif !important;
+            font-family: $bodyFontFamily !important;
             font-size: ${settings.fontSize}px !important;
             $textSpacingCss
             box-sizing: border-box !important;
@@ -142,6 +144,15 @@ internal object ReaderContentStyles {
 
 private fun String.cssString(): String =
     "'${replace("\\", "\\\\").replace("'", "\\'")}'"
+
+private fun String.readerCssFontFamily(): String = when (this) {
+    ReaderFontManager.defaultMinchoFont ->
+        "${cssString()}, 'NotoSerifCJKjp-Regular', serif"
+    ReaderFontManager.defaultGothicFont ->
+        "${cssString()}, 'NotoSansCJKJP-Regular', sans-serif"
+    else ->
+        "${cssString()}, serif"
+}
 
 private fun String.cssSingleQuotedUrl(): String =
     replace("\\", "\\\\").replace("'", "\\'")
