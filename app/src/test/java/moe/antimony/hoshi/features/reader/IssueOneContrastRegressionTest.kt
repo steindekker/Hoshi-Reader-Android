@@ -8,11 +8,11 @@ class IssueOneContrastRegressionTest {
     @Test
     fun mainShellProvidesReadableContentColorOnAppBackground() {
         val source = File("src/main/java/moe/antimony/hoshi/features/bookshelf/BookshelfView.kt").readText()
-        val shell = source.substringAfter("private fun HoshiMainShell(")
-            .substringBefore("@Composable\nprivate fun BooksTab(")
+        val shell = source.substringAfter("internal fun HoshiMainShell(")
+            .substringBefore("private val NavigationRailInset")
 
-        assertTrue(shell.contains("Surface("))
-        assertTrue(shell.contains("color = MaterialTheme.colorScheme.background"))
+        assertTrue(shell.contains("NavigationSuiteScaffold("))
+        assertTrue(shell.contains("containerColor = MaterialTheme.colorScheme.background"))
         assertTrue(shell.contains("contentColor = MaterialTheme.colorScheme.onBackground"))
     }
 

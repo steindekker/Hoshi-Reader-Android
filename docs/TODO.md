@@ -33,6 +33,7 @@
    - `done` - Point Settings -> Report an Issue at the Android GitHub issue tracker instead of the iOS upstream tracker.
    - `done` - Align EPUB import deduplication with iOS title-based `Books/<safeTitle>` storage and calculate bookshelf progress from `bookmark.characterCount / bookinfo.characterCount`.
    - `done` - Use transient content import intents for EPUB imports so Android's picker can show providers under "Browse files in other apps" on affected devices.
+   - `done` - Replace the fixed iOS-style main shell with Material 3 adaptive navigation, responsive Books grid sizing, and constrained Settings lists for phones, tall screens, and tablet-width windows.
    - `todo` - Align multi-select, shelves, and batch actions with iOS.
    - Verified on emulator with `testdata/test.epub`: cleared app data, imported the EPUB twice through DocumentsUI, confirmed two shelf rows and two independent `files/Books/<uuid>/metadata.json` files, then opened a listed book into the reader.
    - Verified cover thumbnails on emulator with `testdata/test.epub`: imported through DocumentsUI, confirmed `metadata.cover` is `item/image/cover.jpg`, and visually checked the real cover image renders in the shelf row.
@@ -42,6 +43,7 @@
    - Verified bookshelf card layout on emulator with `testdata/test.epub`: imported through Android DocumentsUI, confirmed the progress bar and percentage render below the cover image instead of overlaying it, and confirmed the Books shell toolbar/tab icons are scaled down closer to the iOS proportions.
    - Verified Books toolbar scaling on emulator without clearing app data: installed the resize build on `emulator-5554`, opened Books, confirmed the sort/check/folder/add toolbar controls render smaller while preserving the existing Books interactions, and moved the shelf content upward so the books sit closer to the resized toolbar.
    - Verified import picker intent fix on `emulator-5554`: installed debug build without clearing app data, tapped Books -> Import EPUB, confirmed DocumentsUI opened with root navigation, selected `test.epub`, and confirmed the reader opened. `FileImportContentContractTest` also passed on `SM-G9860` and `Pixel_10_Pro(AVD)`, covering `ACTION_GET_CONTENT`, MIME filters, multi-select, and URI deduplication for shared import contracts.
+   - Verified adaptive main shell on `emulator-5554`: installed debug build, confirmed the default/tall phone Books empty state uses a standard app bar and bottom navigation without oversized controls, temporarily simulated a 3200x2000/320dpi tablet window and confirmed Books and Settings switch to a left navigation rail with constrained content width, then restored the emulator display size and density.
 
 3. `in_progress` - Reader settings
    - `done` - Implement iOS-aligned reader Appearance sheet entry from the reader.

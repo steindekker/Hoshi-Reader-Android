@@ -11,53 +11,60 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.MenuBook
+import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.ArrowDownward
-import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.ReportProblem
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -100,7 +107,7 @@ import java.io.File
 
 private const val ReportIssueUrl = "https://github.com/HuangAntimony/Hoshi-Reader-Android/issues"
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun BookshelfView(
     pendingImportUri: Uri? = null,
@@ -304,10 +311,11 @@ fun BookshelfView(
             settingsDestination = null
         },
         modifier = modifier,
-    ) { contentModifier ->
+    ) { contentModifier, layoutSpec ->
         when (selectedTab) {
             MainTab.Books -> BooksTab(
                 modifier = contentModifier,
+                layoutSpec = layoutSpec,
                 bookEntries = bookEntries,
                 bookStorage = bookStorage,
                 isLoading = isLoading,
@@ -332,6 +340,7 @@ fun BookshelfView(
             )
             MainTab.Settings -> SettingsTab(
                 modifier = contentModifier,
+                layoutSpec = layoutSpec,
                 onDestination = { destination ->
                     when (destination) {
                         SettingsDestination.Dictionaries -> settingsDestination = destination
@@ -400,31 +409,58 @@ fun BookshelfView(
 }
 
 @Composable
-private fun HoshiMainShell(
+internal fun HoshiMainShell(
     selectedTab: MainTab,
     onSelectedTabChange: (MainTab) -> Unit,
     modifier: Modifier = Modifier,
-    content: @Composable (Modifier) -> Unit,
+    content: @Composable (Modifier, MainShellLayoutSpec) -> Unit,
 ) {
-    Surface(
-        modifier = modifier
-            .fillMaxSize(),
-        color = MaterialTheme.colorScheme.background,
-        contentColor = MaterialTheme.colorScheme.onBackground,
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            content(Modifier.fillMaxSize())
-            HoshiBottomTabs(
-                selectedTab = selectedTab,
-                onSelectedTabChange = onSelectedTabChange,
-                modifier = Modifier.align(Alignment.BottomCenter),
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val layoutSpec = MainShellLayoutSpec.forWidthDp(maxWidth.value.toInt())
+        NavigationSuiteScaffold(
+            modifier = Modifier.fillMaxSize(),
+            layoutType = layoutSpec.toNavigationSuiteType(),
+            navigationSuiteItems = {
+                MainTab.entries.forEach { tab ->
+                    item(
+                        selected = tab == selectedTab,
+                        onClick = { onSelectedTabChange(tab) },
+                        icon = { BottomTabGlyph(tab, Modifier.size(24.dp)) },
+                        label = { Text(tab.label) },
+                    )
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.background,
+            contentColor = MaterialTheme.colorScheme.onBackground,
+        ) {
+            content(
+                Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (layoutSpec.navigationLayout == MainShellNavigationLayout.NavigationRail) {
+                            Modifier.padding(start = NavigationRailInset)
+                        } else {
+                            Modifier
+                        },
+                    ),
+                layoutSpec,
             )
         }
     }
 }
 
+private val NavigationRailInset = 80.dp
+
+private fun MainShellLayoutSpec.toNavigationSuiteType(): NavigationSuiteType =
+    when (navigationLayout) {
+        MainShellNavigationLayout.BottomBar -> NavigationSuiteType.NavigationBar
+        MainShellNavigationLayout.NavigationRail -> NavigationSuiteType.NavigationRail
+    }
+
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun BooksTab(
+    layoutSpec: MainShellLayoutSpec,
     bookEntries: List<BookEntry>,
     bookStorage: BookStorage,
     isLoading: Boolean,
@@ -442,99 +478,128 @@ private fun BooksTab(
 ) {
     val sections = remember(bookEntries) { bookshelfSections(bookEntries) }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        when {
-            isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-            bookEntries.isEmpty() -> EmptyBooksView(
-                errorMessage = errorMessage,
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        contentColor = MaterialTheme.colorScheme.onBackground,
+        topBar = {
+            BooksTopAppBar(
+                sortOption = sortOption,
+                sortMenuExpanded = sortMenuExpanded,
+                onSortMenuExpandedChange = onSortMenuExpandedChange,
+                onSortChange = onSortChange,
                 onImport = onImport,
-                modifier = Modifier.fillMaxSize(),
             )
-            else -> LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 28.dp, end = 28.dp, top = 128.dp, bottom = 164.dp),
-                horizontalArrangement = Arrangement.spacedBy(30.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp),
-            ) {
-                sections.forEach { section ->
-                    item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                        BookshelfSectionHeader(
-                            title = section.title,
-                            count = section.books.size,
-                        )
-                    }
-                    items(
-                        items = section.books,
-                        key = { it.metadata.id },
-                    ) { entry ->
-                        Box {
-                            BookGridCell(
-                                entry = entry,
-                                bookStorage = bookStorage,
-                                onOpen = { onOpenBook(entry) },
-                                onLongPress = { onContextMenuEntryChange(entry) },
+        },
+    ) { innerPadding ->
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+        ) {
+            val contentWidthDp = layoutSpec.constrainedContentWidthDp(maxWidth.value.toInt())
+            val contentModifier = Modifier
+                .align(Alignment.TopCenter)
+                .widthIn(max = layoutSpec.contentMaxWidthDp.dp)
+                .fillMaxWidth()
+
+            when {
+                isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+                bookEntries.isEmpty() -> EmptyBooksView(
+                    errorMessage = errorMessage,
+                    onImport = onImport,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .widthIn(max = layoutSpec.contentMaxWidthDp.dp)
+                        .fillMaxWidth()
+                        .padding(horizontal = layoutSpec.pageHorizontalPaddingDp.dp),
+                )
+                else -> LazyVerticalGrid(
+                    columns = GridCells.Fixed(layoutSpec.bookGridColumns(contentWidthDp)),
+                    modifier = contentModifier.fillMaxHeight(),
+                    contentPadding = PaddingValues(
+                        start = layoutSpec.pageHorizontalPaddingDp.dp,
+                        end = layoutSpec.pageHorizontalPaddingDp.dp,
+                        top = 24.dp,
+                        bottom = 24.dp,
+                    ),
+                    horizontalArrangement = Arrangement.spacedBy(layoutSpec.bookGridSpacingDp.dp),
+                    verticalArrangement = Arrangement.spacedBy(24.dp),
+                ) {
+                    sections.forEach { section ->
+                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                            BookshelfSectionHeader(
+                                title = section.title,
+                                count = section.books.size,
                             )
-                            DropdownMenu(
-                                expanded = contextMenuEntry?.metadata?.id == entry.metadata.id,
-                                onDismissRequest = { onContextMenuEntryChange(null) },
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Delete") },
-                                    onClick = {
-                                        contextMenuEntry?.let(onDeleteCandidate)
-                                        onContextMenuEntryChange(null)
-                                    },
+                        }
+                        items(
+                            items = section.books,
+                            key = { it.metadata.id },
+                        ) { entry ->
+                            Box {
+                                BookGridCell(
+                                    entry = entry,
+                                    bookStorage = bookStorage,
+                                    onOpen = { onOpenBook(entry) },
+                                    onLongPress = { onContextMenuEntryChange(entry) },
                                 )
+                                DropdownMenu(
+                                    expanded = contextMenuEntry?.metadata?.id == entry.metadata.id,
+                                    onDismissRequest = { onContextMenuEntryChange(null) },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Delete") },
+                                        onClick = {
+                                            contextMenuEntry?.let(onDeleteCandidate)
+                                            onContextMenuEntryChange(null)
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
-                }
-                errorMessage?.let { message ->
-                    item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                        Text(
-                            text = message,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
+                    errorMessage?.let { message ->
+                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                            Text(
+                                text = message,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
                     }
                 }
             }
         }
-
-        BooksTopChrome(
-            sortOption = sortOption,
-            sortMenuExpanded = sortMenuExpanded,
-            onSortMenuExpandedChange = onSortMenuExpandedChange,
-            onSortChange = onSortChange,
-            onImport = onImport,
-            modifier = Modifier.align(Alignment.TopCenter),
-        )
     }
 }
 
 @Composable
-private fun BooksTopChrome(
+@OptIn(ExperimentalMaterial3Api::class)
+private fun BooksTopAppBar(
     sortOption: BookSortOption,
     sortMenuExpanded: Boolean,
     onSortMenuExpandedChange: (Boolean) -> Unit,
     onSortChange: (BookSortOption) -> Unit,
     onImport: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(top = 18.dp, start = 28.dp, end = 28.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        FrostedCapsule {
+    CenterAlignedTopAppBar(
+        title = {
+            Text(
+                text = "Books",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        navigationIcon = {
             Box {
-                ChromeIconButton(onClick = { onSortMenuExpandedChange(true) }) {
-                    SortGlyph(MaterialTheme.colorScheme.onSurface)
+                IconButton(onClick = { onSortMenuExpandedChange(true) }) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.Sort,
+                        contentDescription = "Sort books",
+                    )
                 }
                 DropdownMenu(
                     expanded = sortMenuExpanded,
@@ -550,27 +615,42 @@ private fun BooksTopChrome(
                     )
                 }
             }
-            ChromeIconButton(onClick = { onSortChange(if (sortOption == BookSortOption.Recent) BookSortOption.Title else BookSortOption.Recent) }) {
-                ListCheckGlyph(MaterialTheme.colorScheme.onSurface)
+        },
+        actions = {
+            IconButton(
+                onClick = {
+                    onSortChange(
+                        if (sortOption == BookSortOption.Recent) {
+                            BookSortOption.Title
+                        } else {
+                            BookSortOption.Recent
+                        },
+                    )
+                },
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.SwapVert,
+                    contentDescription = "Toggle book sort",
+                )
             }
-        }
-        Spacer(Modifier.weight(1f))
-        Text(
-            text = "Books",
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onBackground,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-        Spacer(Modifier.weight(1f))
-        FrostedCircle(onClick = {}) {
-            FolderGlyph(MaterialTheme.colorScheme.onSurface)
-        }
-        Spacer(Modifier.width(12.dp))
-        FrostedCircle(onClick = onImport) {
-            PlusGlyph(MaterialTheme.colorScheme.onSurface)
-        }
-    }
+            IconButton(onClick = {}) {
+                Icon(
+                    imageVector = Icons.Rounded.FolderOpen,
+                    contentDescription = "Shelves",
+                )
+            }
+            IconButton(onClick = onImport) {
+                Icon(
+                    imageVector = Icons.Rounded.Add,
+                    contentDescription = "Import EPUB",
+                )
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.background,
+            scrolledContainerColor = MaterialTheme.colorScheme.background,
+        ),
+    )
 }
 
 @Composable
@@ -691,28 +771,55 @@ private fun ReadingProgressPill(progress: Double, modifier: Modifier = Modifier)
 }
 
 @Composable
-private fun SettingsTab(
+@OptIn(ExperimentalMaterial3Api::class)
+internal fun SettingsTab(
     onDestination: (SettingsDestination) -> Unit,
+    layoutSpec: MainShellLayoutSpec,
     modifier: Modifier = Modifier,
 ) {
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(start = 28.dp, end = 28.dp, top = 112.dp, bottom = 230.dp),
-        verticalArrangement = Arrangement.spacedBy(34.dp),
-    ) {
-        item {
-            Text(
-                text = "Settings",
-                style = MaterialTheme.typography.displayMedium,
-                fontWeight = FontWeight.Black,
-                color = MaterialTheme.colorScheme.onBackground,
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        contentColor = MaterialTheme.colorScheme.onBackground,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = {
+                    Text(
+                        text = "Settings",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background,
+                ),
             )
-        }
-        settingsGroups().forEach { group ->
-            item {
-                SettingsGroupCard(rows = group, onDestination = onDestination)
+        },
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .widthIn(max = layoutSpec.contentMaxWidthDp.dp)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(
+                    start = layoutSpec.pageHorizontalPaddingDp.dp,
+                    end = layoutSpec.pageHorizontalPaddingDp.dp,
+                    top = 16.dp,
+                    bottom = 24.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                settingsGroups().forEach { group ->
+                    item {
+                        SettingsGroupCard(rows = group, onDestination = onDestination)
+                    }
+                }
             }
         }
     }
@@ -724,22 +831,18 @@ private fun SettingsGroupCard(
     onDestination: (SettingsDestination) -> Unit,
 ) {
     Surface(
-        shape = RoundedCornerShape(32.dp),
+        shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(
-            modifier = Modifier.padding(vertical = 8.dp),
-        ) {
+        Column {
             rows.forEachIndexed { index, row ->
                 SettingsRow(row = row, onClick = { onDestination(row.destination) })
                 if (index != rows.lastIndex) {
-                    Box(
-                        modifier = Modifier
-                            .padding(start = 94.dp, end = 34.dp)
-                            .height(1.dp)
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.outlineVariant),
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 72.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant,
                     )
                 }
             }
@@ -754,137 +857,28 @@ private fun SettingsRow(row: SettingsRowModel, onClick: () -> Unit) {
     } else {
         MaterialTheme.colorScheme.onSurface
     }
-    Row(
+    ListItem(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 32.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        SettingsGlyph(row.destination, tint, Modifier.size(32.dp))
-        Spacer(Modifier.width(26.dp))
-        Text(
-            text = row.label,
-            style = MaterialTheme.typography.headlineSmall,
-            color = tint,
-        )
-    }
-}
-
-@Composable
-private fun HoshiBottomTabs(
-    selectedTab: MainTab,
-    onSelectedTabChange: (MainTab) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier
-            .navigationBarsPadding()
-            .padding(bottom = 20.dp)
-            .shadow(22.dp, RoundedCornerShape(38.dp), ambientColor = Color.Black.copy(alpha = 0.12f), spotColor = Color.Black.copy(alpha = 0.12f)),
-        shape = RoundedCornerShape(38.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-    ) {
-        Row(
-            modifier = Modifier.padding(7.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            MainTab.entries.forEach { tab ->
-                val selected = tab == selectedTab
-                val interactionSource = remember(tab) { MutableInteractionSource() }
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(34.dp))
-                        .background(
-                            if (selected) {
-                                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f)
-                            } else {
-                                Color.Transparent
-                            },
-                        )
-                        .clickable(
-                            interactionSource = interactionSource,
-                            indication = null,
-                            onClick = { onSelectedTabChange(tab) },
-                        )
-                        .padding(horizontal = 22.dp, vertical = 9.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        BottomTabGlyph(tab, Modifier.size(28.dp))
-                        Text(
-                            text = tab.label,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FrostedCapsule(content: @Composable RowScope.() -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(34.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-        shadowElevation = 12.dp,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            content = content,
-        )
-    }
-}
-
-@Composable
-private fun FrostedCircle(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    Surface(
-        modifier = modifier
-            .size(50.dp)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick,
-            ),
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-        shadowElevation = 12.dp,
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            content()
-        }
-    }
-}
-
-@Composable
-private fun ChromeIconButton(onClick: () -> Unit, content: @Composable () -> Unit) {
-    val interactionSource = remember { MutableInteractionSource() }
-    Box(
-        modifier = Modifier
-            .size(40.dp)
-            .clip(CircleShape)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        content()
-    }
+            .clickable(onClick = onClick),
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        leadingContent = {
+            SettingsGlyph(row.destination, tint, Modifier.size(24.dp))
+        },
+        headlineContent = {
+            Text(
+                text = row.label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = tint,
+            )
+        },
+        trailingContent = {
+            ChevronRightGlyph(
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
+        },
+    )
 }
 
 @Composable
@@ -951,54 +945,6 @@ private fun SettingsGlyph(destination: SettingsDestination, color: Color, modifi
         contentDescription = null,
         tint = color,
         modifier = modifier,
-    )
-}
-
-@Composable
-private fun SortGlyph(color: Color) {
-    Row(horizontalArrangement = Arrangement.spacedBy((-10).dp)) {
-        Icon(
-            imageVector = Icons.Rounded.ArrowUpward,
-            contentDescription = null,
-            tint = color,
-            modifier = Modifier.size(22.dp),
-        )
-        Icon(
-            imageVector = Icons.Rounded.ArrowDownward,
-            contentDescription = null,
-            tint = color,
-            modifier = Modifier.size(22.dp),
-        )
-    }
-}
-
-@Composable
-private fun ListCheckGlyph(color: Color) {
-    Icon(
-        imageVector = Icons.Rounded.Checklist,
-        contentDescription = null,
-        tint = color,
-        modifier = Modifier.size(24.dp),
-    )
-}
-
-@Composable
-private fun FolderGlyph(color: Color) {
-    Icon(
-        imageVector = Icons.Rounded.FolderOpen,
-        contentDescription = null,
-        tint = color,
-        modifier = Modifier.size(24.dp),
-    )
-}
-
-@Composable
-private fun PlusGlyph(color: Color) {
-    Icon(
-        imageVector = Icons.Rounded.Add,
-        contentDescription = null,
-        tint = color,
-        modifier = Modifier.size(26.dp),
     )
 }
 

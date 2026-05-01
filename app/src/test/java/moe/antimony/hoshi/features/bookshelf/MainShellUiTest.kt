@@ -44,4 +44,31 @@ class MainShellUiTest {
         assertEquals("Unshelved", sections.single().title)
         assertEquals(entries, sections.single().books)
     }
+
+    @Test
+    fun compactWindowsUseBottomNavigationAndTwoBookColumns() {
+        val spec = MainShellLayoutSpec.forWidthDp(360)
+
+        assertEquals(MainShellNavigationLayout.BottomBar, spec.navigationLayout)
+        assertEquals(16, spec.pageHorizontalPaddingDp)
+        assertEquals(2, spec.bookGridColumns(contentWidthDp = 360))
+    }
+
+    @Test
+    fun mediumWindowsUseNavigationRailAndConstrainedBookGrid() {
+        val spec = MainShellLayoutSpec.forWidthDp(700)
+
+        assertEquals(MainShellNavigationLayout.NavigationRail, spec.navigationLayout)
+        assertEquals(640, spec.contentMaxWidthDp)
+        assertEquals(3, spec.bookGridColumns(contentWidthDp = 640))
+    }
+
+    @Test
+    fun expandedWindowsUseNavigationRailAndCapBookGridColumns() {
+        val spec = MainShellLayoutSpec.forWidthDp(1200)
+
+        assertEquals(MainShellNavigationLayout.NavigationRail, spec.navigationLayout)
+        assertEquals(1040, spec.contentMaxWidthDp)
+        assertEquals(5, spec.bookGridColumns(contentWidthDp = 1040))
+    }
 }
