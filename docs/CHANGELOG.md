@@ -5,6 +5,8 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+## [v0.1.3] - 2026-05-01
+
 ### Changed
 
 - Redesign the Books, Dictionary, and Settings shell with Material 3 adaptive navigation, responsive bookshelf sizing, and constrained large-screen settings layouts.
