@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 class ProcessExitDiagnosticsTest {
     @Test
@@ -118,5 +119,12 @@ class ProcessExitDiagnosticsTest {
             "hoshi-diagnostics-20231114-221320.txt",
             diagnosticsExportFileName(1_700_000_000_000),
         )
+    }
+
+    @Test
+    fun diagnosticsScreenHandlesSystemBackLikeToolbarBack() {
+        val source = File("src/main/java/moe/antimony/hoshi/features/diagnostics/DiagnosticsView.kt").readText()
+
+        assertTrue(source.contains("BackHandler(onBack = onClose)"))
     }
 }

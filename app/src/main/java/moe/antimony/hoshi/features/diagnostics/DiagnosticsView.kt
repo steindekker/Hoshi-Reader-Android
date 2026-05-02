@@ -1,6 +1,7 @@
 package moe.antimony.hoshi.features.diagnostics
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
@@ -53,6 +54,7 @@ fun DiagnosticsView(
         }
     }
     val shareText = report?.toShareText().orEmpty()
+    BackHandler(onBack = onClose)
     val saveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         if (uri == null || shareText.isBlank()) return@rememberLauncherForActivityResult
         scope.launch {
