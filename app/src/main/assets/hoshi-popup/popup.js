@@ -1411,8 +1411,33 @@ function createGlossarySection(dictName, contents, isFirst, entryIdx) {
 
 const backStack = [];
 const forwardStack = [];
+let pendingHistoryRestore = null;
+
+function appendPendingHistoryRestore(flush = false) {
+    const pending = pendingHistoryRestore;
+    if (!pending) {
+        return;
+    }
+    const count = flush ? pending.nodes.length : Math.min(2, pending.nodes.length);
+    const chunk = pending.nodes.splice(0, count);
+    if (chunk.length) {
+        pending.container.append(...chunk);
+    }
+    if (!pending.nodes.length) {
+        pendingHistoryRestore = null;
+        return;
+    }
+    if (!flush) {
+        setTimeout(() => appendPendingHistoryRestore(), 16);
+    }
+}
+
+function flushPendingHistoryRestore() {
+    appendPendingHistoryRestore(true);
+}
 
 function redirect(count) {
+    flushPendingHistoryRestore();
     backStack.push(snapshot());
     forwardStack.length = 0;
     window.lookupEntries = undefined;
@@ -1427,6 +1452,7 @@ function redirect(count) {
 }
 
 function snapshot() {
+    flushPendingHistoryRestore();
     const container = document.getElementById('entries-container');
     return {
         nodes: [...container.childNodes],
@@ -1437,8 +1463,17 @@ function snapshot() {
 }
 
 function restore(snapshot) {
+    flushPendingHistoryRestore();
     const container = document.getElementById('entries-container');
-    container.replaceChildren(...snapshot.nodes);
+    const nodes = [...snapshot.nodes];
+    const shouldDeferOffscreenNodes = snapshot.scrollTop === 0 && nodes.length > 6;
+    if (shouldDeferOffscreenNodes) {
+        container.replaceChildren(...nodes.splice(0, 4));
+        pendingHistoryRestore = { container, nodes };
+        setTimeout(() => appendPendingHistoryRestore(), 50);
+    } else {
+        container.replaceChildren(...nodes);
+    }
     window.lookupEntries = snapshot.lookupEntries;
     window.entryCount = snapshot.entryCount;
     audioUrls = {};

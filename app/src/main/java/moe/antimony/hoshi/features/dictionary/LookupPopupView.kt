@@ -407,7 +407,6 @@ private fun LookupPopupWebView(
     val callbackHolder = remember { PopupWebViewCallbackHolder(callbacks) }
     callbackHolder.callbacks = callbacks
     val lookupResultsHolder = remember { PopupLookupResultsHolder(results) }
-    lookupResultsHolder.results = results
     var loadedHtml by remember { mutableStateOf<String?>(null) }
     var appliedClearSelectionSignal by remember { mutableStateOf(clearSelectionSignal) }
     var appliedBackSignal by remember { mutableStateOf(backSignal) }
@@ -446,6 +445,7 @@ private fun LookupPopupWebView(
             callbackHolder.callbacks = callbacks
             webView.setBackgroundColor(if (darkMode) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
             if (loadedHtml != html) {
+                lookupResultsHolder.results = results
                 loadedHtml = html
                 webView.loadDataWithBaseURL(
                     "https://hoshi.local/popup/",

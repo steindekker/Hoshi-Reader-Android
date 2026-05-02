@@ -342,6 +342,42 @@ class LookupPopupHtmlTest {
         assertTrue(source.contains("container.clickAttached"))
     }
 
+    @Test
+    fun popupJavascriptDefersOffscreenHistoryRestoreNodesAtTop() {
+        val source = java.io.File("src/main/assets/hoshi-popup/popup.js").readText()
+        val redirectBody = source.substringAfter("function redirect(count) {")
+            .substringBefore("function snapshot")
+        val snapshotBody = source.substringAfter("function snapshot() {")
+            .substringBefore("function restore")
+        val restoreBody = source.substringAfter("function restore(snapshot) {")
+            .substringBefore("function navigate")
+
+        assertTrue(source.contains("let pendingHistoryRestore = null;"))
+        assertTrue(source.contains("function flushPendingHistoryRestore()"))
+        assertTrue(source.contains("function appendPendingHistoryRestore(flush = false)"))
+        assertTrue(restoreBody.contains("const shouldDeferOffscreenNodes = snapshot.scrollTop === 0 && nodes.length > 6;"))
+        assertTrue(restoreBody.contains("container.replaceChildren(...nodes.splice(0, 4));"))
+        assertTrue(restoreBody.contains("setTimeout(() => appendPendingHistoryRestore(), 50);"))
+        assertTrue(restoreBody.contains("container.replaceChildren(...nodes);"))
+        assertTrue(snapshotBody.contains("flushPendingHistoryRestore();"))
+        assertTrue(redirectBody.contains("flushPendingHistoryRestore();"))
+    }
+
+    @Test
+    fun readerPopupWebViewKeepsRedirectResultsAcrossHistoryRecomposition() {
+        val source = java.io.File("src/main/java/moe/antimony/hoshi/features/dictionary/LookupPopupView.kt").readText()
+        val webViewSource = source.substringAfter("private fun LookupPopupWebView(")
+            .substringBefore("@Composable\nprivate fun LookupPopupActionBar")
+        val setupBeforeAndroidView = webViewSource.substringAfter("val lookupResultsHolder = remember")
+            .substringBefore("AndroidView(")
+        val reloadBranch = webViewSource.substringAfter("if (loadedHtml != html) {")
+            .substringBefore("if (appliedClearSelectionSignal")
+
+        assertFalse(setupBeforeAndroidView.contains("lookupResultsHolder.results = results"))
+        assertTrue(reloadBranch.contains("lookupResultsHolder.results = results"))
+        assertTrue(reloadBranch.indexOf("lookupResultsHolder.results = results") < reloadBranch.indexOf("loadDataWithBaseURL"))
+    }
+
     private fun lookupResult(
         expression: String,
         reading: String,

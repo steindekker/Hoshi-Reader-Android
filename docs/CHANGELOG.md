@@ -21,6 +21,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 - Keep reader progress and page turns in sync after tapping EPUB internal chapter links from the in-book table of contents. #39
 - Keep lookup popup text, tags, and controls readable when E-ink Mode and Dark theme are both enabled. #37
 - Let long Dictionary tab lookup results scroll normally after search. #40
+- Keep Dictionary tab cross-reference links responsive after repeated redirects and fast when swiping back to prior results. #41
 
 ## [v0.1.6] - 2026-05-02
 

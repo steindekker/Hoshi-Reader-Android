@@ -124,6 +124,21 @@ class DictionarySearchContentTest {
         assertTrue(webViewModifier.contains("observeDictionaryHistorySwipe("))
     }
 
+    @Test
+    fun dictionaryResultWebViewKeepsRedirectResultsAcrossHistoryRecomposition() {
+        val source = File("src/main/java/moe/antimony/hoshi/features/dictionary/DictionarySearchView.kt").readText()
+        val webViewSource = source.substringAfter("private fun DictionaryResultWebView(")
+            .substringBefore("@Composable\nprivate fun DictionarySearchMessage")
+        val setupBeforeAndroidView = webViewSource.substringAfter("val lookupResultsHolder = remember")
+            .substringBefore("AndroidView(")
+        val reloadBranch = webViewSource.substringAfter("if (loadedHtml != html) {")
+            .substringBefore("if (appliedClearSelectionSignal")
+
+        assertFalse(setupBeforeAndroidView.contains("lookupResultsHolder.results = results"))
+        assertTrue(reloadBranch.contains("lookupResultsHolder.results = results"))
+        assertTrue(reloadBranch.indexOf("lookupResultsHolder.results = results") < reloadBranch.indexOf("loadDataWithBaseURL"))
+    }
+
     private fun lookupResult(): LookupResult = LookupResult(
         matched = "猫",
         deinflected = "猫",
