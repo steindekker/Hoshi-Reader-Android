@@ -120,6 +120,8 @@ internal object LookupPopupHtml {
                     window.deduplicatePitchAccents = ${normalizedSettings.deduplicatePitchAccents};
                     window.audioSources = ${audioSourcesJson(audioSettings)};
                     window.audioRequestEndpoint = "https://hoshi.local/audio";
+                    window.dictionaryMediaRequestEndpoint = "https://hoshi.local/image";
+                    window.disablePopupImageViewportMaxHeight = true;
                     window.audioEnableAutoplay = ${audioSettings.enableAutoplay};
                     window.audioPlaybackMode = "${audioSettings.playbackMode.rawValue}";
                     window.needsAudio = false;

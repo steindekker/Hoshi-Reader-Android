@@ -12,6 +12,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 ### Fixed
 
 - Fix Dictionary tab lookup results rendering blank after search in v0.1.5 by loading popup CSS and JavaScript from the shared WebView bridge regardless of the result page base URL. #33
+- Render SVG dictionary media in lookup popups, restoring icons embedded in structured dictionary definitions. #35
 - Fix a crash when opening `また、同じ夢を見ていた.epub` by normalizing EPUB-private CSS before Android WebView renders reader chapters. #34
 
 ## [v0.1.5] - 2026-05-02

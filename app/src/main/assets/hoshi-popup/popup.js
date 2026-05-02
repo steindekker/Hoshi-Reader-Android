@@ -345,6 +345,19 @@ function getMediaFilename(dictionary, path) {
     return currentDictionaryMedia.get(key).filename;
 }
 
+function getDictionaryMediaUrl(dictionary, path) {
+    if (window.dictionaryMediaRequestEndpoint) {
+        return `${window.dictionaryMediaRequestEndpoint}?dictionary=${encodeURIComponent(dictionary)}&path=${encodeURIComponent(path)}`;
+    }
+    return `image://?dictionary=${encodeURIComponent(dictionary)}&path=${encodeURIComponent(path)}`;
+}
+
+function applyDictionaryImageContainerFixes(imageContainer) {
+    if (window.disablePopupImageViewportMaxHeight) {
+        imageContainer.style.maxHeight = 'none';
+    }
+}
+
 function setStructuredContentElementStyle(element, style) {
     for (const [property, value] of Object.entries(style)) {
         if ((property === 'marginTop' || property === 'marginLeft' || property === 'marginRight' || property === 'marginBottom') && typeof value === 'number') {
@@ -637,12 +650,13 @@ function createDefinitionImage(data, dictionary, exporting = false) {
     if (typeof border === 'string') { imageContainer.style.border = border; }
     if (typeof borderRadius === 'string') { imageContainer.style.borderRadius = borderRadius; }
     imageContainer.style.width = `${usedWidth}em`;
+    applyDictionaryImageContainerFixes(imageContainer);
     if (typeof title === 'string') {
         imageContainer.title = title;
     }
     
     if (!exporting) {
-        const imageUrl = `image://?dictionary=${encodeURIComponent(dictionary)}&path=${encodeURIComponent(path)}`;
+        const imageUrl = getDictionaryMediaUrl(dictionary, path);
         if (shouldRenderDefinitionImageToCanvas(path, appearance, usedWidth, invAspectRatio)) {
             imageContainer.appendChild(createDefinitionImageCanvas(imageUrl, nodeData?.alt || title || '', (canvas, sourceImage) => {
                 renderDefinitionImageToCanvas(canvas, sourceImage, usedWidth, invAspectRatio, appearance);
@@ -653,8 +667,10 @@ function createDefinitionImage(data, dictionary, exporting = false) {
             img.alt = nodeData?.alt || title || '';
             if (!hasDimensions) {
                 img.addEventListener('load', () => {
-                    imageContainer.style.width = `${Math.min(img.naturalWidth, window.innerWidth - 20)}px`;
+                    const imageWidth = Math.min(img.naturalWidth, window.innerWidth - 20);
+                    imageContainer.style.width = `${imageWidth}px`;
                     aspectRatioSizer.style.paddingTop = `${(img.naturalHeight / img.naturalWidth) * 100}%`;
+                    applyDictionaryImageContainerFixes(imageContainer);
                 }, {once: true});
             }
             img.src = imageUrl;

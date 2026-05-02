@@ -9,6 +9,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import java.io.ByteArrayInputStream
+import de.manhhao.hoshi.HoshiDicts
 import de.manhhao.hoshi.LookupResult
 import moe.antimony.hoshi.features.audio.AudioPlaybackMode
 import moe.antimony.hoshi.features.audio.AudioRequestHandler
@@ -37,6 +38,7 @@ internal class PopupMessageWebViewClient(
     private val callbackHolder: PopupWebViewCallbackHolder,
     private val audioRequestHandler: AudioRequestHandler? = null,
     private val assets: LookupPopupAssets? = null,
+    private val imageRequestHandler: DictionaryImageRequestHandler = DictionaryImageRequestHandler(),
 ) : WebViewClient() {
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
         handlePopupUrl(request.url)
@@ -46,11 +48,17 @@ internal class PopupMessageWebViewClient(
         handlePopupUrl(Uri.parse(url))
 
     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
-        handleAssetRequest(request.url) ?: audioRequestHandler?.handleAudioRequest(request.url.toString())
+        handleAssetRequest(request.url)
+            ?: imageRequestHandler.handleImageRequest(request.url)
+            ?: audioRequestHandler?.handleAudioRequest(request.url.toString())
 
     @Suppress("OVERRIDE_DEPRECATION")
     override fun shouldInterceptRequest(view: WebView, url: String): WebResourceResponse? =
-        handleAssetRequest(Uri.parse(url)) ?: audioRequestHandler?.handleAudioRequest(url)
+        Uri.parse(url).let { uri ->
+            handleAssetRequest(uri)
+                ?: imageRequestHandler.handleImageRequest(uri)
+                ?: audioRequestHandler?.handleAudioRequest(url)
+        }
 
     private fun handleAssetRequest(uri: Uri): WebResourceResponse? {
         val assets = assets ?: return null
@@ -81,6 +89,44 @@ internal class PopupMessageWebViewClient(
         return true
     }
 }
+
+internal class DictionaryImageRequestHandler(
+    private val loadMedia: (dictionary: String, path: String) -> ByteArray? = { dictionary, path ->
+        HoshiDicts.getMediaFile(HoshiDicts.lookupObject, dictionary, path)
+    },
+) {
+    fun handleImageRequest(uri: Uri): WebResourceResponse? {
+        val isIosImageScheme = uri.scheme == "image"
+        val isAndroidImageEndpoint = uri.scheme == "https" &&
+            uri.host == "hoshi.local" &&
+            uri.path == "/image"
+        if (!isIosImageScheme && !isAndroidImageEndpoint) return null
+        val dictionary = uri.getQueryParameter("dictionary").orEmpty()
+        val mediaPath = uri.getQueryParameter("path").orEmpty()
+        if (dictionary.isBlank() || mediaPath.isBlank()) return null
+        val data = loadMedia(dictionary, mediaPath)?.takeIf { it.isNotEmpty() } ?: return null
+
+        return WebResourceResponse(
+            dictionaryImageMimeType(mediaPath),
+            null,
+            ByteArrayInputStream(data),
+        ).apply {
+            responseHeaders = mapOf("Access-Control-Allow-Origin" to "*")
+        }
+    }
+}
+
+internal fun dictionaryImageMimeType(path: String): String =
+    when (path.substringAfterLast('.', missingDelimiterValue = "").lowercase()) {
+        "png" -> "image/png"
+        "jpg", "jpeg" -> "image/jpeg"
+        "gif" -> "image/gif"
+        "webp" -> "image/webp"
+        "avif" -> "image/avif"
+        "heic" -> "image/heic"
+        "svg" -> "image/svg+xml"
+        else -> "application/octet-stream"
+    }
 
 internal class PopupWebViewBridge(
     private val webView: WebView,

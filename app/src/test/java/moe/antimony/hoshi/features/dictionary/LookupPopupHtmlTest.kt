@@ -242,6 +242,17 @@ class LookupPopupHtmlTest {
         assertTrue(html.contains("""window.audioPlaybackMode = "duck";"""))
     }
 
+    @Test
+    fun injectsAndroidDictionaryMediaEndpointForPopupImages() {
+        val html = LookupPopupHtml.render(
+            listOf(lookupResult(expression = "反対", reading = "はんたい", glossary = "opposite")),
+            assets = LookupPopupAssets(popupJs = "", popupCss = ""),
+        )
+
+        assertTrue(html.contains("""window.dictionaryMediaRequestEndpoint = "https://hoshi.local/image";"""))
+        assertTrue(html.contains("window.disablePopupImageViewportMaxHeight = true;"))
+    }
+
     private fun lookupResult(
         expression: String,
         reading: String,
