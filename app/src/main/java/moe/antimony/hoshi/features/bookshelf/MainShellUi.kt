@@ -121,6 +121,7 @@ enum class SettingsDestination {
     Appearance,
     Advanced,
     ReportIssue,
+    Diagnostics,
     About,
 }
 
@@ -143,6 +144,7 @@ fun settingsGroups(): List<List<SettingsRowModel>> = listOf(
     ),
     listOf(
         SettingsRowModel("Report an Issue", SettingsDestination.ReportIssue),
+        SettingsRowModel("Diagnostics", SettingsDestination.Diagnostics),
         SettingsRowModel("About", SettingsDestination.About),
     ),
 )

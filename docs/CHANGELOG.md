@@ -5,6 +5,10 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+### Added
+
+- Add a Settings -> Diagnostics page that shows Android process exit diagnostics, saves them as a `.txt` file, and shares them as text for issue reports.
+
 ### Fixed
 
 - Fix Dictionary tab lookup results rendering blank after search in v0.1.5 by loading popup CSS and JavaScript from the shared WebView bridge regardless of the result page base URL. #33

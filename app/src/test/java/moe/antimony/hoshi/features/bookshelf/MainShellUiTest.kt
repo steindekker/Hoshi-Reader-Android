@@ -26,7 +26,7 @@ class MainShellUiTest {
             listOf("Dictionaries", "Anki", "Appearance", "Advanced"),
             groups.first().map { it.label },
         )
-        assertEquals(listOf("Report an Issue", "About"), groups.last().map { it.label })
+        assertEquals(listOf("Report an Issue", "Diagnostics", "About"), groups.last().map { it.label })
     }
 
     @Test

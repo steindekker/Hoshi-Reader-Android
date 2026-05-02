@@ -41,6 +41,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Info
@@ -106,6 +107,7 @@ import moe.antimony.hoshi.epub.Bookmark
 import moe.antimony.hoshi.epub.EpubBook
 import moe.antimony.hoshi.epub.EpubBookParser
 import moe.antimony.hoshi.features.audio.AdvancedSettingsView
+import moe.antimony.hoshi.features.diagnostics.DiagnosticsView
 import moe.antimony.hoshi.features.dictionary.DictionaryView
 import moe.antimony.hoshi.features.dictionary.DictionarySearchView
 import moe.antimony.hoshi.features.dictionary.DictionarySettingsStore
@@ -327,6 +329,14 @@ fun BookshelfView(
 
     if (settingsDestination == SettingsDestination.Advanced) {
         AdvancedSettingsView(
+            onClose = { settingsDestination = null },
+            modifier = modifier.fillMaxSize(),
+        )
+        return
+    }
+
+    if (settingsDestination == SettingsDestination.Diagnostics) {
+        DiagnosticsView(
             onClose = { settingsDestination = null },
             modifier = modifier.fillMaxSize(),
         )
@@ -1127,6 +1137,7 @@ private fun SettingsGlyph(destination: SettingsDestination, color: Color, modifi
         SettingsDestination.Appearance -> Icons.Rounded.Palette
         SettingsDestination.Advanced -> Icons.Rounded.Settings
         SettingsDestination.ReportIssue -> Icons.Rounded.ReportProblem
+        SettingsDestination.Diagnostics -> Icons.Rounded.BugReport
         SettingsDestination.About -> Icons.Rounded.Info
     }
     Icon(
@@ -1152,6 +1163,7 @@ private fun SettingsDestination.placeholderTitle(): String = when (this) {
     SettingsDestination.Appearance -> "Appearance"
     SettingsDestination.Advanced -> "Advanced"
     SettingsDestination.About -> "About"
+    SettingsDestination.Diagnostics -> "Diagnostics"
     SettingsDestination.Dictionaries -> "Dictionaries"
     SettingsDestination.ReportIssue -> "Report an Issue"
 }

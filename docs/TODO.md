@@ -39,6 +39,7 @@
    - `done` - Replace iOS-style inset Settings row separators with full-width Material-style dividers.
    - `done` - Remove the duplicate manual inset beside Material 3 navigation rail so large-screen layouts rely on `NavigationSuiteScaffold` spacing instead of adding extra blank space.
    - `done` - Align Books shelf content to the start side of the large-screen content area while keeping the grid width capped.
+   - `done` - Add Settings -> Diagnostics between Report an Issue and About, using Android process exit history on Android 11+ plus save-as-`.txt` and share actions so users can attach diagnostics to issue reports.
    - `todo` - Align multi-select, shelves, and batch actions with iOS.
    - Verified on emulator with `testdata/test.epub`: cleared app data, imported the EPUB twice through DocumentsUI, confirmed two shelf rows and two independent `files/Books/<uuid>/metadata.json` files, then opened a listed book into the reader.
    - Verified cover thumbnails on emulator with `testdata/test.epub`: imported through DocumentsUI, confirmed `metadata.cover` is `item/image/cover.jpg`, and visually checked the real cover image renders in the shelf row.
