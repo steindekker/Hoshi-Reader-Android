@@ -19,6 +19,8 @@ class SasayakiPlayer(
     context: Context,
     private val bookRoot: File,
     private val bookStorage: BookStorage,
+    private val bookTitle: String?,
+    private val bookCoverFile: File?,
     matchData: SasayakiMatchData?,
     private val getCurrentChapterIndex: () -> Int,
     private val onCue: (SasayakiMatch, Boolean) -> Unit,
@@ -38,6 +40,7 @@ class SasayakiPlayer(
     private val handler = Handler(Looper.getMainLooper())
     private val timeline = CueTimeline(matchData)
     private var mediaPlayer: MediaPlayer? = null
+    private var mediaSession: SasayakiMediaSession? = null
     private var lastSavedSecond = -1
     private var currentCue: SasayakiMatch? = null
     private var hasPlayedOnce = false
@@ -91,6 +94,7 @@ class SasayakiPlayer(
         if (isPlaying) {
             mediaPlayer?.playbackParams = playbackParams(value)
         }
+        updateMediaSession()
         savePlayback()
     }
 
@@ -136,6 +140,7 @@ class SasayakiPlayer(
         mediaPlayer?.pause()
         isPlaying = false
         handler.removeCallbacks(tickRunnable)
+        updateMediaSession()
         if (restoreTemporaryPosition) {
             restoreTemporaryPlaybackPositionIfNeeded()
         }
@@ -180,6 +185,8 @@ class SasayakiPlayer(
         player.start()
         hasPlayedOnce = true
         isPlaying = true
+        updateMediaSession()
+        mediaSession?.activate()
         updateCue(currentTime, forceDisplay = true)
         handler.removeCallbacks(tickRunnable)
         handler.post(tickRunnable)
@@ -223,6 +230,7 @@ class SasayakiPlayer(
             }
         }
         if (seek.startPlayback) startPlayback()
+        updateMediaSession()
     }
 
     private fun restoreAudio() {
@@ -240,16 +248,32 @@ class SasayakiPlayer(
                 setOnCompletionListener {
                     this@SasayakiPlayer.isPlaying = false
                     handler.removeCallbacks(tickRunnable)
+                    updateMediaSession()
                 }
                 setOnSeekCompleteListener { handleSeekComplete() }
                 prepare()
                 seekTo((playback.lastPosition * 1000.0).toInt().coerceAtLeast(0))
             }
             mediaPlayer = player
+            mediaSession?.release()
+            mediaSession = SasayakiMediaSession(
+                context = appContext,
+                title = bookTitle ?: bookRoot.name,
+                artwork = SasayakiMediaSession.loadCoverArt(bookCoverFile),
+                onPlay = ::startPlayback,
+                onPause = { pausePlayback() },
+                onSkipToPrevious = ::previousCue,
+                onSkipToNext = ::nextCue,
+                onSeekTo = { positionMs ->
+                    stopPlaybackTime = null
+                    seek(positionMs.toDouble() / 1000.0, startPlayback = isPlaying)
+                },
+            )
             duration = player.duration.coerceAtLeast(0).toDouble() / 1000.0
             hasAudio = true
             errorMessage = null
             updateCue(currentTime)
+            updateMediaSession()
         }.onFailure { error ->
             errorMessage = error.localizedMessage ?: "Unable to load audiobook."
             hasAudio = false
@@ -274,6 +298,7 @@ class SasayakiPlayer(
             }
         }
         updateCue(currentTime)
+        updateMediaSession()
     }
 
     private fun updateCue(time: Double, forceDisplay: Boolean = false) {
@@ -310,6 +335,15 @@ class SasayakiPlayer(
         bookStorage.saveSasayakiPlayback(bookRoot, playback)
     }
 
+    private fun updateMediaSession() {
+        mediaSession?.update(
+            isPlaying = isPlaying,
+            currentTimeMs = (currentTime * 1000.0).toLong(),
+            durationMs = (duration * 1000.0).toLong(),
+            rate = rate,
+        )
+    }
+
     private fun restoreTemporaryPlaybackPositionIfNeeded() {
         val returnPosition = temporaryPlaybackReturnPosition ?: return
         temporaryPlaybackReturnPosition = null
@@ -317,12 +351,15 @@ class SasayakiPlayer(
         currentTime = returnPosition
         lastSavedSecond = returnPosition.toInt()
         updateCue(returnPosition)
+        updateMediaSession()
     }
 
     private fun teardownPlayer(clearCue: Boolean) {
         pausePlayback()
         mediaPlayer?.release()
         mediaPlayer = null
+        mediaSession?.release()
+        mediaSession = null
         hasAudio = false
         if (clearCue) clearCue()
     }

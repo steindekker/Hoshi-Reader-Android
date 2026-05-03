@@ -136,6 +136,9 @@ fun ReaderWebView(
     var sasayakiSettings by remember { mutableStateOf(sasayakiSettingsStore.load()) }
     val sasayakiMatchData = remember(bookRoot) { bookRoot?.let(bookStorage::loadSasayakiMatch) }
     val sasayakiAudioRepository = remember(bookRoot) { bookRoot?.let(::SasayakiAudioRepository) }
+    val sasayakiCoverFile = remember(bookRoot, book.coverHref) {
+        resolveBookCoverFile(bookRoot, book.coverHref)
+    }
     var sasayakiPlayer by remember { mutableStateOf<SasayakiPlayer?>(null) }
     var sasayakiWasPausedByLookup by remember { mutableStateOf(false) }
     val view = LocalView.current
@@ -288,6 +291,8 @@ fun ReaderWebView(
                 context = context,
                 bookRoot = bookRoot,
                 bookStorage = bookStorage,
+                bookTitle = book.title,
+                bookCoverFile = sasayakiCoverFile,
                 matchData = sasayakiMatchData,
                 getCurrentChapterIndex = { readerPosition.displayedPosition.index },
                 onCue = { cue, reveal ->
@@ -1089,6 +1094,14 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
+}
+
+private fun resolveBookCoverFile(bookRoot: File?, coverHref: String?): File? {
+    val root = bookRoot?.canonicalFile ?: return null
+    val cover = coverHref?.takeIf { it.isNotBlank() } ?: return null
+    val file = root.resolve(cover).canonicalFile
+    if (file.path != root.path && !file.path.startsWith(root.path + File.separator)) return null
+    return file.takeIf { it.isFile }
 }
 
 private fun SasayakiMatchData.cuesJsonForChapter(chapterIndex: Int): String {
