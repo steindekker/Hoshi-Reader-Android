@@ -1,5 +1,6 @@
 package moe.antimony.hoshi.features.anki
 
+import moe.antimony.hoshi.features.audio.LocalAudioResolver
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -19,6 +20,29 @@ class AnkiRepositoryTest {
             "hoshi_sasayaki_123.m4a",
             ankiInlineMediaReference("[sound:hoshi_sasayaki_123.m4a]"),
         )
+    }
+
+    @Test
+    fun ankiAudioReadsLocalAudioUrlsFromDatabaseLoader() {
+        val localUrl = LocalAudioResolver.audioUrl("nhk16", "taberu.mp3")
+        val localAudio = byteArrayOf(1, 2, 3, 4)
+        var remoteReads = 0
+
+        val result = readAnkiAudioBytes(
+            url = localUrl,
+            readLocalAudio = { file ->
+                assertEquals("nhk16", file.source)
+                assertEquals("taberu.mp3", file.file)
+                localAudio
+            },
+            readRemoteAudio = {
+                remoteReads += 1
+                null
+            },
+        )
+
+        assertTrue(localAudio.contentEquals(result))
+        assertEquals(0, remoteReads)
     }
 
     @Test

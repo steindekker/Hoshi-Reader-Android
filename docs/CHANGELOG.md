@@ -32,6 +32,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 - Keep dictionary-specific AnkiDroid glossary handlebars from falling back to the first glossary when imported dictionary titles include a version suffix.
 - Expand Sasayaki audiobook exports for AnkiDroid `{sasayaki-audio}` to adjacent cues from the selected sentence, matching the iOS sentence-audio behavior.
 - Fill the Lapis `SentenceAudio` field from Sasayaki reader lookups by exporting the matched cue audio before adding the AnkiDroid note.
+- Fill AnkiDroid `{audio}` fields when the selected dictionary audio comes from the imported local audio database.
 - Keep Anki field-to-handlebar mappings editable after closing and reopening the app process without requiring another Fetch.
 - Match the reader loading screen to the active reader background, preventing a white flash when opening books in dark mode.
 - Keep the bookshelf visible while opening an existing book, preventing a brief loading-spinner flash before the reader appears.

@@ -4,6 +4,9 @@ import android.content.Context
 import android.util.Log
 import androidx.core.content.FileProvider
 import de.manhhao.hoshi.HoshiDicts
+import moe.antimony.hoshi.features.audio.LocalAudioFile
+import moe.antimony.hoshi.features.audio.LocalAudioRepository
+import moe.antimony.hoshi.features.audio.LocalAudioResolver
 import java.io.File
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
@@ -15,6 +18,7 @@ class AnkiRepository(
     private val context: Context,
     private val backend: AnkiBackend,
     private val settingsRepository: AnkiSettingsRepository,
+    private val localAudioRepository: LocalAudioRepository = LocalAudioRepository.fromContext(context),
 ) {
     val settings: Flow<AnkiSettings> = settingsRepository.settings
 
@@ -113,7 +117,12 @@ class AnkiRepository(
 
     private fun addRemoteAudio(url: String): String? =
         runCatching {
-            val data = URL(url).openStream().use { it.readBytes() }
+            val data = readAnkiAudioBytes(
+                url = url,
+                readLocalAudio = localAudioRepository::loadAudio,
+                readRemoteAudio = { remoteUrl -> URL(remoteUrl).openStream().use { it.readBytes() } },
+            )
+                ?: return null
             val file = mediaCacheFile("hoshi_audio_${data.contentHashCode()}.mp3")
             file.writeBytes(data)
             addMediaFile(file.absolutePath, file.name, "audio/mpeg")
@@ -143,6 +152,19 @@ class AnkiRepository(
     private fun mediaCacheFile(name: String): File {
         val dir = File(context.cacheDir, "anki-media").also { it.mkdirs() }
         return File(dir, name)
+    }
+}
+
+internal fun readAnkiAudioBytes(
+    url: String,
+    readLocalAudio: (LocalAudioFile) -> ByteArray?,
+    readRemoteAudio: (String) -> ByteArray?,
+): ByteArray? {
+    val localFile = LocalAudioResolver.parseAudioUrl(url)
+    return if (localFile != null) {
+        readLocalAudio(localFile)
+    } else {
+        readRemoteAudio(url)
     }
 }
 
