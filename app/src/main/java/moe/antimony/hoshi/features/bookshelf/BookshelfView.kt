@@ -107,6 +107,7 @@ import moe.antimony.hoshi.epub.BookRepository
 import moe.antimony.hoshi.epub.BookSortOption
 import moe.antimony.hoshi.importing.FileImportContent
 import moe.antimony.hoshi.importing.ImportFileType
+import moe.antimony.hoshi.ui.theme.LocalHoshiDarkTheme
 import moe.antimony.hoshi.ui.theme.LocalHoshiEInkMode
 import java.io.File
 import kotlin.math.max
@@ -671,13 +672,19 @@ private fun BookCoverCard(entry: BookEntry, bookRepository: BookRepository) {
         value = BookCoverBitmapCache.load(coverFile)
     }
     val shape = RoundedCornerShape(10.dp)
+    val coverPlaceholderColor = MaterialTheme.colorScheme.background
+    val coverBorderColor = if (LocalHoshiDarkTheme.current) {
+        Color.White.copy(alpha = 0.9f)
+    } else {
+        Color.Black.copy(alpha = 0.18f)
+    }
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(0.72f)
             .clip(shape)
-            .background(Color.White)
-            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.9f)), shape),
+            .background(coverPlaceholderColor)
+            .border(BorderStroke(1.dp, coverBorderColor), shape),
         contentAlignment = Alignment.Center,
     ) {
         bitmap?.let { coverBitmap ->

@@ -37,6 +37,7 @@ private val LightColorScheme = lightColorScheme(
 )
 
 val LocalHoshiEInkMode = staticCompositionLocalOf { false }
+val LocalHoshiDarkTheme = staticCompositionLocalOf { false }
 
 internal fun hoshiColorScheme(darkTheme: Boolean, eInkMode: Boolean) = when {
     eInkMode && darkTheme -> eInkColorScheme(dark = true)
@@ -134,7 +135,10 @@ fun HoshiReaderTheme(
         else -> hoshiColorScheme(darkTheme = darkTheme, eInkMode = eInkMode)
     }
 
-    CompositionLocalProvider(LocalHoshiEInkMode provides eInkMode) {
+    CompositionLocalProvider(
+        LocalHoshiEInkMode provides eInkMode,
+        LocalHoshiDarkTheme provides darkTheme,
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,

@@ -129,6 +129,22 @@ class MainShellUiTest {
     }
 
     @Test
+    fun bookCoverPlaceholderUsesBookshelfBackground() {
+        val source = File("src/main/java/moe/antimony/hoshi/features/bookshelf/BookshelfView.kt").readText()
+        val coverCard = source.substringAfter("private fun BookCoverCard(")
+            .substringBefore("private object BookCoverBitmapCache")
+
+        assertTrue(coverCard.contains("MaterialTheme.colorScheme.background"))
+        assertTrue(coverCard.contains(".background(coverPlaceholderColor)"))
+        assertFalse(coverCard.contains(".background(Color.White)"))
+        assertTrue(coverCard.contains("LocalHoshiDarkTheme.current"))
+        assertTrue(coverCard.contains("Color.White.copy(alpha = 0.9f)"))
+        assertTrue(coverCard.contains("Color.Black.copy(alpha = 0.18f)"))
+        assertTrue(coverCard.contains("BorderStroke(1.dp, coverBorderColor)"))
+        assertFalse(coverCard.contains("isSystemInDarkTheme()"))
+    }
+
+    @Test
     fun bookProgressIsLoadedOnceForShelfEntries() = runBlocking {
         val filesDir = Files.createTempDirectory("hoshi-bookshelf-progress").toFile()
         try {
