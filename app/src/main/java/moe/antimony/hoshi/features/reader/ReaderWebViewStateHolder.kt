@@ -34,6 +34,12 @@ internal class ReaderWebViewStateHolder(
     var webViewViewportSize by mutableStateOf(IntSize.Zero)
         private set
 
+    var isWebViewRestoring by mutableStateOf(true)
+        private set
+
+    var webViewRestoreEpoch by mutableStateOf(0)
+        private set
+
     var sasayakiWasPausedByLookup by mutableStateOf(false)
         private set
 
@@ -43,6 +49,7 @@ internal class ReaderWebViewStateHolder(
 
     fun applySettings(settings: ReaderSettings) {
         readerPosition = readerPosition.prepareReloadAtDisplayedPosition()
+        markWebViewRestoring()
         effectiveSettings = settings
     }
 
@@ -120,13 +127,29 @@ internal class ReaderWebViewStateHolder(
         return readerPosition.displayedPosition
     }
 
+    fun recordContinuousScrollProgress(progress: Double, restoreEpoch: Int): ReaderChapterPosition? {
+        if (isWebViewRestoring || restoreEpoch != webViewRestoreEpoch) return null
+        return recordDisplayedProgress(progress)
+    }
+
     fun prepareReloadAtDisplayedPosition() {
         readerPosition = readerPosition.prepareReloadAtDisplayedPosition()
+        markWebViewRestoring()
     }
 
     fun jumpTo(position: ReaderChapterPosition, fragment: String? = null): ReaderChapterPosition {
         readerPosition = readerPosition.jumpTo(position, fragment)
+        markWebViewRestoring()
         return readerPosition.displayedPosition
+    }
+
+    fun markWebViewRestoring() {
+        webViewRestoreEpoch += 1
+        isWebViewRestoring = true
+    }
+
+    fun markWebViewRestored() {
+        isWebViewRestoring = false
     }
 
     fun goToNextChapter(lastIndex: Int): ReaderChapterPosition? {

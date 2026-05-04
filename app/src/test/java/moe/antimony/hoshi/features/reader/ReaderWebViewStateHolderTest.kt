@@ -3,6 +3,7 @@ package moe.antimony.hoshi.features.reader
 import androidx.compose.ui.unit.IntSize
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -29,6 +30,38 @@ class ReaderWebViewStateHolderTest {
         assertEquals(ReaderChapterPosition(index = 2, progress = 1.0), previous)
         assertEquals(previous, holder.readerPosition.loadPosition)
         assertEquals(previous, holder.readerPosition.displayedPosition)
+    }
+
+    @Test
+    fun continuousScrollProgressIsIgnoredWhileWebViewIsRestoringLikeIos() {
+        val holder = stateHolder(initialIndex = 2)
+
+        val next = holder.goToNextChapter(lastIndex = 3)
+        val ignored = holder.recordContinuousScrollProgress(0.72, holder.webViewRestoreEpoch)
+
+        assertEquals(ReaderChapterPosition(index = 3, progress = 0.0), next)
+        assertNull(ignored)
+        assertEquals(ReaderChapterPosition(index = 3, progress = 0.0), holder.readerPosition.displayedPosition)
+
+        holder.markWebViewRestored()
+        val saved = holder.recordContinuousScrollProgress(0.12, holder.webViewRestoreEpoch)
+
+        assertEquals(ReaderChapterPosition(index = 3, progress = 0.12), saved)
+        assertEquals(saved, holder.readerPosition.displayedPosition)
+    }
+
+    @Test
+    fun staleContinuousScrollProgressFromPreviousRestoreEpochIsIgnored() {
+        val holder = stateHolder(initialIndex = 2)
+        holder.markWebViewRestored()
+        val oldEpoch = holder.webViewRestoreEpoch
+
+        holder.goToNextChapter(lastIndex = 3)
+        holder.markWebViewRestored()
+        val staleProgress = holder.recordContinuousScrollProgress(0.72, oldEpoch)
+
+        assertNull(staleProgress)
+        assertEquals(ReaderChapterPosition(index = 3, progress = 0.0), holder.readerPosition.displayedPosition)
     }
 
     @Test

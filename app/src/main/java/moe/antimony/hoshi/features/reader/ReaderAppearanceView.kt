@@ -267,6 +267,29 @@ private fun ReaderAppearanceContent(
         }
         item {
             AppearanceSection(title = "Layout", palette = palette) {
+                SegmentedRow(
+                    label = "Mode",
+                    options = listOf("Paginated", "Continuous"),
+                    selected = if (settings.continuousMode) "Continuous" else "Paginated",
+                    onSelected = { label ->
+                        onSettingsChange(settings.copy(continuousMode = label == "Continuous"))
+                    },
+                    palette = palette,
+                )
+                if (settings.continuousMode) {
+                    AppearanceDivider(palette)
+                    SliderRow(
+                        label = "Chapter Swipe Distance",
+                        value = settings.chapterSwipeDistance.toString(),
+                        sliderValue = settings.chapterSwipeDistance.toFloat(),
+                        valueRange = 10f..60f,
+                        steps = 9,
+                        onValueChange = { value ->
+                            onSettingsChange(settings.copy(chapterSwipeDistance = (round(value / 5) * 5).toInt()))
+                        },
+                    )
+                }
+                AppearanceDivider(palette)
                 StepperRow(
                     label = "Horizontal Padding",
                     value = "${settings.horizontalPadding}%",

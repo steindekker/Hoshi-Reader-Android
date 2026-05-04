@@ -116,6 +116,23 @@ class ReaderPaginationScriptsTest {
     }
 
     @Test
+    fun continuousRestoreProgressZeroResetsAndroidWebViewScrollToChapterStart() {
+        val script = ReaderPaginationScripts.shellScript(
+            settings = ReaderSettings(continuousMode = true),
+        )
+        val restoreProgress = script.substringAfter("restoreProgress: async function(progress)")
+            .substringBefore("var walker = this.createWalker()")
+
+        assertTrue(script.contains("scrollToChapterStart: function()"))
+        assertTrue(script.contains("window.scrollTo(0, 0)"))
+        assertTrue(script.contains("document.documentElement.scrollLeft = 0"))
+        assertTrue(script.contains("document.body.scrollLeft = 0"))
+        assertTrue(restoreProgress.contains("this.scrollToChapterStart()"))
+        assertTrue(restoreProgress.contains("requestAnimationFrame(() => {"))
+        assertTrue(restoreProgress.contains("this.notifyRestoreComplete()"))
+    }
+
+    @Test
     fun exposesSasayakiCueWrappingAndHighlightingLikeIos() {
         val script = ReaderPaginationScripts.shellScript()
 

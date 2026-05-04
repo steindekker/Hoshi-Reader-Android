@@ -23,6 +23,8 @@ data class ReaderSettings(
     val selectedFont: String = ReaderFontManager.defaultMinchoFont,
     val fontSize: Int = 22,
     val hideFurigana: Boolean = false,
+    val continuousMode: Boolean = false,
+    val chapterSwipeDistance: Int = 20,
     val horizontalPadding: Int = 5,
     val verticalPadding: Int = 0,
     val avoidPageBreak: Boolean = false,
@@ -139,6 +141,8 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
         ),
         fontSize = preferences.getInt("fontSize", 22),
         hideFurigana = preferences.getBoolean("readerHideFurigana", false),
+        continuousMode = preferences.getBoolean("continuousMode", false),
+        chapterSwipeDistance = preferences.getInt("chapterSwipeDistance", 20).coerceIn(10, 60),
         horizontalPadding = preferences.getInt("layoutHorizontalPadding", 5),
         verticalPadding = preferences.getInt("layoutVerticalPadding", 0),
         avoidPageBreak = preferences.getBoolean("avoidPageBreak", false),
@@ -169,6 +173,8 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
             .putString("selectedFont", settings.selectedFont)
             .putInt("fontSize", settings.fontSize)
             .putBoolean("readerHideFurigana", settings.hideFurigana)
+            .putBoolean("continuousMode", settings.continuousMode)
+            .putInt("chapterSwipeDistance", settings.chapterSwipeDistance)
             .putInt("layoutHorizontalPadding", settings.horizontalPadding)
             .putInt("layoutVerticalPadding", settings.verticalPadding)
             .putBoolean("avoidPageBreak", settings.avoidPageBreak)
@@ -238,6 +244,8 @@ class ReaderSettingsRepository(
             ),
             fontSize = this[KEY_FONT_SIZE] ?: 22,
             hideFurigana = this[KEY_HIDE_FURIGANA] ?: false,
+            continuousMode = this[KEY_CONTINUOUS_MODE] ?: false,
+            chapterSwipeDistance = (this[KEY_CHAPTER_SWIPE_DISTANCE] ?: 20).coerceIn(10, 60),
             horizontalPadding = this[KEY_HORIZONTAL_PADDING] ?: 5,
             verticalPadding = this[KEY_VERTICAL_PADDING] ?: 0,
             avoidPageBreak = this[KEY_AVOID_PAGE_BREAK] ?: false,
@@ -267,6 +275,8 @@ class ReaderSettingsRepository(
         this[KEY_SELECTED_FONT] = settings.selectedFont
         this[KEY_FONT_SIZE] = settings.fontSize
         this[KEY_HIDE_FURIGANA] = settings.hideFurigana
+        this[KEY_CONTINUOUS_MODE] = settings.continuousMode
+        this[KEY_CHAPTER_SWIPE_DISTANCE] = settings.chapterSwipeDistance
         this[KEY_HORIZONTAL_PADDING] = settings.horizontalPadding
         this[KEY_VERTICAL_PADDING] = settings.verticalPadding
         this[KEY_AVOID_PAGE_BREAK] = settings.avoidPageBreak
@@ -300,6 +310,8 @@ class ReaderSettingsRepository(
         private val KEY_SELECTED_FONT = stringPreferencesKey("selectedFont")
         private val KEY_FONT_SIZE = intPreferencesKey("fontSize")
         private val KEY_HIDE_FURIGANA = booleanPreferencesKey("readerHideFurigana")
+        private val KEY_CONTINUOUS_MODE = booleanPreferencesKey("continuousMode")
+        private val KEY_CHAPTER_SWIPE_DISTANCE = intPreferencesKey("chapterSwipeDistance")
         private val KEY_HORIZONTAL_PADDING = intPreferencesKey("layoutHorizontalPadding")
         private val KEY_VERTICAL_PADDING = intPreferencesKey("layoutVerticalPadding")
         private val KEY_AVOID_PAGE_BREAK = booleanPreferencesKey("avoidPageBreak")

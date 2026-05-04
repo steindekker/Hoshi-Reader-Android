@@ -31,6 +31,8 @@ class ReaderSettingsRepositoryTest {
             assertEquals(ReaderFontManager.defaultMinchoFont, settings.selectedFont)
             assertEquals(22, settings.fontSize)
             assertFalse(settings.hideFurigana)
+            assertFalse(settings.continuousMode)
+            assertEquals(20, settings.chapterSwipeDistance)
             assertEquals(5, settings.horizontalPadding)
             assertEquals(0, settings.verticalPadding)
             assertFalse(settings.avoidPageBreak)
@@ -61,6 +63,8 @@ class ReaderSettingsRepositoryTest {
                 eInkMode = true,
                 selectedFont = "Hiragino Mincho ProN",
                 fontSize = 29,
+                continuousMode = true,
+                chapterSwipeDistance = 120,
                 lineHeight = 1.9,
                 popupSwipeThreshold = 120,
                 volumeKeysTurnPages = true,
@@ -74,6 +78,8 @@ class ReaderSettingsRepositoryTest {
             assertTrue(migrated.eInkMode)
             assertEquals(ReaderFontManager.defaultMinchoFont, migrated.selectedFont)
             assertEquals(29, migrated.fontSize)
+            assertTrue(migrated.continuousMode)
+            assertEquals(60, migrated.chapterSwipeDistance)
             assertEquals(1.9, migrated.lineHeight, 0.000001)
             assertEquals(60, migrated.popupSwipeThreshold)
             assertTrue(migrated.volumeKeysTurnPages)
@@ -95,6 +101,8 @@ class ReaderSettingsRepositoryTest {
                     selectedFont = ReaderFontManager.defaultGothicFont,
                     fontSize = 24,
                     hideFurigana = true,
+                    continuousMode = true,
+                    chapterSwipeDistance = 35,
                     horizontalPadding = 12,
                     verticalPadding = 6,
                     avoidPageBreak = true,
@@ -125,6 +133,8 @@ class ReaderSettingsRepositoryTest {
             assertEquals(ReaderFontManager.defaultGothicFont, saved.selectedFont)
             assertEquals(24, saved.fontSize)
             assertTrue(saved.hideFurigana)
+            assertTrue(saved.continuousMode)
+            assertEquals(35, saved.chapterSwipeDistance)
             assertEquals(12, saved.horizontalPadding)
             assertEquals(6, saved.verticalPadding)
             assertTrue(saved.avoidPageBreak)

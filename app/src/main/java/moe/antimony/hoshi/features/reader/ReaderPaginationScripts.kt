@@ -33,6 +33,14 @@ internal object ReaderPaginationScripts {
         sasayakiCuesJson: String? = null,
         initialFragment: String? = null,
     ): String {
+        if (settings.continuousMode) {
+            return continuousShellScript(
+                initialProgress = initialProgress,
+                settings = settings,
+                sasayakiCuesJson = sasayakiCuesJson,
+                initialFragment = initialFragment,
+            )
+        }
         val initialRestoreScript = initialFragment?.let { fragment ->
             "window.hoshiReader.jumpToFragment(${fragment.javaScriptStringLiteral()});"
         } ?: "window.hoshiReader.restoreProgress($initialProgress);"
@@ -549,6 +557,340 @@ internal object ReaderPaginationScripts {
         }
         </script>
     """.trimIndent()
+    }
+
+    private fun continuousShellScript(
+        initialProgress: Double,
+        settings: ReaderSettings,
+        sasayakiCuesJson: String?,
+        initialFragment: String?,
+    ): String {
+        val initialRestoreScript = initialFragment?.let { fragment ->
+            "window.hoshiReader.jumpToFragment(${fragment.javaScriptStringLiteral()});"
+        } ?: "window.hoshiReader.restoreProgress($initialProgress);"
+        return """
+        <script>
+        window.hoshiReader = {
+          cueWrappers: new Map(),
+          activeCueId: null,
+          ttuRegexNegated: /[^0-9A-Za-z○◯々-〇〻ぁ-ゖゝ-ゞァ-ヺー０-９Ａ-Ｚａ-ｚｦ-ﾝ\p{Radical}\p{Unified_Ideograph}]+/gimu,
+          ttuRegex: /[0-9A-Za-z○◯々-〇〻ぁ-ゖゝ-ゞァ-ヺー０-９Ａ-Ｚａ-ｚｦ-ﾝ\p{Radical}\p{Unified_Ideograph}]/iu,
+          nodeStartOffsets: new WeakMap(),
+          isVertical: function() {
+            return window.getComputedStyle(document.body).writingMode === "vertical-rl";
+          },
+          isFurigana: function(node) {
+            var el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+            return !!(el && el.closest('rt, rp'));
+          },
+          normalizeText: function(text) {
+            return (text || '').replace(this.ttuRegexNegated, '');
+          },
+          countChars: function(text) {
+            return Array.from(this.normalizeText(text)).length;
+          },
+          isMatchableChar: function(char) {
+            return this.ttuRegex.test(char || '');
+          },
+          notifyRestoreComplete: function() {
+            if (window.HoshiReaderRestore && window.HoshiReaderRestore.postMessage) {
+              window.HoshiReaderRestore.postMessage('restoreCompleted');
+            }
+          },
+          scrollToChapterStart: function() {
+            var root = document.scrollingElement || document.documentElement;
+            window.scrollTo(0, 0);
+            root.scrollTop = 0;
+            root.scrollLeft = 0;
+            document.documentElement.scrollTop = 0;
+            document.documentElement.scrollLeft = 0;
+            document.body.scrollTop = 0;
+            document.body.scrollLeft = 0;
+          },
+          createWalker: function(rootNode) {
+            var root = rootNode || document.body;
+            return document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+              acceptNode: (n) => this.isFurigana(n) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
+            });
+          },
+          getRect: function(target) {
+            var rect = target.getClientRects()[0];
+            return rect || target.getBoundingClientRect();
+          },
+          buildNodeOffsets: function() {
+            var offsets = new WeakMap();
+            var walker = this.createWalker();
+            var count = 0;
+            var node;
+            while (node = walker.nextNode()) {
+              offsets.set(node, count);
+              count += this.countChars(node.textContent);
+            }
+            this.nodeStartOffsets = offsets;
+          },
+          scrollToTarget: function(target) {
+            var rect = this.getRect(target);
+            if (this.isVertical()) {
+              if (rect.left >= 0 && rect.right <= window.innerWidth) return false;
+            } else if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
+              return false;
+            }
+            target.scrollIntoView({ block: 'start', inline: 'nearest' });
+            return true;
+          },
+          collectSasayakiCueRanges: function(cues) {
+            var cueRanges = new Map();
+            if (!cues.length) return [];
+            var index = 0;
+            var current = cues[0];
+            var start = current.start;
+            var end = start + current.length;
+            var cursor = 0;
+            var segment = null;
+            var flushSegment = function(node) {
+              if (!segment) return;
+              var ranges = cueRanges.get(segment.id) || [];
+              ranges.push({ node: node, start: segment.start, end: segment.end });
+              cueRanges.set(segment.id, ranges);
+              segment = null;
+            };
+            var advanceCue = function() {
+              index += 1;
+              current = cues[index];
+              if (current) {
+                start = current.start;
+                end = start + current.length;
+              }
+            };
+            var walker = this.createWalker();
+            var node;
+            while (current && (node = walker.nextNode())) {
+              var text = node.textContent;
+              var i = 0;
+              while (i < text.length && current) {
+                var char = String.fromCodePoint(text.codePointAt(i));
+                var next = i + char.length;
+                if (this.isMatchableChar(char)) {
+                  if (cursor >= start && cursor < end) {
+                    if (!segment) {
+                      segment = { id: current.id, start: i, end: next };
+                    } else {
+                      segment.end = next;
+                    }
+                  } else {
+                    flushSegment(node);
+                  }
+                  cursor += 1;
+                  if (cursor === end) {
+                    flushSegment(node);
+                    advanceCue();
+                  }
+                } else if (segment) {
+                  segment.end = next;
+                }
+                i = next;
+              }
+              flushSegment(node);
+            }
+            return cues.map(function(cue) {
+              return { id: cue.id, ranges: cueRanges.get(cue.id) || [] };
+            });
+          },
+          applySasayakiCues: function(cues) {
+            this.resetSasayakiCues();
+            var cueRanges = this.collectSasayakiCueRanges(cues);
+            var range = document.createRange();
+            for (var i = cueRanges.length - 1; i >= 0; i--) {
+              var id = cueRanges[i].id;
+              var ranges = cueRanges[i].ranges;
+              if (!ranges.length) continue;
+              var wrappers = [];
+              for (var j = ranges.length - 1; j >= 0; j--) {
+                var segment = ranges[j];
+                range.setStart(segment.node, segment.start);
+                range.setEnd(segment.node, segment.end);
+                var wrapper = document.createElement('span');
+                wrapper.className = 'hoshi-sasayaki-cue';
+                wrapper.appendChild(range.extractContents());
+                range.insertNode(wrapper);
+                wrappers.push(wrapper);
+              }
+              wrappers.reverse();
+              this.cueWrappers.set(id, wrappers);
+            }
+            this.buildNodeOffsets();
+          },
+          highlightSasayakiCue: function(cueId, reveal) {
+            this.clearSasayakiCue();
+            var wrappers = this.cueWrappers.get(cueId);
+            if (!wrappers || !wrappers.length) return null;
+            this.activeCueId = cueId;
+            wrappers.forEach(function(wrapper) { wrapper.classList.add('hoshi-sasayaki-active'); });
+            if (reveal && this.scrollToTarget(wrappers[0])) {
+              return this.calculateProgress();
+            }
+            return null;
+          },
+          clearSasayakiCue: function() {
+            if (!this.activeCueId) return;
+            var wrappers = this.cueWrappers.get(this.activeCueId) || [];
+            wrappers.forEach(function(wrapper) { wrapper.classList.remove('hoshi-sasayaki-active'); });
+            this.activeCueId = null;
+          },
+          resetSasayakiCues: function() {
+            var self = this;
+            this.cueWrappers.forEach(function(wrappers) { self.unwrap(wrappers); });
+            this.cueWrappers.clear();
+            this.activeCueId = null;
+          },
+          unwrap: function(wrappers) {
+            wrappers.forEach(function(wrapper) {
+              var parent = wrapper.parentNode;
+              if (!parent) return;
+              while (wrapper.firstChild) {
+                parent.insertBefore(wrapper.firstChild, wrapper);
+              }
+              parent.removeChild(wrapper);
+              parent.normalize();
+            });
+          },
+          calculateProgress: function() {
+            var vertical = this.isVertical();
+            var walker = this.createWalker();
+            var totalChars = 0;
+            var exploredChars = 0;
+            var node;
+            while (node = walker.nextNode()) {
+              var nodeLen = this.countChars(node.textContent);
+              totalChars += nodeLen;
+              if (nodeLen > 0) {
+                var range = document.createRange();
+                range.selectNodeContents(node);
+                var rect = this.getRect(range);
+                if (vertical ? (rect.left > window.innerWidth) : (rect.bottom < 0)) {
+                  exploredChars += nodeLen;
+                }
+              }
+            }
+            return totalChars > 0 ? exploredChars / totalChars : 0;
+          },
+          restoreProgress: async function(progress) {
+            await document.fonts.ready;
+            if (progress <= 0) {
+              this.scrollToChapterStart();
+              requestAnimationFrame(() => {
+                this.scrollToChapterStart();
+                this.notifyRestoreComplete();
+              });
+              return;
+            }
+            var walker = this.createWalker();
+            var totalChars = 0;
+            var node;
+            while (node = walker.nextNode()) {
+              totalChars += this.countChars(node.textContent);
+            }
+            if (totalChars <= 0) {
+              this.notifyRestoreComplete();
+              return;
+            }
+            var targetCharCount = Math.ceil(totalChars * progress);
+            var runningSum = 0;
+            var targetNode = null;
+            walker = this.createWalker();
+            while (node = walker.nextNode()) {
+              runningSum += this.countChars(node.textContent);
+              targetNode = node;
+              if (runningSum > targetCharCount) break;
+            }
+            if (targetNode && targetNode.parentElement) {
+              targetNode.parentElement.scrollIntoView({
+                block: progress >= 0.999999 ? 'end' : 'start',
+                inline: 'nearest',
+                behavior: 'instant'
+              });
+            }
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => this.notifyRestoreComplete());
+            });
+          },
+          jumpToFragment: async function(fragment) {
+            await document.fonts.ready;
+            var rawFragment = (fragment || '').trim();
+            var target = rawFragment && (document.getElementById(rawFragment) || document.getElementsByName(rawFragment)[0]);
+            if (!target) {
+              this.notifyRestoreComplete();
+              return false;
+            }
+            target.scrollIntoView();
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => this.notifyRestoreComplete());
+            });
+            return true;
+          },
+          paginate: function(direction) {
+            var vertical = this.isVertical();
+            var root = document.scrollingElement || document.documentElement;
+            var before = vertical ? window.scrollX : root.scrollTop;
+            if (vertical) {
+              window.scrollBy({ left: direction === "forward" ? -window.innerWidth : window.innerWidth, behavior: "instant" });
+            } else {
+              window.scrollBy({ top: direction === "forward" ? window.innerHeight : -window.innerHeight, behavior: "instant" });
+            }
+            var after = vertical ? window.scrollX : root.scrollTop;
+            return Math.abs(after - before) > 1 ? "scrolled" : "limit";
+          }
+        };
+        window.hoshiReader.initialize = function() {
+          if (window.hoshiReader.didInitialize) return;
+          window.hoshiReader.didInitialize = true;
+          var viewport = document.querySelector('meta[name="viewport"]');
+          if (viewport) { viewport.remove(); }
+          var newViewport = document.createElement('meta');
+          newViewport.name = 'viewport';
+          newViewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+          document.head.appendChild(newViewport);
+          document.documentElement.style.setProperty('--hoshi-continuous-height', window.innerHeight + 'px');
+          document.documentElement.style.setProperty('--hoshi-image-max-width', Math.max(1, Math.floor(window.innerWidth * ${settings.imageWidthViewportRatio})) + 'px');
+          document.documentElement.style.setProperty('--hoshi-image-max-height', Math.max(1, window.innerHeight - ${settings.bottomOverlapPx}) + 'px');
+          Array.from(document.querySelectorAll('svg')).forEach(function(svg) {
+            if (svg.querySelector('image') && svg.getAttribute('preserveAspectRatio') === 'none') {
+              svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+            }
+          });
+          var imagePromises = Array.from(document.querySelectorAll('img')).map(function(img) {
+            return new Promise(function(resolve) {
+              var isGaiji = img.classList.contains('gaiji') || img.classList.contains('gaiji-line');
+              var mark = function() {
+                if (!isGaiji && (img.naturalWidth > 256 || img.naturalHeight > 256)) {
+                  img.classList.add('block-img');
+                }
+                resolve();
+              };
+              if (img.complete && img.naturalWidth > 0) {
+                mark();
+              } else {
+                img.onload = mark;
+                img.onerror = function() { resolve(); };
+              }
+            });
+          });
+          Promise.all(imagePromises).then(function() {
+            return new Promise(function(resolve) { setTimeout(resolve, 50); });
+          }).then(function() {
+            window.hoshiReader.buildNodeOffsets();
+            ${sasayakiCuesJson?.let { "window.hoshiReader.applySasayakiCues($it);" }.orEmpty()}
+            $initialRestoreScript
+          });
+        };
+        window.addEventListener('load', function() {
+          window.hoshiReader.initialize();
+        });
+        if (document.readyState === 'complete') {
+          window.hoshiReader.initialize();
+        }
+        </script>
+        """.trimIndent()
     }
 }
 

@@ -86,6 +86,65 @@ internal object ReaderContentStyles {
             }
             """.trimIndent()
         }
+        val layoutCss = if (settings.continuousMode) {
+            val hiddenOverflowAxis = if (settings.verticalWriting) "overflow-y" else "overflow-x"
+            val viewportConstraintCss = if (settings.verticalWriting) {
+                "height: var(--hoshi-continuous-height, 100vh) !important;"
+            } else {
+                """
+                width: 100vw !important;
+                min-height: 100vh !important;
+                """.trimIndent()
+            }
+            """
+            html, body {
+                $hiddenOverflowAxis: hidden !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: $backgroundColor !important;
+                color: $textColor !important;
+                writing-mode: ${settings.writingModeCss} !important;
+            }
+            body {
+                font-family: $bodyFontFamily !important;
+                font-size: ${settings.fontSize}px !important;
+                -webkit-text-size-adjust: none !important;
+                $textSpacingCss
+                box-sizing: border-box !important;
+                $viewportConstraintCss
+                padding: ${settings.pagePaddingCss} !important;
+                padding-bottom: ${settings.bottomPaddingCss} !important;
+                $gridCss
+                text-orientation: mixed;
+            }
+            """.trimIndent()
+        } else {
+            """
+            html, body {
+                overflow: hidden !important;
+                height: var(--page-height, 100vh) !important;
+                width: var(--page-width, 100vw) !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: $backgroundColor !important;
+                color: $textColor !important;
+                writing-mode: ${settings.writingModeCss} !important;
+            }
+            body {
+                font-family: $bodyFontFamily !important;
+                font-size: ${settings.fontSize}px !important;
+                -webkit-text-size-adjust: none !important;
+                $textSpacingCss
+                box-sizing: border-box !important;
+                column-width: var(--page-width, 100vw) !important;
+                column-gap: ${settings.columnGapCss};
+                padding: ${settings.pagePaddingCss} !important;
+                padding-bottom: ${settings.bottomPaddingCss} !important;
+                $gridCss
+                text-orientation: mixed;
+            }
+            """.trimIndent()
+        }
         return """
         $fontFaceCss
         $pageBreakCss
@@ -98,29 +157,7 @@ internal object ReaderContentStyles {
         html {
             -webkit-line-box-contain: block glyphs replaced;
         }
-        html, body {
-            overflow: hidden !important;
-            height: var(--page-height, 100vh) !important;
-            width: var(--page-width, 100vw) !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            background: $backgroundColor !important;
-            color: $textColor !important;
-            writing-mode: ${settings.writingModeCss} !important;
-        }
-        body {
-            font-family: $bodyFontFamily !important;
-            font-size: ${settings.fontSize}px !important;
-            -webkit-text-size-adjust: none !important;
-            $textSpacingCss
-            box-sizing: border-box !important;
-            column-width: var(--page-width, 100vw) !important;
-            column-gap: ${settings.columnGapCss};
-            padding: ${settings.pagePaddingCss} !important;
-            padding-bottom: ${settings.bottomPaddingCss} !important;
-            $gridCss
-            text-orientation: mixed;
-        }
+        $layoutCss
         img.block-img {
             max-width: var(--hoshi-image-max-width, ${settings.imageMaxWidthFallbackCss}) !important;
             max-height: var(--hoshi-image-max-height, ${settings.imageMaxHeightFallbackCss}) !important;

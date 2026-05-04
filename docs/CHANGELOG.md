@@ -7,10 +7,14 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ### Added
 
+- Add the iOS-style reader continuous scroll mode with an Appearance layout toggle and chapter boundary swipe distance control.
 - Add AnkiDroid mining from dictionary lookup results, including Lapis field defaults, iOS-compatible handlebars, duplicate checks, tags, and media export support.
 
 ### Fixed
 
+- Keep continuous scroll chapter transitions landing at the next chapter start instead of inheriting the previous chapter's WebView scroll offset.
+- Keep the continuous scroll progress counter stable during rapid chapter-boundary flips by ignoring WebView scroll callbacks while chapter restore is in progress.
+- Keep reader content hidden until Android WebView reports restored chapter jumps are visually ready, avoiding intermediate WebView flashes without adding transition animations.
 - Match the bookshelf cover loading placeholder to the shelf background, preventing white cover flashes when returning to Books from the bottom tab bar in dark mode.
 - Wait for saved reader appearance settings and the first bookshelf load before drawing the app shell, avoiding light-theme empty-library flashes during dark-theme cold starts.
 - Let the Android launch screen follow the system light or dark mode before the app UI is ready.

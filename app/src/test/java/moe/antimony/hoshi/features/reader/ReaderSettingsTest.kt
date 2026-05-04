@@ -19,6 +19,8 @@ class ReaderSettingsTest {
         assertEquals(1.65, settings.lineHeight, 0.0)
         assertEquals("Noto Serif CJK JP", settings.selectedFont)
         assertFalse(settings.sepiaInvertInDark)
+        assertFalse(settings.continuousMode)
+        assertEquals(20, settings.chapterSwipeDistance)
         assertTrue(settings.popupSwipeToDismiss)
         assertEquals(30, settings.popupSwipeThreshold)
     }
@@ -95,6 +97,18 @@ class ReaderSettingsTest {
         val css = ReaderContentStyles.styleTag(ReaderSettings(verticalWriting = false))
 
         assertTrue(css.contains("writing-mode: horizontal-tb !important;"))
+    }
+
+    @Test
+    fun continuousReaderCssUsesScrollableIosLayoutInsteadOfPagedColumns() {
+        val css = ReaderContentStyles.styleTag(ReaderSettings(continuousMode = true))
+
+        assertTrue(css.contains("overflow-y: hidden !important;"))
+        assertTrue(css.lines().any { it.trim() == "height: var(--hoshi-continuous-height, 100vh) !important;" })
+        assertFalse(css.contains("overflow: hidden !important;"))
+        assertFalse(css.contains("height: var(--page-height, 100vh) !important;"))
+        assertFalse(css.contains("column-width: var(--page-width, 100vw) !important;"))
+        assertFalse(css.contains("column-gap:"))
     }
 
     @Test
@@ -219,6 +233,21 @@ class ReaderSettingsTest {
     }
 
     @Test
+    fun appearanceLayoutSectionExposesIosReadingModeControls() {
+        val source = File("src/main/java/moe/antimony/hoshi/features/reader/ReaderAppearanceView.kt").readText()
+        val layoutSection = source.substringAfter("""AppearanceSection(title = "Layout"""")
+            .substringBefore("""AppearanceSection(title = "Display"""")
+
+        assertTrue(layoutSection.contains("""label = "Mode""""))
+        assertTrue(layoutSection.contains("""options = listOf("Paginated", "Continuous")"""))
+        assertTrue(layoutSection.contains("settings.copy(continuousMode = label == \"Continuous\")"))
+        assertTrue(layoutSection.contains("""label = "Chapter Swipe Distance""""))
+        assertTrue(layoutSection.contains("settings.continuousMode"))
+        assertTrue(layoutSection.contains("valueRange = 10f..60f"))
+        assertTrue(layoutSection.contains("settings.copy(chapterSwipeDistance = (round(value / 5) * 5).toInt())"))
+    }
+
+    @Test
     fun chapterWebViewUsesLatestSelectionCallbackAfterAppearanceChanges() {
         val source = File("src/main/java/moe/antimony/hoshi/features/reader/ReaderWebView.kt").readText()
         val chapterWebView = source.substringAfter("private fun ChapterWebView(")
@@ -226,6 +255,20 @@ class ReaderSettingsTest {
 
         assertTrue(chapterWebView.contains("rememberUpdatedState(onTextSelected)"))
         assertTrue(chapterWebView.contains("currentOnTextSelected.value(selection)"))
+    }
+
+    @Test
+    fun continuousReaderUsesScrollProgressAndBoundarySwipeInsteadOfPagedSwipe() {
+        val source = File("src/main/java/moe/antimony/hoshi/features/reader/ReaderWebView.kt").readText()
+        val scripts = File("src/main/java/moe/antimony/hoshi/features/reader/ReaderPaginationScripts.kt").readText()
+        val chapterWebView = source.substringAfter("private fun ChapterWebView(")
+            .substringBefore("private class EpubWebViewClient")
+
+        assertTrue(chapterWebView.contains("ContinuousScrollTouchListener"))
+        assertTrue(chapterWebView.contains("readerSettings.continuousMode"))
+        assertTrue(chapterWebView.contains("setOnScrollChangeListener"))
+        assertTrue(chapterWebView.contains("ReaderPaginationScripts.progressInvocation()"))
+        assertTrue(scripts.contains("document.documentElement.style.setProperty('--hoshi-continuous-height', window.innerHeight + 'px')"))
     }
 
     @Test
@@ -240,6 +283,25 @@ class ReaderSettingsTest {
         assertFalse(chapterWebView.contains("loadDataWithBaseURL"))
         assertTrue(chapterWebView.contains("view.evaluateJavascript(readerSetupScript, null)"))
         assertTrue(webViewClient.contains("override fun onPageFinished"))
+    }
+
+    @Test
+    fun chapterWebViewWaitsForAndroidVisualStateBeforeShowingRestoredContent() {
+        val source = File("src/main/java/moe/antimony/hoshi/features/reader/ReaderWebView.kt").readText()
+        val restoreBridge = source.substringAfter("private class ReaderRestoreBridge(")
+            .substringBefore("private const val MAX_SELECTION_LENGTH")
+
+        assertTrue(source.contains("private fun WebView.hideForReaderRestore()"))
+        assertTrue(source.contains("private fun WebView.showAfterReaderRestore()"))
+        assertTrue(source.contains("animate().cancel()"))
+        assertTrue(source.contains("postVisualStateCallback"))
+        assertTrue(source.contains("WebView.VisualStateCallback()"))
+        assertTrue(source.contains("readerRestoreGenerations"))
+        assertTrue(restoreBridge.contains("webView.showAfterReaderRestore()"))
+        assertTrue(source.contains("alpha = 0f"))
+        assertTrue(source.contains("alpha = 1f"))
+        assertFalse(source.contains(".alpha(1f)"))
+        assertFalse(source.contains(".setDuration("))
     }
 
     @Test

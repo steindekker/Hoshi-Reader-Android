@@ -9,6 +9,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.net.Uri
+import android.os.SystemClock
 import android.webkit.JavascriptInterface
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
@@ -16,6 +17,8 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.View
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
@@ -73,10 +76,11 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
+import java.util.WeakHashMap
+import kotlinx.coroutines.launch
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.coroutines.launch
 import moe.antimony.hoshi.LocalHoshiAppContainer
 import moe.antimony.hoshi.epub.EpubBook
 import moe.antimony.hoshi.features.audio.AudioSettings
@@ -94,6 +98,7 @@ import moe.antimony.hoshi.features.sasayaki.SasayakiSettings
 import moe.antimony.hoshi.features.sasayaki.SasayakiSheet
 import moe.antimony.hoshi.webview.applyHoshiWebViewSecurityDefaults
 import java.io.File
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -267,6 +272,10 @@ fun ReaderWebView(
         val savedPosition = stateHolder.recordDisplayedProgress(progress)
         onSaveBookmark(savedPosition.index, savedPosition.progress)
     }
+    fun saveContinuousScrollProgress(progress: Double, restoreEpoch: Int) {
+        val savedPosition = stateHolder.recordContinuousScrollProgress(progress, restoreEpoch) ?: return
+        onSaveBookmark(savedPosition.index, savedPosition.progress)
+    }
     fun navigateReaderPage(direction: ReaderNavigationDirection): Boolean {
         val currentWebView = webView ?: return false
         closeLookupPopupsAndSelection()
@@ -414,6 +423,10 @@ fun ReaderWebView(
                 webViewViewportSize = stateHolder.webViewViewportSize,
                 onReaderViewportSizeChanged = stateHolder::updateViewportSize,
                 onWebViewReady = { webView = it },
+                isWebViewRestoring = stateHolder.isWebViewRestoring,
+                webViewRestoreEpoch = stateHolder.webViewRestoreEpoch,
+                onRestoreStarted = stateHolder::markWebViewRestoring,
+                onRestoreCompleted = stateHolder::markWebViewRestored,
                 onNextChapter = {
                     goToNextChapter()
                 },
@@ -422,6 +435,9 @@ fun ReaderWebView(
                 },
                 onSaveBookmark = { progress ->
                     saveDisplayedProgress(progress)
+                },
+                onContinuousScrollProgress = { progress, restoreEpoch ->
+                    saveContinuousScrollProgress(progress, restoreEpoch)
                 },
                 onInternalLink = { target ->
                     closeLookupPopupsAndSelection()
@@ -796,9 +812,14 @@ private fun ChapterWebView(
     webViewViewportSize: IntSize,
     onReaderViewportSizeChanged: (IntSize) -> Unit,
     onWebViewReady: (WebView) -> Unit,
+    isWebViewRestoring: Boolean,
+    webViewRestoreEpoch: Int,
+    onRestoreStarted: () -> Unit,
+    onRestoreCompleted: () -> Unit,
     onNextChapter: () -> Boolean,
     onPreviousChapter: () -> Boolean,
     onSaveBookmark: (progress: Double) -> Unit,
+    onContinuousScrollProgress: (progress: Double, restoreEpoch: Int) -> Unit,
     onInternalLink: (ReaderInternalLinkTarget) -> Unit,
     readerSettings: ReaderSettings,
     sasayakiCuesJson: String?,
@@ -811,11 +832,24 @@ private fun ChapterWebView(
     modifier: Modifier = Modifier,
 ) {
     val currentOnTextSelected = rememberUpdatedState(onTextSelected)
+    val currentOnSaveBookmark = rememberUpdatedState(onSaveBookmark)
+    val currentOnContinuousScrollProgress = rememberUpdatedState(onContinuousScrollProgress)
+    val currentOnClearLookupPopup = rememberUpdatedState(onClearLookupPopup)
+    val currentOnNextChapter = rememberUpdatedState(onNextChapter)
+    val currentOnPreviousChapter = rememberUpdatedState(onPreviousChapter)
+    val currentIsWebViewRestoring = rememberUpdatedState(isWebViewRestoring)
+    val currentWebViewRestoreEpoch = rememberUpdatedState(webViewRestoreEpoch)
+    val currentOnRestoreStarted = rememberUpdatedState(onRestoreStarted)
+    val currentOnRestoreCompleted = rememberUpdatedState(onRestoreCompleted)
+    var lastContinuousProgressUpdate by remember { mutableStateOf(0L) }
     val currentOnFragmentRestored = rememberUpdatedState<(WebView) -> Unit> { restoredWebView ->
         if (chapterFragment != null) {
             restoredWebView.evaluateJavascript(ReaderPaginationScripts.progressInvocation()) { progressResult ->
-                ReaderPaginationScripts.doubleResult(progressResult)?.let(onSaveBookmark)
+                ReaderPaginationScripts.doubleResult(progressResult)?.let(currentOnSaveBookmark.value)
+                currentOnRestoreCompleted.value()
             }
+        } else {
+            currentOnRestoreCompleted.value()
         }
     }
     val chapter = book.chapters[chapterPosition.index]
@@ -855,7 +889,7 @@ private fun ChapterWebView(
                 applyHoshiWebViewSecurityDefaults()
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
-                alpha = 0f
+                hideForReaderRestore()
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 addJavascriptInterface(
                     ReaderSelectionBridge(this) { selection ->
@@ -872,40 +906,87 @@ private fun ChapterWebView(
                 webViewClient = EpubWebViewClient(book, fontManager, onInternalLink) { view ->
                     view.evaluateJavascript(readerSetupScript, null)
                 }
-                setOnTouchListener(object : SwipePageTouchListener(context) {
-                    override fun onTap(x: Float, y: Float) {
-                        val density = resources.displayMetrics.density
-                        evaluateJavascript(
-                            ReaderSelectionCommand.SelectText(
-                                x = androidPixelsToCssPixels(x, density),
-                                y = androidPixelsToCssPixels(y, density),
-                                maxLength = MAX_SELECTION_LENGTH,
-                            ).source,
-                        ) { result ->
-                            if (ReaderSelectionResult.fromWebViewResult(result).selectedNothing) {
-                                onClearLookupPopup()
-                            }
-                        }
-                    }
-
-                    override fun onLeftSwipe() {
-                        onClearLookupPopup()
-                        navigatePage(ReaderNavigationDirection.Backward, onPreviousChapter, onSaveBookmark)
-                    }
-
-                    override fun onRightSwipe() {
-                        onClearLookupPopup()
-                        navigatePage(ReaderNavigationDirection.Forward, onNextChapter, onSaveBookmark)
-                    }
-                })
                 onWebViewReady(this)
             }
         },
         update = { webView ->
+            fun selectAt(x: Float, y: Float) {
+                val density = webView.resources.displayMetrics.density
+                webView.evaluateJavascript(
+                    ReaderSelectionCommand.SelectText(
+                        x = androidPixelsToCssPixels(x, density),
+                        y = androidPixelsToCssPixels(y, density),
+                        maxLength = MAX_SELECTION_LENGTH,
+                    ).source,
+                ) { result ->
+                    if (ReaderSelectionResult.fromWebViewResult(result).selectedNothing) {
+                        currentOnClearLookupPopup.value()
+                    }
+                }
+            }
+            if (readerSettings.continuousMode) {
+                webView.setOnTouchListener(
+                    ContinuousScrollTouchListener(
+                        settings = readerSettings,
+                        onTap = ::selectAt,
+                        onNextChapter = {
+                            currentOnClearLookupPopup.value()
+                            val changed = currentOnNextChapter.value()
+                            if (changed) webView.hideForReaderRestore()
+                            changed
+                        },
+                        onPreviousChapter = {
+                            currentOnClearLookupPopup.value()
+                            val changed = currentOnPreviousChapter.value()
+                            if (changed) webView.hideForReaderRestore()
+                            changed
+                        },
+                    ),
+                )
+                webView.setOnScrollChangeListener { _, _, _, _, _ ->
+                    val now = SystemClock.uptimeMillis()
+                    if (now - lastContinuousProgressUpdate < CONTINUOUS_PROGRESS_THROTTLE_MS) return@setOnScrollChangeListener
+                    lastContinuousProgressUpdate = now
+                    if (currentIsWebViewRestoring.value) return@setOnScrollChangeListener
+                    val restoreEpoch = currentWebViewRestoreEpoch.value
+                    currentOnClearLookupPopup.value()
+                    webView.evaluateJavascript(ReaderPaginationScripts.progressInvocation()) { progressResult ->
+                        ReaderPaginationScripts.doubleResult(progressResult)?.let { progress ->
+                            currentOnContinuousScrollProgress.value(progress, restoreEpoch)
+                        }
+                    }
+                }
+            } else {
+                webView.setOnScrollChangeListener(null)
+                webView.setOnTouchListener(object : SwipePageTouchListener(webView.context) {
+                    override fun onTap(x: Float, y: Float) {
+                        selectAt(x, y)
+                    }
+
+                    override fun onLeftSwipe() {
+                        currentOnClearLookupPopup.value()
+                        webView.navigatePage(
+                            ReaderNavigationDirection.Backward,
+                            currentOnPreviousChapter.value,
+                            currentOnSaveBookmark.value,
+                        )
+                    }
+
+                    override fun onRightSwipe() {
+                        currentOnClearLookupPopup.value()
+                        webView.navigatePage(
+                            ReaderNavigationDirection.Forward,
+                            currentOnNextChapter.value,
+                            currentOnSaveBookmark.value,
+                        )
+                    }
+                })
+            }
             val loadKey = "$baseUrl#${readerSetupScript.hashCode()}#$webViewViewportSize"
             if (webView.tag != loadKey) {
                 webView.tag = loadKey
-                webView.alpha = 0f
+                webView.hideForReaderRestore()
+                currentOnRestoreStarted.value()
                 webView.webViewClient = EpubWebViewClient(book, fontManager, onInternalLink) { view ->
                     view.evaluateJavascript(readerSetupScript, null)
                 }
@@ -1025,6 +1106,57 @@ private fun WebView.navigatePage(
     }
 }
 
+private class ContinuousScrollTouchListener(
+    private val settings: ReaderSettings,
+    private val onTap: (Float, Float) -> Unit,
+    private val onNextChapter: () -> Boolean,
+    private val onPreviousChapter: () -> Boolean,
+) : View.OnTouchListener {
+    private var downX = 0f
+    private var downY = 0f
+
+    override fun onTouch(view: View, event: MotionEvent): Boolean {
+        val webView = view as? WebView ?: return false
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.x
+                downY = event.y
+            }
+            MotionEvent.ACTION_UP -> {
+                val dx = event.x - downX
+                val dy = event.y - downY
+                if (abs(dx) < TAP_SLOP && abs(dy) < TAP_SLOP) {
+                    onTap(event.x, event.y)
+                    return false
+                }
+                handleBoundarySwipe(webView, dx, dy)
+            }
+        }
+        return false
+    }
+
+    private fun handleBoundarySwipe(webView: WebView, dx: Float, dy: Float) {
+        val threshold = settings.chapterSwipeDistance * webView.resources.displayMetrics.density
+        if (settings.verticalWriting) {
+            if (abs(dx) < threshold || abs(dx) < abs(dy)) return
+            when {
+                dx > 0 && !webView.canScrollHorizontally(-1) -> onNextChapter()
+                dx < 0 && !webView.canScrollHorizontally(1) -> onPreviousChapter()
+            }
+        } else {
+            if (abs(dy) < threshold || abs(dy) < abs(dx)) return
+            when {
+                dy < 0 && !webView.canScrollVertically(1) -> onNextChapter()
+                dy > 0 && !webView.canScrollVertically(-1) -> onPreviousChapter()
+            }
+        }
+    }
+
+    private companion object {
+        const val TAP_SLOP = 12f
+    }
+}
+
 private class ReaderRestoreBridge(
     private val webView: WebView,
     private val onRestoreCompleted: (WebView) -> Unit,
@@ -1033,12 +1165,38 @@ private class ReaderRestoreBridge(
     fun postMessage(@Suppress("UNUSED_PARAMETER") message: String) {
         webView.post {
             onRestoreCompleted(webView)
-            webView.alpha = 1f
+            webView.showAfterReaderRestore()
         }
     }
 }
 
+private fun WebView.hideForReaderRestore() {
+    animate().cancel()
+    readerRestoreGenerations[this] = (readerRestoreGenerations[this] ?: 0L) + 1L
+    alpha = 0f
+}
+
+private fun WebView.showAfterReaderRestore() {
+    animate().cancel()
+    val generation = readerRestoreGenerations[this] ?: 0L
+    postVisualStateCallback(
+        generation,
+        object : WebView.VisualStateCallback() {
+            override fun onComplete(requestId: Long) {
+                post {
+                    if (readerRestoreGenerations[this@showAfterReaderRestore] == generation) {
+                        animate().cancel()
+                        alpha = 1f
+                    }
+                }
+            }
+        },
+    )
+}
+
+private val readerRestoreGenerations = WeakHashMap<WebView, Long>()
 private const val MAX_SELECTION_LENGTH = 16
+private const val CONTINUOUS_PROGRESS_THROTTLE_MS = 250L
 private val ReaderWebViewTopPadding = 44.dp
 private val ReaderWebViewBottomPadding = 56.dp
 
