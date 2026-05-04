@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.zIndex
 import moe.antimony.hoshi.dictionary.LookupEngine
 import moe.antimony.hoshi.features.audio.AudioSettings
+import moe.antimony.hoshi.features.anki.AnkiMiningContext
 import moe.antimony.hoshi.features.reader.ReaderSelectionData
 import java.util.UUID
 
@@ -26,6 +27,8 @@ internal data class LookupPopupOptions(
     val eInkMode: Boolean = false,
     val audioSettings: AudioSettings = AudioSettings(),
     val popupActionBar: Boolean = false,
+    val documentTitle: String? = null,
+    val coverPath: String? = null,
 )
 
 internal data class LookupPopupItem(
@@ -65,6 +68,12 @@ internal fun createLookupPopupItem(
             eInkMode = options.eInkMode,
             audioSettings = options.audioSettings,
             popupActionBar = options.popupActionBar,
+            ankiContext = AnkiMiningContext(
+                sentence = selection.sentence,
+                documentTitle = options.documentTitle,
+                coverPath = options.coverPath,
+                sentenceOffset = selection.sentenceOffset,
+            ),
         ),
     ) to first.matched.codePointCount(0, first.matched.length)
 }
@@ -108,6 +117,7 @@ internal fun LookupPopupStackView(
     onSasayakiTogglePlayback: () -> Unit = {},
     onSasayakiPauseStateCleared: () -> Unit = {},
     onSasayakiPlayForward: (SasayakiMatch) -> Unit = {},
+    onPrepareSasayakiAudio: (SasayakiMatch, String) -> String? = { _, _ -> null },
 ) {
     popups.forEachIndexed { index, popup ->
         key(popup.id) {
@@ -135,6 +145,7 @@ internal fun LookupPopupStackView(
                 onSasayakiTogglePlayback = onSasayakiTogglePlayback,
                 onSasayakiPauseStateCleared = onSasayakiPauseStateCleared,
                 onSasayakiPlayForward = onSasayakiPlayForward,
+                onPrepareSasayakiAudio = onPrepareSasayakiAudio,
                 modifier = modifier
                     .fillMaxSize()
                     .zIndex(2f + index),

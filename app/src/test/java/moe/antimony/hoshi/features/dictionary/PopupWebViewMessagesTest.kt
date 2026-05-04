@@ -46,11 +46,31 @@ class PopupWebViewMessagesTest {
     }
 
     @Test
+    fun popupBridgeExposesAnkiMiningCallbacksToJavascript() {
+        val source = File("src/main/java/moe/antimony/hoshi/features/dictionary/PopupWebViewMessages.kt")
+            .readText()
+
+        assertTrue(source.contains("val onMineEntry: (String) -> Boolean"))
+        assertTrue(source.contains("val onDuplicateCheck: (String) -> Boolean"))
+        assertTrue(source.contains("@JavascriptInterface\n    fun mineEntry"))
+        assertTrue(source.contains("@JavascriptInterface\n    fun duplicateCheck"))
+    }
+
+    @Test
     fun popupSelectionScriptDoesNotLookupLinkedText() {
         val source = File("src/main/assets/hoshi-popup/selection.js").readText()
 
         assertTrue(source.contains("document.elementFromPoint(x, y)"))
         assertTrue(source.contains(".closest('a')"))
         assertTrue(source.contains("return null;"))
+    }
+
+    @Test
+    fun popupMiningUsesStoredHoshiSelectionTextBeforeWebViewClearsNativeSelection() {
+        val source = File("src/main/assets/hoshi-popup/popup.js").readText()
+
+        assertTrue(source.contains("function getPopupSelectionText()"))
+        assertTrue(source.contains("window.hoshiSelection?.selection?.text"))
+        assertTrue(source.contains("lastSelection = getPopupSelectionText();"))
     }
 }

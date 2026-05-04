@@ -27,6 +27,8 @@ internal class PopupWebViewCallbacks(
     val onLookupRedirected: (Int) -> Unit = {},
     val onPlayWordAudio: (String, AudioPlaybackMode) -> Unit = { _, _ -> },
     val onContentReady: () -> Unit = {},
+    val onMineEntry: (String) -> Boolean = { false },
+    val onDuplicateCheck: (String) -> Boolean = { false },
 )
 
 internal class PopupWebViewCallbackHolder(
@@ -155,6 +157,14 @@ internal class PopupWebViewBridge(
     }
 
     @JavascriptInterface
+    fun mineEntry(payloadJson: String): Boolean =
+        runCatching { callbackHolder.callbacks.onMineEntry(payloadJson) }.getOrDefault(false)
+
+    @JavascriptInterface
+    fun duplicateCheck(expression: String): Boolean =
+        runCatching { callbackHolder.callbacks.onDuplicateCheck(expression) }.getOrDefault(false)
+
+    @JavascriptInterface
     fun postMessage(message: String) {
         val payload = runCatching { JSONObject(message) }.getOrNull() ?: return
         val callbacks = callbackHolder.callbacks
@@ -196,5 +206,6 @@ private fun JSONObject.toSelectionData(
             height = rect.optDouble("height"),
         ),
         normalizedOffset = opt("normalizedOffset")?.let { if (it == JSONObject.NULL) null else (it as? Number)?.toInt() },
+        sentenceOffset = opt("sentenceOffset")?.let { if (it == JSONObject.NULL) null else (it as? Number)?.toInt() },
     )
 }

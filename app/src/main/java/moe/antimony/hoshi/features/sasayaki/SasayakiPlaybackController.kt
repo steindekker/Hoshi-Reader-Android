@@ -34,6 +34,7 @@ internal interface SasayakiPlaybackControllerContract {
     fun previousCue()
     fun findCue(chapterIndex: Int, offset: Int): SasayakiMatch?
     fun playCue(cue: SasayakiMatch, stop: Boolean)
+    fun exportCueAudio(cue: SasayakiMatch, sentence: String): File?
     fun release()
 }
 
@@ -43,7 +44,7 @@ internal class SasayakiPlaybackController(
     playbackRepository: SasayakiPlaybackRepository,
     bookTitle: String?,
     bookCoverFile: File?,
-    matchData: SasayakiMatchData?,
+    private val matchData: SasayakiMatchData?,
     initialPlayback: SasayakiPlaybackData?,
     persistenceScope: CoroutineScope,
     private val getCurrentChapterIndex: () -> Int,
@@ -261,6 +262,24 @@ internal class SasayakiPlaybackController(
             lastPosition = playback.lastPosition,
             delay = delay,
             pauseWithoutRestore = { pausePlayback(restoreTemporaryPosition = false) },
+        )
+    }
+
+    override fun exportCueAudio(cue: SasayakiMatch, sentence: String): File? {
+        val source = audioSourceRepository.playbackSource(playback) ?: return null
+        val outputDir = File(appContext.cacheDir, "anki-media/sasayaki")
+        val range = SasayakiCueAudioRangeResolver.resolve(
+            matchData = matchData,
+            cue = cue,
+            sentence = sentence,
+            delay = delay,
+        )
+        return SasayakiCueAudioExporter.export(
+            context = appContext,
+            source = source,
+            cue = cue,
+            range = range,
+            outputDir = outputDir,
         )
     }
 

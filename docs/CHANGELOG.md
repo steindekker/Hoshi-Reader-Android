@@ -5,8 +5,23 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+### Added
+
+- Add AnkiDroid mining from dictionary lookup results, including Lapis field defaults, iOS-compatible handlebars, duplicate checks, tags, and media export support.
+
 ### Fixed
 
+- Preserve selected popup text when mining AnkiDroid cards, restoring the Lapis `{popup-selection-text}` field.
+- Add dictionary SVG media to AnkiDroid notes as real media files instead of nested image HTML, restoring MK3 gaiji icons in mined Lapis cards.
+- Keep MK3 SVG gaiji inline with surrounding text in AnkiDroid Lapis glossary fields.
+- Bold only the selected sentence occurrence in AnkiDroid `{sentence}` fields when the mined word appears multiple times.
+- Make the Anki field mapping settings list responsive by using lightweight rows and editing mappings in a focused dialog.
+- Show imported term dictionaries as `{single-glossary-...}` handlebar choices in AnkiDroid field mappings, matching iOS dictionary-specific glossary mappings.
+- Keep dictionary-specific AnkiDroid glossary handlebars from falling back to the first glossary when imported dictionary titles include a version suffix.
+- Expand Sasayaki audiobook exports for AnkiDroid `{sasayaki-audio}` to adjacent cues from the selected sentence, matching the iOS sentence-audio behavior.
+- Fill the Lapis `SentenceAudio` field from Sasayaki reader lookups by exporting the matched cue audio before adding the AnkiDroid note.
+- Keep Anki field-to-handlebar mappings editable after closing and reopening the app process without requiring another Fetch.
+- Match the reader loading screen to the active reader background, preventing a white flash when opening books in dark mode.
 - Keep the bookshelf visible while opening an existing book, preventing a brief loading-spinner flash before the reader appears.
 - Refresh Settings detail controls immediately after toggles or option changes, and remove Navigation3 fade transitions so page switches are e-ink friendly.
 - Keep external EPUB opens and Sasayaki media-control returns in the existing Hoshi task, and ignore duplicate EPUB import requests while an import is already running.

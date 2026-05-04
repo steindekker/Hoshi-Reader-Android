@@ -196,6 +196,8 @@ fun ReaderWebView(
                 darkMode = effectiveSettings.usesDarkInterface(systemDarkTheme),
                 eInkMode = effectiveSettings.eInkMode,
                 audioSettings = audioSettings,
+                documentTitle = book.title,
+                coverPath = sasayakiCoverFile?.absolutePath,
             ),
         )?.let { (popup, highlightCount) ->
             popup.copy(sasayakiCue = sasayakiCueForSelection(selection)) to highlightCount
@@ -215,6 +217,8 @@ fun ReaderWebView(
                 darkMode = effectiveSettings.usesDarkInterface(systemDarkTheme),
                 eInkMode = effectiveSettings.eInkMode,
                 audioSettings = audioSettings,
+                documentTitle = book.title,
+                coverPath = sasayakiCoverFile?.absolutePath,
             ),
         )?.let { (popup, highlightCount) ->
             popup.copy(sasayakiCue = sasayakiCueForSelection(selection)) to highlightCount
@@ -447,6 +451,9 @@ fun ReaderWebView(
                 onSasayakiPlayForward = { cue ->
                     sasayakiPlayer?.playCue(cue, stop = false)
                     setLookupPopups(emptyList())
+                },
+                onPrepareSasayakiAudio = { cue, sentence ->
+                    sasayakiPlayer?.exportCueAudio(cue, sentence)?.absolutePath
                 },
                 modifier = Modifier.fillMaxSize(),
             )

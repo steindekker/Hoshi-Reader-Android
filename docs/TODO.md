@@ -39,7 +39,7 @@ Status: `in_progress`
 
 Status: `in_progress`
 
-- Wire remaining iOS `PopupWebView` Anki mining behavior.
+- Wire remaining iOS `PopupWebView` Anki mining behavior beyond selected popup text export.
 - Re-run diagonal popup swipe validation when a reliable Reader or nested Dictionary popup state is available.
 - Reader fixes must start from `reference/Hoshi-Reader-iOS/Features/Reader/ReaderWebView/ReaderWebView.swift` plus the matching JS/CSS.
 - Keep WebView-based reading and lookup. Do not replace it with native text rendering.
@@ -63,11 +63,12 @@ Status: `todo`
 
 ### Anki
 
-Status: `todo`
+Status: `in_progress`
 
-- Investigate AnkiDroid APIs, intents, and any Android-appropriate AnkiConnect path.
-- Build the smallest card creation flow from dictionary lookup results.
-- Do not copy iOS AnkiMobile x-callback behavior directly.
+- Android now targets AnkiDroid's native API instead of AnkiMobile callbacks.
+- Current emulator validation covers Lapis field mapping restore, field mapping list scrolling, dictionary-specific Anki handlebars without first-glossary fallback, MK3 SVG dictionary media/inline gaiji styling, selected sentence occurrence bolding, and Sasayaki sentence-expanded cue audio mining.
+- Next: expand duplicate and future AnkiConnect backend coverage.
+- Keep AnkiConnect behind the Anki backend boundary; do not add it by coupling popup mining directly to HTTP calls.
 
 ### Audio And Sasayaki
 
@@ -112,6 +113,6 @@ Also run `./gradlew lint` when changing resources, manifest, UI, packaging, or r
 
 For settings/navigation changes, verify settings controls update immediately and route changes avoid fade transitions on e-ink displays.
 
-For bookshelf-to-reader regressions, use real-device continuous screenshots or screen recording to confirm no Bookshelf loading spinner appears between tapping a book and showing the Reader.
+For bookshelf-to-reader regressions, use real-device continuous screenshots or screen recording to confirm no Bookshelf loading spinner or dark-mode white loading frame appears between tapping a book and showing the Reader.
 
 For reader/dictionary/audio user flows, perform targeted emulator or device validation using the test data listed in `AGENTS.md`.
