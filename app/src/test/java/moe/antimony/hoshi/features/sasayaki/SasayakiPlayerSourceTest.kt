@@ -1,5 +1,8 @@
 package moe.antimony.hoshi.features.sasayaki
 
+import moe.antimony.hoshi.epub.SasayakiPlaybackData
+import moe.antimony.hoshi.epub.SasayakiMatch
+
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -7,142 +10,140 @@ import java.io.File
 
 class SasayakiPlayerSourceTest {
     @Test
-    fun importedAudioUsesPersistedUriInsteadOfPrivateCopyLikeIos() {
-        val source = File("src/main/java/moe/antimony/hoshi/features/sasayaki/SasayakiPlayer.kt").readText()
-        val importAudio = source.substringAfter("fun importAudio(")
-            .substringBefore("fun togglePlayback()")
-        val restoreAudio = source.substringAfter("private fun restoreAudio()")
-            .substringBefore("private fun tick()")
+    fun playerIsOnlyTheComposeFacingControllerAdapter() {
+        val source = playerSource()
 
-        assertTrue(source.contains("import android.net.Uri"))
-        assertTrue(importAudio.contains("audioUri: Uri, copiedAudioFileName: String? = null"))
-        assertTrue(importAudio.contains("if (copiedAudioFileName == null)"))
-        assertTrue(importAudio.contains("audioUri.toString()"))
-        assertTrue(importAudio.contains("audioFileName = copiedAudioFileName"))
-        assertTrue(restoreAudio.contains("Uri.parse("))
-        assertTrue(restoreAudio.contains("setDataSource(appContext, uri)"))
-        assertTrue(restoreAudio.contains("setDataSource(requireNotNull(file).absolutePath)"))
+        assertTrue(source.contains("class SasayakiPlayer internal constructor("))
+        assertTrue(source.contains("private val controller: SasayakiPlaybackControllerContract"))
+        assertTrue(source.contains("SasayakiPlaybackController("))
+        assertTrue(source.contains("val playback: SasayakiPlaybackData get() = controller.playback"))
+        assertTrue(source.contains("var autoScroll: Boolean"))
+        assertTrue(source.contains("get() = controller.autoScroll"))
+        assertTrue(source.contains("controller.autoScroll = value"))
+        assertTrue(source.contains("fun importAudio(audioUri: Uri, copiedAudioFileName: String? = null)"))
+        assertTrue(source.contains("controller.importAudio(audioUri = audioUri, copiedAudioFileName = copiedAudioFileName)"))
+        assertTrue(source.contains("controller.pausePlayback(restoreTemporaryPosition = restoreTemporaryPosition)"))
+        assertTrue(source.contains("controller.findCue(chapterIndex = chapterIndex, offset = offset)"))
+        assertTrue(source.contains("controller.playCue(cue = cue, stop = stop)"))
+
+        assertFalse(source.contains("SasayakiAudioCommandCoordinator("))
+        assertFalse(source.contains("SasayakiPlaybackCommandCoordinator("))
+        assertFalse(source.contains("SasayakiPlaybackLifecycleController("))
+        assertFalse(source.contains("SasayakiMediaSessionHandleCoordinator("))
+        assertFalse(source.contains("private fun restoreAudio()"))
+        assertFalse(source.contains("private fun tick()"))
+        assertFalse(source.contains("private fun updateCue("))
     }
 
     @Test
-    fun audioCanBeClearedAndDescribesStorageMode() {
-        val source = File("src/main/java/moe/antimony/hoshi/features/sasayaki/SasayakiPlayer.kt").readText()
-        val clearAudio = source.substringAfter("fun clearAudio()")
-            .substringBefore("fun togglePlayback()")
+    fun controllerOwnsPlaybackAudioAndMediaSessionCoordinatorGraph() {
+        val source = controllerSource()
+        val restoreAudio = source.substringAfter("private fun restoreAudio()")
+            .substringBefore("private fun tick()")
+        val teardown = source.substringAfter("private fun teardownPlayer(clearCue: Boolean)")
 
+        assertTrue(source.contains("internal interface SasayakiPlaybackControllerContract"))
+        assertTrue(source.contains("internal class SasayakiPlaybackController("))
+        assertTrue(source.contains("private val audioSourceRepository = SasayakiAudioRepository(bookRoot)"))
+        assertTrue(source.contains("private val playbackPersistence = SasayakiPlaybackPersistenceState("))
+        assertTrue(source.contains("private val playbackLifecycle = SasayakiPlaybackLifecycleController("))
+        assertTrue(source.contains("private val playbackCommands = SasayakiPlaybackCommandCoordinator("))
+        assertTrue(source.contains("private val audioCommands = SasayakiAudioCommandCoordinator("))
+        assertTrue(source.contains("private val audioRestore = SasayakiAudioRestoreController("))
+        assertTrue(source.contains("private val audioRestoreCallbacks = SasayakiAudioRestoreCallbacksCoordinator("))
+        assertTrue(source.contains("private val audioRestoreResult = SasayakiAudioRestoreResultCoordinator("))
+        assertTrue(source.contains("private val audioRestoreWorkflow = SasayakiAudioRestoreWorkflowCoordinator("))
+        assertTrue(source.contains("private val mediaSessionHandle = SasayakiMediaSessionHandleCoordinator()"))
+        assertTrue(source.contains("private val mediaSessionPublishing = SasayakiMediaSessionPublishingCoordinator("))
+        assertTrue(source.contains("private val playbackTeardown = SasayakiPlaybackTeardownCoordinator("))
+        assertTrue(source.contains("val playback: SasayakiPlaybackData"))
+        assertTrue(source.contains("get() = playbackPersistence.playback"))
         assertTrue(source.contains("val audioStorageSummary: String"))
-        assertTrue(source.contains("playback.audioFileName != null"))
-        assertTrue(source.contains("playback.audioUri != null"))
-        assertTrue(clearAudio.contains("audioRepository.deleteAudio(playback)"))
-        assertTrue(clearAudio.contains("releasePersistableUriPermission"))
-        assertTrue(clearAudio.contains("audioUri = null"))
-        assertTrue(clearAudio.contains("audioFileName = null"))
-        assertTrue(clearAudio.contains("hasAudio = false"))
+        assertTrue(source.contains("get() = playbackPersistence.audioStorageSummary"))
+
+        assertTrue(restoreAudio.contains("audioRestoreWorkflow.restore("))
+        assertTrue(restoreAudio.contains("releaseExistingMediaSession = mediaSessionHandle::releaseExisting"))
+        assertTrue(restoreAudio.contains("handleSeekComplete = ::handleSeekComplete"))
+        assertTrue(restoreAudio.contains("pausePlayback = { pausePlayback(restoreTemporaryPosition = true) }"))
+        assertTrue(teardown.contains("playbackTeardown.teardown("))
+        assertFalse(source.contains("import android.media.MediaPlayer"))
+        assertFalse(source.contains("private var playbackEngine: SasayakiPlaybackEngine? = null"))
+        assertFalse(source.contains("private var mediaSession: SasayakiMediaSessionHandle? = null"))
     }
 
     @Test
-    fun restoredAudioStaysPausedUntilExplicitPlaybackLikeIos() {
-        val source = File("src/main/java/moe/antimony/hoshi/features/sasayaki/SasayakiPlayer.kt").readText()
-        val restoreAudio = source.substringAfter("private fun restoreAudio()")
-            .substringBefore("private fun tick()")
-        val setRate = source.substringAfter("fun setRate(value: Float)")
-            .substringBefore("fun importAudio(")
-        val startPlayback = source.substringAfter("private fun startPlayback()")
-            .substringBefore("private fun seek(")
-
-        assertFalse(restoreAudio.contains("playbackParams = playbackParams(rate)"))
-        assertTrue(setRate.contains("if (isPlaying)"))
-        assertTrue(setRate.contains("mediaPlayer?.playbackParams = playbackParams(value)"))
-        assertTrue(startPlayback.contains("player.playbackParams = playbackParams(rate)"))
-        assertTrue(startPlayback.contains("player.start()"))
-        assertTrue(startPlayback.contains("hasPlayedOnce = true"))
-    }
-
-    @Test
-    fun popupCuePlaybackMatchesIosStopSemantics() {
-        val source = File("src/main/java/moe/antimony/hoshi/features/sasayaki/SasayakiPlayer.kt").readText()
-        val playCue = source.substringAfter("fun playCue(cue: SasayakiMatch, stop: Boolean)")
-            .substringBefore("fun release()")
+    fun controllerPreservesCuePlaybackSeekAndDisplaySemantics() {
+        val source = controllerSource()
+        val eventSource = File("src/main/java/moe/antimony/hoshi/features/sasayaki/SasayakiPlaybackEventCoordinator.kt").readText()
+        val playCue = source.substringAfter("override fun playCue(cue: SasayakiMatch, stop: Boolean)")
+            .substringBefore("override fun release()")
+        val complete = source.substringAfter("private fun handleSeekComplete()")
+            .substringBefore("private fun restoreAudio()")
         val tick = source.substringAfter("private fun tick()")
             .substringBefore("private fun updateCue(")
-        val seek = source.substringAfter("private fun seek(")
-            .substringBefore("private fun restoreAudio()")
-
-        assertTrue(source.contains("private var stopPlaybackTime: Double? = null"))
-        assertTrue(source.contains("private var temporaryPlaybackReturnPosition: Double? = null"))
-        assertTrue(source.contains("fun findCue(chapterIndex: Int, offset: Int): SasayakiMatch?"))
-        assertTrue(playCue.contains("stopPlaybackTime = null"))
-        assertTrue(playCue.contains("if (isPlaying) pausePlayback(restoreTemporaryPosition = false)"))
-        assertTrue(playCue.contains("temporaryPlaybackReturnPosition = if (stop) playback.lastPosition else null"))
-        assertTrue(playCue.contains("cue.startTime + delay"))
-        assertTrue(playCue.contains("stopPlaybackTime = if (stop) cue.endTime + delay else null"))
-        assertTrue(playCue.contains("savePosition = !stop"))
-        assertTrue(seek.contains("savePosition: Boolean = true"))
-        assertTrue(source.contains("if (seek.savePosition)"))
-        assertTrue(tick.contains("stopPlaybackTime?.let"))
-        assertTrue(tick.contains("pausePlayback()"))
-        assertTrue(tick.substringBefore("stopPlaybackTime?.let").contains("if (temporaryPlaybackReturnPosition == null && second != lastSavedSecond)"))
-        assertTrue(source.contains("private fun restoreTemporaryPlaybackPositionIfNeeded()"))
-        assertTrue(source.contains("temporaryPlaybackReturnPosition = null"))
-    }
-
-    @Test
-    fun seekWaitsForMediaPlayerCompletionBeforeUpdatingCueLikeIos() {
-        val source = File("src/main/java/moe/antimony/hoshi/features/sasayaki/SasayakiPlayer.kt").readText()
-        val seek = source.substringAfter("private fun seek(")
-            .substringBefore("private fun restoreAudio()")
-        val complete = source.substringAfter("private fun handleSeekComplete(")
-            .substringBefore("private fun restoreAudio()")
-        val restoreAudio = source.substringAfter("private fun restoreAudio()")
-            .substringBefore("private fun tick()")
-        val tick = source.substringAfter("private fun tick()")
-            .substringBefore("private fun updateCue(")
-
-        assertTrue(source.contains("private data class PendingSeek"))
-        assertTrue(source.contains("private var pendingSeek: PendingSeek? = null"))
-        assertTrue(restoreAudio.contains("setOnSeekCompleteListener { handleSeekComplete() }"))
-        assertTrue(seek.contains("pendingSeek = PendingSeek("))
-        assertTrue(seek.contains("handler.removeCallbacks(tickRunnable)"))
-        assertFalse(seek.substringBefore("private fun handleSeekComplete(").contains("if (updateCue) updateCue(seconds)"))
-        assertFalse(seek.substringBefore("private fun handleSeekComplete(").contains("if (startPlayback) startPlayback()"))
-        assertTrue(complete.contains("val seek = pendingSeek ?: return"))
-        assertTrue(complete.contains("pendingSeek = null"))
-        assertTrue(complete.contains("currentTime = seek.seconds"))
-        assertTrue(complete.contains("if (seek.updateCue) updateCue(seek.seconds)"))
-        assertTrue(complete.contains("if (seek.startPlayback) startPlayback()"))
-        assertTrue(tick.contains("if (pendingSeek != null) return"))
-    }
-
-    @Test
-    fun popupCuePlaybackDisplaysSelectedCueAfterSeekCompletes() {
-        val source = File("src/main/java/moe/antimony/hoshi/features/sasayaki/SasayakiPlayer.kt").readText()
-        val playCue = source.substringAfter("fun playCue(cue: SasayakiMatch, stop: Boolean)")
-            .substringBefore("fun release()")
-        val seek = source.substringAfter("private fun seek(")
-            .substringBefore("private fun handleSeekComplete(")
-        val complete = source.substringAfter("private fun handleSeekComplete(")
-            .substringBefore("private fun restoreAudio()")
-
-        assertTrue(source.contains("val displayCue: SasayakiMatch? = null"))
-        assertTrue(playCue.contains("displayCue = cue"))
-        assertTrue(seek.contains("displayCue = displayCue"))
-        assertTrue(source.contains("private fun displayCue(cue: SasayakiMatch, reveal: Boolean)"))
-        assertTrue(complete.contains("seek.displayCue?.let { cue ->"))
-        assertTrue(complete.contains("displayCue(cue, reveal = autoScroll && (hasPlayedOnce || seek.startPlayback))"))
-        assertTrue(complete.indexOf("seek.displayCue?.let { cue ->") < complete.indexOf("if (seek.startPlayback) startPlayback()"))
-    }
-
-    @Test
-    fun startPlaybackRedisplaysCurrentCueLikeIos() {
-        val source = File("src/main/java/moe/antimony/hoshi/features/sasayaki/SasayakiPlayer.kt").readText()
-        val startPlayback = source.substringAfter("private fun startPlayback()")
-            .substringBefore("private fun seek(")
         val updateCue = source.substringAfter("private fun updateCue(")
-            .substringBefore("private fun displayCue(")
+            .substringBefore("private fun applyCueDisplayAction(")
 
-        assertTrue(startPlayback.contains("hasPlayedOnce = true"))
-        assertTrue(startPlayback.contains("updateCue(currentTime, forceDisplay = true)"))
-        assertTrue(updateCue.contains("forceDisplay: Boolean = false"))
-        assertTrue(updateCue.contains("if (!forceDisplay && cue.id == currentCue?.id) return"))
+        assertTrue(source.contains("private val cueNavigation = SasayakiCueNavigationController(matchData)"))
+        assertTrue(source.contains("private val cueDisplay = SasayakiCueDisplayCoordinator()"))
+        assertTrue(source.contains("private val cueDisplayActionDispatcher = SasayakiCueDisplayActionDispatcher("))
+        assertTrue(source.contains("private val cuePresentation = SasayakiCuePresentationState()"))
+        assertTrue(source.contains("private val playbackStart = SasayakiPlaybackStartCoordinator("))
+        assertTrue(source.contains("private val playbackTick = SasayakiPlaybackTickCoordinator("))
+        assertTrue(source.contains("private val cueUpdate = SasayakiCueUpdateCoordinator("))
+        assertTrue(source.contains("private val seekComplete = SasayakiSeekCompleteCoordinator("))
+        assertTrue(source.contains("private val temporaryPlaybackRestore = SasayakiTemporaryPlaybackRestoreCoordinator("))
+        assertTrue(source.contains("override fun findCue(chapterIndex: Int, offset: Int): SasayakiMatch?"))
+        assertTrue(source.contains("cueNavigation.findCue(chapterIndex = chapterIndex, offset = offset)"))
+        assertTrue(playCue.contains("playbackCommands.playCue("))
+        assertTrue(playCue.contains("pauseWithoutRestore = { pausePlayback(restoreTemporaryPosition = false) }"))
+        assertTrue(complete.contains("seekComplete.handle("))
+        assertTrue(complete.contains("applyCueDisplayAction = ::applyCueDisplayAction"))
+        assertTrue(tick.contains("playbackTick.tick("))
+        assertTrue(updateCue.contains("cueUpdate.update("))
+        assertTrue(source.contains("cueDisplayActionDispatcher.apply(action)"))
+
+        assertTrue(eventSource.contains("seek.displayCue?.let { cue ->"))
+        assertTrue(eventSource.contains("cueDisplay.displaySelectedCue("))
+        assertTrue(eventSource.contains("tick.shouldStopPlayback"))
+        assertTrue(eventSource.contains("cueNavigation.cueAtPlaybackTime(time = time, delay = delay)"))
+        assertFalse(source.contains("private var currentCue: SasayakiMatch? = null"))
+        assertFalse(source.contains("private var stopPlaybackTime: Double? = null"))
+        assertFalse(source.contains("private var temporaryPlaybackReturnPosition: Double? = null"))
     }
+
+    @Test
+    fun controllerPreservesPersistenceSettingsAndPublishingBoundaries() {
+        val source = controllerSource()
+        val eventSource = File("src/main/java/moe/antimony/hoshi/features/sasayaki/SasayakiPlaybackEventCoordinator.kt").readText()
+        val setDelay = source.substringAfter("override fun setDelay(value: Double)")
+            .substringBefore("override fun setRate(value: Float)")
+        val setRate = source.substringAfter("override fun setRate(value: Float)")
+            .substringBefore("override fun importAudio(")
+        val updateMediaSession = source.substringAfter("private fun updateMediaSession()")
+            .substringBefore("private fun restoreTemporaryPlaybackPositionIfNeeded()")
+
+        assertTrue(source.contains("private val playbackSettings = SasayakiPlaybackSettingsCoordinator("))
+        assertTrue(setDelay.contains("playbackSettings.setDelay("))
+        assertTrue(setDelay.contains("currentTime = currentTime"))
+        assertTrue(setDelay.contains("updateCue = ::updateCue"))
+        assertTrue(setRate.contains("playbackSettings.setRate("))
+        assertTrue(setRate.contains("updateMediaSession = ::updateMediaSession"))
+        assertTrue(updateMediaSession.contains("mediaSessionPublishing.update("))
+        assertTrue(updateMediaSession.contains("isPlaying = isPlaying"))
+        assertTrue(updateMediaSession.contains("currentTime = currentTime"))
+        assertTrue(updateMediaSession.contains("duration = duration"))
+        assertTrue(updateMediaSession.contains("rate = rate"))
+        assertTrue(eventSource.contains("playbackPersistence.savePosition(seek.seconds)"))
+        assertTrue(eventSource.contains("playbackPersistence.savePosition(playbackState.currentTime)"))
+        assertFalse(setDelay.contains("playbackPersistence.setDelay(value)"))
+        assertFalse(setRate.contains("playbackPersistence.setRate(value)"))
+        assertFalse(updateMediaSession.contains("mediaSessionHandle.update("))
+    }
+
+    private fun playerSource(): String =
+        File("src/main/java/moe/antimony/hoshi/features/sasayaki/SasayakiPlayer.kt").readText()
+
+    private fun controllerSource(): String =
+        File("src/main/java/moe/antimony/hoshi/features/sasayaki/SasayakiPlaybackController.kt").readText()
 }

@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.LruCache
-import android.view.KeyEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -79,11 +78,11 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -97,362 +96,123 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import moe.antimony.hoshi.dictionary.DictionaryRepository
+import moe.antimony.hoshi.LocalHoshiAppContainer
 import moe.antimony.hoshi.epub.BookEntry
-import moe.antimony.hoshi.epub.BookMetadata
+import moe.antimony.hoshi.epub.BookRepository
 import moe.antimony.hoshi.epub.BookSortOption
-import moe.antimony.hoshi.epub.BookStorage
-import moe.antimony.hoshi.epub.Bookmark
-import moe.antimony.hoshi.epub.EpubBook
-import moe.antimony.hoshi.epub.EpubBookParser
-import moe.antimony.hoshi.features.audio.AdvancedSettingsView
-import moe.antimony.hoshi.features.diagnostics.DiagnosticsView
-import moe.antimony.hoshi.features.dictionary.DictionaryView
-import moe.antimony.hoshi.features.dictionary.DictionarySearchView
-import moe.antimony.hoshi.features.dictionary.DictionarySettingsStore
-import moe.antimony.hoshi.features.reader.ReaderAppearanceScreen
-import moe.antimony.hoshi.features.reader.ReaderBehaviorScreen
-import moe.antimony.hoshi.features.reader.ReaderFontManager
-import moe.antimony.hoshi.features.reader.ReaderSettings
-import moe.antimony.hoshi.features.reader.ReaderWebView
-import moe.antimony.hoshi.features.sasayaki.SasayakiMatchView
-import moe.antimony.hoshi.features.sasayaki.SasayakiSettingsStore
 import moe.antimony.hoshi.importing.FileImportContent
 import moe.antimony.hoshi.importing.ImportFileType
 import moe.antimony.hoshi.ui.theme.LocalHoshiEInkMode
 import java.io.File
 import kotlin.math.max
 
-private const val ReportIssueUrl = "https://github.com/HuangAntimony/Hoshi-Reader-Android/issues"
+data class SasayakiMatchRequest(
+    val bookId: String,
+    val bookEntry: BookEntry,
+)
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun BookshelfView(
     pendingImportUri: Uri? = null,
     onPendingImportConsumed: () -> Unit = {},
-    readerSettings: ReaderSettings,
-    onReaderSettingsChange: (ReaderSettings) -> Unit,
-    onReaderKeyEventHandlerChange: (((KeyEvent) -> Boolean)?) -> Unit = {},
+    onOpenReader: (String) -> Unit,
+    onOpenSasayakiMatch: (SasayakiMatchRequest) -> Unit,
+    refreshKey: Int = 0,
+    layoutSpec: MainShellLayoutSpec,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val bookStorage = remember { BookStorage(context.filesDir) }
-    val dictionaryRepository = remember { DictionaryRepository(context.filesDir, context.cacheDir) }
-    val dictionarySettingsStore = remember { DictionarySettingsStore(context) }
-    val sasayakiSettingsStore = remember { SasayakiSettingsStore(context) }
-    val readerFontManager = remember { ReaderFontManager(context.filesDir) }
-    var selectedTab by remember {
-        mutableStateOf(
-            if (dictionarySettingsStore.load().dictionaryTabDefault) {
-                MainTab.Dictionary
-            } else {
-                MainTab.Books
-            },
-        )
-    }
-    var settingsDestination by remember { mutableStateOf<SettingsDestination?>(null) }
-    var bookEntries by remember { mutableStateOf<List<BookEntry>>(emptyList()) }
-    var sortOption by remember { mutableStateOf(BookSortOption.Recent) }
+    val appContainer = LocalHoshiAppContainer.current
+    val bookRepository = appContainer.bookRepository
+    val sasayakiSettingsRepository = appContainer.sasayakiSettingsRepository
+    val booksViewModel: BookshelfViewModel = viewModel(
+        factory = remember(context, appContainer) {
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                    BookshelfViewModel(
+                        appContainer.bookshelfRepository(context.contentResolver),
+                    ) as T
+            }
+        },
+    )
+    val uiState by booksViewModel.uiState.collectAsState()
     var sortMenuExpanded by remember { mutableStateOf(false) }
     var contextMenuEntry by remember { mutableStateOf<BookEntry?>(null) }
     var deleteCandidate by remember { mutableStateOf<BookEntry?>(null) }
-    var sasayakiMatchEntry by remember { mutableStateOf<BookEntry?>(null) }
-    var sasayakiEnabled by remember { mutableStateOf(sasayakiSettingsStore.load().enabled) }
-    var bookProgressById by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
-    var selectedBookRoot by remember { mutableStateOf<File?>(null) }
-    var book by remember { mutableStateOf<EpubBook?>(null) }
-    var bookmark by remember { mutableStateOf<Bookmark?>(null) }
-    var isReading by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-
-    fun reloadBookEntries(option: BookSortOption = sortOption) {
-        scope.launch {
-            val (entries, progressById) = withContext(Dispatchers.IO) {
-                val entries = bookStorage.loadBookEntries(option)
-                entries to loadBookProgressById(entries, bookStorage)
-            }
-            bookEntries = entries
-            bookProgressById = progressById
-        }
-    }
-
-    fun saveMetadata(root: File, parsedBook: EpubBook, previous: BookMetadata? = null) {
-        val metadata = BookMetadata(
-            id = previous?.id ?: root.name,
-            title = parsedBook.title,
-            cover = parsedBook.coverHref,
-            folder = root.name,
-            lastAccess = bookStorage.currentAppleReferenceDateSeconds(),
-        )
-        bookStorage.saveMetadata(root, metadata)
-    }
-
-    fun saveBookInfo(root: File, parsedBook: EpubBook) {
-        bookStorage.saveBookInfo(root, parsedBook.bookInfo)
-    }
-
-    fun parseBook(file: File, openReader: Boolean, refreshAccess: Boolean) {
-        scope.launch {
-            isLoading = true
-            errorMessage = null
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    val parsedBook = EpubBookParser().parse(file)
-                    if (refreshAccess) {
-                        saveMetadata(file, parsedBook, bookStorage.loadMetadata(file))
-                    }
-                    saveBookInfo(file, parsedBook)
-                    parsedBook
-                }
-            }.onSuccess { parsedBook ->
-                selectedBookRoot = file
-                book = parsedBook
-                bookmark = bookStorage.loadBookmark(file)
-                reloadBookEntries()
-                isReading = openReader
-            }.onFailure {
-                errorMessage = it.localizedMessage ?: "Failed to open EPUB."
-            }
-            isLoading = false
-        }
-    }
-
-    fun importBook(uri: Uri) {
-        scope.launch {
-            isLoading = true
-            errorMessage = null
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    val root = bookStorage.importBook(context.contentResolver, uri)
-                    val parsedBook = EpubBookParser().parse(root)
-                    saveMetadata(root, parsedBook, bookStorage.loadMetadata(root))
-                    saveBookInfo(root, parsedBook)
-                    root to parsedBook
-                }
-            }.onSuccess { (root, parsedBook) ->
-                selectedBookRoot = root
-                book = parsedBook
-                bookmark = bookStorage.loadBookmark(root)
-                reloadBookEntries()
-                selectedTab = MainTab.Books
-                isReading = true
-                isLoading = false
-            }.onFailure {
-                errorMessage = it.localizedMessage ?: "Failed to import EPUB."
-                isLoading = false
-            }
-        }
-    }
 
     val importer = rememberLauncherForActivityResult(FileImportContent()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                )
-            }
-            importBook(uri)
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
         }
+        booksViewModel.importBook(uri)
     }
 
     fun launchBookImporter() {
         importer.launch(ImportFileType.Epub.mimeTypes)
     }
 
-    fun updateReaderSettings(settings: ReaderSettings) {
-        onReaderSettingsChange(settings)
+    LaunchedEffect(refreshKey) {
+        booksViewModel.reloadBookEntries()
     }
 
     LaunchedEffect(Unit) {
-        reloadBookEntries()
-        withContext(Dispatchers.IO) {
-            runCatching { dictionaryRepository.rebuildLookupQuery() }
+        booksViewModel.rebuildLookupQuery()
+    }
+
+    LaunchedEffect(sasayakiSettingsRepository) {
+        sasayakiSettingsRepository.settings.collect { settings ->
+            booksViewModel.setSasayakiEnabled(settings.enabled)
         }
     }
 
     LaunchedEffect(pendingImportUri) {
         val uri = pendingImportUri ?: return@LaunchedEffect
         onPendingImportConsumed()
-        importBook(uri)
+        booksViewModel.importBook(uri)
     }
 
-    if (isReading && book != null) {
-        ReaderWebView(
-            book = requireNotNull(book),
-            bookRoot = selectedBookRoot,
-            initialChapterIndex = bookmark?.chapterIndex ?: 0,
-            initialProgress = bookmark?.progress ?: 0.0,
-            readerSettings = readerSettings,
-            onReaderSettingsChange = ::updateReaderSettings,
-            onReaderKeyEventHandlerChange = onReaderKeyEventHandlerChange,
-            onSaveBookmark = { chapterIndex, progress ->
-                val file = selectedBookRoot ?: return@ReaderWebView
-                val parsedBook = book ?: return@ReaderWebView
-                val savedBookmark = Bookmark(
-                    chapterIndex = chapterIndex,
-                    progress = progress,
-                    characterCount = parsedBook.characterCountAt(chapterIndex, progress),
-                    lastModified = bookStorage.currentAppleReferenceDateSeconds(),
-                )
-                bookmark = savedBookmark
-                val total = parsedBook.bookInfo.characterCount
-                val readingProgress = if (total > 0) {
-                    savedBookmark.characterCount.toDouble().div(total.toDouble()).coerceIn(0.0, 1.0)
-                } else {
-                    0.0
-                }
-                val bookId = bookEntries.firstOrNull { it.root == file }?.metadata?.id ?: file.name
-                bookProgressById = bookProgressById + (bookId to readingProgress)
-                scope.launch(Dispatchers.IO) {
-                    bookStorage.saveBookmark(file, savedBookmark)
-                }
-            },
-            onClose = { isReading = false },
-            modifier = modifier.fillMaxSize(),
-        )
-        return
+    LaunchedEffect(uiState.openReaderBookId) {
+        val bookId = uiState.openReaderBookId ?: return@LaunchedEffect
+        onOpenReader(bookId)
+        booksViewModel.consumeOpenReaderEvent()
     }
 
-    sasayakiMatchEntry?.let { entry ->
-        SasayakiMatchView(
-            bookEntry = entry,
-            bookStorage = bookStorage,
-            onClose = { sasayakiMatchEntry = null },
-            modifier = modifier.fillMaxSize(),
-        )
-        return
-    }
-
-    if (settingsDestination == SettingsDestination.Dictionaries) {
-        DictionaryView(
-            onClose = { settingsDestination = null },
-            modifier = modifier.fillMaxSize(),
-        )
-        return
-    }
-
-    if (settingsDestination == SettingsDestination.Appearance) {
-        ReaderAppearanceScreen(
-            settings = readerSettings,
-            onSettingsChange = ::updateReaderSettings,
-            fontManager = readerFontManager,
-            onClose = { settingsDestination = null },
-            modifier = modifier.fillMaxSize(),
-        )
-        return
-    }
-
-    if (settingsDestination == SettingsDestination.Behavior) {
-        ReaderBehaviorScreen(
-            settings = readerSettings,
-            onSettingsChange = ::updateReaderSettings,
-            onClose = { settingsDestination = null },
-            modifier = modifier.fillMaxSize(),
-        )
-        return
-    }
-
-    if (settingsDestination == SettingsDestination.Advanced) {
-        AdvancedSettingsView(
-            onClose = {
-                sasayakiEnabled = sasayakiSettingsStore.load().enabled
-                settingsDestination = null
-            },
-            modifier = modifier.fillMaxSize(),
-        )
-        return
-    }
-
-    if (settingsDestination == SettingsDestination.Diagnostics) {
-        DiagnosticsView(
-            onClose = { settingsDestination = null },
-            modifier = modifier.fillMaxSize(),
-        )
-        return
-    }
-
-    HoshiMainShell(
-        selectedTab = selectedTab,
-        onSelectedTabChange = {
-            selectedTab = it
-            settingsDestination = null
-        },
+    BooksTab(
         modifier = modifier,
-    ) { contentModifier, layoutSpec ->
-        when (selectedTab) {
-            MainTab.Books -> BooksTab(
-                modifier = contentModifier,
-                layoutSpec = layoutSpec,
-                bookEntries = bookEntries,
-                bookProgressById = bookProgressById,
-                bookStorage = bookStorage,
-                isLoading = isLoading,
-                errorMessage = errorMessage,
-                sortOption = sortOption,
-                sortMenuExpanded = sortMenuExpanded,
-                onSortMenuExpandedChange = { sortMenuExpanded = it },
-                onSortChange = {
-                    sortOption = it
-                    sortMenuExpanded = false
-                    reloadBookEntries(it)
-                },
-                onImport = ::launchBookImporter,
-                onOpenBook = { parseBook(it.root, openReader = true, refreshAccess = true) },
-                contextMenuEntry = contextMenuEntry,
-                onContextMenuEntryChange = { contextMenuEntry = it },
-                onDeleteCandidate = { deleteCandidate = it },
-                sasayakiEnabled = sasayakiEnabled,
-                onMatchSasayaki = { entry ->
-                    sasayakiMatchEntry = entry
-                },
-            )
-            MainTab.Dictionary -> DictionarySearchView(
-                readerSettings = readerSettings,
-                modifier = contentModifier.fillMaxSize(),
-            )
-            MainTab.Settings -> SettingsTab(
-                modifier = contentModifier,
-                layoutSpec = layoutSpec,
-                onDestination = { destination ->
-                    when (destination) {
-                        SettingsDestination.Dictionaries -> settingsDestination = destination
-                        SettingsDestination.ReportIssue -> context.startActivity(
-                            Intent(
-                                Intent.ACTION_VIEW,
-                                Uri.parse(ReportIssueUrl),
-                            ),
-                        )
-                        else -> settingsDestination = destination
-                    }
-                },
-            )
-        }
-    }
-
-    settingsDestination?.takeIf {
-        it != SettingsDestination.Dictionaries &&
-            it != SettingsDestination.Appearance &&
-            it != SettingsDestination.Behavior &&
-            it != SettingsDestination.Advanced
-    }?.let { destination ->
-        AlertDialog(
-            onDismissRequest = { settingsDestination = null },
-            title = { Text(destination.placeholderTitle()) },
-            text = { Text("This settings page is not implemented yet.") },
-            confirmButton = {
-                TextButton(onClick = { settingsDestination = null }) {
-                    Text("OK")
-                }
-            },
-        )
-    }
+        layoutSpec = layoutSpec,
+        bookEntries = uiState.bookEntries,
+        bookProgressById = uiState.bookProgressById,
+        bookRepository = bookRepository,
+        isLoading = uiState.isLoading,
+        errorMessage = uiState.errorMessage,
+        sortOption = uiState.sortOption,
+        sortMenuExpanded = sortMenuExpanded,
+        onSortMenuExpandedChange = { sortMenuExpanded = it },
+        onSortChange = {
+            sortMenuExpanded = false
+            booksViewModel.changeSort(it)
+        },
+        onImport = ::launchBookImporter,
+        onOpenBook = booksViewModel::openBook,
+        contextMenuEntry = contextMenuEntry,
+        onContextMenuEntryChange = { contextMenuEntry = it },
+        onDeleteCandidate = { deleteCandidate = it },
+        sasayakiEnabled = uiState.sasayakiEnabled,
+        onMatchSasayaki = { entry ->
+            onOpenSasayakiMatch(SasayakiMatchRequest(entry.metadata.id, entry))
+        },
+    )
 
     deleteCandidate?.let { candidate ->
         AlertDialog(
@@ -461,19 +221,8 @@ fun BookshelfView(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        scope.launch(Dispatchers.IO) {
-                            bookStorage.deleteBook(candidate.root)
-                            withContext(Dispatchers.Main) {
-                                if (selectedBookRoot == candidate.root) {
-                                    selectedBookRoot = null
-                                    book = null
-                                    bookmark = null
-                                    isReading = false
-                                }
-                                reloadBookEntries()
-                                deleteCandidate = null
-                            }
-                        }
+                        booksViewModel.deleteBook(candidate)
+                        deleteCandidate = null
                     },
                 ) {
                     Text("Delete")
@@ -629,7 +378,7 @@ private fun BooksTab(
     layoutSpec: MainShellLayoutSpec,
     bookEntries: List<BookEntry>,
     bookProgressById: Map<String, Double>,
-    bookStorage: BookStorage,
+    bookRepository: BookRepository,
     isLoading: Boolean,
     errorMessage: String?,
     sortOption: BookSortOption,
@@ -721,7 +470,7 @@ private fun BooksTab(
                                     BookGridCell(
                                         entry = entry,
                                         progress = bookProgressById[entry.metadata.id] ?: 0.0,
-                                        bookStorage = bookStorage,
+                                        bookRepository = bookRepository,
                                         layoutSpec = layoutSpec,
                                         onOpen = { onOpenBook(entry) },
                                         onLongPress = { onContextMenuEntryChange(entry) },
@@ -877,7 +626,7 @@ private fun BookshelfSectionHeader(
 private fun BookGridCell(
     entry: BookEntry,
     progress: Double,
-    bookStorage: BookStorage,
+    bookRepository: BookRepository,
     layoutSpec: MainShellLayoutSpec,
     onOpen: () -> Unit,
     onLongPress: () -> Unit,
@@ -888,7 +637,7 @@ private fun BookGridCell(
             onLongClick = onLongPress,
         ),
     ) {
-        BookCoverCard(entry = entry, bookStorage = bookStorage)
+        BookCoverCard(entry = entry, bookRepository = bookRepository)
         Spacer(Modifier.height(6.dp))
         ReadingProgressPill(
             progress = progress,
@@ -905,17 +654,19 @@ private fun BookGridCell(
     }
 }
 
-internal fun loadBookProgressById(
+internal suspend fun loadBookProgressById(
     entries: List<BookEntry>,
-    bookStorage: BookStorage,
+    bookRepository: BookRepository,
 ): Map<String, Double> =
     entries.associate { entry ->
-        entry.metadata.id to bookStorage.loadReadingProgress(entry.root)
+        entry.metadata.id to bookRepository.loadReadingProgress(entry.root)
     }
 
 @Composable
-private fun BookCoverCard(entry: BookEntry, bookStorage: BookStorage) {
-    val coverFile = remember(entry) { bookStorage.coverFile(entry) }
+private fun BookCoverCard(entry: BookEntry, bookRepository: BookRepository) {
+    val coverFile by produceState<File?>(initialValue = null, key1 = entry, key2 = bookRepository) {
+        value = bookRepository.coverFile(entry)
+    }
     val bitmap by produceState<Bitmap?>(initialValue = null, key1 = coverFile) {
         value = BookCoverBitmapCache.load(coverFile)
     }
@@ -1210,17 +961,6 @@ private fun ChevronRightGlyph(color: Color, modifier: Modifier = Modifier) {
         tint = color,
         modifier = modifier,
     )
-}
-
-private fun SettingsDestination.placeholderTitle(): String = when (this) {
-    SettingsDestination.Anki -> "Anki"
-    SettingsDestination.Appearance -> "Appearance"
-    SettingsDestination.Behavior -> "Behavior"
-    SettingsDestination.Advanced -> "Advanced"
-    SettingsDestination.About -> "About"
-    SettingsDestination.Diagnostics -> "Diagnostics"
-    SettingsDestination.Dictionaries -> "Dictionaries"
-    SettingsDestination.ReportIssue -> "Report an Issue"
 }
 
 private fun Float.formatOneDecimal(): String =

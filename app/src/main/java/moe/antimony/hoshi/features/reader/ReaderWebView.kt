@@ -1,5 +1,9 @@
 package moe.antimony.hoshi.features.reader
 
+import moe.antimony.hoshi.epub.SasayakiPlaybackData
+import moe.antimony.hoshi.epub.SasayakiMatchData
+import moe.antimony.hoshi.epub.SasayakiMatch
+
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
@@ -54,7 +58,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -67,42 +73,27 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
-import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.coroutines.launch
+import moe.antimony.hoshi.LocalHoshiAppContainer
 import moe.antimony.hoshi.epub.EpubBook
-import moe.antimony.hoshi.epub.BookStorage
-import moe.antimony.hoshi.features.audio.AudioSettingsStore
-import moe.antimony.hoshi.features.dictionary.DictionarySettingsStore
+import moe.antimony.hoshi.features.audio.AudioSettings
+import moe.antimony.hoshi.features.dictionary.DictionarySettings
 import moe.antimony.hoshi.features.dictionary.LookupPopupItem
 import moe.antimony.hoshi.features.dictionary.LookupPopupOptions
 import moe.antimony.hoshi.features.dictionary.LookupPopupStackView
 import moe.antimony.hoshi.features.dictionary.createLookupPopupItem
+import moe.antimony.hoshi.features.sasayaki.BookSasayakiPlaybackRepository
 import moe.antimony.hoshi.features.sasayaki.SasayakiAudioRepository
 import moe.antimony.hoshi.features.sasayaki.SasayakiCueRange
-import moe.antimony.hoshi.features.sasayaki.SasayakiMatch
-import moe.antimony.hoshi.features.sasayaki.SasayakiMatchData
 import moe.antimony.hoshi.features.sasayaki.SasayakiPlayer
 import moe.antimony.hoshi.features.sasayaki.SasayakiScreenAwake
 import moe.antimony.hoshi.features.sasayaki.SasayakiSettings
-import moe.antimony.hoshi.features.sasayaki.SasayakiSettingsStore
 import moe.antimony.hoshi.features.sasayaki.SasayakiSheet
-import moe.antimony.hoshi.webview.disableNativeOverscrollStretch
+import moe.antimony.hoshi.webview.applyHoshiWebViewSecurityDefaults
 import java.io.File
-
-data class ReaderSelectionData(
-    val text: String,
-    val sentence: String,
-    val rect: ReaderSelectionRect,
-    val normalizedOffset: Int?,
-)
-
-data class ReaderSelectionRect(
-    val x: Double,
-    val y: Double,
-    val width: Double,
-    val height: Double,
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -119,46 +110,76 @@ fun ReaderWebView(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var effectiveSettings by remember(readerSettings) { mutableStateOf(readerSettings) }
-    var showAppearance by remember { mutableStateOf(false) }
-    var showChapters by remember { mutableStateOf(false) }
-    var showSasayaki by remember { mutableStateOf(false) }
-    var showReaderMenu by remember { mutableStateOf(false) }
-    var lookupPopups by remember { mutableStateOf<List<LookupPopupItem>>(emptyList()) }
     var webView by remember { mutableStateOf<WebView?>(null) }
-    var readerWebViewViewportSize by remember { mutableStateOf(IntSize.Zero) }
     val context = LocalContext.current
-    val fontManager = remember { ReaderFontManager(context.filesDir) }
-    val dictionarySettingsStore = remember { DictionarySettingsStore(context) }
-    val audioSettingsStore = remember { AudioSettingsStore(context) }
-    val bookStorage = remember { BookStorage(context.filesDir) }
-    val sasayakiSettingsStore = remember { SasayakiSettingsStore(context) }
-    var sasayakiSettings by remember { mutableStateOf(sasayakiSettingsStore.load()) }
-    val sasayakiMatchData = remember(bookRoot) { bookRoot?.let(bookStorage::loadSasayakiMatch) }
+    val appContainer = LocalHoshiAppContainer.current
+    val scope = rememberCoroutineScope()
+    val fontManager = appContainer.readerFontManager
+    val dictionarySettingsRepository = appContainer.dictionarySettingsRepository
+    val audioSettingsRepository = appContainer.audioSettingsRepository
+    val sasayakiSettingsRepository = appContainer.sasayakiSettingsRepository
+    val bookRepository = appContainer.bookRepository
+    var sasayakiSettings by remember { mutableStateOf(SasayakiSettings()) }
+    val sasayakiMatchData by produceState<SasayakiMatchData?>(initialValue = null, key1 = bookRoot, key2 = bookRepository) {
+        value = bookRoot?.let { bookRepository.loadSasayakiMatch(it) }
+    }
+    var sasayakiPlaybackData by remember(bookRoot) { mutableStateOf<SasayakiPlaybackData?>(null) }
+    var isSasayakiPlaybackLoaded by remember(bookRoot) { mutableStateOf(bookRoot == null) }
+    LaunchedEffect(bookRoot, bookRepository) {
+        isSasayakiPlaybackLoaded = bookRoot == null
+        sasayakiPlaybackData = bookRoot?.let { bookRepository.loadSasayakiPlayback(it) }
+        isSasayakiPlaybackLoaded = true
+    }
     val sasayakiAudioRepository = remember(bookRoot) { bookRoot?.let(::SasayakiAudioRepository) }
     val sasayakiCoverFile = remember(bookRoot, book.coverHref) {
         resolveBookCoverFile(bookRoot, book.coverHref)
     }
     var sasayakiPlayer by remember { mutableStateOf<SasayakiPlayer?>(null) }
-    var sasayakiWasPausedByLookup by remember { mutableStateOf(false) }
     val view = LocalView.current
     val systemDarkTheme = isSystemInDarkTheme()
     val clampedInitialIndex = initialChapterIndex.coerceIn(0, book.chapters.lastIndex)
-    var readerPosition by remember(book) {
-        mutableStateOf(
-            ReaderPositionState(
-                ReaderChapterPosition(
-                    index = clampedInitialIndex,
-                    progress = initialProgress.coerceIn(0.0, 1.0),
-                ),
+    val stateHolder = remember(book) {
+        ReaderWebViewStateHolder(
+            initialSettings = readerSettings,
+            initialPosition = ReaderChapterPosition(
+                index = clampedInitialIndex,
+                progress = initialProgress.coerceIn(0.0, 1.0),
             ),
         )
     }
+    LaunchedEffect(readerSettings) {
+        stateHolder.syncSettings(readerSettings)
+    }
+    var dictionarySettings by remember { mutableStateOf(DictionarySettings()) }
+    var audioSettings by remember { mutableStateOf(AudioSettings()) }
+    LaunchedEffect(dictionarySettingsRepository) {
+        dictionarySettingsRepository.settings.collect { settings ->
+            dictionarySettings = settings
+        }
+    }
+    LaunchedEffect(audioSettingsRepository) {
+        audioSettingsRepository.settings.collect { settings ->
+            audioSettings = settings
+        }
+    }
+    LaunchedEffect(sasayakiSettingsRepository) {
+        sasayakiSettingsRepository.settings.collect { settings ->
+            sasayakiSettings = settings
+        }
+    }
+    val effectiveSettings = stateHolder.effectiveSettings
+    val readerPosition = stateHolder.readerPosition
+    val lookupPopups = stateHolder.lookupPopups
+    val showReaderMenu = stateHolder.showReaderMenu
+    val showAppearance = stateHolder.showAppearance
+    val showChapters = stateHolder.showChapters
+    val showSasayaki = stateHolder.showSasayaki
+    val sasayakiWasPausedByLookup = stateHolder.sasayakiWasPausedByLookup
     fun sasayakiCueForSelection(selection: ReaderSelectionData): SasayakiMatch? {
         val player = sasayakiPlayer ?: return null
         val offset = selection.normalizedOffset ?: return null
         if (!sasayakiSettings.enabled || !player.hasAudio) return null
-        return player.findCue(chapterIndex = readerPosition.displayedPosition.index, offset = offset)
+        return player.findCue(chapterIndex = stateHolder.readerPosition.displayedPosition.index, offset = offset)
     }
     fun lookupRootPopup(selection: ReaderSelectionData): Pair<LookupPopupItem, Int>? =
         createLookupPopupItem(
@@ -171,10 +192,10 @@ fun ReaderWebView(
                 swipeToDismiss = effectiveSettings.popupSwipeToDismiss,
                 swipeThreshold = effectiveSettings.popupSwipeThreshold,
                 popupActionBar = effectiveSettings.popupActionBar,
-                dictionarySettings = dictionarySettingsStore.load(),
+                dictionarySettings = dictionarySettings,
                 darkMode = effectiveSettings.usesDarkInterface(systemDarkTheme),
                 eInkMode = effectiveSettings.eInkMode,
-                audioSettings = audioSettingsStore.load(),
+                audioSettings = audioSettings,
             ),
         )?.let { (popup, highlightCount) ->
             popup.copy(sasayakiCue = sasayakiCueForSelection(selection)) to highlightCount
@@ -190,29 +211,26 @@ fun ReaderWebView(
                 swipeToDismiss = effectiveSettings.popupSwipeToDismiss,
                 swipeThreshold = effectiveSettings.popupSwipeThreshold,
                 popupActionBar = effectiveSettings.popupActionBar,
-                dictionarySettings = dictionarySettingsStore.load(),
+                dictionarySettings = dictionarySettings,
                 darkMode = effectiveSettings.usesDarkInterface(systemDarkTheme),
                 eInkMode = effectiveSettings.eInkMode,
-                audioSettings = audioSettingsStore.load(),
+                audioSettings = audioSettings,
             ),
         )?.let { (popup, highlightCount) ->
             popup.copy(sasayakiCue = sasayakiCueForSelection(selection)) to highlightCount
         }
+
     fun clearReaderSelection() {
-        webView?.evaluateJavascript(ReaderSelectionScripts.clearInvocation(), null)
+        webView?.evaluateJavascript(ReaderSelectionCommand.ClearSelection.source, null)
     }
     fun resumeSasayakiAfterLookupIfNeeded() {
         val player = sasayakiPlayer
-        if (sasayakiWasPausedByLookup && player != null && !player.isPlaying) {
+        if (player != null && !player.isPlaying) {
             player.togglePlayback()
         }
-        sasayakiWasPausedByLookup = false
     }
     fun setLookupPopups(nextPopups: List<LookupPopupItem>) {
-        lookupPopups = nextPopups
-        if (nextPopups.isEmpty()) {
-            resumeSasayakiAfterLookupIfNeeded()
-        }
+        stateHolder.setLookupPopups(nextPopups, ::resumeSasayakiAfterLookupIfNeeded)
     }
     fun closeLookupPopupsAndSelection() {
         clearReaderSelection()
@@ -220,31 +238,30 @@ fun ReaderWebView(
     }
     fun updateSasayakiSettings(settings: SasayakiSettings) {
         sasayakiSettings = settings
-        sasayakiSettingsStore.save(settings)
+        scope.launch {
+            sasayakiSettingsRepository.update { settings }
+        }
         sasayakiPlayer?.autoScroll = settings.autoScroll
     }
     fun goToNextChapter(): Boolean {
-        val next = readerPosition.loadPosition.nextOrNull(book.chapters.lastIndex)
+        val next = stateHolder.goToNextChapter(book.chapters.lastIndex)
         if (next != null) {
-            readerPosition = readerPosition.jumpTo(next)
             onSaveBookmark(next.index, next.progress)
             return true
         }
         return false
     }
     fun goToPreviousChapter(): Boolean {
-        val previous = readerPosition.loadPosition.previousOrNull()
+        val previous = stateHolder.goToPreviousChapter()
         if (previous != null) {
-            readerPosition = readerPosition.jumpTo(previous)
             onSaveBookmark(previous.index, previous.progress)
             return true
         }
         return false
     }
     fun saveDisplayedProgress(progress: Double) {
-        val updatedPosition = readerPosition.recordPageProgress(progress)
-        readerPosition = updatedPosition
-        onSaveBookmark(updatedPosition.displayedPosition.index, updatedPosition.displayedPosition.progress)
+        val savedPosition = stateHolder.recordDisplayedProgress(progress)
+        onSaveBookmark(savedPosition.index, savedPosition.progress)
     }
     fun navigateReaderPage(direction: ReaderNavigationDirection): Boolean {
         val currentWebView = webView ?: return false
@@ -258,11 +275,13 @@ fun ReaderWebView(
     }
     fun pauseSasayakiForLookupIfNeeded() {
         val player = sasayakiPlayer
-        if (sasayakiSettings.enabled && sasayakiSettings.autoPause && player?.isPlaying == true) {
-            player.pausePlayback()
-            sasayakiWasPausedByLookup = true
-        } else if (!sasayakiSettings.autoPause) {
-            sasayakiWasPausedByLookup = false
+        if (stateHolder.shouldPauseSasayakiForLookup(
+                enabled = sasayakiSettings.enabled,
+                autoPause = sasayakiSettings.autoPause,
+                isPlaying = player?.isPlaying == true,
+            )
+        ) {
+            player?.pausePlayback()
         }
     }
     val handleTextSelected: (ReaderSelectionData) -> Int? = { selection ->
@@ -284,25 +303,26 @@ fun ReaderWebView(
             totalCharacters = book.bookInfo.characterCount,
         )
     }
-    LaunchedEffect(bookRoot, sasayakiMatchData) {
+    LaunchedEffect(bookRoot, sasayakiMatchData, isSasayakiPlaybackLoaded, sasayakiPlaybackData) {
         sasayakiPlayer?.release()
-        sasayakiPlayer = if (bookRoot != null && sasayakiMatchData != null) {
+        sasayakiPlayer = if (bookRoot != null && sasayakiMatchData != null && isSasayakiPlaybackLoaded) {
             SasayakiPlayer(
                 context = context,
                 bookRoot = bookRoot,
-                bookStorage = bookStorage,
+                playbackRepository = BookSasayakiPlaybackRepository(bookRoot, bookRepository),
                 bookTitle = book.title,
                 bookCoverFile = sasayakiCoverFile,
                 matchData = sasayakiMatchData,
-                getCurrentChapterIndex = { readerPosition.displayedPosition.index },
+                initialPlayback = sasayakiPlaybackData,
+                persistenceScope = scope,
+                getCurrentChapterIndex = { stateHolder.readerPosition.displayedPosition.index },
                 onCue = { cue, reveal ->
                     webView?.evaluateJavascript(
                         ReaderPaginationScripts.highlightSasayakiCueInvocation(cue.id, reveal),
                     ) { progressResult ->
                         ReaderPaginationScripts.doubleResult(progressResult)?.let { progress ->
-                            val updatedPosition = readerPosition.recordPageProgress(progress)
-                            readerPosition = updatedPosition
-                            onSaveBookmark(updatedPosition.displayedPosition.index, updatedPosition.displayedPosition.progress)
+                            val savedPosition = stateHolder.recordDisplayedProgress(progress)
+                            onSaveBookmark(savedPosition.index, savedPosition.progress)
                         }
                     }
                 },
@@ -311,8 +331,8 @@ fun ReaderWebView(
                 },
                 onLoadChapter = { chapterIndex ->
                     val target = ReaderChapterPosition(index = chapterIndex, progress = 0.0)
-                    readerPosition = readerPosition.jumpTo(target)
-                    onSaveBookmark(target.index, target.progress)
+                    val savedPosition = stateHolder.jumpTo(target)
+                    onSaveBookmark(savedPosition.index, savedPosition.progress)
                 },
             )
         } else {
@@ -321,9 +341,6 @@ fun ReaderWebView(
     }
     DisposableEffect(Unit) {
         onDispose { sasayakiPlayer?.release() }
-    }
-    LaunchedEffect(showReaderMenu, showSasayaki) {
-        sasayakiSettings = sasayakiSettingsStore.load()
     }
     sasayakiPlayer?.autoScroll = sasayakiSettings.autoScroll
     val currentReaderKeyHandler = rememberUpdatedState<(KeyEvent) -> Boolean> { event ->
@@ -390,15 +407,8 @@ fun ReaderWebView(
                 book = book,
                 chapterPosition = readerPosition.loadPosition,
                 chapterFragment = readerPosition.loadFragment,
-                webViewViewportSize = readerWebViewViewportSize,
-                onReaderViewportSizeChanged = { size ->
-                    if (size != readerWebViewViewportSize) {
-                        if (readerWebViewViewportSize != IntSize.Zero) {
-                            readerPosition = readerPosition.prepareReloadAtDisplayedPosition()
-                        }
-                        readerWebViewViewportSize = size
-                    }
-                },
+                webViewViewportSize = stateHolder.webViewViewportSize,
+                onReaderViewportSizeChanged = stateHolder::updateViewportSize,
                 onWebViewReady = { webView = it },
                 onNextChapter = {
                     goToNextChapter()
@@ -411,8 +421,8 @@ fun ReaderWebView(
                 },
                 onInternalLink = { target ->
                     closeLookupPopupsAndSelection()
-                    readerPosition = readerPosition.jumpTo(target.position, target.fragment)
-                    onSaveBookmark(target.position.index, target.position.progress)
+                    val savedPosition = stateHolder.jumpTo(target.position, target.fragment)
+                    onSaveBookmark(savedPosition.index, savedPosition.progress)
                 },
                 readerSettings = effectiveSettings,
                 sasayakiCuesJson = sasayakiMatchData?.cuesJsonForChapter(readerPosition.loadPosition.index),
@@ -433,7 +443,7 @@ fun ReaderWebView(
                 sasayakiIsPlaying = sasayakiPlayer?.isPlaying == true,
                 onSasayakiReplayCue = { cue -> sasayakiPlayer?.playCue(cue, stop = true) },
                 onSasayakiTogglePlayback = { sasayakiPlayer?.togglePlayback() },
-                onSasayakiPauseStateCleared = { sasayakiWasPausedByLookup = false },
+                onSasayakiPauseStateCleared = stateHolder::clearSasayakiPauseState,
                 onSasayakiPlayForward = { cue ->
                     sasayakiPlayer?.playCue(cue, stop = false)
                     setLookupPopups(emptyList())
@@ -465,22 +475,13 @@ fun ReaderWebView(
             settings = effectiveSettings,
             colors = readerChromeColors(effectiveSettings, systemDarkTheme),
             onClose = onClose,
-            onMenu = { showReaderMenu = true },
+            onMenu = stateHolder::showReaderMenu,
             menuExpanded = showReaderMenu,
-            onDismissMenu = { showReaderMenu = false },
-            onChapters = {
-                showReaderMenu = false
-                showChapters = true
-            },
-            onAppearance = {
-                showReaderMenu = false
-                showAppearance = true
-            },
+            onDismissMenu = stateHolder::dismissReaderMenu,
+            onChapters = stateHolder::openChaptersFromMenu,
+            onAppearance = stateHolder::openAppearanceFromMenu,
             onSasayaki = if (sasayakiSettings.enabled && sasayakiMatchData != null) {
-                {
-                    showReaderMenu = false
-                    showSasayaki = true
-                }
+                stateHolder::openSasayakiFromMenu
             } else {
                 null
             },
@@ -489,7 +490,7 @@ fun ReaderWebView(
                 ?.let { player ->
                     ({
                         if (sasayakiWasPausedByLookup) {
-                            sasayakiWasPausedByLookup = false
+                            stateHolder.clearSasayakiPauseState()
                         } else {
                             player.togglePlayback()
                         }
@@ -504,12 +505,11 @@ fun ReaderWebView(
         ReaderAppearanceSheet(
             settings = effectiveSettings,
             onSettingsChange = {
-                readerPosition = readerPosition.prepareReloadAtDisplayedPosition()
-                effectiveSettings = it
+                stateHolder.applySettings(it)
                 onReaderSettingsChange(it)
             },
             fontManager = fontManager,
-            onDismiss = { showAppearance = false },
+            onDismiss = stateHolder::dismissAppearance,
         )
     }
     if (showChapters) {
@@ -518,11 +518,11 @@ fun ReaderWebView(
             currentPosition = readerPosition.displayedPosition,
             onJump = { target ->
                 closeLookupPopupsAndSelection()
-                readerPosition = readerPosition.jumpTo(target)
-                onSaveBookmark(target.index, target.progress)
-                showChapters = false
+                val savedPosition = stateHolder.jumpTo(target)
+                onSaveBookmark(savedPosition.index, savedPosition.progress)
+                stateHolder.dismissChapters()
             },
-            onDismiss = { showChapters = false },
+            onDismiss = stateHolder::dismissChapters,
         )
     }
     if (showSasayaki && sasayakiPlayer != null && sasayakiAudioRepository != null) {
@@ -531,7 +531,7 @@ fun ReaderWebView(
             audioRepository = sasayakiAudioRepository,
             settings = sasayakiSettings,
             onSettingsChange = ::updateSasayakiSettings,
-            onDismiss = { showSasayaki = false },
+            onDismiss = stateHolder::dismissSasayaki,
         )
     }
 }
@@ -845,13 +845,9 @@ private fun ChapterWebView(
             .background(Color(readerSettings.backgroundColor(systemDark))),
         factory = { context ->
             WebView(context).apply {
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = false
-                settings.allowFileAccess = false
-                settings.allowContentAccess = false
+                applyHoshiWebViewSecurityDefaults()
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
-                disableNativeOverscrollStretch()
                 alpha = 0f
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 addJavascriptInterface(
@@ -873,13 +869,13 @@ private fun ChapterWebView(
                     override fun onTap(x: Float, y: Float) {
                         val density = resources.displayMetrics.density
                         evaluateJavascript(
-                            ReaderSelectionScripts.selectInvocation(
+                            ReaderSelectionCommand.SelectText(
                                 x = androidPixelsToCssPixels(x, density),
                                 y = androidPixelsToCssPixels(y, density),
                                 maxLength = MAX_SELECTION_LENGTH,
-                            ),
+                            ).source,
                         ) { result ->
-                            if (ReaderSelectionScripts.didSelectNothing(result)) {
+                            if (ReaderSelectionResult.fromWebViewResult(result).selectedNothing) {
                                 onClearLookupPopup()
                             }
                         }
@@ -918,6 +914,8 @@ private class EpubWebViewClient(
     private val onInternalLink: (ReaderInternalLinkTarget) -> Unit,
     private val onReaderPageFinished: (WebView) -> Unit,
 ) : WebViewClient() {
+    private val resourceBridge = ReaderWebResourceBridge(book, fontManager)
+
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
         val target = book.resolveInternalReaderLink(request.url?.toString().orEmpty()) ?: return false
         onInternalLink(target)
@@ -932,18 +930,8 @@ private class EpubWebViewClient(
     }
 
     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-        val uri = request.url ?: return null
-        if (uri.host != "hoshi.local") return null
-        if (uri.path.orEmpty().startsWith("/fonts/")) {
-            val fileName = Uri.decode(uri.path.orEmpty().removePrefix("/fonts/"))
-            val fontFile = fontManager.fontFileForRequest(fileName) ?: return null
-            return WebResourceResponse(fontFile.mediaType(), null, fontFile.inputStream())
-        }
-        val path = uri.path.orEmpty().removePrefix("/epub/")
-        val mediaType = book.mediaType(path)
-        val data = book.readResource(path)?.let { sanitizeReaderResource(mediaType, it) } ?: return null
-        val encoding = if (mediaType.substringBefore(';').trim().equals("text/css", ignoreCase = true)) "UTF-8" else null
-        return WebResourceResponse(mediaType, encoding, data.inputStream())
+        val url = request.url?.toString() ?: return null
+        return resourceBridge.resourceForUrl(url)?.toWebResourceResponse()
     }
 
     override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
@@ -1006,7 +994,7 @@ private fun String.javaScriptStringLiteral(): String =
         append('"')
     }
 
-private fun File.mediaType(): String = when (extension.lowercase()) {
+internal fun File.mediaType(): String = when (extension.lowercase()) {
     "ttf" -> "font/ttf"
     "otf" -> "font/otf"
     "woff" -> "font/woff"
@@ -1030,33 +1018,6 @@ private fun WebView.navigatePage(
     }
 }
 
-private class ReaderSelectionBridge(
-    private val webView: WebView,
-    private val onTextSelected: (ReaderSelectionData) -> Int?,
-) {
-    private val json = Json { ignoreUnknownKeys = true }
-
-    @JavascriptInterface
-    fun postMessage(message: String) {
-        val payload = runCatching { json.decodeFromString<ReaderSelectionPayload>(message) }.getOrNull() ?: return
-        val data = ReaderSelectionData(
-            text = payload.text,
-            sentence = payload.sentence,
-            rect = ReaderSelectionRect(
-                x = payload.rect.x,
-                y = payload.rect.y,
-                width = payload.rect.width,
-                height = payload.rect.height,
-            ),
-            normalizedOffset = payload.normalizedOffset,
-        )
-        webView.post {
-            val highlightCount = onTextSelected(data) ?: return@post
-            webView.evaluateJavascript(ReaderSelectionScripts.highlightInvocation(highlightCount), null)
-        }
-    }
-}
-
 private class ReaderRestoreBridge(
     private val webView: WebView,
     private val onRestoreCompleted: (WebView) -> Unit,
@@ -1069,22 +1030,6 @@ private class ReaderRestoreBridge(
         }
     }
 }
-
-@Serializable
-private data class ReaderSelectionPayload(
-    val text: String,
-    val sentence: String,
-    val rect: ReaderSelectionPayloadRect,
-    val normalizedOffset: Int? = null,
-)
-
-@Serializable
-private data class ReaderSelectionPayloadRect(
-    val x: Double,
-    val y: Double,
-    val width: Double,
-    val height: Double,
-)
 
 private const val MAX_SELECTION_LENGTH = 16
 private val ReaderWebViewTopPadding = 44.dp

@@ -1,5 +1,7 @@
 package moe.antimony.hoshi.features.dictionary
 
+import moe.antimony.hoshi.epub.SasayakiMatch
+
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
@@ -8,7 +10,6 @@ import androidx.compose.ui.zIndex
 import moe.antimony.hoshi.dictionary.LookupEngine
 import moe.antimony.hoshi.features.audio.AudioSettings
 import moe.antimony.hoshi.features.reader.ReaderSelectionData
-import moe.antimony.hoshi.features.sasayaki.SasayakiMatch
 import java.util.UUID
 
 internal data class LookupPopupOptions(
@@ -38,11 +39,12 @@ internal fun createLookupPopupItem(
     selection: ReaderSelectionData,
     options: LookupPopupOptions,
     dictionaryStyles: Map<String, String>? = null,
+    lookup: (String, Int, Int) -> List<de.manhhao.hoshi.LookupResult> = LookupEngine::lookup,
 ): Pair<LookupPopupItem, Int>? {
     val settings = options.dictionarySettings.normalized()
     val styles = dictionaryStyles ?: currentDictionaryStyles()
     val results = runCatching {
-        LookupEngine.lookup(selection.text, settings.maxResults, settings.scanLength)
+        lookup(selection.text, settings.maxResults, settings.scanLength)
     }.getOrDefault(emptyList())
     val first = results.firstOrNull() ?: return null
     return LookupPopupItem(

@@ -1,5 +1,7 @@
 package moe.antimony.hoshi.features.sasayaki
 
+import moe.antimony.hoshi.epub.SasayakiMatchData
+
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -28,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -45,8 +48,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import moe.antimony.hoshi.epub.BookEntry
-import moe.antimony.hoshi.epub.BookStorage
 import moe.antimony.hoshi.epub.EpubBookParser
+import moe.antimony.hoshi.epub.SasayakiSidecarRepository
 import moe.antimony.hoshi.importing.FileImportContent
 import moe.antimony.hoshi.importing.ImportFileType
 import moe.antimony.hoshi.importing.importDisplayName
@@ -57,7 +60,7 @@ import kotlin.math.roundToInt
 @Composable
 fun SasayakiMatchView(
     bookEntry: BookEntry,
-    bookStorage: BookStorage,
+    bookRepository: SasayakiSidecarRepository,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -68,8 +71,9 @@ fun SasayakiMatchView(
     var searchWindow by remember { mutableFloatStateOf(200f) }
     var isMatching by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var currentMatch by remember(bookEntry.root) {
-        mutableStateOf(bookStorage.loadSasayakiMatch(bookEntry.root))
+    var currentMatch by remember(bookEntry.root) { mutableStateOf<SasayakiMatchData?>(null) }
+    LaunchedEffect(bookEntry.root, bookRepository) {
+        currentMatch = bookRepository.loadSasayakiMatch(bookEntry.root)
     }
     val importer = rememberLauncherForActivityResult(FileImportContent()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -101,7 +105,7 @@ fun SasayakiMatchView(
                         cues = SasayakiParser.parseCues(srtBytes),
                         searchWindow = searchWindow.roundToInt(),
                     )
-                    bookStorage.saveSasayakiMatch(bookEntry.root, nextMatch)
+                    bookRepository.saveSasayakiMatch(bookEntry.root, nextMatch)
                     nextMatch
                 }
             }.onSuccess { nextMatch ->

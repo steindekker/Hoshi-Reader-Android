@@ -1,9 +1,10 @@
 package moe.antimony.hoshi.features.bookshelf
 
+import kotlinx.coroutines.runBlocking
 import moe.antimony.hoshi.epub.BookMetadata
 import moe.antimony.hoshi.epub.BookEntry
 import moe.antimony.hoshi.epub.BookInfo
-import moe.antimony.hoshi.epub.BookStorage
+import moe.antimony.hoshi.epub.BookRepository
 import moe.antimony.hoshi.epub.Bookmark
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -97,21 +98,24 @@ class MainShellUiTest {
     @Test
     fun bookshelfGridDisablesOverscrollAndKeepsDividerOnContentBoundary() {
         val source = File("src/main/java/moe/antimony/hoshi/features/bookshelf/BookshelfView.kt").readText()
+        val repository = File("src/main/java/moe/antimony/hoshi/features/bookshelf/BookshelfRepository.kt").readText()
 
         assertTrue(source.contains("CompositionLocalProvider(LocalOverscrollFactory provides null)"))
         assertTrue(source.contains(".padding(bottom = innerPadding.calculateBottomPadding())"))
         assertTrue(source.contains("contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)"))
         assertTrue(source.contains("BookCoverBitmapCache.load(coverFile)"))
-        assertTrue(source.contains("loadBookProgressById(entries, bookStorage)"))
+        assertTrue(repository.contains("loadBookProgressById(entries, bookRepository)"))
     }
 
     @Test
     fun sasayakiMatchMenuOpensAdjustableMatchScreen() {
         val source = File("src/main/java/moe/antimony/hoshi/features/bookshelf/BookshelfView.kt").readText()
+        val appShell = File("src/main/java/moe/antimony/hoshi/navigation/AppShell.kt").readText()
 
-        assertTrue(source.contains("var sasayakiMatchEntry by remember { mutableStateOf<BookEntry?>(null) }"))
-        assertTrue(source.contains("SasayakiMatchView("))
-        assertTrue(source.contains("sasayakiMatchEntry = entry"))
+        assertTrue(source.contains("onOpenSasayakiMatch(SasayakiMatchRequest(entry.metadata.id, entry))"))
+        assertTrue(appShell.contains("sasayakiMatchRequestStore.put(request)"))
+        assertTrue(appShell.contains("backStack.openSasayakiMatchRoute(request.bookId)"))
+        assertTrue(appShell.contains("SasayakiMatchView("))
         assertFalse(source.contains("SasayakiMatcher.match("))
         assertFalse(source.contains("searchWindow = 200"))
         assertFalse(source.contains("sasayakiMatcher.launch"))
@@ -125,13 +129,13 @@ class MainShellUiTest {
     }
 
     @Test
-    fun bookProgressIsLoadedOnceForShelfEntries() {
+    fun bookProgressIsLoadedOnceForShelfEntries() = runBlocking {
         val filesDir = Files.createTempDirectory("hoshi-bookshelf-progress").toFile()
         try {
-            val storage = BookStorage(filesDir)
+            val repository = BookRepository(filesDir)
             val root = File(filesDir, "Books/book-a").also { it.mkdirs() }
-            storage.saveBookInfo(root, BookInfo(characterCount = 200, chapterInfo = emptyMap()))
-            storage.saveBookmark(
+            repository.saveBookInfo(root, BookInfo(characterCount = 200, chapterInfo = emptyMap()))
+            repository.saveBookmark(
                 root,
                 Bookmark(
                     chapterIndex = 0,
@@ -150,7 +154,7 @@ class MainShellUiTest {
                 ),
             )
 
-            assertEquals(0.25, loadBookProgressById(listOf(entry), storage).getValue("a"), 0.0001)
+            assertEquals(0.25, loadBookProgressById(listOf(entry), repository).getValue("a"), 0.0001)
         } finally {
             filesDir.deleteRecursively()
         }

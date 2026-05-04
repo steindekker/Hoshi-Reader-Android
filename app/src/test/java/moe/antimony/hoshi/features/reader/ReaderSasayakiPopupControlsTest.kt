@@ -1,5 +1,6 @@
 package moe.antimony.hoshi.features.reader
 
+
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -14,7 +15,7 @@ class ReaderSasayakiPopupControlsTest {
         assertTrue(stackSource.contains("val sasayakiCue: SasayakiMatch? = null"))
         assertTrue(readerSource.contains("sasayakiCueForSelection(selection)"))
         assertTrue(readerSource.contains("sasayakiCue = sasayakiCueForSelection(selection)"))
-        assertTrue(readerSource.contains("player.findCue(chapterIndex = readerPosition.displayedPosition.index, offset = offset)"))
+        assertTrue(readerSource.contains("player.findCue(chapterIndex = stateHolder.readerPosition.displayedPosition.index, offset = offset)"))
         assertTrue(popupSource.contains("SasayakiPopupControls("))
     }
 

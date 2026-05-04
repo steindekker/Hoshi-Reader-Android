@@ -1,12 +1,11 @@
 package moe.antimony.hoshi.epub
 
+
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import moe.antimony.hoshi.features.sasayaki.SasayakiMatch
-import moe.antimony.hoshi.features.sasayaki.SasayakiMatchData
-import moe.antimony.hoshi.features.sasayaki.SasayakiPlaybackData
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
@@ -14,7 +13,7 @@ import java.nio.file.Files
 
 class BookMetadataStorageTest {
     @Test
-    fun saveMetadataWritesIosCompatibleMetadataJson() {
+    fun saveMetadataWritesIosCompatibleMetadataJson() = runBlocking {
         val storage = BookStorage(Files.createTempDirectory("hoshi-metadata").toFile())
         val bookRoot = storage.createBookDirectory("book-a")
         val metadata = BookMetadata(
@@ -36,7 +35,7 @@ class BookMetadataStorageTest {
     }
 
     @Test
-    fun loadBookEntriesReturnsMetadataBackedBooksSortedByLastAccessDescending() {
+    fun loadBookEntriesReturnsMetadataBackedBooksSortedByLastAccessDescending() = runBlocking {
         val storage = BookStorage(Files.createTempDirectory("hoshi-metadata-list").toFile())
         val olderRoot = storage.createBookDirectory("older")
         val newerRoot = storage.createBookDirectory("newer")
@@ -56,7 +55,7 @@ class BookMetadataStorageTest {
     }
 
     @Test
-    fun loadBookEntriesCanSortByTitleLikeIos() {
+    fun loadBookEntriesCanSortByTitleLikeIos() = runBlocking {
         val storage = BookStorage(Files.createTempDirectory("hoshi-metadata-title").toFile())
         val zRoot = storage.createBookDirectory("z")
         val aRoot = storage.createBookDirectory("a")
@@ -75,7 +74,33 @@ class BookMetadataStorageTest {
     }
 
     @Test
-    fun deleteBookRemovesBookDirectory() {
+    fun loadBookEntryFindsBooksByStableMetadataId() = runBlocking {
+        val storage = BookStorage(Files.createTempDirectory("hoshi-metadata-id").toFile())
+        val root = storage.createBookDirectory("folder-a")
+        storage.saveMetadata(
+            root,
+            BookMetadata(id = "stable-id", title = "Stable", cover = null, folder = "folder-a", lastAccess = 20.0),
+        )
+
+        val entry = storage.loadBookEntry("stable-id")
+
+        assertEquals(root.canonicalFile, entry?.root?.canonicalFile)
+        assertEquals("stable-id", entry?.metadata?.id)
+    }
+
+    @Test
+    fun loadBookEntryFallsBackToFolderIdWhenMetadataIsMissing() = runBlocking {
+        val storage = BookStorage(Files.createTempDirectory("hoshi-metadata-fallback-id").toFile())
+        val root = storage.createBookDirectory("folder-only")
+
+        val entry = storage.loadBookEntry("folder-only")
+
+        assertEquals(root.canonicalFile, entry?.root?.canonicalFile)
+        assertEquals("folder-only", entry?.metadata?.id)
+    }
+
+    @Test
+    fun deleteBookRemovesBookDirectory() = runBlocking {
         val storage = BookStorage(Files.createTempDirectory("hoshi-metadata-delete").toFile())
         val root = storage.createBookDirectory("delete-me")
         root.resolve("metadata.json").writeText("{}")
@@ -87,7 +112,7 @@ class BookMetadataStorageTest {
     }
 
     @Test
-    fun importedBookDirectoryNameMatchesIosSanitizedTitleAndDeduplicates() {
+    fun importedBookDirectoryNameMatchesIosSanitizedTitleAndDeduplicates() = runBlocking {
         val storage = BookStorage(Files.createTempDirectory("hoshi-metadata-dedupe").toFile())
 
         val first = storage.createBookDirectoryForImportedTitle("屍人荘/の:殺人")
@@ -99,7 +124,7 @@ class BookMetadataStorageTest {
     }
 
     @Test
-    fun savesAndLoadsIosCompatibleSasayakiSidecars() {
+    fun savesAndLoadsIosCompatibleSasayakiSidecars() = runBlocking {
         val storage = BookStorage(Files.createTempDirectory("hoshi-sasayaki-sidecars").toFile())
         val root = storage.createBookDirectory("book")
         val match = SasayakiMatchData(
@@ -112,6 +137,12 @@ class BookMetadataStorageTest {
             rate = 1.1f,
             audioUri = "content://audio/test.m4b",
         )
+        val copiedPlayback = SasayakiPlaybackData(
+            lastPosition = 42.0,
+            delay = 0.2,
+            rate = 0.95f,
+            audioFileName = "sasayaki_audio.m4b",
+        )
 
         storage.saveSasayakiMatch(root, match)
         storage.saveSasayakiPlayback(root, playback)
@@ -120,5 +151,57 @@ class BookMetadataStorageTest {
         assertEquals(playback, storage.loadSasayakiPlayback(root))
         assertEquals(true, root.resolve("sasayaki_match.json").isFile)
         assertEquals(true, root.resolve("sasayaki_playback.json").isFile)
+
+        storage.saveSasayakiPlayback(root, copiedPlayback)
+
+        assertEquals(copiedPlayback, storage.loadSasayakiPlayback(root))
+    }
+
+    @Test
+    fun loadsExistingIosSasayakiSidecarJsonWithoutMigration() = runBlocking {
+        val storage = BookStorage(Files.createTempDirectory("hoshi-ios-sasayaki-sidecars").toFile())
+        val root = storage.createBookDirectory("book")
+        root.resolve("sasayaki_match.json").writeText(
+            """
+            {
+                "matches": [
+                    {
+                        "id": "0",
+                        "startTime": 1.0,
+                        "endTime": 2.0,
+                        "text": "本文",
+                        "chapterIndex": 3,
+                        "start": 10,
+                        "length": 2
+                    }
+                ],
+                "unmatched": 4
+            }
+            """.trimIndent(),
+        )
+        root.resolve("sasayaki_playback.json").writeText(
+            """
+            {
+                "lastPosition": 12.5,
+                "audioBookmark": "AAEC"
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            SasayakiMatchData(
+                matches = listOf(SasayakiMatch("0", 1.0, 2.0, "本文", chapterIndex = 3, start = 10, length = 2)),
+                unmatched = 4,
+            ),
+            storage.loadSasayakiMatch(root),
+        )
+        assertEquals(
+            SasayakiPlaybackData(
+                lastPosition = 12.5,
+                delay = 0.0,
+                rate = 1f,
+            ),
+            storage.loadSasayakiPlayback(root),
+        )
     }
 }

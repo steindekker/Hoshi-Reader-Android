@@ -46,6 +46,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import moe.antimony.hoshi.LocalHoshiAppContainer
 import moe.antimony.hoshi.features.settings.SettingsDetailScaffold
 import moe.antimony.hoshi.features.sasayaki.SasayakiSettingsView
 import moe.antimony.hoshi.importing.FileImportContent
@@ -130,10 +132,11 @@ fun AudioSettingsView(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val appContainer = LocalHoshiAppContainer.current
     val scope = rememberCoroutineScope()
-    val store = remember { AudioSettingsStore(context) }
-    var settings by remember { mutableStateOf(store.load()) }
-    val repository = remember { LocalAudioRepository.fromContext(context) }
+    val audioSettingsRepository = appContainer.audioSettingsRepository
+    var settings by remember { mutableStateOf(AudioSettings()) }
+    val repository = appContainer.localAudioRepository
     var nameInput by remember { mutableStateOf("") }
     var urlInput by remember { mutableStateOf("") }
     var importedSize by remember { mutableStateOf(repository.databaseSizeBytes()) }
@@ -142,9 +145,17 @@ fun AudioSettingsView(
     var isImporting by remember { mutableStateOf(false) }
     val hasImportedDatabase = importedSize != null
 
+    LaunchedEffect(audioSettingsRepository) {
+        audioSettingsRepository.settings.collect { latest ->
+            settings = latest
+        }
+    }
+
     fun save(next: AudioSettings) {
         settings = next
-        store.save(next)
+        scope.launch {
+            audioSettingsRepository.update { next }
+        }
     }
 
     fun moveSource(from: Int, to: Int) {
