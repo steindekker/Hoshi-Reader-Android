@@ -5,6 +5,8 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+## [v0.3.1] - 2026-05-06
+
 ### Changed
 
 - Raise the reader Appearance maximum font size to 60 for larger text. #46
