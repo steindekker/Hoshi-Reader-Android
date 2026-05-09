@@ -138,6 +138,17 @@ fun AnkiView(
                     )
                     AnkiDivider()
                     AnkiSwitchRow(
+                        label = "Check for duplicates across all models",
+                        checked = uiState.settings.checkDuplicatesAcrossAllModels,
+                        onCheckedChange = viewModel::updateCheckDuplicatesAcrossAllModels,
+                    )
+                    AnkiDivider()
+                    AnkiDuplicateScopeRow(
+                        scope = uiState.settings.duplicateScope,
+                        onSelect = viewModel::updateDuplicateScope,
+                    )
+                    AnkiDivider()
+                    AnkiSwitchRow(
                         label = "Compact Glossaries",
                         checked = uiState.settings.compactGlossaries,
                         onCheckedChange = viewModel::updateCompactGlossaries,
@@ -207,6 +218,28 @@ private fun AnkiNoteTypeRow(
         onSelect = onSelect,
     )
 }
+
+@Composable
+private fun AnkiDuplicateScopeRow(
+    scope: AnkiDuplicateScope,
+    onSelect: (AnkiDuplicateScope) -> Unit,
+) {
+    AnkiDropdownRow(
+        label = "Duplicate Check Scope",
+        value = scope.displayName,
+        enabled = true,
+        items = AnkiDuplicateScope.entries,
+        itemLabel = { it.displayName },
+        onSelect = onSelect,
+    )
+}
+
+private val AnkiDuplicateScope.displayName: String
+    get() = when (this) {
+        AnkiDuplicateScope.Collection -> "Collection"
+        AnkiDuplicateScope.Deck -> "Deck"
+        AnkiDuplicateScope.DeckRoot -> "Deck Root"
+    }
 
 @Composable
 private fun <T> AnkiDropdownRow(

@@ -1,8 +1,10 @@
 package moe.antimony.hoshi.features.anki
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.serialization.json.Json
 
 class AnkiUiStateTest {
     @Test
@@ -29,5 +31,14 @@ class AnkiUiStateTest {
         assertEquals(lapis, state.selectedNoteType)
         assertEquals(listOf(lapis), state.availableNoteTypes)
         assertTrue(state.isConfigured)
+    }
+
+    @Test
+    fun oldPersistedAnkiSettingsDefaultToCollectionScopeAndSelectedModelOnly() {
+        val settings = Json { ignoreUnknownKeys = true }
+            .decodeFromString<AnkiSettings>("""{"allowDupes":false,"compactGlossaries":true}""")
+
+        assertEquals(AnkiDuplicateScope.Collection, settings.duplicateScope)
+        assertFalse(settings.checkDuplicatesAcrossAllModels)
     }
 }

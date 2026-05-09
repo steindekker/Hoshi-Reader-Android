@@ -68,7 +68,7 @@ Hoshi Reader Android 基于以下生态：
 - [hoshidicts](https://github.com/Manhhao/hoshidicts) 及 [hoshidicts-kotlin-bridge](https://github.com/Manhhao/hoshidicts-kotlin-bridge)：Yomitan 辞典支持。
 - [Yomitan](https://github.com/yomidevs/yomitan)：辞典格式和查词体验参考。
 - [AnkiDroid](https://github.com/ankidroid/Anki-Android)：Android 挖卡集成。
-- [Ankiconnect Android](https://github.com/KamWithK/AnkiconnectAndroid)：本地音频行为参考。
+- [Ankiconnect Android](https://github.com/KamWithK/AnkiconnectAndroid)：本地音频行为和 AnkiDroid 重复范围 / checksum 查询参考。
 - [ッツ Ebook Reader](https://github.com/ttu-ttu/ebook-reader)：阅读器和统计体验灵感来源。
 
 ## 许可证

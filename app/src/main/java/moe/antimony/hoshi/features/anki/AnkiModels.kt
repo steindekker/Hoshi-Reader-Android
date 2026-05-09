@@ -21,6 +21,13 @@ data class AnkiNoteType(
 )
 
 @Serializable
+enum class AnkiDuplicateScope {
+    Collection,
+    Deck,
+    DeckRoot,
+}
+
+@Serializable
 data class AnkiSettings(
     val selectedDeckId: Long? = null,
     val selectedDeckName: String? = null,
@@ -31,6 +38,8 @@ data class AnkiSettings(
     val fieldMappings: Map<String, String> = emptyMap(),
     val tags: String = "",
     val allowDupes: Boolean = false,
+    val checkDuplicatesAcrossAllModels: Boolean = false,
+    val duplicateScope: AnkiDuplicateScope = AnkiDuplicateScope.Collection,
     val compactGlossaries: Boolean = false,
     val embedMedia: Boolean = true,
 )

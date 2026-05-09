@@ -30,10 +30,16 @@ class AnkiBackendAdapterTest {
             ),
             tags = setOf("hoshi", "reader"),
             allowDupes = false,
+            duplicateScope = AnkiDuplicateScope.Collection,
+            checkDuplicatesAcrossAllModels = false,
         )
 
         assertFalse(added)
         assertNull(api.addedFields)
+        assertEquals(7L, api.lastDuplicateModelId)
+        assertEquals(3L, api.lastDuplicateDeckId)
+        assertEquals(AnkiDuplicateScope.Collection, api.lastDuplicateScope)
+        assertFalse(api.lastDuplicateCheckAllModels)
     }
 
     @Test
@@ -58,11 +64,14 @@ class AnkiBackendAdapterTest {
             ),
             tags = setOf("hoshi", "reader"),
             allowDupes = true,
+            duplicateScope = AnkiDuplicateScope.Deck,
+            checkDuplicatesAcrossAllModels = true,
         )
 
         assertTrue(added)
         assertArrayEquals(arrayOf("食べる", "パンを<b>食べる</b>。", "1139"), api.addedFields)
         assertEquals(setOf("hoshi", "reader"), api.addedTags)
+        assertNull(api.lastDuplicateModelId)
     }
 
     @Test
@@ -83,8 +92,63 @@ class AnkiBackendAdapterTest {
             ),
             backend.fetchNoteTypes(),
         )
-        assertTrue(backend.isDuplicate(7L, "読む"))
-        assertFalse(backend.isDuplicate(7L, "書く"))
+        assertTrue(
+            backend.isDuplicate(
+                deck = AnkiDeck(2L, "Mining"),
+                noteType = AnkiNoteType(7L, "Lapis", listOf("Expression", "Sentence")),
+                key = "読む",
+                duplicateScope = AnkiDuplicateScope.Collection,
+                checkDuplicatesAcrossAllModels = false,
+            ),
+        )
+        assertFalse(
+            backend.isDuplicate(
+                deck = AnkiDeck(2L, "Mining"),
+                noteType = AnkiNoteType(7L, "Lapis", listOf("Expression", "Sentence")),
+                key = "書く",
+                duplicateScope = AnkiDuplicateScope.Collection,
+                checkDuplicatesAcrossAllModels = false,
+            ),
+        )
+    }
+
+    @Test
+    fun adapterPassesDeckScopeAndAllModelsToDuplicateCheck() {
+        val api = FakeAnkiContentApi(duplicateKeys = setOf("読む"))
+        val backend = AnkiDroidBackendAdapter(api)
+
+        assertTrue(
+            backend.isDuplicate(
+                deck = AnkiDeck(2L, "Mining"),
+                noteType = AnkiNoteType(7L, "Lapis", listOf("Expression")),
+                key = "読む",
+                duplicateScope = AnkiDuplicateScope.Deck,
+                checkDuplicatesAcrossAllModels = true,
+            ),
+        )
+
+        assertEquals(7L, api.lastDuplicateModelId)
+        assertEquals(2L, api.lastDuplicateDeckId)
+        assertEquals(AnkiDuplicateScope.Deck, api.lastDuplicateScope)
+        assertTrue(api.lastDuplicateCheckAllModels)
+    }
+
+    @Test
+    fun adapterPassesDeckRootScopeToDuplicateCheck() {
+        val api = FakeAnkiContentApi(duplicateKeys = setOf("読む"))
+        val backend = AnkiDroidBackendAdapter(api)
+
+        assertTrue(
+            backend.isDuplicate(
+                deck = AnkiDeck(2L, "Mining"),
+                noteType = AnkiNoteType(7L, "Lapis", listOf("Expression")),
+                key = "読む",
+                duplicateScope = AnkiDuplicateScope.DeckRoot,
+                checkDuplicatesAcrossAllModels = false,
+            ),
+        )
+
+        assertEquals(AnkiDuplicateScope.DeckRoot, api.lastDuplicateScope)
     }
 
     private class FakeAnkiContentApi(
@@ -97,6 +161,14 @@ class AnkiBackendAdapterTest {
             private set
         var addedTags: Set<String>? = null
             private set
+        var lastDuplicateModelId: Long? = null
+            private set
+        var lastDuplicateDeckId: Long? = null
+            private set
+        var lastDuplicateScope: AnkiDuplicateScope? = null
+            private set
+        var lastDuplicateCheckAllModels: Boolean = false
+            private set
 
         override fun deckList(): Map<Long, String> = decks
 
@@ -104,7 +176,19 @@ class AnkiBackendAdapterTest {
 
         override fun fieldList(modelId: Long): List<String> = fields[modelId].orEmpty()
 
-        override fun findDuplicateNotes(modelId: Long, key: String): Boolean = key in duplicateKeys
+        override fun findDuplicateNotes(
+            deck: AnkiDeck,
+            modelId: Long,
+            key: String,
+            duplicateScope: AnkiDuplicateScope,
+            checkAllModels: Boolean,
+        ): Boolean {
+            lastDuplicateDeckId = deck.id
+            lastDuplicateModelId = modelId
+            lastDuplicateScope = duplicateScope
+            lastDuplicateCheckAllModels = checkAllModels
+            return key in duplicateKeys
+        }
 
         override fun addNote(
             modelId: Long,

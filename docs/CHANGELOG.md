@@ -8,6 +8,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 ### Added
 
 - Let selected or shared text from Android Translate and Share actions open directly in Hoshi's lookup popup.
+- Add AnkiDroid duplicate checking settings for collection, deck, or deck-root scope and optional checks across all note models. #49
 
 ### Fixed
 

@@ -4,13 +4,21 @@ interface AnkiBackend {
     fun isAvailable(): Boolean
     fun fetchDecks(): List<AnkiDeck>
     fun fetchNoteTypes(): List<AnkiNoteType>
-    fun isDuplicate(modelId: Long, key: String): Boolean
+    fun isDuplicate(
+        deck: AnkiDeck,
+        noteType: AnkiNoteType,
+        key: String,
+        duplicateScope: AnkiDuplicateScope,
+        checkDuplicatesAcrossAllModels: Boolean,
+    ): Boolean
     fun addNote(
         deck: AnkiDeck,
         noteType: AnkiNoteType,
         fieldsByName: Map<String, String>,
         tags: Set<String>,
         allowDupes: Boolean,
+        duplicateScope: AnkiDuplicateScope,
+        checkDuplicatesAcrossAllModels: Boolean,
     ): Boolean
     fun addMediaFromUri(uriString: String, preferredName: String, mimeType: String): String?
 }
@@ -19,7 +27,13 @@ interface AnkiContentApi {
     fun deckList(): Map<Long, String>
     fun modelList(): Map<Long, String>
     fun fieldList(modelId: Long): List<String>
-    fun findDuplicateNotes(modelId: Long, key: String): Boolean
+    fun findDuplicateNotes(
+        deck: AnkiDeck,
+        modelId: Long,
+        key: String,
+        duplicateScope: AnkiDuplicateScope,
+        checkAllModels: Boolean,
+    ): Boolean
     fun addNote(modelId: Long, deckId: Long, fields: Array<String>, tags: Set<String>): Long?
     fun addMediaFromUri(uriString: String, preferredName: String, mimeType: String): String? = null
     fun isAvailable(): Boolean = true
@@ -38,8 +52,20 @@ class AnkiDroidBackendAdapter(
             AnkiNoteType(id = id, name = name, fields = api.fieldList(id))
         }
 
-    override fun isDuplicate(modelId: Long, key: String): Boolean =
-        key.isNotBlank() && api.findDuplicateNotes(modelId, key)
+    override fun isDuplicate(
+        deck: AnkiDeck,
+        noteType: AnkiNoteType,
+        key: String,
+        duplicateScope: AnkiDuplicateScope,
+        checkDuplicatesAcrossAllModels: Boolean,
+    ): Boolean =
+        key.isNotBlank() && api.findDuplicateNotes(
+            deck = deck,
+            modelId = noteType.id,
+            key = key,
+            duplicateScope = duplicateScope,
+            checkAllModels = checkDuplicatesAcrossAllModels,
+        )
 
     override fun addNote(
         deck: AnkiDeck,
@@ -47,9 +73,20 @@ class AnkiDroidBackendAdapter(
         fieldsByName: Map<String, String>,
         tags: Set<String>,
         allowDupes: Boolean,
+        duplicateScope: AnkiDuplicateScope,
+        checkDuplicatesAcrossAllModels: Boolean,
     ): Boolean {
         val duplicateKey = noteType.fields.firstOrNull()?.let(fieldsByName::get).orEmpty()
-        if (!allowDupes && isDuplicate(noteType.id, duplicateKey)) return false
+        if (
+            !allowDupes &&
+            isDuplicate(
+                deck = deck,
+                noteType = noteType,
+                key = duplicateKey,
+                duplicateScope = duplicateScope,
+                checkDuplicatesAcrossAllModels = checkDuplicatesAcrossAllModels,
+            )
+        ) return false
         val fields = noteType.fields.map { fieldsByName[it].orEmpty() }.toTypedArray()
         return api.addNote(
             modelId = noteType.id,

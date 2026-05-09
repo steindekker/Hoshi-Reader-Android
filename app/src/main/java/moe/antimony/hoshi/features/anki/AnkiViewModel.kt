@@ -130,6 +130,18 @@ class AnkiViewModel(
         }
     }
 
+    fun updateCheckDuplicatesAcrossAllModels(value: Boolean) {
+        viewModelScope.launch {
+            repository.updateSettings { it.copy(checkDuplicatesAcrossAllModels = value) }
+        }
+    }
+
+    fun updateDuplicateScope(value: AnkiDuplicateScope) {
+        viewModelScope.launch {
+            repository.updateSettings { it.copy(duplicateScope = value) }
+        }
+    }
+
     fun updateCompactGlossaries(value: Boolean) {
         viewModelScope.launch {
             repository.updateSettings { it.copy(compactGlossaries = value) }
@@ -149,7 +161,11 @@ class AnkiViewModel(
     fun duplicateCheckAsync(expression: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
             val isDuplicate = runCatching {
-                repository.isDuplicate(expression, _uiState.value.noteTypes)
+                repository.isDuplicate(
+                    expression = expression,
+                    decks = _uiState.value.decks,
+                    noteTypes = _uiState.value.noteTypes,
+                )
             }.getOrDefault(false)
             onResult(isDuplicate)
         }

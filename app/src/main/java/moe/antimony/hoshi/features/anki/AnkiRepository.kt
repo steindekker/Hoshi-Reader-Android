@@ -99,20 +99,34 @@ class AnkiRepository(
             fieldsByName = fields,
             tags = settings.tags.split(Regex("\\s+")).filter { it.isNotBlank() }.toSet(),
             allowDupes = settings.allowDupes,
+            duplicateScope = settings.duplicateScope,
+            checkDuplicatesAcrossAllModels = settings.checkDuplicatesAcrossAllModels,
         )
         added
     }
 
     suspend fun isDuplicate(
         expression: String,
+        decks: List<AnkiDeck>,
         noteTypes: List<AnkiNoteType>,
     ): Boolean = withContext(Dispatchers.IO) {
         val settings = settings.first()
         val availableNoteTypes = noteTypes.ifEmpty { backend.fetchNoteTypes() }
+        val availableDecks = decks.ifEmpty { backend.fetchDecks() }
+        val deck = availableDecks.firstOrNull { it.id == settings.selectedDeckId }
+            ?: settings.selectedDeckName?.let { name -> availableDecks.firstOrNull { it.name == name } }
+            ?: return@withContext false
         val noteTypeId = settings.selectedNoteTypeId
             ?: settings.selectedNoteTypeName?.let { name -> availableNoteTypes.firstOrNull { it.name == name }?.id }
             ?: return@withContext false
-        backend.isDuplicate(noteTypeId, expression)
+        val noteType = availableNoteTypes.firstOrNull { it.id == noteTypeId } ?: return@withContext false
+        backend.isDuplicate(
+            deck = deck,
+            noteType = noteType,
+            key = expression,
+            duplicateScope = settings.duplicateScope,
+            checkDuplicatesAcrossAllModels = settings.checkDuplicatesAcrossAllModels,
+        )
     }
 
     private fun addRemoteAudio(url: String): String? =

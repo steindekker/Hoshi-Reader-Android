@@ -34,4 +34,15 @@ class AnkiViewSourceTest {
         assertTrue(tagsCall.contains("onValueChange = viewModel::updateTags"))
         assertFalse(tagsCall.contains("handlebarOptions"))
     }
+
+    @Test
+    fun duplicateSettingsExposeScopeAndAllModelsControls() {
+        val source = File("src/main/java/moe/antimony/hoshi/features/anki/AnkiView.kt").readText()
+
+        assertTrue(source.contains("Check for duplicates across all models"))
+        assertTrue(source.contains("Duplicate Check Scope"))
+        assertTrue(source.contains("Deck Root"))
+        assertTrue(source.contains("viewModel::updateCheckDuplicatesAcrossAllModels"))
+        assertTrue(source.contains("viewModel::updateDuplicateScope"))
+    }
 }
