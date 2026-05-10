@@ -115,8 +115,8 @@ import moe.antimony.hoshi.epub.BookEntry
 import moe.antimony.hoshi.epub.BookRepository
 import moe.antimony.hoshi.epub.BookShelf
 import moe.antimony.hoshi.epub.BookSortOption
-import moe.antimony.hoshi.importing.FileImportContent
 import moe.antimony.hoshi.importing.ImportFileType
+import moe.antimony.hoshi.importing.MultipleFileImportContent
 import moe.antimony.hoshi.importing.importDisplayName
 import moe.antimony.hoshi.ui.HoshiBlockingProgressOverlay
 import moe.antimony.hoshi.ui.theme.LocalHoshiDarkTheme
@@ -163,18 +163,21 @@ fun BookshelfView(
     var showBulkDeleteConfirmation by remember { mutableStateOf(false) }
     var showShelfManagement by remember { mutableStateOf(false) }
 
-    val importer = rememberLauncherForActivityResult(FileImportContent()) { uri: Uri? ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        runCatching {
-            context.contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+    val importer = rememberLauncherForActivityResult(MultipleFileImportContent()) { uris: List<Uri> ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        val imports = uris.map { uri ->
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            BookImportItem(
+                uri = uri,
+                displayName = context.contentResolver.importDisplayName(uri),
             )
         }
-        booksViewModel.importBook(
-            uri = uri,
-            displayName = context.contentResolver.importDisplayName(uri),
-        )
+        booksViewModel.importBooks(imports)
     }
 
     fun launchBookImporter() {

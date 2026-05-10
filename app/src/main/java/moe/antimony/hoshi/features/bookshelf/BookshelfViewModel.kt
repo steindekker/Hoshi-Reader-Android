@@ -13,6 +13,17 @@ import kotlinx.coroutines.launch
 import moe.antimony.hoshi.epub.BookEntry
 import moe.antimony.hoshi.epub.BookSortOption
 
+internal data class BookImportItem(
+    val uri: Uri,
+    val displayName: String? = null,
+)
+
+internal data class PendingBookImport(
+    val importKey: String,
+    val displayName: String? = null,
+    val importOperation: suspend () -> String,
+)
+
 internal class BookshelfViewModel(
     private val repository: BookshelfRepository,
     coroutineScope: CoroutineScope? = null,
@@ -68,6 +79,18 @@ internal class BookshelfViewModel(
         }
     }
 
+    fun importBooks(imports: List<BookImportItem>) {
+        val pendingImports = imports.map { import ->
+            PendingBookImport(
+                importKey = import.uri.toString(),
+                displayName = import.displayName,
+            ) {
+                repository.importBook(import.uri)
+            }
+        }
+        importBooks(pendingImports)
+    }
+
     internal fun importBook(
         importKey: String,
         displayName: String? = null,
@@ -81,11 +104,64 @@ internal class BookshelfViewModel(
             onComplete = { importGate.finish(importKey) },
             blockingProgressMessage = "Importing ${displayName?.takeIf { it.isNotBlank() } ?: "EPUB"}...",
             block = {
-                val bookId = importOperation()
+                importOperation()
                 reloadBookEntriesSync()
-                _uiState.update { it.copy(openReaderBookId = bookId) }
             },
         )
+    }
+
+    internal fun importBooks(imports: List<PendingBookImport>) {
+        if (imports.isEmpty()) {
+            return
+        }
+        if (imports.size == 1) {
+            val import = imports.single()
+            importBook(import.importKey, import.displayName, import.importOperation)
+            return
+        }
+
+        val importKey = imports.joinToString(separator = "\n") { it.importKey }
+        if (!importGate.tryStart(importKey)) {
+            return
+        }
+
+        workScope.launch {
+            val failed = mutableListOf<String>()
+            _uiState.update {
+                it.copy(
+                    isLoading = true,
+                    blockingProgressMessage = "Importing 1 / ${imports.size}...",
+                    errorMessage = null,
+                )
+            }
+            try {
+                imports.forEachIndexed { index, import ->
+                    _uiState.update {
+                        it.copy(blockingProgressMessage = "Importing ${index + 1} / ${imports.size}...")
+                    }
+                    try {
+                        import.importOperation()
+                    } catch (_: Throwable) {
+                        failed += import.failureDisplayName()
+                    }
+                }
+                reloadBookEntriesSync()
+                if (failed.isNotEmpty()) {
+                    _uiState.update {
+                        it.copy(errorMessage = "Failed to import:\n${failed.joinToString(separator = "\n")}")
+                    }
+                }
+            } catch (error: Throwable) {
+                _uiState.update {
+                    it.copy(
+                        errorMessage = error.localizedMessage ?: "Failed to import EPUB.",
+                    )
+                }
+            } finally {
+                _uiState.update { it.copy(isLoading = false, blockingProgressMessage = null) }
+                importGate.finish(importKey)
+            }
+        }
     }
 
     fun deleteBook(entry: BookEntry) {
@@ -279,3 +355,8 @@ internal class BookshelfViewModel(
         ownedScope?.cancel()
     }
 }
+
+private fun PendingBookImport.failureDisplayName(): String =
+    displayName?.takeIf { it.isNotBlank() }
+        ?: importKey.substringAfterLast('/').takeIf { it.isNotBlank() }
+        ?: "EPUB"

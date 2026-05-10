@@ -93,7 +93,7 @@ class BookshelfViewModelTest {
     }
 
     @Test
-    fun importingBookPublishesOpenReaderEventOnSuccess() {
+    fun importingBookRefreshesShelfWithoutOpeningReaderOnSuccess() {
         val repository = FakeBookshelfRepository(importBookId = "imported-book")
         val viewModel = BookshelfViewModel(repository, testScope())
 
@@ -104,7 +104,8 @@ class BookshelfViewModelTest {
             repository.importBookId
         }
 
-        assertEquals("imported-book", viewModel.uiState.value.openReaderBookId)
+        assertNull(viewModel.uiState.value.openReaderBookId)
+        assertEquals(listOf(BookSortOption.Recent), repository.loadRequests)
         assertFalse(viewModel.uiState.value.isLoading)
         assertNull(viewModel.uiState.value.blockingProgressMessage)
         assertNull(viewModel.uiState.value.errorMessage)
@@ -128,7 +129,7 @@ class BookshelfViewModelTest {
 
         continueImport.complete(Unit)
 
-        assertEquals("imported-book", viewModel.uiState.value.openReaderBookId)
+        assertNull(viewModel.uiState.value.openReaderBookId)
         assertNull(viewModel.uiState.value.blockingProgressMessage)
         assertFalse(viewModel.uiState.value.isLoading)
     }
@@ -156,7 +157,7 @@ class BookshelfViewModelTest {
             "retry-book"
         }
 
-        assertEquals("retry-book", viewModel.uiState.value.openReaderBookId)
+        assertNull(viewModel.uiState.value.openReaderBookId)
         assertNull(viewModel.uiState.value.errorMessage)
     }
 
@@ -189,8 +190,90 @@ class BookshelfViewModelTest {
 
         continueImport.complete(Unit)
 
-        assertEquals("imported-book", viewModel.uiState.value.openReaderBookId)
+        assertNull(viewModel.uiState.value.openReaderBookId)
         assertEquals(1, importCount)
+        assertNull(viewModel.uiState.value.blockingProgressMessage)
+    }
+
+    @Test
+    fun importingBooksProcessesEachItemWithCountProgressAndDoesNotOpenReader() {
+        val repository = FakeBookshelfRepository()
+        val viewModel = BookshelfViewModel(repository, testScope())
+        val firstImport = CompletableDeferred<Unit>()
+        val secondImport = CompletableDeferred<Unit>()
+        val importedKeys = mutableListOf<String>()
+
+        viewModel.importBooks(
+            listOf(
+                PendingBookImport(
+                    importKey = "content://books/first.epub",
+                    displayName = "first.epub",
+                ) {
+                    importedKeys += "content://books/first.epub"
+                    firstImport.await()
+                    "first-book"
+                },
+                PendingBookImport(
+                    importKey = "content://books/second.epub",
+                    displayName = "second.epub",
+                ) {
+                    importedKeys += "content://books/second.epub"
+                    secondImport.await()
+                    "second-book"
+                },
+            ),
+        )
+
+        assertEquals("Importing 1 / 2...", viewModel.uiState.value.blockingProgressMessage)
+        assertEquals(listOf("content://books/first.epub"), importedKeys)
+
+        firstImport.complete(Unit)
+
+        assertEquals("Importing 2 / 2...", viewModel.uiState.value.blockingProgressMessage)
+        assertEquals(
+            listOf("content://books/first.epub", "content://books/second.epub"),
+            importedKeys,
+        )
+
+        secondImport.complete(Unit)
+
+        assertNull(viewModel.uiState.value.openReaderBookId)
+        assertEquals(listOf(BookSortOption.Recent), repository.loadRequests)
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertNull(viewModel.uiState.value.blockingProgressMessage)
+        assertNull(viewModel.uiState.value.errorMessage)
+    }
+
+    @Test
+    fun importingBooksContinuesAfterItemFailureAndReportsFailedNames() {
+        val repository = FakeBookshelfRepository()
+        val viewModel = BookshelfViewModel(repository, testScope())
+        val importedKeys = mutableListOf<String>()
+
+        viewModel.importBooks(
+            listOf(
+                PendingBookImport(
+                    importKey = "content://books/bad.epub",
+                    displayName = "bad.epub",
+                ) {
+                    importedKeys += "bad"
+                    error("bad epub")
+                },
+                PendingBookImport(
+                    importKey = "content://books/good.epub",
+                    displayName = "good.epub",
+                ) {
+                    importedKeys += "good"
+                    "good-book"
+                },
+            ),
+        )
+
+        assertEquals(listOf("bad", "good"), importedKeys)
+        assertEquals("Failed to import:\nbad.epub", viewModel.uiState.value.errorMessage)
+        assertNull(viewModel.uiState.value.openReaderBookId)
+        assertEquals(listOf(BookSortOption.Recent), repository.loadRequests)
+        assertFalse(viewModel.uiState.value.isLoading)
         assertNull(viewModel.uiState.value.blockingProgressMessage)
     }
 

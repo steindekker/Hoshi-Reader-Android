@@ -36,6 +36,16 @@ class FileTaskOverlaySourceTest {
     }
 
     @Test
+    fun bookshelfEpubImportUsesMultiSelectPicker() {
+        val source = File("src/main/java/moe/antimony/hoshi/features/bookshelf/BookshelfView.kt").readText()
+
+        assertTrue(source.contains("import moe.antimony.hoshi.importing.MultipleFileImportContent"))
+        assertTrue(source.contains("rememberLauncherForActivityResult(MultipleFileImportContent())"))
+        assertTrue(source.contains("booksViewModel.importBooks("))
+        assertFalse(source.contains("rememberLauncherForActivityResult(FileImportContent()) { uri: Uri? ->"))
+    }
+
+    @Test
     fun backupNoLongerHasPrivateScrimOverlayImplementation() {
         val source = File("src/main/java/moe/antimony/hoshi/features/backup/BackupSettingsView.kt").readText()
 
