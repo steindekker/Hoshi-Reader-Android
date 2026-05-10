@@ -190,6 +190,20 @@ class BookshelfViewModelTest {
         assertTrue(viewModel.uiState.value.sasayakiEnabled)
     }
 
+    @Test
+    fun shelfExpansionStateStaysInMemoryAcrossReloads() {
+        val viewModel = BookshelfViewModel(FakeBookshelfRepository(), testScope())
+
+        viewModel.setShelfExpanded("__reading__", false)
+        viewModel.setShelfExpanded("shelf:Manga", true)
+        viewModel.reloadBookEntries()
+
+        assertEquals(
+            mapOf("__reading__" to false, "shelf:Manga" to true),
+            viewModel.uiState.value.shelfExpansionState,
+        )
+    }
+
     private fun testScope(): CoroutineScope = CoroutineScope(Dispatchers.Unconfined)
 
     private fun bookEntry(id: String): BookEntry =

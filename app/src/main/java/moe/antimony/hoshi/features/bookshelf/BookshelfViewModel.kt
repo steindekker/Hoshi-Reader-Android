@@ -183,6 +183,12 @@ internal class BookshelfViewModel(
         }
     }
 
+    fun setShelfExpanded(collapseKey: String, isExpanded: Boolean) {
+        _uiState.update { state ->
+            state.copy(shelfExpansionState = state.shelfExpansionState + (collapseKey to isExpanded))
+        }
+    }
+
     fun setSasayakiEnabled(enabled: Boolean) {
         _uiState.update { it.copy(sasayakiEnabled = enabled) }
     }

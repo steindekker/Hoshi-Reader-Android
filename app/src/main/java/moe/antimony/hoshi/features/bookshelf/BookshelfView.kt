@@ -87,7 +87,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -217,6 +216,7 @@ fun BookshelfView(
         shelves = uiState.shelves,
         isSelecting = uiState.isSelecting,
         selectedBookIds = uiState.selectedBookIds,
+        shelfExpansionState = uiState.shelfExpansionState,
         sortMenuExpanded = sortMenuExpanded,
         onSortMenuExpandedChange = { sortMenuExpanded = it },
         onSortChange = {
@@ -226,6 +226,7 @@ fun BookshelfView(
         onStartSelecting = booksViewModel::startSelecting,
         onClearSelection = booksViewModel::clearSelection,
         onToggleSelectedBook = booksViewModel::toggleSelectedBook,
+        onShelfExpandedChange = booksViewModel::setShelfExpanded,
         onMoveSelectedBooks = booksViewModel::moveSelectedBooks,
         onDeleteSelectedBooks = { showBulkDeleteConfirmation = true },
         onManageShelves = { showShelfManagement = true },
@@ -496,12 +497,14 @@ private fun BooksTab(
     shelves: List<BookShelf>,
     isSelecting: Boolean,
     selectedBookIds: Set<String>,
+    shelfExpansionState: Map<String, Boolean>,
     sortMenuExpanded: Boolean,
     onSortMenuExpandedChange: (Boolean) -> Unit,
     onSortChange: (BookSortOption) -> Unit,
     onStartSelecting: () -> Unit,
     onClearSelection: () -> Unit,
     onToggleSelectedBook: (BookEntry) -> Unit,
+    onShelfExpandedChange: (String, Boolean) -> Unit,
     onMoveSelectedBooks: (String?) -> Unit,
     onDeleteSelectedBooks: () -> Unit,
     onManageShelves: () -> Unit,
@@ -516,8 +519,6 @@ private fun BooksTab(
     onMatchSasayaki: (BookEntry) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val expandedShelves = remember { mutableStateMapOf<String, Boolean>() }
-
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
@@ -586,7 +587,12 @@ private fun BooksTab(
                         verticalArrangement = Arrangement.spacedBy(layoutSpec.bookGridVerticalSpacingDp.dp),
                     ) {
                         sections.filter { it.books.isNotEmpty() }.forEach { section ->
-                            val isExpanded = !section.isCollapsible || expandedShelves[section.shelfName] == true
+                            val collapseKey = section.collapseKey
+                            val isExpanded = if (!section.isCollapsible) {
+                                true
+                            } else {
+                                collapseKey?.let { key -> shelfExpansionState[key] ?: section.isReading } ?: true
+                            }
                             item(
                                 key = "header:${section.title}",
                                 span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) },
@@ -598,8 +604,8 @@ private fun BooksTab(
                                     isCollapsible = section.isCollapsible,
                                     isExpanded = isExpanded,
                                     onToggle = {
-                                        section.shelfName?.let { shelfName ->
-                                            expandedShelves[shelfName] = expandedShelves[shelfName] != true
+                                        collapseKey?.let { key ->
+                                            onShelfExpandedChange(key, !isExpanded)
                                         }
                                     },
                                 )
@@ -649,17 +655,19 @@ private fun BooksTab(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clickable {
-                                                section.shelfName?.let { shelfName ->
-                                                    expandedShelves[shelfName] = true
+                                                collapseKey?.let { key ->
+                                                    onShelfExpandedChange(key, true)
                                                 }
                                             },
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(CollapsedShelfCoverSpacingDp.dp),
                                     ) {
-                                        section.books.take(layoutSpec.bookGridColumns(contentWidthDp)).forEach { entry ->
+                                        val collapsedCoverWidthDp =
+                                            layoutSpec.collapsedShelfPreviewCoverWidthDp(contentWidthDp)
+                                        section.books.take(layoutSpec.collapsedShelfPreviewColumns(contentWidthDp)).forEach { entry ->
                                             BookCoverCard(
                                                 entry = entry,
                                                 bookRepository = bookRepository,
-                                                modifier = Modifier.width(64.dp),
+                                                modifier = Modifier.width(collapsedCoverWidthDp.dp),
                                             )
                                         }
                                     }
@@ -920,6 +928,17 @@ private fun BookGridCell(
                         .background(MaterialTheme.colorScheme.background, RoundedCornerShape(100))
                         .size(28.dp),
                 )
+            } else if (isBookCompleted(progress)) {
+                Icon(
+                    imageVector = Icons.Rounded.CheckCircle,
+                    contentDescription = "Read",
+                    tint = Color(0xFF8C8C92),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .background(MaterialTheme.colorScheme.background, RoundedCornerShape(100))
+                        .size(28.dp),
+                )
             }
         }
         Spacer(Modifier.height(6.dp))
@@ -1059,7 +1078,7 @@ private fun ReadingProgressPill(progress: Double, modifier: Modifier = Modifier)
         }
         Spacer(Modifier.width(8.dp))
         Text(
-            text = "${(clamped * 100).coerceAtMost(99.9f).formatOneDecimal()}%",
+            text = bookshelfProgressText(progress),
             style = MaterialTheme.typography.labelLarge,
             color = progressTextColor,
             fontWeight = FontWeight.Bold,
@@ -1467,6 +1486,3 @@ private fun ChevronRightGlyph(color: Color, modifier: Modifier = Modifier) {
         modifier = modifier,
     )
 }
-
-private fun Float.formatOneDecimal(): String =
-    String.format(java.util.Locale.US, "%.1f", this)

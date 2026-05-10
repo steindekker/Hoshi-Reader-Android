@@ -13,6 +13,7 @@ data class BookshelfUiState(
     val showReading: Boolean = false,
     val isSelecting: Boolean = false,
     val selectedBookIds: Set<String> = emptySet(),
+    val shelfExpansionState: Map<String, Boolean> = emptyMap(),
     val sasayakiEnabled: Boolean = false,
     val hasLoadedBooks: Boolean = false,
     val isLoading: Boolean = false,

@@ -31,7 +31,7 @@ Status: `in_progress`
 
 Status: `in_progress`
 
-- Bookshelf management now supports iOS-style custom shelves, the optional Reading shelf, collapsed shelf previews, single-book moves, selection mode, batch moves/deletes, and Mark Read.
+- Bookshelf management now supports iOS-style custom shelves, the optional collapsible Reading shelf, rotation-stable compact collapsed shelf previews, read-completion badges, single-book moves, selection mode, batch moves/deletes, and Mark Read.
 - Next: complete shelf-name entry and multi-EPUB DocumentsUI validation on a device session where text input can be driven manually or through adb.
 - Keep EPUB import through Android SAF.
 - Preserve iOS-shaped `Books/<safeTitle>` storage and sidecar JSON compatibility, including UUID book ids in `metadata.json`/`shelves.json` and `Books/<folder>/<cover>` metadata cover paths for backup/restore interop. Keep the legacy Android field migration isolated so it can be removed after the supported upgrade window.

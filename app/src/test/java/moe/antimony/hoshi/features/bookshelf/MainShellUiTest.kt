@@ -77,6 +77,7 @@ class MainShellUiTest {
 
         assertEquals(listOf("Reading", "Manga", "Unshelved"), sections.map { it.title })
         assertEquals(true, sections[0].isReading)
+        assertTrue(sections[0].isCollapsible)
         assertEquals(listOf("reading"), sections[0].books.map { it.metadata.id })
         assertEquals(listOf("shelved"), sections[1].books.map { it.metadata.id })
         assertEquals(listOf("unread", "reading"), sections[2].books.map { it.metadata.id })
@@ -106,6 +107,19 @@ class MainShellUiTest {
         assertEquals(64, spec.compactNavigationHeightDp)
         assertEquals(16, spec.pageHorizontalPaddingDp)
         assertEquals(2, spec.bookGridColumns(contentWidthDp = 360))
+        assertEquals(4, spec.collapsedShelfPreviewColumns(contentWidthDp = 360))
+        assertTrue(spec.collapsedShelfPreviewCoverWidthDp(contentWidthDp = 360) > 64)
+        assertTrue(spec.collapsedShelfPreviewColumns(contentWidthDp = 360) > spec.bookGridColumns(contentWidthDp = 360))
+    }
+
+    @Test
+    fun landscapeWindowsShowMoreCollapsedShelfPreviews() {
+        val spec = MainShellLayoutSpec.forWidthDp(800)
+        val contentWidth = spec.constrainedContentWidthDp(800)
+
+        assertEquals(MainShellNavigationLayout.NavigationRail, spec.navigationLayout)
+        assertTrue(spec.collapsedShelfPreviewColumns(contentWidth) > 4)
+        assertTrue(spec.collapsedShelfPreviewCoverWidthDp(contentWidth) >= CollapsedShelfCoverTargetWidthDp)
     }
 
     @Test
@@ -259,6 +273,16 @@ class MainShellUiTest {
         assertTrue(progress.contains("progressTrackColor"))
         assertTrue(progress.contains("progressFillColor"))
         assertTrue(progress.contains("progressBorderColor"))
+    }
+
+    @Test
+    fun bookshelfProgressShowsCompletedBooksAsRead() {
+        assertFalse(isBookCompleted(progress = 0.998))
+        assertTrue(isBookCompleted(progress = 0.999))
+        assertTrue(isBookCompleted(progress = 1.0))
+        assertEquals("99.8%", bookshelfProgressText(progress = 0.998))
+        assertEquals("100.0%", bookshelfProgressText(progress = 0.999))
+        assertEquals("100.0%", bookshelfProgressText(progress = 1.0))
     }
 
     @Test

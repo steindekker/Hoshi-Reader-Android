@@ -54,6 +54,21 @@ data class MainShellLayoutSpec(
         return columns.coerceIn(1, bookGridMaxColumns)
     }
 
+    fun collapsedShelfPreviewColumns(contentWidthDp: Int): Int {
+        val available = (contentWidthDp - pageHorizontalPaddingDp * 2).coerceAtLeast(CollapsedShelfCoverTargetWidthDp)
+        val adaptiveColumns =
+            ((available + CollapsedShelfCoverSpacingDp) / (CollapsedShelfCoverTargetWidthDp + CollapsedShelfCoverSpacingDp))
+                .coerceAtLeast(1)
+        val minimumPreviewColumns = (bookGridColumns(contentWidthDp) + 2).coerceAtLeast(4)
+        return maxOf(adaptiveColumns, minimumPreviewColumns)
+    }
+
+    fun collapsedShelfPreviewCoverWidthDp(contentWidthDp: Int): Int {
+        val available = (contentWidthDp - pageHorizontalPaddingDp * 2).coerceAtLeast(CollapsedShelfCoverTargetWidthDp)
+        val columns = collapsedShelfPreviewColumns(contentWidthDp)
+        return ((available - CollapsedShelfCoverSpacingDp * (columns - 1)) / columns).coerceAtLeast(1)
+    }
+
     companion object {
         fun forWidthDp(widthDp: Int): MainShellLayoutSpec = when {
             widthDp < MediumWidthBreakpointDp -> MainShellLayoutSpec(
@@ -116,6 +131,9 @@ data class MainShellLayoutSpec(
 
 private const val MediumWidthBreakpointDp = 600
 private const val ExpandedWidthBreakpointDp = 840
+internal const val CollapsedShelfCoverTargetWidthDp = 80
+internal const val CollapsedShelfCoverSpacingDp = 12
+private const val CompletedProgressThreshold = 0.999
 
 enum class SettingsDestination {
     Dictionaries,
@@ -139,7 +157,14 @@ data class BookshelfSectionModel(
     val shelfName: String? = null,
     val isReading: Boolean = false,
     val isCollapsible: Boolean = false,
-)
+) {
+    val collapseKey: String?
+        get() = when {
+            isReading -> "__reading__"
+            shelfName != null -> "shelf:$shelfName"
+            else -> null
+        }
+}
 
 fun settingsGroups(): List<List<SettingsRowModel>> = listOf(
     listOf(
@@ -185,6 +210,7 @@ fun bookshelfSections(
                 title = "Reading",
                 books = reading,
                 isReading = true,
+                isCollapsible = true,
             )
         }
     }
@@ -206,4 +232,16 @@ fun bookshelfSections(
         sections += BookshelfSectionModel("Unshelved", unshelved)
     }
     return sections
+}
+
+fun isBookCompleted(progress: Double): Boolean =
+    progress >= CompletedProgressThreshold
+
+fun bookshelfProgressText(progress: Double): String {
+    val percentage = if (isBookCompleted(progress)) {
+        100.0
+    } else {
+        progress.coerceIn(0.0, 1.0) * 100.0
+    }
+    return String.format(java.util.Locale.US, "%.1f%%", percentage)
 }
