@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material3.Button
@@ -62,6 +63,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.features.backup.BackupSettingsView
 import moe.antimony.hoshi.features.settings.SettingsDetailScaffold
 import moe.antimony.hoshi.features.sasayaki.SasayakiSettingsView
 import moe.antimony.hoshi.importing.FileImportContent
@@ -71,6 +73,7 @@ import moe.antimony.hoshi.importing.ImportFileType
 @Composable
 fun AdvancedSettingsView(
     onClose: () -> Unit,
+    onBooksRestored: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var destination by remember { mutableStateOf<AdvancedDestination?>(null) }
@@ -84,6 +87,14 @@ fun AdvancedSettingsView(
     if (destination == AdvancedDestination.Sasayaki) {
         SasayakiSettingsView(
             onClose = { destination = null },
+            modifier = modifier,
+        )
+        return
+    }
+    if (destination == AdvancedDestination.Backup) {
+        BackupSettingsView(
+            onClose = { destination = null },
+            onBooksRestored = onBooksRestored,
             modifier = modifier,
         )
         return
@@ -118,6 +129,16 @@ fun AdvancedSettingsView(
                         headlineContent = { Text("Sasayaki (Audiobooks)") },
                         supportingContent = { Text("Read along with matched audiobook subtitles") },
                         modifier = Modifier.clickable { destination = AdvancedDestination.Sasayaki },
+                    )
+                }
+            }
+            item {
+                GroupCard {
+                    ListItem(
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        leadingContent = { Icon(Icons.Rounded.Backup, contentDescription = null) },
+                        headlineContent = { Text("Backup") },
+                        modifier = Modifier.clickable { destination = AdvancedDestination.Backup },
                     )
                 }
             }
@@ -523,6 +544,7 @@ private fun BackIconButton(onClick: () -> Unit) {
 private enum class AdvancedDestination {
     Audio,
     Sasayaki,
+    Backup,
 }
 
 private const val ProgressUpdateBytes = 64L * 1024L * 1024L

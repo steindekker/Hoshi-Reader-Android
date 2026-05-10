@@ -13,6 +13,7 @@ import moe.antimony.hoshi.features.anki.AnkiDroidBackendAdapter
 import moe.antimony.hoshi.features.anki.AnkiRepository
 import moe.antimony.hoshi.features.anki.AnkiSettingsRepository
 import moe.antimony.hoshi.features.anki.ankiSettingsRepository
+import moe.antimony.hoshi.features.backup.HoshiBackupRepository
 import moe.antimony.hoshi.features.bookshelf.AndroidBookshelfRepository
 import moe.antimony.hoshi.features.bookshelf.BookshelfRepository
 import moe.antimony.hoshi.features.bookshelf.BookshelfSettingsRepository
@@ -43,6 +44,7 @@ internal class HoshiAppContainer(context: Context) {
     val bookshelfSettingsRepository: BookshelfSettingsRepository = appContext.bookshelfSettingsRepository()
     val readerFontManager: ReaderFontManager = ReaderFontManager(appContext.filesDir)
     val localAudioRepository: LocalAudioRepository = LocalAudioRepository(appContext.filesDir)
+    val backupRepository: HoshiBackupRepository = HoshiBackupRepository(appContext.filesDir)
     val ankiRepository: AnkiRepository = AnkiRepository(
         context = appContext,
         backend = AnkiDroidBackendAdapter(AndroidAnkiContentApi(appContext)),

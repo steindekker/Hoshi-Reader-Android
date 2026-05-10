@@ -8,6 +8,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 ### Added
 
 - Add iOS-style bookshelf management with custom shelves, a Reading shelf toggle, shelf previews, toolbar action grouping, single-book and batch moves, batch deletion, and Mark Read.
+- Add iOS-compatible Books and Dictionaries backup restore in Advanced -> Backup using `.hoshi` archives.
 
 ### Fixed
 

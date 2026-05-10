@@ -52,6 +52,12 @@ data class ImportFileType(
             mimeTypes = arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"),
         )
 
+        val HoshiBackup = ImportFileType(
+            description = "Hoshi backup",
+            extensions = listOf("hoshi"),
+            mimeTypes = arrayOf("application/octet-stream", "application/zip", "*/*"),
+        )
+
         val ReaderFont = ImportFileType(
             description = "font",
             extensions = listOf("ttf", "otf", "woff", "woff2"),

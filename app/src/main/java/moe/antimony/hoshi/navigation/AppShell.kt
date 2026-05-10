@@ -191,6 +191,7 @@ fun AppShell(
                         onReaderSettingsChange = currentOnReaderSettingsChange,
                         readerFontManager = readerFontManager,
                         onClose = ::popRoute,
+                        onBooksRestored = { bookshelfRefreshKey += 1 },
                         onSelectedTabChange = { selectTopLevelRoute(it.toRoute()) },
                     )
                     is AppRoute.ReaderRoute -> {
@@ -305,6 +306,7 @@ private fun SettingsDetailDestination(
     onReaderSettingsChange: (ReaderSettings) -> Unit,
     readerFontManager: ReaderFontManager,
     onClose: () -> Unit,
+    onBooksRestored: () -> Unit,
     onSelectedTabChange: (MainTab) -> Unit,
 ) {
     when (route.section) {
@@ -331,6 +333,7 @@ private fun SettingsDetailDestination(
         )
         SettingsDetailSection.Advanced -> AdvancedSettingsView(
             onClose = onClose,
+            onBooksRestored = onBooksRestored,
             modifier = Modifier.fillMaxSize(),
         )
         SettingsDetailSection.Diagnostics -> DiagnosticsView(
