@@ -80,8 +80,14 @@ class BookRepository(
     override suspend fun metadataCoverPath(bookRoot: File, coverHref: String?): String? =
         fileDataSource.metadataCoverPath(bookRoot, coverHref)
 
-    suspend fun deleteBook(bookRoot: File) {
+    suspend fun deleteBook(
+        bookRoot: File,
+        releasePersistedSasayakiAudioUri: (String) -> Unit = {},
+    ) {
         val removedId = loadMetadata(bookRoot)?.id ?: bookRoot.name
+        loadSasayakiPlayback(bookRoot)?.audioUri?.let { uri ->
+            runCatching { releasePersistedSasayakiAudioUri(uri) }
+        }
         fileDataSource.deleteBook(bookRoot)
         val cleanedShelves = loadShelves().map { shelf ->
             shelf.copy(bookIds = shelf.bookIds.filterNot { it == removedId })

@@ -91,4 +91,19 @@ class BookRepositoryDataSourceTest {
             repository.loadShelves(),
         )
     }
+
+    @Test
+    fun deletingBookReleasesPersistedSasayakiAudioUriBeforeRemovingBookDirectory() = runBlocking {
+        val repository = BookRepository(Files.createTempDirectory("hoshi-book-audio-uri-delete").toFile())
+        val remove = repository.createBookDirectory("remove-audio-uri")
+        remove.resolve("sasayaki_playback.json").writeText(
+            """{"lastPosition":0.0,"audioUri":"content://media/external/audio/media/1"}""",
+        )
+        val released = mutableListOf<String>()
+
+        repository.deleteBook(remove) { released += it }
+
+        assertEquals(listOf("content://media/external/audio/media/1"), released)
+        assertFalse(remove.exists())
+    }
 }

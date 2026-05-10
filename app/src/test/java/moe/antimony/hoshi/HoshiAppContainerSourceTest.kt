@@ -20,7 +20,7 @@ class HoshiAppContainerSourceTest {
             "class HoshiAppContainer",
             "private val appContext = context.applicationContext",
             "val bookRepository: BookRepository = BookRepository(appContext.filesDir)",
-            "val dictionaryRepository: DictionaryRepository = DictionaryRepository(appContext.filesDir, appContext.cacheDir)",
+            "val dictionaryRepository: DictionaryRepository = DictionaryRepository(appContext.filesDir)",
             "val readerSettingsRepository: ReaderSettingsRepository = appContext.readerSettingsRepository()",
             "val dictionarySettingsRepository: DictionarySettingsRepository = appContext.dictionarySettingsRepository()",
             "val audioSettingsRepository: AudioSettingsRepository = appContext.audioSettingsRepository()",
@@ -33,7 +33,7 @@ class HoshiAppContainerSourceTest {
         listOf(appShell, bookshelf, dictionaryView, dictionarySearch, readerWebView).forEach { productionSource ->
             assertTrue(productionSource.contains("LocalHoshiAppContainer.current"))
             assertFalse(productionSource.contains("BookRepository(context.filesDir)"))
-            assertFalse(productionSource.contains("DictionaryRepository(context.filesDir, context.cacheDir)"))
+            assertFalse(productionSource.contains("DictionaryRepository(context.filesDir)"))
         }
     }
 

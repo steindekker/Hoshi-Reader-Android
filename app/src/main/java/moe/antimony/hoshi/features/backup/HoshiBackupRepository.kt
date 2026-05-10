@@ -8,6 +8,9 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -101,14 +104,7 @@ class HoshiBackupRepository(
             try {
                 archiveFile.outputStream().use { output -> input.copyTo(output) }
                 unzipInto(archiveFile, tempRoot)
-                check(!destination.exists() || destination.deleteRecursively()) {
-                    "Unable to replace ${target.folderName} directory."
-                }
-                if (!tempRoot.renameTo(destination)) {
-                    check(destination.mkdirs()) { "Unable to recreate ${target.folderName} directory." }
-                    tempRoot.copyRecursively(destination, overwrite = true)
-                    tempRoot.deleteRecursively()
-                }
+                replaceDestinationWithRestoredFolder(target, tempRoot, destination)
             } catch (error: Throwable) {
                 tempRoot.deleteRecursively()
                 throw error
@@ -116,6 +112,41 @@ class HoshiBackupRepository(
                 archiveFile.delete()
             }
         }
+    }
+
+    private fun replaceDestinationWithRestoredFolder(
+        target: BackupTarget,
+        restoredFolder: File,
+        destination: File,
+    ) {
+        val replacementBackup = destination.takeIf(File::exists)?.let { existing ->
+            filesDir.resolve(".${target.folderName.lowercase()}-restore-backup-${UUID.randomUUID()}")
+                .also { backup -> moveReplacing(existing, backup) }
+        }
+        try {
+            moveReplacing(restoredFolder, destination)
+            replacementBackup?.deleteRecursively()
+        } catch (error: Throwable) {
+            destination.deleteRecursively()
+            if (replacementBackup?.exists() == true) {
+                moveReplacing(replacementBackup, destination)
+            }
+            throw error
+        }
+    }
+
+    private fun moveReplacing(source: File, target: File) {
+        runCatching {
+            Files.move(
+                source.toPath(),
+                target.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        }.recoverCatching { error ->
+            if (error !is AtomicMoveNotSupportedException) throw error
+            Files.move(source.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }.getOrThrow()
     }
 
     private fun unzipInto(archiveFile: File, destinationRoot: File) {

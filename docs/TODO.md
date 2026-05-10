@@ -36,6 +36,7 @@ Status: `in_progress`
 - Keep EPUB import through Android SAF.
 - Preserve iOS-shaped `Books/<safeTitle>` storage and sidecar JSON compatibility, including UUID book ids in `metadata.json`/`shelves.json` and `Books/<folder>/<cover>` metadata cover paths for backup/restore interop. Keep the legacy Android field migration isolated so it can be removed after the supported upgrade window.
 - Advanced -> Backup exports and restores iOS-shaped `Books` and `Dictionaries` `.hoshi` archives; iOS-created Books restore is device-validated, and next validation should cover Android-created archives restored by iOS.
+- Settings -> About includes a confirmed storage cleanup tool for interrupted restore/import residues, orphan Sasayaki audio, local audio temp files, and Anki media cache. Backup export interruptions can leave partial files only at the user-selected SAF destination, not under app-private storage.
 
 ### Reader And Lookup
 
@@ -62,6 +63,7 @@ Status: `in_progress`
 - Align recommended dictionary download/update state with iOS `DictionaryView`.
 - Do not reimplement Yomitan import, lookup, media, or style extraction outside `third_party/hoshidicts-kotlin-bridge` unless the bridge gap is documented first.
 - Frequency and pitch dictionaries must stay type-specific; do not treat metadata dictionaries as term fallback dictionaries.
+- Dictionary imports write through hidden staging names inside `Dictionaries/<type>` before renaming into place, so interrupted imports should leave cleanup-visible staging files/folders instead of partial dictionary directories.
 
 ### Highlights And Notes
 

@@ -17,14 +17,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CleaningServices
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -42,7 +46,9 @@ import kotlinx.coroutines.withContext
 import moe.antimony.hoshi.BuildConfig
 import moe.antimony.hoshi.LocalHoshiAppContainer
 import moe.antimony.hoshi.features.settings.SettingsDetailScaffold
+import moe.antimony.hoshi.features.storage.StorageCleanupReport
 import java.io.File
+import java.util.Locale
 
 private const val GitHubRepositoryUrl = "https://github.com/HuangAntimony/Hoshi-Reader-Android"
 
@@ -57,6 +63,50 @@ fun AboutScreen(
     val record by appContainer.updateDownloadStore.record.collectAsState(initial = null)
     val actionableRecord = record?.takeIf { it.shouldSurfaceInAbout(BuildConfig.VERSION_NAME) }
     var checkState by remember { mutableStateOf<AboutUpdateCheckState>(AboutUpdateCheckState.Idle) }
+    var cleanupState by remember { mutableStateOf<StorageCleanupUiState>(StorageCleanupUiState.Idle) }
+    var pendingCleanupConfirmation by remember { mutableStateOf<StorageCleanupReport?>(null) }
+
+    pendingCleanupConfirmation?.let { report ->
+        AlertDialog(
+            onDismissRequest = { pendingCleanupConfirmation = null },
+            title = { Text("Clean Up Storage") },
+            text = {
+                Text(
+                    "Delete ${formatStorageSize(report.totalSizeBytes)} of cache and leftover files? " +
+                        "This cannot be undone.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingCleanupConfirmation = null
+                        scope.launch {
+                            cleanupState = StorageCleanupUiState.Cleaning(report)
+                            cleanupState = runCatching {
+                                withContext(Dispatchers.IO) {
+                                    appContainer.storageCleanupRepository.clean(report)
+                                }
+                            }.fold(
+                                onSuccess = { StorageCleanupUiState.Ready(it) },
+                                onFailure = { error ->
+                                    StorageCleanupUiState.Error(
+                                        error.localizedMessage ?: "Unable to clean up storage.",
+                                    )
+                                },
+                            )
+                        }
+                    },
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingCleanupConfirmation = null }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
 
     SettingsDetailScaffold(
         title = "About",
@@ -102,12 +152,90 @@ fun AboutScreen(
                                 )
                             },
                         ) {
-                            androidx.compose.material3.Icon(
+                            Icon(
                                 imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
                                 contentDescription = null,
                                 modifier = Modifier.padding(end = 8.dp),
                             )
                             Text("GitHub")
+                        }
+                    }
+                }
+            }
+            item {
+                AboutCard {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Storage Cleanup",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = storageCleanupStatusText(cleanupState),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        val report = cleanupState.reportOrNull()
+                        if (report != null && report.categories.isNotEmpty()) {
+                            Spacer(Modifier.height(12.dp))
+                            report.categories.forEach { category ->
+                                Text(
+                                    text = "${category.title}: ${formatStorageSize(category.sizeBytes)} (${formatItemCount(category.itemCount)})",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Button(
+                                onClick = {
+                                    scope.launch {
+                                        cleanupState = StorageCleanupUiState.Scanning
+                                        cleanupState = runCatching {
+                                            withContext(Dispatchers.IO) {
+                                                appContainer.storageCleanupRepository.scan()
+                                            }
+                                        }.fold(
+                                            onSuccess = { StorageCleanupUiState.Ready(it) },
+                                            onFailure = { error ->
+                                                StorageCleanupUiState.Error(
+                                                    error.localizedMessage ?: "Unable to scan storage.",
+                                                )
+                                            },
+                                        )
+                                    }
+                                },
+                                enabled = !cleanupState.isBusy,
+                            ) {
+                                if (cleanupState == StorageCleanupUiState.Scanning) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier
+                                            .padding(end = 8.dp)
+                                            .size(18.dp),
+                                        strokeWidth = 2.dp,
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Rounded.CleaningServices,
+                                        contentDescription = null,
+                                        modifier = Modifier.padding(end = 8.dp),
+                                    )
+                                }
+                                Text("Scan")
+                            }
+                            if (report?.hasCleanableItems == true) {
+                                OutlinedButton(
+                                    onClick = { pendingCleanupConfirmation = report },
+                                    enabled = !cleanupState.isBusy,
+                                ) {
+                                    Text("Clean Up")
+                                }
+                            }
                         }
                     }
                 }
@@ -173,7 +301,7 @@ fun AboutScreen(
                                         }
                                     },
                                 ) {
-                                    androidx.compose.material3.Icon(
+                                    Icon(
                                         imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
                                         contentDescription = null,
                                         modifier = Modifier.padding(end = 8.dp),
@@ -208,6 +336,60 @@ private sealed interface AboutUpdateCheckState {
     data class Result(val outcome: UpdateCheckOutcome) : AboutUpdateCheckState
     data class Error(val message: String) : AboutUpdateCheckState
 }
+
+private sealed interface StorageCleanupUiState {
+    data object Idle : StorageCleanupUiState
+    data object Scanning : StorageCleanupUiState
+    data class Ready(val report: StorageCleanupReport) : StorageCleanupUiState
+    data class Cleaning(val report: StorageCleanupReport) : StorageCleanupUiState
+    data class Error(val message: String) : StorageCleanupUiState
+}
+
+private val StorageCleanupUiState.isBusy: Boolean
+    get() = this == StorageCleanupUiState.Scanning || this is StorageCleanupUiState.Cleaning
+
+private fun StorageCleanupUiState.reportOrNull(): StorageCleanupReport? =
+    when (this) {
+        is StorageCleanupUiState.Ready -> report
+        is StorageCleanupUiState.Cleaning -> report
+        else -> null
+    }
+
+private fun storageCleanupStatusText(state: StorageCleanupUiState): String =
+    when (state) {
+        StorageCleanupUiState.Idle -> "Scan for interrupted imports, restore leftovers, orphaned audio, and media cache."
+        StorageCleanupUiState.Scanning -> "Scanning app storage..."
+        is StorageCleanupUiState.Cleaning -> "Cleaning selected files..."
+        is StorageCleanupUiState.Error -> state.message
+        is StorageCleanupUiState.Ready -> {
+            if (state.report.hasCleanableItems) {
+                "${formatStorageSize(state.report.totalSizeBytes)} can be cleaned across ${state.report.categories.size} categories."
+            } else {
+                "No cleanable app storage leftovers were found."
+            }
+        }
+    }
+
+private fun formatStorageSize(bytes: Long): String {
+    if (bytes < 1024L) return "$bytes B"
+    val units = listOf("KB", "MB", "GB")
+    var value = bytes.toDouble() / 1024.0
+    units.forEachIndexed { index, unit ->
+        val isLast = index == units.lastIndex
+        if (value < 1024.0 || isLast) {
+            return if (value < 10.0) {
+                "%.1f %s".format(Locale.US, value, unit)
+            } else {
+                "%.0f %s".format(Locale.US, value, unit)
+            }
+        }
+        value /= 1024.0
+    }
+    return "$bytes B"
+}
+
+private fun formatItemCount(count: Int): String =
+    "$count ${if (count == 1) "item" else "items"}"
 
 private fun updateStatusText(
     checkState: AboutUpdateCheckState,

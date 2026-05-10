@@ -6,9 +6,8 @@ import java.io.File
 
 internal class DictionaryRepository(
     filesDir: File,
-    cacheDir: File,
     private val storage: DictionaryStorageDataSource = DictionaryStorageDataSource(filesDir),
-    private val importDataSource: DictionaryImportDataSource = DictionaryImportDataSource(cacheDir),
+    private val importDataSource: DictionaryImportDataSource = DictionaryImportDataSource(),
     private val lookupQueryService: DictionaryLookupQueryService = DictionaryLookupQueryService(),
 ) {
     fun loadDictionaries(type: DictionaryType): List<DictionaryInfo> =

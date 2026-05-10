@@ -14,6 +14,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 - Show a startup prompt when a newer downloaded update is ready to install.
 - Add a GitHub repository link to Settings -> About for starring this app's project.
 - Add GitHub release mirror fallbacks for update checks and APK downloads when direct GitHub access fails.
+- Add a Settings -> About storage cleanup tool that scans app-private leftovers by category and asks for confirmation before deleting them.
 
 ### Fixed
 
@@ -22,6 +23,8 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 - Prevent reader lookup popups from crashing when the popup is taller than the available screen area.
 - Open downloaded update APKs through Android's package installer and route users to the unknown-apps permission when required.
 - Hide downloaded update packages that are not newer than the installed app version from Settings -> About.
+- Stage dictionary imports before committing them, so interrupted imports leave removable staging data instead of partial dictionaries.
+- Release persisted external Sasayaki audio permissions when deleting a book.
 
 ## [v0.3.4] - 2026-05-10
 

@@ -29,6 +29,7 @@ import moe.antimony.hoshi.features.reader.ReaderSettingsRepository
 import moe.antimony.hoshi.features.reader.readerSettingsRepository
 import moe.antimony.hoshi.features.sasayaki.SasayakiSettingsRepository
 import moe.antimony.hoshi.features.sasayaki.sasayakiSettingsRepository
+import moe.antimony.hoshi.features.storage.StorageCleanupRepository
 import moe.antimony.hoshi.features.update.AndroidUpdateDownloadManager
 import moe.antimony.hoshi.features.update.GitHubReleaseUpdateRepository
 import moe.antimony.hoshi.features.update.UpdateCheckService
@@ -42,7 +43,7 @@ internal class HoshiAppContainer(context: Context) {
     private val appContext = context.applicationContext
 
     val bookRepository: BookRepository = BookRepository(appContext.filesDir)
-    val dictionaryRepository: DictionaryRepository = DictionaryRepository(appContext.filesDir, appContext.cacheDir)
+    val dictionaryRepository: DictionaryRepository = DictionaryRepository(appContext.filesDir)
     val readerSettingsRepository: ReaderSettingsRepository = appContext.readerSettingsRepository()
     val dictionarySettingsRepository: DictionarySettingsRepository = appContext.dictionarySettingsRepository()
     val audioSettingsRepository: AudioSettingsRepository = appContext.audioSettingsRepository()
@@ -54,6 +55,7 @@ internal class HoshiAppContainer(context: Context) {
     val readerFontManager: ReaderFontManager = ReaderFontManager(appContext.filesDir)
     val localAudioRepository: LocalAudioRepository = LocalAudioRepository(appContext.filesDir)
     val backupRepository: HoshiBackupRepository = HoshiBackupRepository(appContext.filesDir)
+    val storageCleanupRepository: StorageCleanupRepository = StorageCleanupRepository(appContext.filesDir, appContext.cacheDir)
     val ankiRepository: AnkiRepository = AnkiRepository(
         context = appContext,
         backend = AnkiDroidBackendAdapter(AndroidAnkiContentApi(appContext)),

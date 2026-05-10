@@ -13,14 +13,12 @@ class DictionaryRepositoryTest {
     @Test
     fun repositoryMutationsPersistStorageConfigAndRebuildLookupPaths() {
         val filesDir = temporaryFolder.newFolder("files")
-        val cacheDir = temporaryFolder.newFolder("cache")
         val storage = DictionaryStorageDataSource(filesDir)
         val bridge = RecordingDictionaryNativeBridge()
         val repository = DictionaryRepository(
             filesDir,
-            cacheDir,
             storage,
-            DictionaryImportDataSource(cacheDir, bridge),
+            DictionaryImportDataSource(bridge),
             DictionaryLookupQueryService(bridge),
         )
         writeDictionary(storage.typeDirectory(DictionaryType.Term), "First", "First")
@@ -45,13 +43,11 @@ class DictionaryRepositoryTest {
     @Test
     fun repositoryMoveRewritesIosOrderThroughStorage() {
         val filesDir = temporaryFolder.newFolder("move-files")
-        val cacheDir = temporaryFolder.newFolder("move-cache")
         val storage = DictionaryStorageDataSource(filesDir)
         val repository = DictionaryRepository(
             filesDir,
-            cacheDir,
             storage,
-            DictionaryImportDataSource(cacheDir, RecordingDictionaryNativeBridge()),
+            DictionaryImportDataSource(RecordingDictionaryNativeBridge()),
             DictionaryLookupQueryService(RecordingDictionaryNativeBridge()),
         )
         writeDictionary(storage.typeDirectory(DictionaryType.Term), "First", "First")

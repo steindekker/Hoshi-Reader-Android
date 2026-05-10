@@ -1,6 +1,7 @@
 package moe.antimony.hoshi.features.bookshelf
 
 import android.content.ContentResolver
+import android.content.Intent
 import android.net.Uri
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -70,11 +71,11 @@ internal class AndroidBookshelfRepository(
     }
 
     override suspend fun deleteBook(entry: BookEntry) = withContext(ioDispatcher) {
-        bookRepository.deleteBook(entry.root)
+        bookRepository.deleteBook(entry.root, ::releasePersistedSasayakiAudioUri)
     }
 
     override suspend fun deleteBooks(entries: Collection<BookEntry>) = withContext(ioDispatcher) {
-        entries.forEach { bookRepository.deleteBook(it.root) }
+        entries.forEach { bookRepository.deleteBook(it.root, ::releasePersistedSasayakiAudioUri) }
     }
 
     override suspend fun moveBooks(bookIds: Set<String>, shelfName: String?) = withContext(ioDispatcher) {
@@ -159,4 +160,11 @@ internal class AndroidBookshelfRepository(
 
     private suspend fun readerBookId(root: File): String =
         bookRepository.loadMetadata(root)?.id ?: root.name
+
+    private fun releasePersistedSasayakiAudioUri(uriString: String) {
+        contentResolver.releasePersistableUriPermission(
+            Uri.parse(uriString),
+            Intent.FLAG_GRANT_READ_URI_PERMISSION,
+        )
+    }
 }
