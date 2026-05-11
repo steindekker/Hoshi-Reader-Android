@@ -5,6 +5,8 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+## [v0.4.2] - 2026-05-12
+
 ### Fixed
 
 - Keep the Dictionary tab search cursor visible in dark theme. #54
