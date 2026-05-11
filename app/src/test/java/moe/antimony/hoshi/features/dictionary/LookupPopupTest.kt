@@ -2,6 +2,7 @@ package moe.antimony.hoshi.features.dictionary
 
 import moe.antimony.hoshi.features.reader.ReaderSelectionData
 import moe.antimony.hoshi.features.reader.ReaderSelectionRect
+import moe.antimony.hoshi.features.audio.AudioSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -125,6 +126,41 @@ class LookupPopupTest {
 
         assertEquals(1, afterDismissingChild.single { it.id == "root" }.clearSelectionSignal)
         assertEquals(1, afterDismissingGrandchild.single { it.id == "child" }.clearSelectionSignal)
+    }
+
+    @Test
+    fun existingPopupsRetainSelectionAndHistorySignalsWhenThemeChanges() {
+        val popups = listOf(
+            LookupPopupItem(
+                id = "root",
+                clearSelectionSignal = 3,
+                state = LookupPopupState(
+                    selection = ReaderSelectionData(
+                        text = "猫",
+                        sentence = "猫です",
+                        rect = ReaderSelectionRect(x = 0.0, y = 0.0, width = 1.0, height = 1.0),
+                        normalizedOffset = 4,
+                    ),
+                    results = emptyList(),
+                    darkMode = false,
+                    eInkMode = false,
+                    audioSettings = AudioSettings(enableAutoplay = false),
+                ),
+            ),
+        )
+
+        val themed = popups.withLookupPopupVisualOptions(
+            darkMode = true,
+            eInkMode = true,
+            audioSettings = AudioSettings(enableAutoplay = true),
+        )
+
+        assertEquals("root", themed.single().id)
+        assertEquals(3, themed.single().clearSelectionSignal)
+        assertEquals("猫", themed.single().state.selection.text)
+        assertTrue(themed.single().state.darkMode)
+        assertTrue(themed.single().state.eInkMode)
+        assertTrue(themed.single().state.audioSettings.enableAutoplay)
     }
 
 }

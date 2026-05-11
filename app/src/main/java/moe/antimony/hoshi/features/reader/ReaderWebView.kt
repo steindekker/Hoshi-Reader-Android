@@ -93,6 +93,7 @@ import moe.antimony.hoshi.features.dictionary.LookupPopupItem
 import moe.antimony.hoshi.features.dictionary.LookupPopupOptions
 import moe.antimony.hoshi.features.dictionary.LookupPopupStackView
 import moe.antimony.hoshi.features.dictionary.createLookupPopupItem
+import moe.antimony.hoshi.features.dictionary.withLookupPopupVisualOptions
 import moe.antimony.hoshi.features.sasayaki.BookSasayakiPlaybackRepository
 import moe.antimony.hoshi.features.sasayaki.SasayakiAudioRepository
 import moe.antimony.hoshi.features.sasayaki.SasayakiCueRange
@@ -179,6 +180,14 @@ fun ReaderWebView(
     val effectiveSettings = stateHolder.effectiveSettings
     val readerPosition = stateHolder.readerPosition
     val lookupPopups = stateHolder.lookupPopups
+    val popupDarkMode = effectiveSettings.usesDarkInterface(systemDarkTheme)
+    val themedLookupPopups = remember(lookupPopups, popupDarkMode, effectiveSettings.eInkMode, audioSettings) {
+        lookupPopups.withLookupPopupVisualOptions(
+            darkMode = popupDarkMode,
+            eInkMode = effectiveSettings.eInkMode,
+            audioSettings = audioSettings,
+        )
+    }
     val showReaderMenu = stateHolder.showReaderMenu
     val showAppearance = stateHolder.showAppearance
     val showChapters = stateHolder.showChapters
@@ -202,7 +211,7 @@ fun ReaderWebView(
                 swipeThreshold = effectiveSettings.popupSwipeThreshold,
                 popupActionBar = effectiveSettings.popupActionBar,
                 dictionarySettings = dictionarySettings,
-                darkMode = effectiveSettings.usesDarkInterface(systemDarkTheme),
+                darkMode = popupDarkMode,
                 eInkMode = effectiveSettings.eInkMode,
                 audioSettings = audioSettings,
                 documentTitle = book.title,
@@ -223,7 +232,7 @@ fun ReaderWebView(
                 swipeThreshold = effectiveSettings.popupSwipeThreshold,
                 popupActionBar = effectiveSettings.popupActionBar,
                 dictionarySettings = dictionarySettings,
-                darkMode = effectiveSettings.usesDarkInterface(systemDarkTheme),
+                darkMode = popupDarkMode,
                 eInkMode = effectiveSettings.eInkMode,
                 audioSettings = audioSettings,
                 documentTitle = book.title,
@@ -496,7 +505,7 @@ fun ReaderWebView(
                 )
             }
             LookupPopupStackView(
-                popups = lookupPopups,
+                popups = themedLookupPopups,
                 onPopupsChange = ::setLookupPopups,
                 lookupChildPopup = ::lookupChildPopup,
                 onRootPopupDismissed = ::clearReaderSelection,

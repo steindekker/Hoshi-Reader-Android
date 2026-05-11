@@ -104,6 +104,21 @@ internal fun dismissPopupAt(
         }
     }
 
+internal fun List<LookupPopupItem>.withLookupPopupVisualOptions(
+    darkMode: Boolean,
+    eInkMode: Boolean,
+    audioSettings: AudioSettings,
+): List<LookupPopupItem> =
+    map { popup ->
+        popup.copy(
+            state = popup.state.copy(
+                darkMode = darkMode,
+                eInkMode = eInkMode,
+                audioSettings = audioSettings,
+            ),
+        )
+    }
+
 @Composable
 internal fun LookupPopupStackView(
     popups: List<LookupPopupItem>,

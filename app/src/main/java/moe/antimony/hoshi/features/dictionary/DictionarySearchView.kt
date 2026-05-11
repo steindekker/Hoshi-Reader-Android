@@ -123,6 +123,36 @@ fun DictionarySearchView(
         darkMode = popupDarkMode,
         audioSettings = uiState.audioSettings,
     )
+    val resultHtml = remember(
+        uiState.lastQuery,
+        uiState.results,
+        uiState.dictionaryStyles,
+        uiState.dictionarySettings,
+        popupDarkMode,
+        readerSettings.eInkMode,
+        uiState.audioSettings,
+        ankiUiState.popupSettings,
+        assets,
+    ) {
+        DictionarySearchContent.renderExistingResults(
+            lastQuery = uiState.lastQuery,
+            results = uiState.results,
+            assets = assets,
+            dictionaryStyles = uiState.dictionaryStyles,
+            dictionarySettings = uiState.dictionarySettings,
+            darkMode = popupDarkMode,
+            eInkMode = readerSettings.eInkMode,
+            audioSettings = uiState.audioSettings,
+            ankiSettings = ankiUiState.popupSettings,
+        ).html
+    }
+    val themedPopups = remember(uiState.popups, popupDarkMode, readerSettings.eInkMode, uiState.audioSettings) {
+        uiState.popups.withLookupPopupVisualOptions(
+            darkMode = popupDarkMode,
+            eInkMode = readerSettings.eInkMode,
+            audioSettings = uiState.audioSettings,
+        )
+    }
     val runLookup = {
         searchViewModel.runLookup(
             assets = assets,
@@ -145,7 +175,7 @@ fun DictionarySearchView(
     ) {
         when {
             uiState.html.isNotBlank() -> DictionaryResultWebView(
-                html = uiState.html,
+                html = resultHtml,
                 results = uiState.results,
                 assets = assets,
                 audioSettings = uiState.audioSettings,
@@ -204,7 +234,7 @@ fun DictionarySearchView(
                 .padding(horizontal = 20.dp, vertical = 10.dp),
         )
         LookupPopupStackView(
-            popups = uiState.popups,
+            popups = themedPopups,
             onPopupsChange = searchViewModel::setPopups,
             lookupChildPopup = lookupPopup,
             onRootPopupDismissed = searchViewModel::dismissRootPopup,

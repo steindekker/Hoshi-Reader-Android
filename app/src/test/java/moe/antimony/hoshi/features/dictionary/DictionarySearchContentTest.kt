@@ -69,6 +69,39 @@ class DictionarySearchContentTest {
     }
 
     @Test
+    fun existingResultsCanBeRerenderedForThemeChangesWithoutRunningLookupAgain() {
+        var lookupCount = 0
+        val state = DictionarySearchContent.runLookup(
+            query = " 猫 ",
+            lookup = {
+                lookupCount += 1
+                listOf(lookupResult())
+            },
+            assets = LookupPopupAssets(
+                popupJs = "window.renderPopup = function() {};",
+                popupCss = ".entry-header {}",
+            ),
+            darkMode = false,
+        )
+
+        val rerendered = DictionarySearchContent.renderExistingResults(
+            lastQuery = state.lastQuery,
+            results = state.results,
+            dictionaryStyles = state.dictionaryStyles,
+            assets = LookupPopupAssets(
+                popupJs = "window.renderPopup = function() {};",
+                popupCss = ".entry-header {}",
+            ),
+            darkMode = true,
+        )
+
+        assertEquals(1, lookupCount)
+        assertEquals("猫", rerendered.lastQuery)
+        assertTrue(rerendered.hasResults)
+        assertTrue(rerendered.html.contains("""data-hoshi-color-scheme="dark""""))
+    }
+
+    @Test
     fun dictionarySearchCanRenderEInkPopupCssFromReaderSettings() {
         val state = DictionarySearchContent.runLookup(
             query = " 猫 ",

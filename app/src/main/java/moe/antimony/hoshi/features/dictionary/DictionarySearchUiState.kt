@@ -65,8 +65,41 @@ internal object DictionarySearchContent {
                 dictionaryStyles = emptyMap(),
             )
         }
-        return DictionarySearchRenderState(
+        return renderExistingResults(
             lastQuery = trimmed,
+            results = results,
+            assets = assets,
+            dictionaryStyles = dictionaryStyles,
+            dictionarySettings = dictionarySettings,
+            darkMode = darkMode,
+            eInkMode = eInkMode,
+            audioSettings = audioSettings,
+            ankiSettings = ankiSettings,
+        )
+    }
+
+    fun renderExistingResults(
+        lastQuery: String,
+        results: List<LookupResult>,
+        assets: LookupPopupAssets? = null,
+        dictionaryStyles: Map<String, String> = emptyMap(),
+        dictionarySettings: DictionarySettings = DictionarySettings(),
+        darkMode: Boolean = false,
+        eInkMode: Boolean = false,
+        audioSettings: AudioSettings = AudioSettings(),
+        ankiSettings: AnkiPopupSettings = AnkiPopupSettings(),
+    ): DictionarySearchRenderState {
+        if (results.isEmpty()) {
+            return DictionarySearchRenderState(
+                lastQuery = lastQuery,
+                html = "",
+                results = emptyList(),
+                hasResults = false,
+                dictionaryStyles = emptyMap(),
+            )
+        }
+        return DictionarySearchRenderState(
+            lastQuery = lastQuery,
             html = LookupPopupHtml.render(
                 results = results,
                 assets = assets,
