@@ -4,11 +4,12 @@
 
 ## 核心规则
 
-- iOS 用户可见行为和 UI 是唯一真源；不要让 Android 默认行为、第三方示例或 POC 覆盖 iOS 行为。
-- 开始功能切片前，先查看 `reference/Hoshi-Reader-iOS` 对应实现并总结行为。
+- iOS 用户可见行为和 UI 是唯一真源；不要让 Android 默认行为、第三方示例或 POC 覆盖 iOS 用户可见行为。
+- 开始功能切片前，先查看 `reference/Hoshi-Reader-iOS` 对应实现并总结用户交互、状态流和边界行为。
 - 修复问题时不要做补丁式修复（补丁后发现没修好再继续叠新补丁）；应先把 iOS 版作为真源，直接参考 iOS 现有实现和状态流来修。只有在尽可能照齐 iOS 逻辑后，仍因 Android/iOS 系统层差异导致行为不一致时，才做最小偏差的 Android 侧适配，且不可进一步扩大实现偏差。
 - 不要把 Swift 源码复制到 `app/src/main` 或任何 Android package。
 - iOS 架构只作行为参考；Android 使用 repository、ViewModel、不可变 UI state。
+- 涉及 Android 系统能力、平台限制、权限、Intent、DocumentsUI、WebView、Media3、WorkManager、Google/Jetpack API、打包安装或后台任务时，优先查询 Android/Google/Jetpack 官方文档确认当前推荐实现和限制；iOS 只作为用户交互和行为逻辑参考，具体实现方式以 Android 官方文档和本仓库 Android 架构为准。
 - 推进顺序：model/storage -> bookshelf import -> reader -> dictionary popup -> Anki -> sync -> settings。
 - 主路径：bookshelf -> import EPUB -> open reader -> select text -> lookup。
 - 完成需求时先更新 `docs/TODO.md`，再把代码和 TODO 放进同一个 commit；用户明确要求不 commit 时不要提交。
@@ -34,14 +35,14 @@ rg "LookupEngine" reference/Hoshi-Reader-iOS
 
 ## Android 技术栈
 
-- UI：Jetpack Compose、Material 3、自定义 Hoshi 主题。
+- UI：Jetpack Compose、Material 3。
 - 语言/构建：Kotlin、Kotlin DSL。
-- 导航：优先 AndroidX Navigation Compose。
+- 导航：使用当前 Navigation3/typed route back stack 架构；新增路由按现有 `AppShell` / `NavDisplay` / route key 模式接入。
 - 状态：ViewModel + immutable UI state + `StateFlow`。
 - 数据：repository 负责文件、数据库、辞典、EPUB、网络。
 - 异步：Kotlin coroutines，禁止阻塞主线程。
 - JSON：Kotlin Serialization 或 Moshi。
-- 持久化：优先保留 iOS sidecar JSON；仅在明显简化时使用 Room。
+- 持久化：保留 iOS sidecar JSON。
 - 文件导入：Android Storage Access Framework + app-specific storage。
 - Android API 按平台语义选择，不机械映射 iOS API。
 
@@ -62,9 +63,6 @@ git submodule update --init --recursive
 
 ## EPUB 与阅读器
 
-- EPUB 解析优先沿用 `../Hoshi-POC/app/src/main/rust/hoshiepub` 的 Rust/UniFFI 方案，对齐 iOS `EPUBKit`。
-- 可借鉴 `../Hoshi-POC` 的 EPUB 解析和 Rust/UniFFI 构建方式；不要借鉴其阅读器 UI/交互。
-- 不优先接入 Readium。
 - Parser 能力收敛到 iOS 已用模型：manifest、spine、toc、章节内容、资源读取、封面路径等；不要新增搜索、全文索引或额外导航 API。
 - UniFFI：`uniffi.toml` 的 `[bindings.kotlin]` 需要 `android = true`；Android 打包侧用 JNA AAR，JVM 单测侧用 jar。
 - `cargo-ndk` 只构建库目标，避免交叉编译 UniFFI bindgen 等 host binary。
@@ -72,8 +70,6 @@ git submodule update --init --recursive
 - 阅读器必须保留 WebView；查词依赖 WebView 和 JS 侧选择、坐标、DOM 逻辑。
 - WebView 用 Compose `AndroidView` 嵌入；本地章节内容优先 `WebViewAssetLoader` 或 `loadDataWithBaseURL()`。
 - 不要启用宽泛 file URL 访问，如 `allowUniversalAccessFromFileURLs`。
-- 覆盖日文竖排、自定义 CSS、字体/主题变化、进度恢复、文本选择、高亮、辞典弹窗定位。
-- 翻页以 iOS `ReaderWebView` / `reader.js` 为准：页内由 JS 滚动；到章节边界才切章节；反向跨章节进入上一章末尾。
 - 竖排分页注意 Android WebView/WKWebView 差异；图片页需稳定 CSS 尺寸约束，必要时取整 CSS 页面变量，避免 fractional column overflow 产生空白页。
 
 ## 阅读器调试
@@ -92,6 +88,7 @@ git submodule update --init --recursive
 - EPUB：`testdata/test.epub`、`testdata/test2.epub`
 - 辞典：`testdata/JMdict_english.zip`、`testdata/MK3.zip`、`testdata/freq.zip`、`testdata/pitch.zip`
 - 字体：`testdata/KleeOne-SemiBold.ttf`
+- Sasayaki：`testdata/test.srt`、`testdata/test.m4b`
 - EPUB reader 手工验证样本：`testdata/test.epub`
 - 导入必须通过 DocumentsUI 选择测试文件，或使用等价的已授权 `content://` URI；不要用 `file:///sdcard/...` 或 shell 拼出的未授权 `content://...`。
 - 命令行辅助时，可先把样本推送到模拟器 Downloads，再通过 DocumentsUI 选择。
@@ -116,17 +113,15 @@ $ANDROID_HOME/platform-tools/adb -s emulator-5554 shell input text taberu
 $ANDROID_HOME/platform-tools/adb -s emulator-5554 shell input keyevent 66
 ```
 
-- `adb shell input text '食べる'` 失败通常是 shell/input method 限制，不代表应用失败。
-- 日语优先测 `食べる` / `たべる`；ASCII 可导入 `testdata/MK3.zip` 后查 `test`。
+- 日语优先测 `食べる` / `たべる`。
 - 自动输入受影响时，允许用户手动输入；之后基于当前模拟器状态继续验证，不要清数据或重导入。
 - 查词 WebView 用 DevTools/CDP 检查 DOM、按钮状态、JS 变量和 console log。
-- 音频按钮可用 `input motionevent DOWN/UP` 捕捉按下态，再查 logcat 的 `MediaPlayer`、`MediaHTTPService`、`audio/mpeg`。
 
 ## 集成
 
 - Anki：先调查 AnkiDroid API、intent 或 Android 可用 AnkiConnect 路径。
 - Google Drive：使用 Android Google Sign-In/OAuth/Drive API，不复用 iOS token/keychain 思路。
-- Audio/Sasayaki：用 AndroidX Media3/ExoPlayer 做原型验证。
+- Audio/Sasayaki：使用 AndroidX Media3/ExoPlayer 和现有 Sasayaki controller/repository 边界推进，保持 iOS 侧可见播放、cue、导出行为一致。
 
 ## 验证
 
@@ -135,6 +130,13 @@ $ANDROID_HOME/platform-tools/adb -s emulator-5554 shell input keyevent 66
 ```bash
 ./gradlew test
 ./gradlew assembleDebug
+```
+
+需要跑单个 JVM 单测或测试类时，不要使用 `./gradlew test --tests ...`；本仓库的 `:app:test` 是 Android Gradle 聚合任务，不支持 `--tests` 过滤。应使用：
+
+```bash
+./gradlew :app:testDebugUnitTest --tests fully.qualified.TestClassName
+./gradlew :app:testDebugUnitTest --tests fully.qualified.TestClassName.testMethodName
 ```
 
 修改资源、manifest、UI 或打包时还要运行：
