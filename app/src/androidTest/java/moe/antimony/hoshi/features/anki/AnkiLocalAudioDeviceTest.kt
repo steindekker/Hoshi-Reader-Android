@@ -115,7 +115,13 @@ class AnkiLocalAudioDeviceTest {
         override fun fetchNoteTypes(): List<AnkiNoteType> =
             listOf(AnkiNoteType(7L, "Lapis", listOf("Expression", "Audio")))
 
-        override fun isDuplicate(modelId: Long, key: String): Boolean = false
+        override fun isDuplicate(
+            deck: AnkiDeck,
+            noteType: AnkiNoteType,
+            key: String,
+            duplicateScope: AnkiDuplicateScope,
+            checkDuplicatesAcrossAllModels: Boolean,
+        ): Boolean = false
 
         override fun addNote(
             deck: AnkiDeck,
@@ -123,6 +129,8 @@ class AnkiLocalAudioDeviceTest {
             fieldsByName: Map<String, String>,
             tags: Set<String>,
             allowDupes: Boolean,
+            duplicateScope: AnkiDuplicateScope,
+            checkDuplicatesAcrossAllModels: Boolean,
         ): Boolean {
             addedFields = fieldsByName
             return true
