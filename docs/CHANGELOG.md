@@ -5,6 +5,8 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+## [v0.4.1] - 2026-05-12
+
 ### Fixed
 
 - Open dictionary definition web links in Android's external default browser, matching iOS popup behavior.
