@@ -267,6 +267,14 @@ class ReaderChromeTest {
     }
 
     @Test
+    fun systemThemeChromeUsesSepiaColorsWhenSepiaIsEnabledAsLightTheme() {
+        val settings = ReaderSettings(theme = ReaderTheme.System, systemLightSepia = true)
+
+        assertEquals(0x40FFFFFFL, readerChromeColors(settings, systemDark = false).buttonContainer)
+        assertEquals(0x661A1A1AL, readerChromeColors(settings, systemDark = true).buttonContainer)
+    }
+
+    @Test
     fun eInkModeUsesOpaquePureChromeColors() {
         val light = readerChromeColors(ReaderSettings(eInkMode = true), systemDark = false)
         val dark = readerChromeColors(ReaderSettings(theme = ReaderTheme.Dark, eInkMode = true), systemDark = false)

@@ -26,6 +26,7 @@ class ReaderSettingsRepositoryTest {
 
             assertEquals(ReaderTheme.System, settings.theme)
             assertFalse(settings.eInkMode)
+            assertFalse(settings.systemLightSepia)
             assertFalse(settings.sepiaInvertInDark)
             assertTrue(settings.verticalWriting)
             assertEquals(ReaderFontManager.defaultMinchoFont, settings.selectedFont)
@@ -99,6 +100,7 @@ class ReaderSettingsRepositoryTest {
             repository.update { current ->
                 current.copy(
                     theme = ReaderTheme.Sepia,
+                    systemLightSepia = true,
                     sepiaInvertInDark = true,
                     verticalWriting = false,
                     selectedFont = ReaderFontManager.defaultGothicFont,
@@ -132,6 +134,7 @@ class ReaderSettingsRepositoryTest {
             val saved = repository.settings.first()
 
             assertEquals(ReaderTheme.Sepia, saved.theme)
+            assertTrue(saved.systemLightSepia)
             assertTrue(saved.sepiaInvertInDark)
             assertFalse(saved.verticalWriting)
             assertEquals(ReaderFontManager.defaultGothicFont, saved.selectedFont)

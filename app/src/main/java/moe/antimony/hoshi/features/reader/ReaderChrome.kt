@@ -174,7 +174,7 @@ fun readerChromeColors(settings: ReaderSettings, systemDark: Boolean): ReaderChr
         menuBorder = 0x26FFFFFF,
         infoText = 0x99FFFFFF,
     )
-    settings.theme == ReaderTheme.Sepia -> ReaderChromeColors(
+    settings.usesSepiaLightContent(systemDark) -> ReaderChromeColors(
         buttonContainer = 0x40FFFFFF,
         buttonContent = 0xFF1F170D,
         menuContainer = 0xFFF8EFDD,

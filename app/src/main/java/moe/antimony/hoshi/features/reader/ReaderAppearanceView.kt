@@ -228,6 +228,14 @@ private fun ReaderAppearanceContent(
                         checked = settings.eInkMode,
                         onCheckedChange = { onSettingsChange(settings.copy(eInkMode = it)) },
                     )
+                    if (settings.theme == ReaderTheme.System) {
+                        AppearanceDivider(palette)
+                        SwitchRow(
+                            label = "Use Sepia as Light Theme",
+                            checked = settings.systemLightSepia,
+                            onCheckedChange = { onSettingsChange(settings.copy(systemLightSepia = it)) },
+                        )
+                    }
                     if (settings.theme == ReaderTheme.Sepia) {
                         AppearanceDivider(palette)
                         SwitchRow(

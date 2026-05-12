@@ -18,6 +18,7 @@ class ReaderSettingsTest {
         assertEquals(0, settings.verticalPadding)
         assertEquals(1.65, settings.lineHeight, 0.0)
         assertEquals("Noto Serif CJK JP", settings.selectedFont)
+        assertFalse(settings.systemLightSepia)
         assertFalse(settings.sepiaInvertInDark)
         assertFalse(settings.continuousMode)
         assertEquals(20, settings.chapterSwipeDistance)
@@ -213,6 +214,18 @@ class ReaderSettingsTest {
 
         assertTrue(css.contains("background: #000 !important;"))
         assertTrue(css.contains("color: #fff !important;"))
+    }
+
+    @Test
+    fun systemReaderThemeCanUseSepiaAsLightThemeLikeIos() {
+        val settings = ReaderSettings(theme = ReaderTheme.System, systemLightSepia = true)
+
+        assertEquals(0xFFF2E2C9, settings.backgroundColor(systemDark = false))
+        assertEquals("#332A1B", settings.textColorCss(systemDark = false))
+        assertEquals(0xFF000000, settings.backgroundColor(systemDark = true))
+        assertEquals("#fff", settings.textColorCss(systemDark = true))
+        assertFalse(settings.usesDarkInterface(systemDark = false))
+        assertTrue(settings.usesDarkInterface(systemDark = true))
     }
 
     @Test
