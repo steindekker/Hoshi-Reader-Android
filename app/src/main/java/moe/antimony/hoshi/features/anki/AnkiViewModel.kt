@@ -15,6 +15,7 @@ data class AnkiUiState(
     val noteTypes: List<AnkiNoteType> = emptyList(),
     val isFetching: Boolean = false,
     val errorMessage: String? = null,
+    val errorAction: AnkiErrorAction? = null,
 ) {
     val availableDecks: List<AnkiDeck>
         get() = decks.ifEmpty { settings.availableDecks }
@@ -36,6 +37,10 @@ data class AnkiUiState(
             allowDupes = settings.allowDupes,
             compactGlossaries = settings.compactGlossaries,
         )
+}
+
+enum class AnkiErrorAction {
+    OpenPermissionSettings,
 }
 
 class AnkiViewModel(
@@ -64,19 +69,43 @@ class AnkiViewModel(
 
     fun fetchConfiguration() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isFetching = true, errorMessage = null)
+            _uiState.value = _uiState.value.copy(isFetching = true, errorMessage = null, errorAction = null)
             when (val result = repository.fetchConfiguration()) {
                 is AnkiFetchResult.Success -> _uiState.value = _uiState.value.copy(
                     decks = result.decks,
                     noteTypes = result.noteTypes,
                     isFetching = false,
+                    errorAction = null,
                 )
                 is AnkiFetchResult.Error -> _uiState.value = _uiState.value.copy(
                     isFetching = false,
                     errorMessage = result.message,
+                    errorAction = if (result.message == AnkiFetchFailure.PermissionDenied.userMessage) {
+                        AnkiErrorAction.OpenPermissionSettings
+                    } else {
+                        null
+                    },
                 )
             }
         }
+    }
+
+    fun isAnkiDroidAvailable(): Boolean = repository.isAnkiDroidAvailable()
+
+    fun showFetchApiUnavailable() {
+        _uiState.value = _uiState.value.copy(
+            isFetching = false,
+            errorMessage = AnkiFetchFailure.ApiUnavailable.userMessage,
+            errorAction = null,
+        )
+    }
+
+    fun showFetchPermissionDenied() {
+        _uiState.value = _uiState.value.copy(
+            isFetching = false,
+            errorMessage = AnkiFetchFailure.PermissionDenied.userMessage,
+            errorAction = AnkiErrorAction.OpenPermissionSettings,
+        )
     }
 
     fun selectDeck(deck: AnkiDeck) {

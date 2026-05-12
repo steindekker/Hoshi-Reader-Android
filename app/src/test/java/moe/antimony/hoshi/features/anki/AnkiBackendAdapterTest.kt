@@ -79,7 +79,7 @@ class AnkiBackendAdapterTest {
         val api = FakeAnkiContentApi(
             decks = mapOf(1L to "Default", 2L to "Mining"),
             models = mapOf(5L to "Basic", 7L to "Lapis"),
-            fields = mapOf(7L to listOf("Expression", "Sentence")),
+            fields = mapOf(5L to listOf("Front", "Back"), 7L to listOf("Expression", "Sentence")),
             duplicateKeys = setOf("読む"),
         )
         val backend = AnkiDroidBackendAdapter(api)
@@ -87,7 +87,7 @@ class AnkiBackendAdapterTest {
         assertEquals(listOf(AnkiDeck(1L, "Default"), AnkiDeck(2L, "Mining")), backend.fetchDecks())
         assertEquals(
             listOf(
-                AnkiNoteType(5L, "Basic", emptyList()),
+                AnkiNoteType(5L, "Basic", listOf("Front", "Back")),
                 AnkiNoteType(7L, "Lapis", listOf("Expression", "Sentence")),
             ),
             backend.fetchNoteTypes(),
@@ -110,6 +110,86 @@ class AnkiBackendAdapterTest {
                 checkDuplicatesAcrossAllModels = false,
             ),
         )
+    }
+
+    @Test
+    fun adapterReportsUnavailableAnkiDroidApi() {
+        val backend = AnkiDroidBackendAdapter(
+            FakeAnkiContentApi(
+                deckFailure = AnkiFetchFailure.ApiUnavailable,
+            ),
+        )
+
+        val error = assertAnkiFetchFailure(AnkiFetchFailure.ApiUnavailable) {
+            backend.fetchDecks()
+        }
+
+        assertEquals(
+            "AnkiDroid is unavailable. Install AnkiDroid, then try again.",
+            error.message,
+        )
+    }
+
+    @Test
+    fun adapterReportsPermissionDeniedWhenProviderRejectsFetch() {
+        val backend = AnkiDroidBackendAdapter(
+            FakeAnkiContentApi(
+                modelFailure = AnkiFetchFailure.PermissionDenied,
+            ),
+        )
+
+        val error = assertAnkiFetchFailure(AnkiFetchFailure.PermissionDenied) {
+            backend.fetchNoteTypes()
+        }
+
+        assertEquals(
+            "AnkiDroid database access was denied. Grant the permission to fetch decks and note types.",
+            error.message,
+        )
+    }
+
+    @Test
+    fun adapterReportsNullDeckAndModelListsSeparately() {
+        assertAnkiFetchFailure(AnkiFetchFailure.DeckListUnavailable) {
+            AnkiDroidBackendAdapter(FakeAnkiContentApi(decks = null)).fetchDecks()
+        }
+        assertAnkiFetchFailure(AnkiFetchFailure.ModelListUnavailable) {
+            AnkiDroidBackendAdapter(FakeAnkiContentApi(models = null)).fetchNoteTypes()
+        }
+    }
+
+    @Test
+    fun adapterReportsUnreadableModelFieldsAndSkipsUnusableModels() {
+        val backend = AnkiDroidBackendAdapter(
+            FakeAnkiContentApi(
+                models = mapOf(5L to "Basic", 7L to "Lapis"),
+                fields = mapOf(7L to listOf("Expression")),
+                nullFieldModelIds = setOf(5L),
+            ),
+        )
+
+        val error = assertAnkiFetchFailure(AnkiFetchFailure.ModelFieldsUnavailable) {
+            backend.fetchNoteTypes()
+        }
+
+        assertEquals("Unable to read fields for AnkiDroid note type: Basic.", error.message)
+    }
+
+    @Test
+    fun adapterReportsAllModelFieldsUnavailableWhenNoModelIsUsable() {
+        val backend = AnkiDroidBackendAdapter(
+            FakeAnkiContentApi(
+                models = mapOf(5L to "Basic"),
+                fields = emptyMap(),
+                nullFieldModelIds = setOf(5L),
+            ),
+        )
+
+        val error = assertAnkiFetchFailure(AnkiFetchFailure.ModelFieldsUnavailable) {
+            backend.fetchNoteTypes()
+        }
+
+        assertEquals("Unable to read fields for AnkiDroid note type: Basic.", error.message)
     }
 
     @Test
@@ -152,10 +232,13 @@ class AnkiBackendAdapterTest {
     }
 
     private class FakeAnkiContentApi(
-        private val decks: Map<Long, String> = mapOf(1L to "Default"),
-        private val models: Map<Long, String> = mapOf(7L to "Lapis"),
+        private val decks: Map<Long, String>? = mapOf(1L to "Default"),
+        private val models: Map<Long, String>? = mapOf(7L to "Lapis"),
         private val fields: Map<Long, List<String>> = mapOf(7L to listOf("Expression")),
         private val duplicateKeys: Set<String> = emptySet(),
+        private val deckFailure: AnkiFetchFailure? = null,
+        private val modelFailure: AnkiFetchFailure? = null,
+        private val nullFieldModelIds: Set<Long> = emptySet(),
     ) : AnkiContentApi {
         var addedFields: Array<String>? = null
             private set
@@ -170,11 +253,20 @@ class AnkiBackendAdapterTest {
         var lastDuplicateCheckAllModels: Boolean = false
             private set
 
-        override fun deckList(): Map<Long, String> = decks
+        override fun deckList(): Map<Long, String> =
+            deckFailure?.let { throw AnkiFetchException(it) } ?: decks
+                ?: throw AnkiFetchException(AnkiFetchFailure.DeckListUnavailable)
 
-        override fun modelList(): Map<Long, String> = models
+        override fun modelList(): Map<Long, String> =
+            modelFailure?.let { throw AnkiFetchException(it) } ?: models
+                ?: throw AnkiFetchException(AnkiFetchFailure.ModelListUnavailable)
 
-        override fun fieldList(modelId: Long): List<String> = fields[modelId].orEmpty()
+        override fun fieldList(modelId: Long): List<String> =
+            if (modelId in nullFieldModelIds) {
+                throw AnkiFetchException(AnkiFetchFailure.ModelFieldsUnavailable)
+            } else {
+                fields[modelId].orEmpty()
+            }
 
         override fun findDuplicateNotes(
             deck: AnkiDeck,
@@ -199,6 +291,19 @@ class AnkiBackendAdapterTest {
             addedFields = fields
             addedTags = tags
             return 123L
+        }
+    }
+
+    private fun assertAnkiFetchFailure(
+        expected: AnkiFetchFailure,
+        block: () -> Unit,
+    ): AnkiFetchException {
+        return try {
+            block()
+            throw AssertionError("Expected AnkiFetchException.")
+        } catch (error: AnkiFetchException) {
+            assertEquals(expected, error.failure)
+            error
         }
     }
 }

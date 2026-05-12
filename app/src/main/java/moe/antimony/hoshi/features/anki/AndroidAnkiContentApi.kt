@@ -2,8 +2,10 @@ package moe.antimony.hoshi.features.anki
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import com.ichi2.anki.FlashCardsContract
 import com.ichi2.anki.api.AddContentApi
+import java.lang.SecurityException
 import java.math.BigInteger
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
@@ -16,13 +18,20 @@ class AndroidAnkiContentApi(
     private val api = AddContentApi(appContext)
 
     override fun deckList(): Map<Long, String> =
-        api.deckList.orEmpty()
+        readAnkiApi(AnkiFetchFailure.DeckListUnavailable) {
+            api.deckList ?: throw AnkiFetchException(AnkiFetchFailure.DeckListUnavailable)
+        }
 
     override fun modelList(): Map<Long, String> =
-        api.modelList.orEmpty()
+        readAnkiApi(AnkiFetchFailure.ModelListUnavailable) {
+            api.modelList ?: throw AnkiFetchException(AnkiFetchFailure.ModelListUnavailable)
+        }
 
     override fun fieldList(modelId: Long): List<String> =
-        api.getFieldList(modelId)?.toList().orEmpty()
+        readAnkiApi(AnkiFetchFailure.ModelFieldsUnavailable) {
+            api.getFieldList(modelId)?.toList()
+                ?: throw AnkiFetchException(AnkiFetchFailure.ModelFieldsUnavailable)
+        }
 
     override fun findDuplicateNotes(
         deck: AnkiDeck,
@@ -78,6 +87,21 @@ class AndroidAnkiContentApi(
     override fun isAvailable(): Boolean =
         AddContentApi.getAnkiDroidPackageName(appContext) != null
 
+    private inline fun <T> readAnkiApi(fallbackFailure: AnkiFetchFailure, block: () -> T): T {
+        if (!isAvailable()) throw AnkiFetchException(AnkiFetchFailure.ApiUnavailable)
+        return try {
+            block()
+        } catch (error: AnkiFetchException) {
+            throw error
+        } catch (error: SecurityException) {
+            logAnkiApiFailure("AnkiDroid database permission denied.", error)
+            throw AnkiFetchException(AnkiFetchFailure.PermissionDenied, cause = error)
+        } catch (error: Throwable) {
+            logAnkiApiFailure("AnkiDroid API request failed.", error)
+            throw AnkiFetchException(fallbackFailure, cause = error)
+        }
+    }
+
     private fun noteHasCardInDeck(noteId: Long, deckIds: Set<Long>): Boolean {
         if (deckIds.isEmpty()) return false
         val noteUri = Uri.withAppendedPath(FlashCardsContract.Note.CONTENT_URI, noteId.toString())
@@ -103,6 +127,10 @@ class AndroidAnkiContentApi(
         val NoteProjection = arrayOf(FlashCardsContract.Note._ID, FlashCardsContract.Note.CSUM)
         val CardProjection = arrayOf(FlashCardsContract.Card.DECK_ID)
     }
+}
+
+private fun logAnkiApiFailure(message: String, error: Throwable) {
+    runCatching { Log.w("AndroidAnkiContentApi", message, error) }
 }
 
 internal fun ankiDuplicateNoteSelection(

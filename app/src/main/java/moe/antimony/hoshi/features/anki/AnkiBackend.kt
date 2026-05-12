@@ -23,6 +23,35 @@ interface AnkiBackend {
     fun addMediaFromUri(uriString: String, preferredName: String, mimeType: String): String?
 }
 
+enum class AnkiFetchFailure(
+    val userMessage: String,
+) {
+    ApiUnavailable(
+        "AnkiDroid is unavailable. Install AnkiDroid, then try again.",
+    ),
+    PermissionDenied(
+        "AnkiDroid database access was denied. Grant the permission to fetch decks and note types.",
+    ),
+    DeckListUnavailable(
+        "Unable to read AnkiDroid decks. Open AnkiDroid and try again.",
+    ),
+    ModelListUnavailable(
+        "Unable to read AnkiDroid note types. Open AnkiDroid and try again.",
+    ),
+    ModelFieldsUnavailable(
+        "Unable to read fields for one or more AnkiDroid note types.",
+    ),
+    ProviderFailure(
+        "AnkiDroid did not respond while fetching decks and note types. Open AnkiDroid and try again.",
+    ),
+}
+
+class AnkiFetchException(
+    val failure: AnkiFetchFailure,
+    override val message: String = failure.userMessage,
+    override val cause: Throwable? = null,
+) : RuntimeException(message, cause)
+
 interface AnkiContentApi {
     fun deckList(): Map<Long, String>
     fun modelList(): Map<Long, String>
@@ -47,10 +76,34 @@ class AnkiDroidBackendAdapter(
     override fun fetchDecks(): List<AnkiDeck> =
         api.deckList().map { (id, name) -> AnkiDeck(id, name) }
 
-    override fun fetchNoteTypes(): List<AnkiNoteType> =
-        api.modelList().map { (id, name) ->
-            AnkiNoteType(id = id, name = name, fields = api.fieldList(id))
+    override fun fetchNoteTypes(): List<AnkiNoteType> {
+        val unreadableModels = mutableListOf<String>()
+        val noteTypes = api.modelList().mapNotNull { (id, name) ->
+            val fields = runCatching { api.fieldList(id) }
+                .getOrElse { error ->
+                    if (error is AnkiFetchException && error.failure == AnkiFetchFailure.ModelFieldsUnavailable) {
+                        unreadableModels += name
+                        return@mapNotNull null
+                    }
+                    throw error
+                }
+            if (fields.isEmpty()) {
+                unreadableModels += name
+                null
+            } else {
+                AnkiNoteType(id = id, name = name, fields = fields)
+            }
         }
+        if (unreadableModels.isNotEmpty()) {
+            val message = if (unreadableModels.size == 1) {
+                "Unable to read fields for AnkiDroid note type: ${unreadableModels.single()}."
+            } else {
+                "Unable to read fields for AnkiDroid note types: ${unreadableModels.joinToString()}."
+            }
+            throw AnkiFetchException(AnkiFetchFailure.ModelFieldsUnavailable, message)
+        }
+        return noteTypes
+    }
 
     override fun isDuplicate(
         deck: AnkiDeck,

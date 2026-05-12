@@ -1,6 +1,9 @@
 package moe.antimony.hoshi.features.anki
 
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -81,17 +84,25 @@ fun AnkiView(
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        if (granted) viewModel.fetchConfiguration()
-    }
-    val fetchAnki = {
-        if (ContextCompat.checkSelfPermission(
-                context,
-                AnkiDroidReadWritePermission,
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
+        if (granted) {
             viewModel.fetchConfiguration()
         } else {
-            permissionLauncher.launch(AnkiDroidReadWritePermission)
+            viewModel.showFetchPermissionDenied()
+        }
+    }
+    val fetchAnki = {
+        when (
+            ankiFetchAction(
+                isAnkiDroidAvailable = viewModel.isAnkiDroidAvailable(),
+                permissionGranted = ContextCompat.checkSelfPermission(
+                    context,
+                    AnkiDroidReadWritePermission,
+                ) == PackageManager.PERMISSION_GRANTED,
+            )
+        ) {
+            AnkiFetchAction.FetchConfiguration -> viewModel.fetchConfiguration()
+            AnkiFetchAction.RequestPermission -> permissionLauncher.launch(AnkiDroidReadWritePermission)
+            AnkiFetchAction.ShowApiUnavailable -> viewModel.showFetchApiUnavailable()
         }
     }
 
@@ -112,7 +123,20 @@ fun AnkiView(
                         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
                         headlineContent = { Text("AnkiDroid") },
                         supportingContent = {
-                            Text(uiState.errorMessage ?: "Fetch decks and note types from AnkiDroid.")
+                            Column {
+                                Text(uiState.errorMessage ?: "Fetch decks and note types from AnkiDroid.")
+                                if (uiState.errorAction == AnkiErrorAction.OpenPermissionSettings) {
+                                    TextButton(
+                                        onClick = {
+                                            runCatching {
+                                                context.startActivity(ankiPermissionSettingsIntent(context.packageName))
+                                            }
+                                        },
+                                    ) {
+                                        Text("Open App Settings")
+                                    }
+                                }
+                            }
                         },
                         trailingContent = {
                             TextButton(onClick = fetchAnki, enabled = !uiState.isFetching) {
@@ -188,6 +212,30 @@ fun AnkiView(
         }
     }
 }
+
+internal enum class AnkiFetchAction {
+    FetchConfiguration,
+    RequestPermission,
+    ShowApiUnavailable,
+}
+
+internal fun ankiFetchAction(
+    isAnkiDroidAvailable: Boolean,
+    permissionGranted: Boolean,
+): AnkiFetchAction =
+    when {
+        !isAnkiDroidAvailable -> AnkiFetchAction.ShowApiUnavailable
+        permissionGranted -> AnkiFetchAction.FetchConfiguration
+        else -> AnkiFetchAction.RequestPermission
+    }
+
+internal fun ankiPermissionSettingsIntent(packageName: String): Intent =
+    Intent(
+        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        Uri.parse(ankiPermissionSettingsUri(packageName)),
+    )
+
+internal fun ankiPermissionSettingsUri(packageName: String): String = "package:$packageName"
 
 @Composable
 private fun AnkiDeckRow(

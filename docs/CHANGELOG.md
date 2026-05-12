@@ -5,6 +5,10 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+### Fixed
+
+- Show clear AnkiDroid setup errors when fetching decks and note types fails, distinguish missing AnkiDroid from denied access, and offer a shortcut to app settings after permission denial.
+
 ## [v0.4.3] - 2026-05-12
 
 ### Added

@@ -26,18 +26,28 @@ class AnkiRepository(
         settingsRepository.update(transform)
     }
 
+    fun isAnkiDroidAvailable(): Boolean = backend.isAvailable()
+
     suspend fun fetchConfiguration(): AnkiFetchResult = withContext(Dispatchers.IO) {
         val fetched = runCatching {
-            if (!backend.isAvailable()) return@withContext AnkiFetchResult.Error("AnkiDroid is not available.")
+            if (!backend.isAvailable()) return@withContext AnkiFetchResult.Error(AnkiFetchFailure.ApiUnavailable.userMessage)
             backend.fetchDecks() to backend.fetchNoteTypes()
         }.getOrElse { error ->
+            if (error is AnkiFetchException) {
+                logAnkiFetchFailure("Unable to fetch AnkiDroid configuration: ${error.failure}", error)
+                return@withContext AnkiFetchResult.Error(error.message ?: error.failure.userMessage)
+            }
+            logAnkiFetchFailure("Unable to fetch AnkiDroid configuration.", error)
             return@withContext AnkiFetchResult.Error(
-                error.message ?: "Hoshi could not access AnkiDroid. Grant AnkiDroid database access and try again.",
+                "AnkiDroid did not respond while fetching decks and note types. Open AnkiDroid and try again.",
             )
         }
         val (decks, noteTypes) = fetched
-        if (decks.isEmpty() || noteTypes.isEmpty()) {
-            return@withContext AnkiFetchResult.Error("No AnkiDroid decks or note types were found.")
+        if (decks.isEmpty()) {
+            return@withContext AnkiFetchResult.Error("No AnkiDroid decks were found.")
+        }
+        if (noteTypes.isEmpty()) {
+            return@withContext AnkiFetchResult.Error("No AnkiDroid note types were found.")
         }
         settingsRepository.update { current ->
             val selectedDeck = selectDeckAfterFetch(decks, current)
@@ -183,6 +193,10 @@ internal fun readAnkiAudioBytes(
 }
 
 private const val TAG = "AnkiRepository"
+
+private fun logAnkiFetchFailure(message: String, error: Throwable) {
+    runCatching { Log.w(TAG, message, error) }
+}
 
 internal fun selectDeckAfterFetch(
     decks: List<AnkiDeck>,
