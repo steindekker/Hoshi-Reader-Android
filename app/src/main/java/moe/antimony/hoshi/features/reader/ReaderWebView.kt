@@ -1074,11 +1074,14 @@ private fun ChapterWebView(
         fontManager.webViewFontUrl(readerSettings.selectedFont)
     }
     val baseUrl = remember(chapter) { "https://hoshi.local/epub/${chapter.href}" }
+    val readerContentReloadKey = remember(readerSettings) {
+        readerSettings.readerContentReloadKey()
+    }
     val readerSetupScript = remember(
         chapter,
         chapterPosition.progress,
         chapterFragment,
-        readerSettings,
+        readerContentReloadKey,
         fontFaceUrl,
         systemDark,
         scanNonJapaneseText,

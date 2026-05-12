@@ -47,7 +47,7 @@ internal class ReaderWebViewStateHolder(
         private set
 
     fun syncSettings(settings: ReaderSettings) {
-        val shouldReloadContent = effectiveSettings.readerContentLayoutKey() != settings.readerContentLayoutKey()
+        val shouldReloadContent = effectiveSettings.readerContentReloadKey() != settings.readerContentReloadKey()
         effectiveSettings = settings
         if (shouldReloadContent) {
             prepareReloadAtDisplayedPosition()
@@ -55,9 +55,7 @@ internal class ReaderWebViewStateHolder(
     }
 
     fun applySettings(settings: ReaderSettings) {
-        readerPosition = readerPosition.prepareReloadAtDisplayedPosition()
-        markWebViewRestoring()
-        effectiveSettings = settings
+        syncSettings(settings)
     }
 
     fun showReaderMenu() {
@@ -189,9 +187,10 @@ internal class ReaderWebViewStateHolder(
     }
 }
 
-private data class ReaderContentLayoutKey(
+internal data class ReaderContentReloadKey(
     val theme: ReaderTheme,
     val eInkMode: Boolean,
+    val systemLightSepia: Boolean,
     val sepiaInvertInDark: Boolean,
     val verticalWriting: Boolean,
     val selectedFont: String,
@@ -207,10 +206,11 @@ private data class ReaderContentLayoutKey(
     val characterSpacing: Double,
 )
 
-private fun ReaderSettings.readerContentLayoutKey(): ReaderContentLayoutKey =
-    ReaderContentLayoutKey(
+internal fun ReaderSettings.readerContentReloadKey(): ReaderContentReloadKey =
+    ReaderContentReloadKey(
         theme = theme,
         eInkMode = eInkMode,
+        systemLightSepia = systemLightSepia,
         sepiaInvertInDark = sepiaInvertInDark,
         verticalWriting = verticalWriting,
         selectedFont = selectedFont,

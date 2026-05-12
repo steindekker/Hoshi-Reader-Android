@@ -129,6 +129,50 @@ class ReaderWebViewStateHolderTest {
     }
 
     @Test
+    fun appliedPopupSettingsDoNotReloadWebView() {
+        val holder = stateHolder(initialIndex = 1)
+        holder.markWebViewRestored()
+        val previousEpoch = holder.webViewRestoreEpoch
+
+        holder.applySettings(
+            ReaderSettings(
+                popupWidth = 420,
+                popupHeight = 360,
+                popupActionBar = true,
+                popupFullWidth = true,
+                popupSwipeToDismiss = false,
+                popupSwipeThreshold = 45,
+            ),
+        )
+
+        assertFalse(holder.isWebViewRestoring)
+        assertEquals(previousEpoch, holder.webViewRestoreEpoch)
+    }
+
+    @Test
+    fun readerContentReloadKeyIgnoresPopupSettings() {
+        val base = ReaderSettings(continuousMode = true)
+        val popupOnly = base.copy(
+            popupWidth = 420,
+            popupHeight = 360,
+            popupActionBar = true,
+            popupFullWidth = true,
+            popupSwipeToDismiss = false,
+            popupSwipeThreshold = 45,
+        )
+
+        assertEquals(base.readerContentReloadKey(), popupOnly.readerContentReloadKey())
+    }
+
+    @Test
+    fun readerContentReloadKeyChangesForContentSettings() {
+        val base = ReaderSettings()
+
+        assertFalse(base.readerContentReloadKey() == base.copy(fontSize = 28).readerContentReloadKey())
+        assertFalse(base.readerContentReloadKey() == base.copy(systemLightSepia = true).readerContentReloadKey())
+    }
+
+    @Test
     fun focusModeTogglesWithoutReloadingTheReaderContent() {
         val holder = stateHolder(initialIndex = 1)
         holder.markWebViewRestored()
