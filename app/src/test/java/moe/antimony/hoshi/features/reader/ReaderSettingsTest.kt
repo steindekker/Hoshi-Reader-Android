@@ -1,5 +1,6 @@
 package moe.antimony.hoshi.features.reader
 
+import androidx.compose.ui.graphics.Color
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -21,9 +22,55 @@ class ReaderSettingsTest {
         assertFalse(settings.systemLightSepia)
         assertFalse(settings.sepiaInvertInDark)
         assertFalse(settings.continuousMode)
+        assertFalse(settings.enableStatistics)
+        assertEquals(StatisticsAutostartMode.Off, settings.statisticsAutostartMode)
+        assertFalse(settings.showStatisticsToggle)
+        assertFalse(settings.showReadingSpeed)
+        assertFalse(settings.showReadingTime)
         assertEquals(20, settings.chapterSwipeDistance)
         assertTrue(settings.popupSwipeToDismiss)
         assertEquals(30, settings.popupSwipeThreshold)
+    }
+
+    @Test
+    fun statisticsAutostartModesUseIosRawLabels() {
+        assertEquals("Off", StatisticsAutostartMode.Off.rawValue)
+        assertEquals("Page Turn", StatisticsAutostartMode.PageTurn.rawValue)
+        assertEquals("On", StatisticsAutostartMode.On.rawValue)
+    }
+
+    @Test
+    fun enablingStatisticsTurnsOnReaderDisplayStatisticsControls() {
+        val settings = ReaderSettings(
+            enableStatistics = false,
+            showStatisticsToggle = false,
+            showReadingSpeed = false,
+            showReadingTime = false,
+        )
+
+        val enabled = settings.withStatisticsEnabled(true)
+
+        assertTrue(enabled.enableStatistics)
+        assertTrue(enabled.showStatisticsToggle)
+        assertTrue(enabled.showReadingSpeed)
+        assertTrue(enabled.showReadingTime)
+    }
+
+    @Test
+    fun statisticsDisplayControlsRemainUserControlledAfterAlreadyEnabled() {
+        val settings = ReaderSettings(
+            enableStatistics = true,
+            showStatisticsToggle = false,
+            showReadingSpeed = false,
+            showReadingTime = false,
+        )
+
+        val enabled = settings.withStatisticsEnabled(true)
+
+        assertTrue(enabled.enableStatistics)
+        assertFalse(enabled.showStatisticsToggle)
+        assertFalse(enabled.showReadingSpeed)
+        assertFalse(enabled.showReadingTime)
     }
 
     @Test
@@ -277,7 +324,29 @@ class ReaderSettingsTest {
 
     @Test
     fun twoOptionAppearanceSegmentsReserveEnoughWidthForContinuousLabel() {
-        assertEquals(220, segmentedControlWidthDp(optionCount = 2))
+        assertEquals(120, segmentedControlWidthDp(optionCount = 2))
+        assertEquals(100, segmentedControlWidthDp(listOf("縦", "横")))
+        assertEquals(120, segmentedControlWidthDp(listOf("Top", "Bottom")))
+        assertEquals(180, segmentedControlWidthDp(listOf("Paginated", "Continuous")))
+    }
+
+    @Test
+    fun eInkAppearanceSegmentsUseInverseSelectedColors() {
+        val colors = readerSegmentedControlColors(
+            eInkMode = true,
+            background = Color.White,
+            content = Color.Black,
+            surfaceVariant = Color.White,
+            primaryContainer = Color.Black,
+            onPrimaryContainer = Color.White,
+            outlineVariant = Color.Black,
+        )
+
+        assertEquals(Color.White, colors.container)
+        assertEquals(Color.Black, colors.selected)
+        assertEquals(Color.White, colors.selectedContent)
+        assertEquals(Color.Black, colors.unselectedContent)
+        assertEquals(Color.Black, colors.border)
     }
 
 }

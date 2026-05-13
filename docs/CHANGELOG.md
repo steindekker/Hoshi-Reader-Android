@@ -5,6 +5,21 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+### Added
+
+- Add iOS-compatible reader reading statistics with Advanced settings, reader Statistics sheet, optional session toggle, bottom speed/time display, and per-book `statistics.json` sidecar storage.
+
+### Changed
+
+- Align the reader Statistics sheet and top-left statistics toggle with iOS by removing the sheet header close row and using a timer icon while tracking.
+- Stabilize reader bottom sheets so Chapters, Appearance, Statistics, and Sasayaki open as a single 70%-height panel with a top dismiss area, and hand fast internal scrolling to their content instead of jittering between detents.
+- Make reader sheets denser and smooth Appearance sheet scrolling by reducing row heights across Chapters, Appearance, Statistics, and Sasayaki, tightening Appearance rows, and preventing Appearance segmented controls from truncating labels or losing selected-state contrast in E-ink mode.
+- Keep the reader Chapters sheet cover header while removing the extra large Chapters title and close button, and reduce boundary scroll jank in the chapter list.
+
+### Fixed
+
+- Pause active reader statistics tracking while the reader is backgrounded, persist the flushed values, and resume the active session on return so background time is not counted.
+
 ## [v0.4.4] - 2026-05-13
 
 ### Added
