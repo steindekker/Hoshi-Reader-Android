@@ -135,6 +135,26 @@ class ReaderChromeTest {
     }
 
     @Test
+    fun topTitleReservesControlsSymmetricallySoItAlignsWithProgress() {
+        assertEquals(
+            ReaderTopTitlePaddingDp(startDp = 42, endDp = 42),
+            readerTopTitlePaddingDp(hasStartControl = true, hasEndControl = false),
+        )
+        assertEquals(
+            ReaderTopTitlePaddingDp(startDp = 42, endDp = 42),
+            readerTopTitlePaddingDp(hasStartControl = false, hasEndControl = true),
+        )
+        assertEquals(
+            ReaderTopTitlePaddingDp(startDp = 42, endDp = 42),
+            readerTopTitlePaddingDp(hasStartControl = true, hasEndControl = true),
+        )
+        assertEquals(
+            ReaderTopTitlePaddingDp(startDp = 0, endDp = 0),
+            readerTopTitlePaddingDp(hasStartControl = false, hasEndControl = false),
+        )
+    }
+
+    @Test
     fun statisticsTopToggleUsesIosTimerIconWhenTracking() {
         assertEquals(Icons.AutoMirrored.Rounded.ShowChart, readerStatisticsTopToggleIcon(isTracking = false))
         assertEquals(Icons.Rounded.Timer, readerStatisticsTopToggleIcon(isTracking = true))

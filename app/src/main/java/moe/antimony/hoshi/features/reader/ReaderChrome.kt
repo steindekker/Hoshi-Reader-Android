@@ -74,6 +74,11 @@ data class ReaderFocusModeToggleArea(
     val horizontalPaddingDp: Int,
 )
 
+data class ReaderTopTitlePaddingDp(
+    val startDp: Int,
+    val endDp: Int,
+)
+
 data class ReaderBottomChromeMetrics(
     val buttonSizeDp: Int,
     val topSasayakiButtonSizeDp: Int,
@@ -187,6 +192,14 @@ fun readerFocusModeToggleArea(
     )
 }
 
+fun readerTopTitlePaddingDp(
+    hasStartControl: Boolean,
+    hasEndControl: Boolean,
+): ReaderTopTitlePaddingDp {
+    val sidePadding = if (hasStartControl || hasEndControl) ReaderTopTitleControlPaddingDp else 0
+    return ReaderTopTitlePaddingDp(startDp = sidePadding, endDp = sidePadding)
+}
+
 fun readerChromeColors(settings: ReaderSettings, systemDark: Boolean): ReaderChromeColors = when {
     settings.eInkMode && settings.usesDarkInterface(systemDark) -> ReaderChromeColors(
         buttonContainer = 0xFF000000,
@@ -242,3 +255,4 @@ private const val ReaderChromeLineHeightDp = 20
 private const val ReaderBottomChromeButtonSizeDp = 44
 private const val ReaderTopButtonSizeDp = 36
 private const val ReaderTopButtonIconSizeDp = 20
+private const val ReaderTopTitleControlPaddingDp = 42

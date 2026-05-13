@@ -11,6 +11,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ### Fixed
 
+- Keep the reader top title centered with the progress text when only one top chrome button is visible.
 - Prevent paginated reader progress from moving backward on page turns when vertical text layout reorders text nodes across columns, while still updating and restoring progress inside large text nodes.
 - Prevent books from shifting text after opening at positions with Sasayaki matches, without slowing reader restore.
 - Align the Advanced Backup entry with iOS by moving it into its own section with a storage icon.

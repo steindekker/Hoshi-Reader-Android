@@ -897,6 +897,10 @@ private fun ReaderTopInfo(
         (focusMode || progress.isBlank() || !settings.showProgressTop)
     ) return
     Box(modifier = modifier.fillMaxWidth()) {
+        val titlePadding = readerTopTitlePaddingDp(
+            hasStartControl = onStatisticsToggle != null,
+            hasEndControl = onSasayakiToggle != null,
+        )
         Column(
             modifier = Modifier.align(Alignment.TopCenter),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -909,8 +913,8 @@ private fun ReaderTopInfo(
                     style = MaterialTheme.typography.labelLarge,
                     maxLines = 1,
                     modifier = Modifier.padding(
-                        start = if (onStatisticsToggle != null) 42.dp else 0.dp,
-                        end = if (onSasayakiToggle != null) 42.dp else 0.dp,
+                        start = titlePadding.startDp.dp,
+                        end = titlePadding.endDp.dp,
                     ),
                 )
             }
