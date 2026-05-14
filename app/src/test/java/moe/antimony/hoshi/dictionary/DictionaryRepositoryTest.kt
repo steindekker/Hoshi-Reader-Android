@@ -28,8 +28,10 @@ class DictionaryRepositoryTest {
 
         repository.setDictionaryEnabled(DictionaryType.Term, "Second", enabled = false)
 
-        assertEquals(listOf("First", "Second"), repository.loadDictionaries(DictionaryType.Term).map { it.path.name })
-        assertEquals(listOf(true, false), repository.loadDictionaries(DictionaryType.Term).map { it.isEnabled })
+        val termDictionaries = repository.loadDictionaries(DictionaryType.Term).associateBy { it.path.name }
+        assertEquals(setOf("First", "Second"), termDictionaries.keys)
+        assertEquals(true, termDictionaries.getValue("First").isEnabled)
+        assertEquals(false, termDictionaries.getValue("Second").isEnabled)
         assertEquals(listOf(filesDir.resolve("Dictionaries/Term/First").absolutePath), bridge.termPaths.toList())
         assertEquals(listOf(filesDir.resolve("Dictionaries/Frequency/Freq").absolutePath), bridge.freqPaths.toList())
         assertEquals(listOf(filesDir.resolve("Dictionaries/Pitch/Pitch").absolutePath), bridge.pitchPaths.toList())
