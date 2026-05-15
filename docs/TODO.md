@@ -48,7 +48,7 @@ This file is the short operational handoff for future agents.
 
 ### Dictionary
 
-- Add iOS-style recommended dictionary downloads; installed updatable dictionaries already support update availability and revision-based updates.
+- Device-validate recommended dictionary downloads from the Dictionaries screen, covering JMdict, Jiten, and Jitendex individual downloads and confirming each imported dictionary remains updatable.
 - Keep frequency and pitch dictionaries type-specific; do not treat metadata dictionaries as term fallback dictionaries.
 - Do not reimplement Yomitan import, lookup, media, or style extraction outside `third_party/hoshidicts-kotlin-bridge` unless the bridge gap is documented first.
 

@@ -9,6 +9,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 - Add a Behavior setting to keep the screen awake while reading books without Sasayaki audio.
 - Add iOS-style dictionary update checks for installed updatable dictionaries, including revision comparison, download/install progress, preservation of dictionary order and enabled state, and Anki single-glossary field migration when a dictionary title changes.
+- Add recommended dictionary downloads for JMdict, Jiten, and Jitendex, with each dictionary downloaded individually.
 
 ### Fixed
 

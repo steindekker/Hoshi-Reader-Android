@@ -68,7 +68,6 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DataObject
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Remove
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -101,6 +100,7 @@ import kotlinx.coroutines.launch
 import moe.antimony.hoshi.LocalHoshiAppContainer
 import moe.antimony.hoshi.dictionary.DictionaryInfo
 import moe.antimony.hoshi.dictionary.DictionaryType
+import moe.antimony.hoshi.dictionary.RecommendedDictionaries
 import moe.antimony.hoshi.features.settings.SettingsDetailScaffold
 import moe.antimony.hoshi.importing.ImportFileType
 import moe.antimony.hoshi.importing.MultipleFileImportContent
@@ -134,6 +134,7 @@ fun DictionaryView(
     var importMenuExpanded by remember { mutableStateOf(false) }
     var destination by remember { mutableStateOf<DictionaryDestination?>(null) }
     var showUpdateConfirmation by remember { mutableStateOf(false) }
+    var showDownloadConfirmation by remember { mutableStateOf(false) }
 
     val importer = rememberLauncherForActivityResult(MultipleFileImportContent()) { uris: List<Uri> ->
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
@@ -405,6 +406,53 @@ fun DictionaryView(
                             Column {
                                 ListItem(
                                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                    headlineContent = {
+                                        Text(
+                                            text = "Download Recommended Dictionaries",
+                                            color = colorScheme.primary,
+                                        )
+                                    },
+                                    modifier = Modifier.clickable(enabled = !isBusy) {
+                                        showDownloadConfirmation = true
+                                    },
+                                )
+                                if (uiState.updatableDictionaries.isNotEmpty()) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(horizontal = 16.dp),
+                                        color = colorScheme.outlineVariant,
+                                    )
+                                    ListItem(
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                        headlineContent = {
+                                            Text(
+                                                text = "Update Dictionaries",
+                                                color = colorScheme.primary,
+                                            )
+                                        },
+                                        modifier = Modifier.clickable(enabled = !isBusy) {
+                                            showUpdateConfirmation = true
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            text = "Yomitan term, frequency and pitch dictionaries (.zip) are supported",
+                            color = colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        )
+                        Spacer(modifier = Modifier.height(18.dp))
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(24.dp),
+                            color = colorScheme.surface,
+                            border = BorderStroke(1.dp, colorScheme.outlineVariant),
+                            tonalElevation = 0.dp,
+                        ) {
+                            Column {
+                                ListItem(
+                                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                                     headlineContent = { Text("Default to Dictionary Tab") },
                                     trailingContent = {
                                         Switch(
@@ -423,13 +471,6 @@ fun DictionaryView(
                                 )
                                 ListItem(
                                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                    leadingContent = {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Tune,
-                                            contentDescription = null,
-                                            tint = colorScheme.onSurfaceVariant,
-                                        )
-                                    },
                                     headlineContent = { Text("Settings") },
                                     trailingContent = {
                                         Icon(
@@ -440,32 +481,6 @@ fun DictionaryView(
                                     },
                                     modifier = Modifier.clickable(enabled = !isBusy) {
                                         destination = DictionaryDestination.Settings
-                                    },
-                                )
-                            }
-                        }
-                        if (uiState.updatableDictionaries.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(24.dp),
-                                color = colorScheme.surface,
-                                border = BorderStroke(1.dp, colorScheme.outlineVariant),
-                                tonalElevation = 0.dp,
-                            ) {
-                                ListItem(
-                                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                    headlineContent = { Text("Update Dictionaries") },
-                                    supportingContent = {
-                                        Text(
-                                            text = uiState.updatableDictionaries
-                                                .joinToString(separator = "\n") { it.dictionary.index.title },
-                                            maxLines = 3,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                    },
-                                    modifier = Modifier.clickable(enabled = !isBusy) {
-                                        showUpdateConfirmation = true
                                     },
                                 )
                             }
@@ -496,12 +511,6 @@ fun DictionaryView(
                                 }
                             }
                         }
-                        Text(
-                            text = "Yomitan term, frequency and pitch dictionaries (.zip) are supported",
-                            color = colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(top = 10.dp),
-                        )
                     }
                 }
                 uiState.errorMessage?.let { item { Text(it, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) } }
@@ -611,6 +620,38 @@ fun DictionaryView(
             },
             dismissButton = {
                 TextButton(onClick = { showUpdateConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+    if (showDownloadConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDownloadConfirmation = false },
+            title = { Text("Download Dictionaries") },
+            text = {
+                Column {
+                    Text("Choose a dictionary to download and import:")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    RecommendedDictionaries.forEach { dictionary ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showDownloadConfirmation = false
+                                    dictionaryViewModel.importRecommendedDictionaries(listOf(dictionary))
+                                }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("${dictionary.name} (${dictionary.type.displayName})")
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showDownloadConfirmation = false }) {
                     Text("Cancel")
                 }
             },

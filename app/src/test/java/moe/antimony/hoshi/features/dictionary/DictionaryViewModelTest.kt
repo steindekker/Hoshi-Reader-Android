@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import moe.antimony.hoshi.dictionary.DictionaryIndex
 import moe.antimony.hoshi.dictionary.DictionaryInfo
 import moe.antimony.hoshi.dictionary.DictionaryRename
+import moe.antimony.hoshi.dictionary.RecommendedDictionary
 import moe.antimony.hoshi.dictionary.DictionaryType
 import moe.antimony.hoshi.dictionary.DictionaryUpdateCandidate
 import moe.antimony.hoshi.dictionary.DictionaryUpdateProgress
@@ -141,6 +142,39 @@ class DictionaryViewModelTest {
         )
         assertFalse(viewModel.uiState.value.isImporting)
         assertNull(viewModel.uiState.value.currentImportMessage)
+    }
+
+    @Test
+    fun importRecommendedDictionariesPassesSelectedItemsAndPublishesProgress() {
+        val first = RecommendedDictionary(
+            id = "jmdict",
+            name = "JMdict",
+            type = DictionaryType.Term,
+            indexUrl = "https://example.invalid/jmdict.json",
+        )
+        val second = RecommendedDictionary(
+            id = "jitendex",
+            name = "Jitendex",
+            type = DictionaryType.Term,
+            indexUrl = "https://jitendex.org/static/yomitan.json",
+        )
+        val repository = FakeDictionaryRepository()
+        val viewModel = DictionaryViewModel(
+            repository = repository,
+            coroutineScope = testScope,
+            ioDispatcher = Dispatchers.Unconfined,
+        )
+
+        viewModel.importRecommendedDictionaries(listOf(first, second))
+
+        assertEquals(listOf(first, second), repository.importedRecommendedDictionaries)
+        assertEquals(
+            listOf("Fetching JMdict", "Downloading Jitendex", "Importing Jitendex"),
+            repository.recommendedProgressMessages,
+        )
+        assertFalse(viewModel.uiState.value.isImporting)
+        assertNull(viewModel.uiState.value.currentImportMessage)
+        assertEquals(1, repository.rebuildCount)
     }
 
     @Test
@@ -359,6 +393,8 @@ private class FakeDictionaryRepository(
     val moveCalls = mutableListOf<Pair<DictionaryType, Pair<Int, Int>>>()
     val importedItems = mutableListOf<DictionaryImportItem>()
     val progressMessages = mutableListOf<String?>()
+    val importedRecommendedDictionaries = mutableListOf<RecommendedDictionary>()
+    val recommendedProgressMessages = mutableListOf<String?>()
     var savedSettings: DictionarySettings? = null
     var savedAnkiSettings: AnkiSettings? = null
 
@@ -377,6 +413,19 @@ private class FakeDictionaryRepository(
             onProgress(item)
             progressMessages += "Importing ${item.displayName}"
         }
+    }
+
+    override suspend fun importRecommendedDictionaries(
+        dictionaries: List<RecommendedDictionary>,
+        onProgress: (DictionaryUpdateProgress) -> Unit,
+    ) {
+        importedRecommendedDictionaries += dictionaries
+        onProgress(DictionaryUpdateProgress(DictionaryUpdateStage.Fetching, dictionaries.first().name))
+        recommendedProgressMessages += "Fetching ${dictionaries.first().name}"
+        onProgress(DictionaryUpdateProgress(DictionaryUpdateStage.Downloading, dictionaries.last().name))
+        recommendedProgressMessages += "Downloading ${dictionaries.last().name}"
+        onProgress(DictionaryUpdateProgress(DictionaryUpdateStage.Importing, dictionaries.last().name))
+        recommendedProgressMessages += "Importing ${dictionaries.last().name}"
     }
 
     override suspend fun updatableDictionaries(): List<DictionaryUpdateCandidate> =

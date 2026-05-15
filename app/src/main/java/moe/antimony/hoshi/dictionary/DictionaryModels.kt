@@ -24,6 +24,7 @@ data class DictionaryUpdateCandidate(
 )
 
 enum class DictionaryUpdateStage {
+    Fetching,
     Checking,
     Downloading,
     Importing,
@@ -48,6 +49,38 @@ data class DictionaryUpdateSummary(
 data class ImportedDictionary(
     val fileName: String,
     val index: DictionaryIndex,
+)
+
+data class RecommendedDictionary(
+    val id: String,
+    val name: String,
+    val type: DictionaryType,
+    val indexUrl: String,
+    val description: String = "",
+)
+
+val RecommendedDictionaries = listOf(
+    RecommendedDictionary(
+        id = "jmdict",
+        name = "JMdict",
+        type = DictionaryType.Term,
+        indexUrl = "https://github.com/yomidevs/jmdict-yomitan/releases/latest/download/JMdict_english.json",
+        description = "Term",
+    ),
+    RecommendedDictionary(
+        id = "jiten",
+        name = "Jiten",
+        type = DictionaryType.Frequency,
+        indexUrl = "https://api.jiten.moe/api/frequency-list/index",
+        description = "Frequency",
+    ),
+    RecommendedDictionary(
+        id = "jitendex",
+        name = "Jitendex",
+        type = DictionaryType.Term,
+        indexUrl = "https://jitendex.org/static/yomitan.json",
+        description = "Term",
+    ),
 )
 
 @Serializable

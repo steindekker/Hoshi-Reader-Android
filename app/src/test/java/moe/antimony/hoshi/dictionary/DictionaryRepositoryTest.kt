@@ -166,6 +166,113 @@ class DictionaryRepositoryTest {
         assertEquals(listOf(installedIndex.title), repository.loadDictionaries(DictionaryType.Term).map { it.index.title })
     }
 
+    @Test
+    fun importRecommendedDictionariesDownloadsSelectedIndexesByType() {
+        val filesDir = temporaryFolder.newFolder("recommended-files")
+        val storage = DictionaryStorageDataSource(filesDir)
+        val bridge = ImportingDictionaryNativeBridge()
+        val jmdictIndex = DictionaryIndex(
+            title = "JMdict [2099-01-01]",
+            format = 3,
+            revision = "JMdict.2099-01-01",
+            isUpdatable = true,
+            indexUrl = "https://example.invalid/jmdict.json",
+            downloadUrl = "https://example.invalid/jmdict.zip",
+        )
+        val jitenIndex = DictionaryIndex(
+            title = "Jiten",
+            format = 3,
+            revision = "Jiten 99-01-01",
+            isUpdatable = true,
+            indexUrl = "https://example.invalid/jiten.json",
+            downloadUrl = "https://example.invalid/jiten.zip",
+        )
+        val jitendexIndex = DictionaryIndex(
+            title = "Jitendex.org [2026-05-05]",
+            format = 3,
+            revision = "2026.05.05.0",
+            isUpdatable = true,
+            indexUrl = "https://jitendex.org/static/yomitan.json",
+            downloadUrl = "https://example.invalid/jitendex.zip",
+        )
+        val remote = FakeDictionaryRemoteDataSource(
+            indexes = mapOf(
+                jmdictIndex.indexUrl to jmdictIndex,
+                jitenIndex.indexUrl to jitenIndex,
+                jitendexIndex.indexUrl to jitendexIndex,
+            ),
+            archives = mapOf(
+                jmdictIndex.downloadUrl to dictionaryArchive(jmdictIndex),
+                jitenIndex.downloadUrl to dictionaryArchive(jitenIndex),
+                jitendexIndex.downloadUrl to dictionaryArchive(jitendexIndex),
+            ),
+        )
+        val repository = DictionaryRepository(
+            filesDir,
+            storage,
+            DictionaryImportDataSource(bridge),
+            DictionaryLookupQueryService(bridge),
+            remote,
+        )
+        val selected = listOf(
+            RecommendedDictionary(
+                id = "jmdict",
+                name = "JMdict",
+                type = DictionaryType.Term,
+                indexUrl = jmdictIndex.indexUrl,
+            ),
+            RecommendedDictionary(
+                id = "jiten",
+                name = "Jiten",
+                type = DictionaryType.Frequency,
+                indexUrl = jitenIndex.indexUrl,
+            ),
+            RecommendedDictionary(
+                id = "jitendex",
+                name = "Jitendex",
+                type = DictionaryType.Term,
+                indexUrl = jitendexIndex.indexUrl,
+            ),
+        )
+        val progress = mutableListOf<String>()
+
+        repository.importRecommendedDictionaries(selected) { update ->
+            progress += "${update.stage}:${update.title}"
+        }
+
+        assertEquals(
+            listOf(
+                "Fetching:JMdict",
+                "Downloading:${jmdictIndex.title}",
+                "Importing:${jmdictIndex.title}",
+                "Fetching:Jiten",
+                "Downloading:${jitenIndex.title}",
+                "Importing:${jitenIndex.title}",
+                "Fetching:Jitendex",
+                "Downloading:${jitendexIndex.title}",
+                "Importing:${jitendexIndex.title}",
+            ),
+            progress,
+        )
+        assertEquals(
+            listOf(jmdictIndex.downloadUrl, jitenIndex.downloadUrl, jitendexIndex.downloadUrl),
+            remote.downloadedUrls,
+        )
+        assertEquals(listOf(jmdictIndex.title, jitendexIndex.title), repository.loadDictionaries(DictionaryType.Term).map { it.index.title })
+        assertEquals(listOf(jitenIndex.title), repository.loadDictionaries(DictionaryType.Frequency).map { it.index.title })
+        assertEquals(
+            listOf(
+                filesDir.resolve("Dictionaries/Term/${jmdictIndex.title}").absolutePath,
+                filesDir.resolve("Dictionaries/Term/${jitendexIndex.title}").absolutePath,
+            ),
+            bridge.termPaths.toList(),
+        )
+        assertEquals(
+            listOf(filesDir.resolve("Dictionaries/Frequency/${jitenIndex.title}").absolutePath),
+            bridge.freqPaths.toList(),
+        )
+    }
+
     private fun writeDictionary(typeDirectory: File, fileName: String, title: String) {
         writeDictionary(
             typeDirectory = typeDirectory,

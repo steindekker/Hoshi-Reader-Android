@@ -23,6 +23,7 @@ import moe.antimony.hoshi.dictionary.DictionaryUpdateCandidate
 import moe.antimony.hoshi.dictionary.DictionaryUpdateProgress
 import moe.antimony.hoshi.dictionary.DictionaryUpdateStage
 import moe.antimony.hoshi.dictionary.DictionaryUpdateSummary
+import moe.antimony.hoshi.dictionary.RecommendedDictionary
 import moe.antimony.hoshi.features.anki.AnkiSettings
 import moe.antimony.hoshi.features.anki.AnkiSettingsRepository
 
@@ -33,6 +34,10 @@ internal interface DictionaryViewModelRepository {
         items: List<DictionaryImportItem>,
         type: DictionaryType,
         onProgress: (DictionaryImportItem) -> Unit,
+    )
+    suspend fun importRecommendedDictionaries(
+        dictionaries: List<RecommendedDictionary>,
+        onProgress: (DictionaryUpdateProgress) -> Unit,
     )
     suspend fun updateDictionaries(onProgress: (DictionaryUpdateProgress) -> Unit): DictionaryUpdateSummary
     suspend fun setDictionaryEnabled(type: DictionaryType, fileName: String, enabled: Boolean)
@@ -75,6 +80,13 @@ internal class AndroidDictionaryViewModelRepository(
 
     override suspend fun updatableDictionaries(): List<DictionaryUpdateCandidate> =
         dictionaryRepository.updatableDictionaries()
+
+    override suspend fun importRecommendedDictionaries(
+        dictionaries: List<RecommendedDictionary>,
+        onProgress: (DictionaryUpdateProgress) -> Unit,
+    ) {
+        dictionaryRepository.importRecommendedDictionaries(dictionaries, onProgress)
+    }
 
     override suspend fun updateDictionaries(
         onProgress: (DictionaryUpdateProgress) -> Unit,
@@ -152,6 +164,38 @@ internal class DictionaryViewModel(
     fun updateDictionaries() {
         updateDictionaries { onProgress ->
             repository.updateDictionaries(onProgress)
+        }
+    }
+
+    fun importRecommendedDictionaries(dictionaries: List<RecommendedDictionary>) {
+        importRecommendedDictionaries { onProgress ->
+            repository.importRecommendedDictionaries(dictionaries, onProgress)
+        }
+    }
+
+    internal fun importRecommendedDictionaries(
+        importOperation: suspend ((DictionaryUpdateProgress) -> Unit) -> Unit,
+    ) {
+        scope.launch {
+            _uiState.update { it.copy(isImporting = true, currentImportMessage = null, errorMessage = null) }
+            runCatching {
+                withContext(ioDispatcher) {
+                    importOperation { progress ->
+                        _uiState.update { state ->
+                            state.copy(currentImportMessage = progress.message())
+                        }
+                    }
+                }
+            }.onSuccess {
+                reloadDictionaries(clearError = true)
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(
+                        errorMessage = error.localizedMessage ?: "Failed to download dictionaries.",
+                    )
+                }
+            }
+            _uiState.update { it.copy(isImporting = false, currentImportMessage = null) }
         }
     }
 
@@ -310,6 +354,7 @@ internal class DictionaryViewModel(
 
 private fun DictionaryUpdateProgress.message(): String =
     when (stage) {
+        DictionaryUpdateStage.Fetching -> "Fetching $title"
         DictionaryUpdateStage.Checking -> "Checking $title"
         DictionaryUpdateStage.Downloading -> "Downloading $title"
         DictionaryUpdateStage.Importing -> "Importing $title"

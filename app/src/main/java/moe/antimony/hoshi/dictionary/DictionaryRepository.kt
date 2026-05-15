@@ -99,6 +99,33 @@ internal class DictionaryRepository(
         )
     }
 
+    fun importRecommendedDictionaries(
+        dictionaries: List<RecommendedDictionary>,
+        onProgress: (DictionaryUpdateProgress) -> Unit = {},
+    ) {
+        var importedCount = 0
+        dictionaries.forEach { dictionary ->
+            onProgress(DictionaryUpdateProgress(DictionaryUpdateStage.Fetching, dictionary.name))
+            val remoteIndex = remoteDataSource.fetchIndex(dictionary.indexUrl)
+            onProgress(DictionaryUpdateProgress(DictionaryUpdateStage.Downloading, remoteIndex.title))
+            val imported = remoteDataSource.downloadArchive(remoteIndex.downloadUrl).use { input ->
+                onProgress(DictionaryUpdateProgress(DictionaryUpdateStage.Importing, remoteIndex.title))
+                importDataSource.importDictionaryWithResult(
+                    input = input,
+                    typeDirectory = storage.typeDirectory(dictionary.type),
+                    shouldSkip = { index -> storage.hasDictionaryWithIndex(dictionary.type, index) },
+                )
+            }
+            importedCount += imported.size
+            if (imported.isNotEmpty()) {
+                storage.saveConfigFromStorage()
+            }
+        }
+        if (importedCount > 0) {
+            rebuildLookupQuery()
+        }
+    }
+
     fun rebuildLookupQuery() {
         lookupQueryService.rebuild(
             termDictionaries = storage.enabledDictionaryPaths(DictionaryType.Term),
