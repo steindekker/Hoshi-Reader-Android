@@ -1,11 +1,17 @@
 package moe.antimony.hoshi.features.reader
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Redo
+import androidx.compose.material.icons.automirrored.rounded.Undo
+import androidx.compose.ui.graphics.vector.ImageVector
 import java.util.Locale
 
 data class ReaderChromeState(
     val title: String,
     val currentCharacter: Int,
     val totalCharacters: Int,
+    val backTargetCharacter: Int? = null,
+    val forwardTargetCharacter: Int? = null,
     val statistics: ReaderStatisticsChromeState? = null,
 ) {
     fun progressText(settings: ReaderSettings): String {
@@ -138,7 +144,12 @@ fun readerWebViewTopPaddingDp(
         settings.showProgressTop && progress.isNotBlank(),
     ).count { it }
     val textHeight = textRows * ReaderChromeLineHeightDp
-    val buttonHeight = if (showSasayakiToggle || showStatisticsToggle) ReaderTopButtonSizeDp else 0
+    val hasJumpHistoryControl = state.backTargetCharacter != null || state.forwardTargetCharacter != null
+    val buttonHeight = if (showSasayakiToggle || showStatisticsToggle || hasJumpHistoryControl) {
+        ReaderTopButtonSizeDp
+    } else {
+        0
+    }
     return ReaderWebViewTopBasePaddingDp + maxOf(textHeight, buttonHeight)
 }
 
@@ -199,6 +210,12 @@ fun readerTopTitlePaddingDp(
     val sidePadding = if (hasStartControl || hasEndControl) ReaderTopTitleControlPaddingDp else 0
     return ReaderTopTitlePaddingDp(startDp = sidePadding, endDp = sidePadding)
 }
+
+fun readerJumpTargetText(character: Int): String = character.toString()
+
+fun readerJumpBackIcon(): ImageVector = Icons.AutoMirrored.Rounded.Undo
+
+fun readerJumpForwardIcon(): ImageVector = Icons.AutoMirrored.Rounded.Redo
 
 fun readerChromeColors(settings: ReaderSettings, systemDark: Boolean): ReaderChromeColors = when {
     settings.eInkMode && settings.usesDarkInterface(systemDark) -> ReaderChromeColors(

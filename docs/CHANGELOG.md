@@ -8,6 +8,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 ### Added
 
 - Add iOS-style reader highlights with color selection, persistent `highlights.json` storage, restore on chapter load, and a reader Highlights sheet for jumping to or deleting highlights.
+- Add iOS-style reader jump return controls so chapter, character, highlight, and internal-link jumps can return to the previous reading position.
 
 ### Fixed
 

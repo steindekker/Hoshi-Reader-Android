@@ -35,6 +35,75 @@ class ReaderWebViewStateHolderTest {
     }
 
     @Test
+    fun activeJumpRecordsDisplayedOriginAndClearsForwardHistory() {
+        val holder = stateHolder(initialIndex = 2)
+        holder.recordDisplayedProgress(0.42)
+
+        holder.jumpToWithHistory(ReaderChapterPosition(index = 5, progress = 0.0))
+        holder.navigateBackInJumpHistory()
+        holder.navigateForwardInJumpHistory()
+        holder.jumpToWithHistory(ReaderChapterPosition(index = 7, progress = 0.0))
+
+        assertEquals(ReaderChapterPosition(index = 5, progress = 0.0), holder.backTargetPosition)
+        assertNull(holder.forwardTargetPosition)
+        assertEquals(ReaderChapterPosition(index = 7, progress = 0.0), holder.readerPosition.displayedPosition)
+    }
+
+    @Test
+    fun jumpHistoryBackAndForwardMirrorIosReaderBehavior() {
+        val holder = stateHolder(initialIndex = 2)
+        holder.recordDisplayedProgress(0.42)
+        holder.jumpToWithHistory(ReaderChapterPosition(index = 5, progress = 0.0))
+        holder.recordDisplayedProgress(0.25)
+
+        val back = holder.navigateBackInJumpHistory()
+        val forward = holder.navigateForwardInJumpHistory()
+
+        assertEquals(ReaderChapterPosition(index = 2, progress = 0.42), back)
+        assertEquals(ReaderChapterPosition(index = 5, progress = 0.25), forward)
+        assertEquals(ReaderChapterPosition(index = 2, progress = 0.42), holder.backTargetPosition)
+        assertNull(holder.forwardTargetPosition)
+    }
+
+    @Test
+    fun ordinaryChapterNavigationDoesNotRecordJumpHistory() {
+        val holder = stateHolder(initialIndex = 2)
+
+        holder.goToNextChapter(lastIndex = 3)
+        holder.goToPreviousChapter()
+
+        assertNull(holder.backTargetPosition)
+        assertNull(holder.forwardTargetPosition)
+    }
+
+    @Test
+    fun manualProgressClearsForwardHistoryOnlyWhenNoBackTargetRemains() {
+        val holder = stateHolder(initialIndex = 2)
+        holder.jumpToWithHistory(ReaderChapterPosition(index = 5, progress = 0.0))
+        holder.navigateBackInJumpHistory()
+
+        holder.recordDisplayedProgress(0.6)
+        holder.clearForwardHistoryAfterManualMovement()
+
+        assertNull(holder.backTargetPosition)
+        assertNull(holder.forwardTargetPosition)
+    }
+
+    @Test
+    fun manualProgressKeepsForwardHistoryWhenBackTargetStillExists() {
+        val holder = stateHolder(initialIndex = 1)
+        holder.jumpToWithHistory(ReaderChapterPosition(index = 2, progress = 0.0))
+        holder.jumpToWithHistory(ReaderChapterPosition(index = 3, progress = 0.0))
+        holder.navigateBackInJumpHistory()
+
+        holder.recordDisplayedProgress(0.6)
+        holder.clearForwardHistoryAfterManualMovement()
+
+        assertEquals(ReaderChapterPosition(index = 1, progress = 0.0), holder.backTargetPosition)
+        assertEquals(ReaderChapterPosition(index = 3, progress = 0.0), holder.forwardTargetPosition)
+    }
+
+    @Test
     fun continuousScrollProgressIsIgnoredWhileWebViewIsRestoringLikeIos() {
         val holder = stateHolder(initialIndex = 2)
 

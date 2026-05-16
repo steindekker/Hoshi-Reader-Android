@@ -1,7 +1,9 @@
 package moe.antimony.hoshi.features.reader
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Redo
 import androidx.compose.material.icons.automirrored.rounded.ShowChart
+import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.Timer
@@ -77,6 +79,24 @@ class ReaderChromeTest {
     }
 
     @Test
+    fun jumpHistoryControlsReserveTheTopChromeRowLikeIos() {
+        val state = ReaderChromeState(
+            title = "屍人荘の殺人",
+            currentCharacter = 355,
+            totalCharacters = 169325,
+            backTargetCharacter = 120,
+        )
+
+        assertEquals(
+            40,
+            readerWebViewTopPaddingDp(
+                state,
+                ReaderSettings(showTitle = false, showProgressTop = false),
+            ),
+        )
+    }
+
+    @Test
     fun sasayakiTopToggleReservesTheTopChromeRowLikeIos() {
         val state = ReaderChromeState(
             title = "屍人荘の殺人",
@@ -132,6 +152,17 @@ class ReaderChromeTest {
 
         assertEquals(metrics.topSasayakiButtonSizeDp, metrics.topStatisticsButtonSizeDp)
         assertEquals(metrics.topSasayakiIconSizeDp, metrics.topStatisticsIconSizeDp)
+    }
+
+    @Test
+    fun jumpHistoryTargetTextUsesUngroupedIosCharacterCount() {
+        assertEquals("1234567", readerJumpTargetText(1_234_567))
+    }
+
+    @Test
+    fun jumpHistoryTopControlsUseIosUndoRedoIcons() {
+        assertEquals(Icons.AutoMirrored.Rounded.Undo, readerJumpBackIcon())
+        assertEquals(Icons.AutoMirrored.Rounded.Redo, readerJumpForwardIcon())
     }
 
     @Test

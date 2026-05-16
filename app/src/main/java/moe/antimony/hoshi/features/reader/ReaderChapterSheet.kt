@@ -51,7 +51,7 @@ import java.util.Locale
 internal fun ReaderChapterSheet(
     book: EpubBook,
     currentPosition: ReaderChapterPosition,
-    onJump: (ReaderChapterPosition) -> Unit,
+    onJump: (ReaderChapterPosition, String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val rows = remember(book, currentPosition.index) { book.chapterRows(currentPosition.index) }
@@ -92,7 +92,12 @@ internal fun ReaderChapterSheet(
                     ReaderChapterListRow(
                         row = row,
                         numberFormat = numberFormat,
-                        onClick = { onJump(ReaderChapterPosition(index = row.spineIndex, progress = 0.0)) },
+                        onClick = {
+                            onJump(
+                                ReaderChapterPosition(index = row.spineIndex, progress = 0.0),
+                                row.fragment,
+                            )
+                        },
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f))
                 }
@@ -106,7 +111,7 @@ internal fun ReaderChapterSheet(
             onDismiss = { showJumpDialog = false },
             onConfirm = { count ->
                 showJumpDialog = false
-                onJump(book.chapterPositionForCharacter(count))
+                onJump(book.chapterPositionForCharacter(count), null)
             },
         )
     }

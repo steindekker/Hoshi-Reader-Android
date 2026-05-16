@@ -379,6 +379,24 @@ fun ReaderWebView(
     fun saveCurrentDisplayedPosition() {
         saveReaderPosition(stateHolder.readerPosition.displayedPosition)
     }
+    fun jumpToPositionWithHistory(position: ReaderChapterPosition, fragment: String? = null) {
+        val statistics = statisticsForSave()
+        val savedPosition = stateHolder.jumpToWithHistory(position, fragment)
+        resetStatisticsBaseline()
+        saveReaderPosition(savedPosition, statistics)
+    }
+    fun navigateJumpBack() {
+        val statistics = statisticsForSave()
+        val savedPosition = stateHolder.navigateBackInJumpHistory() ?: return
+        resetStatisticsBaseline()
+        saveReaderPosition(savedPosition, statistics)
+    }
+    fun navigateJumpForward() {
+        val statistics = statisticsForSave()
+        val savedPosition = stateHolder.navigateForwardInJumpHistory() ?: return
+        resetStatisticsBaseline()
+        saveReaderPosition(savedPosition, statistics)
+    }
     fun currentLoadChapter(): moe.antimony.hoshi.epub.EpubChapter =
         book.chapters[stateHolder.readerPosition.loadPosition.index.coerceIn(0, book.chapters.lastIndex)]
     fun persistHighlights(nextHighlights: List<ReaderHighlight>) {
@@ -610,6 +628,7 @@ fun ReaderWebView(
         startStatisticsForProgressChangeIfNeeded()
         val next = stateHolder.goToNextChapter(book.chapters.lastIndex)
         if (next != null) {
+            stateHolder.clearForwardHistoryAfterManualMovement()
             recordStatisticsAtDisplayedPosition()
             saveReaderPosition(next)
             return true
@@ -620,6 +639,7 @@ fun ReaderWebView(
         startStatisticsForProgressChangeIfNeeded()
         val previous = stateHolder.goToPreviousChapter()
         if (previous != null) {
+            stateHolder.clearForwardHistoryAfterManualMovement()
             recordStatisticsAtDisplayedPosition()
             saveReaderPosition(previous)
             return true
@@ -629,17 +649,20 @@ fun ReaderWebView(
     fun saveDisplayedProgress(progress: Double) {
         startStatisticsForProgressChangeIfNeeded()
         val savedPosition = stateHolder.recordDisplayedProgress(progress)
+        stateHolder.clearForwardHistoryAfterManualMovement()
         recordStatisticsAtDisplayedPosition()
         saveReaderPosition(savedPosition)
     }
     fun displayPagedTurnProgress(progress: Double) {
         startStatisticsForProgressChangeIfNeeded()
         stateHolder.recordDisplayedProgress(progress)
+        stateHolder.clearForwardHistoryAfterManualMovement()
         recordStatisticsAtDisplayedPosition()
     }
     fun saveContinuousScrollProgress(progress: Double, restoreEpoch: Int) {
         startStatisticsForProgressChangeIfNeeded()
         val savedPosition = stateHolder.recordContinuousScrollProgress(progress, restoreEpoch) ?: return
+        stateHolder.clearForwardHistoryAfterManualMovement()
         recordStatisticsAtDisplayedPosition()
         saveReaderPosition(savedPosition)
     }
@@ -686,11 +709,19 @@ fun ReaderWebView(
             onTextSelected(selection)?.let { selectionRects(it) { rootSelectionHighlightRects = it } }
         }
     }
-    val chromeState = remember(book, readerPosition.displayedPosition, statisticsState) {
+    val chromeState = remember(
+        book,
+        readerPosition.displayedPosition,
+        stateHolder.backTargetPosition,
+        stateHolder.forwardTargetPosition,
+        statisticsState,
+    ) {
         ReaderChromeState(
             title = book.title,
             currentCharacter = book.characterCountAt(readerPosition.displayedPosition.index, readerPosition.displayedPosition.progress),
             totalCharacters = book.bookInfo.characterCount,
+            backTargetCharacter = stateHolder.backTargetPosition?.let { book.characterCountAt(it.index, it.progress) },
+            forwardTargetCharacter = stateHolder.forwardTargetPosition?.let { book.characterCountAt(it.index, it.progress) },
             statistics = statisticsState?.session?.let {
                 ReaderStatisticsChromeState(
                     readingSpeed = it.lastReadingSpeed,
@@ -953,10 +984,7 @@ fun ReaderWebView(
                         },
                         onInternalLink = { target ->
                             closeLookupPopupsAndSelection()
-                            val statistics = statisticsForSave()
-                            val savedPosition = stateHolder.jumpTo(target.position, target.fragment)
-                            resetStatisticsBaseline()
-                            saveReaderPosition(savedPosition, statistics)
+                            jumpToPositionWithHistory(target.position, target.fragment)
                         },
                         scanNonJapaneseText = dictionarySettings.scanNonJapaneseText,
                         readerSettings = effectiveSettings,
@@ -1035,6 +1063,18 @@ fun ReaderWebView(
                 null
             },
             statisticsTracking = statisticsState?.isTracking == true,
+            onJumpBack = stateHolder.backTargetPosition?.let {
+                {
+                    closeLookupPopupsAndSelection()
+                    navigateJumpBack()
+                }
+            },
+            onJumpForward = stateHolder.forwardTargetPosition?.let {
+                {
+                    closeLookupPopupsAndSelection()
+                    navigateJumpForward()
+                }
+            },
             onSasayakiToggle = onSasayakiTopToggle,
             sasayakiPlaying = sasayakiPlayer?.isPlaying == true || sasayakiWasPausedByLookup,
             focusMode = focusMode,
@@ -1096,12 +1136,9 @@ fun ReaderWebView(
             ReaderChapterSheet(
                 book = book,
                 currentPosition = readerPosition.displayedPosition,
-                onJump = { target ->
+                onJump = { target, fragment ->
                     closeLookupPopupsAndSelection()
-                    val statistics = statisticsForSave()
-                    val savedPosition = stateHolder.jumpTo(target)
-                    resetStatisticsBaseline()
-                    saveReaderPosition(savedPosition, statistics)
+                    jumpToPositionWithHistory(target, fragment)
                     stateHolder.dismissChapters()
                 },
                 onDismiss = stateHolder::dismissChapters,
@@ -1113,11 +1150,8 @@ fun ReaderWebView(
                 highlights = highlights.orEmpty(),
                 onJump = { highlight ->
                     closeLookupPopupsAndSelection()
-                    val statistics = statisticsForSave()
                     val target = ReaderHighlights.positionForCharacter(book.bookInfo, highlight.character)
-                    val savedPosition = stateHolder.jumpTo(target)
-                    resetStatisticsBaseline()
-                    saveReaderPosition(savedPosition, statistics)
+                    jumpToPositionWithHistory(target)
                     stateHolder.dismissHighlights()
                 },
                 onDelete = ::removeHighlight,
@@ -1200,6 +1234,8 @@ private fun ReaderTopInfo(
     colors: ReaderChromeColors,
     onStatisticsToggle: (() -> Unit)?,
     statisticsTracking: Boolean,
+    onJumpBack: (() -> Unit)?,
+    onJumpForward: (() -> Unit)?,
     onSasayakiToggle: (() -> Unit)?,
     sasayakiPlaying: Boolean,
     focusMode: Boolean,
@@ -1207,15 +1243,36 @@ private fun ReaderTopInfo(
     modifier: Modifier = Modifier,
 ) {
     val progress = state.progressText(settings)
+    val showBackJump = !focusMode && state.backTargetCharacter != null && onJumpBack != null
+    val showForwardJump = !focusMode && state.forwardTargetCharacter != null && onJumpForward != null
     if ((focusMode || !settings.showTitle) &&
         onStatisticsToggle == null &&
+        !showBackJump &&
+        !showForwardJump &&
         onSasayakiToggle == null &&
         (focusMode || progress.isBlank() || !settings.showProgressTop)
     ) return
     Box(modifier = modifier.fillMaxWidth()) {
+        val showStartControls = onStatisticsToggle != null || showBackJump
+        val showEndControls = onSasayakiToggle != null || showForwardJump
+        var startControlWidth by remember { mutableStateOf(0) }
+        var endControlWidth by remember { mutableStateOf(0) }
+        val density = LocalDensity.current
+        val dynamicTitlePadding = with(density) {
+            val maxControlWidth = maxOf(
+                if (showStartControls) startControlWidth else 0,
+                if (showEndControls) endControlWidth else 0,
+            )
+            if (maxControlWidth > 0) maxControlWidth.toDp() + 4.dp else 0.dp
+        }
         val titlePadding = readerTopTitlePaddingDp(
-            hasStartControl = onStatisticsToggle != null,
-            hasEndControl = onSasayakiToggle != null,
+            hasStartControl = showStartControls,
+            hasEndControl = showEndControls,
+        )
+        val resolvedTitlePadding = maxOf(
+            titlePadding.startDp.dp,
+            titlePadding.endDp.dp,
+            dynamicTitlePadding,
         )
         Column(
             modifier = Modifier.align(Alignment.TopCenter),
@@ -1229,8 +1286,8 @@ private fun ReaderTopInfo(
                     style = MaterialTheme.typography.labelLarge,
                     maxLines = 1,
                     modifier = Modifier.padding(
-                        start = titlePadding.startDp.dp,
-                        end = titlePadding.endDp.dp,
+                        start = resolvedTitlePadding,
+                        end = resolvedTitlePadding,
                     ),
                 )
             }
@@ -1242,35 +1299,117 @@ private fun ReaderTopInfo(
                 )
             }
         }
-        if (onStatisticsToggle != null) {
-            ReaderRoundButton(
-                colors = colors,
-                sizeDp = metrics.topStatisticsButtonSizeDp,
-                onClick = onStatisticsToggle,
-                modifier = Modifier.align(Alignment.TopStart),
+        if (showStartControls) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .onSizeChanged { startControlWidth = it.width },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                Icon(
-                    imageVector = readerStatisticsTopToggleIcon(statisticsTracking),
-                    contentDescription = if (statisticsTracking) "Pause statistics" else "Start statistics",
-                    modifier = Modifier.size(metrics.topStatisticsIconSizeDp.dp),
-                    tint = Color(colors.buttonContent),
-                )
+                if (onStatisticsToggle != null) {
+                    ReaderRoundButton(
+                        colors = colors,
+                        sizeDp = metrics.topStatisticsButtonSizeDp,
+                        onClick = onStatisticsToggle,
+                    ) {
+                        Icon(
+                            imageVector = readerStatisticsTopToggleIcon(statisticsTracking),
+                            contentDescription = if (statisticsTracking) "Pause statistics" else "Start statistics",
+                            modifier = Modifier.size(metrics.topStatisticsIconSizeDp.dp),
+                            tint = Color(colors.buttonContent),
+                        )
+                    }
+                }
+                if (showBackJump) {
+                    ReaderJumpHistoryButton(
+                        character = requireNotNull(state.backTargetCharacter),
+                        icon = readerJumpBackIcon(),
+                        iconFirst = true,
+                        contentDescription = "Return to previous jump position",
+                        colors = colors,
+                        heightDp = metrics.topStatisticsButtonSizeDp,
+                        onClick = requireNotNull(onJumpBack),
+                    )
+                }
             }
         }
-        if (onSasayakiToggle != null) {
-            ReaderRoundButton(
-                colors = colors,
-                sizeDp = metrics.topSasayakiButtonSizeDp,
-                onClick = onSasayakiToggle,
-                modifier = Modifier.align(Alignment.TopEnd),
+        if (showEndControls) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .onSizeChanged { endControlWidth = it.width },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                Icon(
-                    imageVector = readerSasayakiTopToggleIcon(sasayakiPlaying),
-                    contentDescription = if (sasayakiPlaying) "Pause Sasayaki" else "Play Sasayaki",
-                    modifier = Modifier.size(metrics.topSasayakiIconSizeDp.dp),
-                    tint = Color(colors.buttonContent),
-                )
+                if (showForwardJump) {
+                    ReaderJumpHistoryButton(
+                        character = requireNotNull(state.forwardTargetCharacter),
+                        icon = readerJumpForwardIcon(),
+                        iconFirst = false,
+                        contentDescription = "Return to later jump position",
+                        colors = colors,
+                        heightDp = metrics.topSasayakiButtonSizeDp,
+                        onClick = requireNotNull(onJumpForward),
+                    )
+                }
+                if (onSasayakiToggle != null) {
+                    ReaderRoundButton(
+                        colors = colors,
+                        sizeDp = metrics.topSasayakiButtonSizeDp,
+                        onClick = onSasayakiToggle,
+                    ) {
+                        Icon(
+                            imageVector = readerSasayakiTopToggleIcon(sasayakiPlaying),
+                            contentDescription = if (sasayakiPlaying) "Pause Sasayaki" else "Play Sasayaki",
+                            modifier = Modifier.size(metrics.topSasayakiIconSizeDp.dp),
+                            tint = Color(colors.buttonContent),
+                        )
+                    }
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun ReaderJumpHistoryButton(
+    character: Int,
+    icon: ImageVector,
+    iconFirst: Boolean,
+    contentDescription: String,
+    colors: ReaderChromeColors,
+    heightDp: Int,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .height(heightDp.dp)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        if (iconFirst) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(16.dp),
+                tint = Color(colors.infoText),
+            )
+        }
+        Text(
+            text = readerJumpTargetText(character),
+            color = Color(colors.infoText),
+            style = MaterialTheme.typography.labelSmall,
+        )
+        if (!iconFirst) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(16.dp),
+                tint = Color(colors.infoText),
+            )
         }
     }
 }
