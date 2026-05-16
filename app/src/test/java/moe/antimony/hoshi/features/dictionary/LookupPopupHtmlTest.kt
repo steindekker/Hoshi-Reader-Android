@@ -6,6 +6,7 @@ import de.manhhao.hoshi.GlossaryEntry
 import de.manhhao.hoshi.LookupResult
 import de.manhhao.hoshi.PitchEntry
 import de.manhhao.hoshi.TermResult
+import de.manhhao.hoshi.TransformGroup
 import moe.antimony.hoshi.features.audio.AudioPlaybackMode
 import moe.antimony.hoshi.features.audio.AudioSettings
 import moe.antimony.hoshi.features.audio.AudioSource
@@ -59,16 +60,45 @@ class LookupPopupHtmlTest {
         assertTrue(html.contains("window.entryCount = 1;"))
     }
 
+    @Test
+    fun deinflectionTraceIncludesBridgeDescriptionsForPopupOverlay() {
+        val html = LookupPopupHtml.render(
+            listOf(
+                lookupResult(
+                    expression = "食べる",
+                    reading = "たべる",
+                    glossary = "to eat",
+                    process = arrayOf(
+                        TransformGroup(
+                            name = "polite",
+                            description = "Polite conjugation of verbs and adjectives.\nUsage: example text.",
+                        ),
+                    ),
+                ),
+            ),
+            assets = LookupPopupAssets(
+                popupJs = "window.renderPopup = function() {};",
+                popupCss = ".entry-header {}",
+                selectionJs = "window.hoshiSelection = { selectText: function() {} };",
+            ),
+        )
+
+        assertTrue(html.contains(""""name":"polite""""))
+        assertTrue(html.contains(""""description":"Polite conjugation of verbs and adjectives.\nUsage: example text.""""))
+        assertTrue(html.contains("""<div class="overlay-close" onclick="closeOverlay()">×</div>"""))
+    }
+
     private fun lookupResult(
         expression: String,
         reading: String,
         glossary: String,
+        process: Array<TransformGroup> = emptyArray(),
         frequencies: Array<FrequencyEntry> = emptyArray(),
         pitches: Array<PitchEntry> = emptyArray(),
     ): LookupResult = LookupResult(
         expression,
         expression,
-        emptyArray(),
+        process,
         TermResult(
             expression = expression,
             reading = reading,

@@ -1,6 +1,6 @@
 # Hoshi Android Agent TODO
 
-Last updated: 2026-05-15
+Last updated: 2026-05-16
 
 This file is the short operational handoff for future agents.
 
@@ -49,6 +49,7 @@ This file is the short operational handoff for future agents.
 ### Dictionary
 
 - Device-validate recommended dictionary downloads from the Dictionaries screen, covering JMdict, Jiten, and Jitendex individual downloads and confirming each imported dictionary remains updatable.
+- For deinflection regressions, verify conjugated lookup results such as `食べた` show iOS-style explanation overlays when tapping deinflection tags.
 - Keep frequency and pitch dictionaries type-specific; do not treat metadata dictionaries as term fallback dictionaries.
 - Do not reimplement Yomitan import, lookup, media, or style extraction outside `third_party/hoshidicts-kotlin-bridge` unless the bridge gap is documented first.
 

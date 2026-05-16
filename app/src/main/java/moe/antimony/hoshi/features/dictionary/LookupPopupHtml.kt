@@ -253,7 +253,7 @@ internal object LookupPopupHtml {
                 $topSpacer
                 $entriesContainer
                 <div class="overlay">
-                    <div class="overlay-close" onclick="closeOverlay()">x</div>
+                    <div class="overlay-close" onclick="closeOverlay()">×</div>
                     <div class="overlay-content"></div>
                 </div>
                 <script>
@@ -330,11 +330,11 @@ internal object LookupPopupHtml {
         put("reading", term.reading)
         put("matched", matched)
         putJsonArray("deinflectionTrace") {
-            process.reversedArray().forEach { name ->
+            process.reversedArray().forEach { transformGroup ->
                 add(
                     buildJsonObject {
-                        put("name", name)
-                        put("description", "")
+                        put("name", transformGroup.name)
+                        put("description", transformGroup.description)
                     },
                 )
             }

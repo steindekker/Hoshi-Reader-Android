@@ -5,6 +5,10 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+### Fixed
+
+- Show iOS-aligned deinflection explanation popups when tapping conjugation tags in dictionary lookup results.
+
 ## [v0.6.3] - 2026-05-15
 
 ### Added
