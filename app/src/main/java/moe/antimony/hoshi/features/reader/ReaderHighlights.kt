@@ -79,7 +79,11 @@ internal object ReaderHighlightSections {
         val labels = chapterLabels(book)
         val grouped = highlights.groupBy { highlight ->
             val position = ReaderHighlights.positionForCharacter(book.bookInfo, highlight.character)
-            position.index
+            var index = position.index
+            while (index > 0 && labels[index] == null) {
+                index -= 1
+            }
+            index
         }
         return grouped.map { (chapterIndex, items) ->
             ReaderHighlightSection(

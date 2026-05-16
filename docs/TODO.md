@@ -31,7 +31,7 @@ This file is the short operational handoff for future agents.
 
 ### Reader And Lookup
 
-- Use `docs/IOS_UPSTREAM_SYNC_QUEUE.md` as the current iOS upstream sync queue; next remaining slices are popup action-button frame sync and highlight unlabeled-chapter grouping.
+- Use `docs/IOS_UPSTREAM_SYNC_QUEUE.md` as the current iOS upstream sync queue; next remaining slice is popup action-button frame sync.
 - Device-validate vertical lookup selection on ruby text, confirming E-ink underlines, regular highlights, and popup placement share one furigana-aware selection area.
 - Device-validate continuous-mode lookup popup placement with nonzero reader padding in both vertical and horizontal writing.
 - Device-validate paginated page turns with top and bottom progress counters enabled on E-ink, confirming the counter no longer refreshes before the page flip.
@@ -57,6 +57,7 @@ This file is the short operational handoff for future agents.
 
 ### Highlights And Notes
 
+- Blocked: device-validate reader Highlights sheet grouping for highlights in unlabeled EPUB spine entries once a repeatable fixture or saved reader state exists.
 - Device-validate remaining reader highlight restore, jump, delete, all-color, and continuous-mode behavior against iOS after paginated creation, primary Highlight toolbar placement, anchored color-picker placement, and native selection drag page-locking were verified on Android targets.
 - Blocked: real-device WebView selection can enter a valid native text-selection state while Samsung/Android does not show the floating selection toolbar; keep this tracked as a platform interaction issue before adding more highlight toolbar patches.
 - Add note editing only if/when iOS exposes a user-visible notes flow.

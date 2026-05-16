@@ -24,6 +24,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 - Use the selected EPUB file name as the visible book title when imported metadata has no usable title.
 - Detect dictionary archive types during manual import and place term, frequency, and pitch data in their matching tabs without choosing a type first.
 - Remove deleted dictionaries from the collapsed dictionary configuration.
+- Group highlights from unlabeled EPUB spine entries under the nearest previous visible chapter in the reader Highlights sheet.
 
 ## [v0.6.3] - 2026-05-15
 

@@ -128,7 +128,7 @@ Validation:
 
 ### 5. Highlight grouping for unlabeled chapters
 
-Status: queued
+Status: synced on Android
 
 Commit:
 
@@ -141,13 +141,13 @@ iOS behavior to mirror:
 
 Android notes:
 
-- Android `ReaderHighlightSections` currently groups by exact spine index and uses `Untitled` when no label exists.
-- Mirror the iOS fallback loop: while the target spine index is greater than zero and has no label, walk backward until a labeled section is found.
+- Android `ReaderHighlightSections` now mirrors the iOS fallback loop: while the target spine index is greater than zero and has no label, it walks backward until a labeled section is found.
+- Highlight rows keep the original highlight objects, so jump and delete actions still target the original character positions.
 
 Validation:
 
-- Use an EPUB with highlights in unlabeled spine items between labeled TOC chapters and confirm they group under the previous visible chapter label.
-- Confirm jump and delete still target the original highlight positions.
+- Unit coverage: `ReaderHighlightBehaviorTest`.
+- Device validation remains recommended with an EPUB that has highlights in unlabeled spine items between labeled TOC chapters.
 
 ## Covered Or No Android Action
 
@@ -167,7 +167,7 @@ Validation:
 | `746a7ac` | 2026-05-15 | Add Sasayaki seek controls | Covered |
 | `53c6980` | 2026-05-15 | Simplify iOS reader buttons | No direct Android action |
 | `9626f84` | 2026-05-15 | Avoid direct popup index access | Covered; re-test with popup work |
-| `d5e966f` | 2026-05-15 | Group unlabeled highlight chapters | Queued |
+| `d5e966f` | 2026-05-15 | Group unlabeled highlight chapters | Synced |
 | `4cd688f` | 2026-05-15 | Recommended dictionary changes | Synced |
 | `130f6cf` | 2026-05-16 | Reader background safe area | No direct Android action |
 | `2f5d71a` | 2026-05-16 | Autodetect dictionary type | Synced |
@@ -181,6 +181,5 @@ Validation:
 ## Suggested Implementation Order
 
 1. Popup action buttons and frame sync.
-2. Highlight grouping.
 
-This order keeps the riskiest WebView/popup work together before the lower-risk highlight model/UI slice.
+This keeps the remaining risky WebView/popup work grouped together.

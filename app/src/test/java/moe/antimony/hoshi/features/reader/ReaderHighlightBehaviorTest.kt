@@ -75,6 +75,26 @@ class ReaderHighlightBehaviorTest {
     }
 
     @Test
+    fun sectionsGroupUnlabeledSpineHighlightsUnderPreviousLabeledChapter() {
+        val book = readerBookWithUnlabeledSpineItem()
+        val highlights = listOf(
+            highlight(id = "chapter-one", character = 2, text = "start"),
+            highlight(id = "split-page", character = 12, text = "middle"),
+            highlight(id = "chapter-two", character = 18, text = "end"),
+        )
+
+        val sections = ReaderHighlightSections.sections(
+            book = book,
+            highlights = highlights,
+        )
+
+        assertEquals(listOf("Chapter One", "Chapter Two"), sections.map { it.label })
+        assertEquals(listOf("chapter-one", "split-page"), sections[0].highlights.map { it.id })
+        assertEquals(listOf(2, 12), sections[0].highlights.map { it.character })
+        assertEquals(listOf("chapter-two"), sections[1].highlights.map { it.id })
+    }
+
+    @Test
     fun creationResultParsesValidWebViewJsonAndRejectsMissingData() {
         val result = ReaderHighlightCreationResult.fromWebViewResult(
             """{"start":4,"offset":9,"text":"食べる"}""",
@@ -131,6 +151,35 @@ class ReaderHighlightBehaviorTest {
                     href = "chapter-2.xhtml",
                     mediaType = "application/xhtml+xml",
                     html = "klmnopqrst",
+                ),
+            ),
+            toc = listOf(
+                moe.antimony.hoshi.epub.EpubTocItem(label = "Chapter One", href = "chapter-1.xhtml"),
+                moe.antimony.hoshi.epub.EpubTocItem(label = "Chapter Two", href = "chapter-2.xhtml"),
+            ),
+        )
+
+    private fun readerBookWithUnlabeledSpineItem(): EpubBook =
+        EpubBook(
+            title = "Book",
+            chapters = listOf(
+                EpubChapter(
+                    id = "chapter-1",
+                    href = "chapter-1.xhtml",
+                    mediaType = "application/xhtml+xml",
+                    html = "abcdefghij",
+                ),
+                EpubChapter(
+                    id = "chapter-1-split",
+                    href = "chapter-1-split.xhtml",
+                    mediaType = "application/xhtml+xml",
+                    html = "klmno",
+                ),
+                EpubChapter(
+                    id = "chapter-2",
+                    href = "chapter-2.xhtml",
+                    mediaType = "application/xhtml+xml",
+                    html = "pqrstuvwxy",
                 ),
             ),
             toc = listOf(
