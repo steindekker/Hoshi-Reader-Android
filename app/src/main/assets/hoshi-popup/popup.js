@@ -1246,8 +1246,8 @@ function syncButtonFrames() {
         return {
             kind: slot.dataset.kind,
             entryIndex: Number(slot.dataset.entryIndex),
-            x: rect.left,
-            y: rect.top,
+            x: rect.left + window.scrollX,
+            y: rect.top + window.scrollY,
             width: rect.width,
             height: rect.height,
             state: slot.dataset.state || 'default',
@@ -1267,7 +1267,6 @@ function scheduleButtonFrameSync() {
 }
 
 window.addEventListener('resize', scheduleButtonFrameSync);
-window.addEventListener('scroll', scheduleButtonFrameSync, { passive: true });
 document.addEventListener('toggle', scheduleButtonFrameSync, true);
 
 function createButtonSlot(kind, entryIndex, enabled = true) {
@@ -1704,6 +1703,5 @@ window.renderPopup = function() {
 };
 
 document.addEventListener('scroll', () => {
-    scheduleButtonFrameSync();
     webkit.messageHandlers.popupScrolled.postMessage(null);
 }, { passive: true });

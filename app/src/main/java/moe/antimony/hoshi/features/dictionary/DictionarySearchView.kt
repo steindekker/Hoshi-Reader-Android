@@ -1,7 +1,6 @@
 package moe.antimony.hoshi.features.dictionary
 
 import android.annotation.SuppressLint
-import android.webkit.WebView
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -40,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
@@ -69,7 +69,6 @@ import moe.antimony.hoshi.features.anki.AnkiMiningContext
 import moe.antimony.hoshi.features.anki.AnkiViewModel
 import moe.antimony.hoshi.features.reader.ReaderFontManager
 import moe.antimony.hoshi.features.reader.ReaderSettings
-import moe.antimony.hoshi.webview.HoshiPopupWebView
 import moe.antimony.hoshi.webview.applyHoshiWebViewSecurityDefaults
 import kotlin.math.abs
 
@@ -141,6 +140,12 @@ fun DictionarySearchView(
     val fontManager = appContainer.readerFontManager
     val fontFaceCss = fontManager.popupFontFaceCss()
     val popupDarkMode = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val actionButtonTintColor = when {
+        readerSettings.eInkMode && popupDarkMode -> Color.White
+        readerSettings.eInkMode -> Color.Black
+        popupDarkMode -> Color(0xFFEBEBF5)
+        else -> Color(0x993C3C43)
+    }
     val popupOptions = dictionarySearchPopupOptions(
         readerSettings = readerSettings,
         dictionarySettings = uiState.dictionarySettings,
@@ -217,6 +222,7 @@ fun DictionarySearchView(
                 fontManager = fontManager,
                 audioSettings = uiState.audioSettings,
                 popupScale = readerSettings.popupScale,
+                actionButtonTintColor = actionButtonTintColor,
                 localAudioRepository = localAudioRepository,
                 clearSelectionSignal = uiState.resultClearSelectionSignal,
                 backSignal = uiState.backSignal,
@@ -432,6 +438,7 @@ private fun DictionaryResultWebView(
     fontManager: ReaderFontManager,
     audioSettings: AudioSettings,
     popupScale: Double,
+    actionButtonTintColor: Color,
     localAudioRepository: LocalAudioRepository,
     clearSelectionSignal: Int,
     backSignal: Int,
@@ -439,97 +446,83 @@ private fun DictionaryResultWebView(
     callbacks: PopupWebViewCallbacks,
     modifier: Modifier = Modifier,
 ) {
-    var buttonFrames by remember(html) { mutableStateOf<List<PopupButtonFrame>>(emptyList()) }
-    var webViewRef by remember { mutableStateOf<WebView?>(null) }
-    val popupCallbacks = callbacks.copy(onButtonFrames = { frames -> buttonFrames = frames })
-    val callbackHolder = remember { PopupWebViewCallbackHolder(popupCallbacks) }
-    callbackHolder.callbacks = popupCallbacks
+    val callbackHolder = remember { PopupWebViewCallbackHolder(callbacks) }
+    callbackHolder.callbacks = callbacks
     val lookupResultsHolder = remember { PopupLookupResultsHolder(results) }
     var loadedHtml by remember { mutableStateOf<String?>(null) }
     var appliedClearSelectionSignal by remember { mutableStateOf(clearSelectionSignal) }
     var appliedBackSignal by remember { mutableStateOf(backSignal) }
     var appliedForwardSignal by remember { mutableStateOf(forwardSignal) }
     var appliedPopupScale by remember { mutableStateOf(popupScale) }
-    val controlContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-    Box(modifier = modifier.fillMaxSize()) {
-        AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory = { context ->
-                val audioRequestHandler = AudioRequestHandler(
-                    localAudioRepository,
-                )
-                HoshiPopupWebView(context).apply {
-                    webViewRef = this
-                    applyHoshiWebViewSecurityDefaults()
-                    isVerticalScrollBarEnabled = false
-                    isHorizontalScrollBarEnabled = false
-                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                    addJavascriptInterface(
-                        PopupWebViewBridge(
-                            webView = this,
-                            callbackHolder = callbackHolder,
-                            lookupResultsHolder = lookupResultsHolder,
-                        ),
-                        "HoshiPopup",
-                    )
-                    webViewClient = PopupMessageWebViewClient(
+    AndroidView(
+        modifier = modifier.fillMaxSize(),
+        factory = { context ->
+            val audioRequestHandler = AudioRequestHandler(
+                localAudioRepository,
+            )
+            PopupActionButtonWebView(context).apply {
+                applyHoshiWebViewSecurityDefaults()
+                isVerticalScrollBarEnabled = false
+                isHorizontalScrollBarEnabled = false
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                addJavascriptInterface(
+                    PopupWebViewBridge(
+                        webView = this,
                         callbackHolder = callbackHolder,
-                        audioRequestHandler = audioRequestHandler,
-                        assets = assets,
-                        fontManager = fontManager,
-                    )
-                }
-            },
-            update = { webView ->
-                webViewRef = webView
-                callbackHolder.callbacks = popupCallbacks
-                webView.webViewClient = PopupMessageWebViewClient(
-                    callbackHolder,
-                    AudioRequestHandler(
-                        localAudioRepository,
+                        lookupResultsHolder = lookupResultsHolder,
                     ),
-                    assets,
-                    fontManager,
+                    "HoshiPopup",
                 )
-                if (loadedHtml != html) {
-                    lookupResultsHolder.results = results
-                    loadedHtml = html
-                    buttonFrames = emptyList()
-                    webView.loadDataWithBaseURL(
-                        "https://hoshi.local/dictionary/",
-                        html,
-                        "text/html",
-                        "UTF-8",
-                        null,
-                    )
-                }
-                if (appliedPopupScale != popupScale) {
-                    appliedPopupScale = popupScale
-                    webView.evaluateJavascript(
-                        "document.documentElement.style.zoom = '${popupScale.coerceIn(0.8, 1.5)}'; if (typeof syncButtonFrames === 'function') requestAnimationFrame(syncButtonFrames)",
-                        null,
-                    )
-                }
-                if (appliedClearSelectionSignal != clearSelectionSignal) {
-                    appliedClearSelectionSignal = clearSelectionSignal
-                    webView.evaluateJavascript("window.hoshiSelection.clearSelection()", null)
-                }
-                if (appliedBackSignal != backSignal) {
-                    appliedBackSignal = backSignal
-                    webView.evaluateJavascript("window.navigateBack(); if (typeof syncButtonFrames === 'function') requestAnimationFrame(syncButtonFrames)", null)
-                }
-                if (appliedForwardSignal != forwardSignal) {
-                    appliedForwardSignal = forwardSignal
-                    webView.evaluateJavascript("window.navigateForward(); if (typeof syncButtonFrames === 'function') requestAnimationFrame(syncButtonFrames)", null)
-                }
-            },
-        )
-        PopupActionButtonOverlay(
-            frames = buttonFrames,
-            contentColor = controlContentColor,
-            onAction = { frame ->
-                webViewRef?.evaluateJavascript(frame.actionScript, null)
-            },
-        )
-    }
+                webViewClient = PopupMessageWebViewClient(
+                    callbackHolder = callbackHolder,
+                    audioRequestHandler = audioRequestHandler,
+                    assets = assets,
+                    fontManager = fontManager,
+                )
+            }
+        },
+        update = { webView ->
+            callbackHolder.callbacks = callbacks
+            webView.webViewClient = PopupMessageWebViewClient(
+                callbackHolder,
+                AudioRequestHandler(
+                    localAudioRepository,
+                ),
+                assets,
+                fontManager,
+            )
+            if (loadedHtml != html) {
+                lookupResultsHolder.results = results
+                loadedHtml = html
+                (webView as? PopupActionButtonWebView)?.clearActionButtons()
+                webView.loadDataWithBaseURL(
+                    "https://hoshi.local/dictionary/",
+                    html,
+                    "text/html",
+                    "UTF-8",
+                    null,
+                )
+            }
+            (webView as? PopupActionButtonWebView)?.setActionButtonTint(actionButtonTintColor.toArgb())
+            if (appliedPopupScale != popupScale) {
+                appliedPopupScale = popupScale
+                webView.evaluateJavascript(
+                    "document.documentElement.style.zoom = '${popupScale.coerceIn(0.8, 1.5)}'; if (typeof syncButtonFrames === 'function') requestAnimationFrame(syncButtonFrames)",
+                    null,
+                )
+            }
+            if (appliedClearSelectionSignal != clearSelectionSignal) {
+                appliedClearSelectionSignal = clearSelectionSignal
+                webView.evaluateJavascript("window.hoshiSelection.clearSelection()", null)
+            }
+            if (appliedBackSignal != backSignal) {
+                appliedBackSignal = backSignal
+                webView.evaluateJavascript("window.navigateBack(); if (typeof syncButtonFrames === 'function') requestAnimationFrame(syncButtonFrames)", null)
+            }
+            if (appliedForwardSignal != forwardSignal) {
+                appliedForwardSignal = forwardSignal
+                webView.evaluateJavascript("window.navigateForward(); if (typeof syncButtonFrames === 'function') requestAnimationFrame(syncButtonFrames)", null)
+            }
+        },
+    )
 }

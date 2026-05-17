@@ -58,15 +58,16 @@ iOS behavior to mirror:
 
 Android notes:
 
-- Do not copy the iOS UIKit implementation. Implement with Android/Compose/WebView primitives while preserving the same user-visible control behavior.
-- Android popup JS now emits placeholder button slots and frame/state messages through the WebView bridge.
-- Dictionary-tab popups and reader popups draw audio and mining controls as Compose overlays on top of a horizontal-scroll-clamped popup WebView.
-- Button frames are refreshed after popup scrolling, resize, popup scale changes, redirect/back/forward restore, result replacement, and document-level dictionary `toggle` events.
+- Android mirrors the iOS ownership split: popup JS owns placeholder slots, button state, duplicate checks, and action entry points, while `PopupActionButtonWebView` owns native `ImageButton` children inside WebView content coordinates.
+- Button frames are routed through the popup WebView bridge directly into the native WebView host; Compose no longer stores or renders popup action-button frames.
+- Native buttons clamp horizontal WebView scrolling while preserving vertical scroll, and because they are WebView children they move with content scroll without per-scroll JS frame resync.
+- Button-frame refresh is triggered by slot creation, duplicate/audio state changes, resize, popup scale changes, redirect/replace, history restore/back/forward, deferred history append, and document-level dictionary toggle events.
 
 Validation:
 
-- Unit coverage: `LookupPopupHtmlTest`, `PopupWebViewMessagesTest`, `LookupPopupTest`, and `HoshiPopupWebViewTest`.
-- Device validation remains recommended for Dictionary tab lookup and reader lookup: audio/mining alignment, duplicate state, Anki add state, audio error state, autoplay, redirect history, collapsed dictionary toggles, child popups, and slow horizontal drags/long presses on controls.
+- Unit coverage: `PopupWebViewMessagesTest` and `LookupPopupHtmlTest`.
+- Instrumented coverage: `PopupActionButtonWebViewTest`.
+- Device validation remains recommended for Dictionary tab lookup, reader lookup, duplicate state, Anki add state, audio error/autoplay, redirect back/forward, collapsed dictionary toggles, child popups, and slow horizontal drags/long presses on controls.
 
 ### 3. Bookshelf title rename and metadata fallback
 
@@ -182,4 +183,4 @@ Validation:
 
 ## Suggested Implementation Order
 
-No queued slices remain in this document. Re-fetch `reference/Hoshi-Reader-iOS` and update this queue before starting the next upstream sync.
+All currently checked iOS upstream user-visible slices are synced or covered on Android.

@@ -10,6 +10,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import org.json.JSONObject.quote
 import java.io.ByteArrayInputStream
+import java.io.File
 import de.manhhao.hoshi.HoshiDicts
 import de.manhhao.hoshi.LookupResult
 import kotlinx.serialization.json.Json
@@ -26,11 +27,10 @@ import moe.antimony.hoshi.features.reader.ReaderFontManager
 import moe.antimony.hoshi.features.reader.ReaderSelectionData
 import moe.antimony.hoshi.features.reader.ReaderSelectionRect
 import moe.antimony.hoshi.features.reader.ReaderSelectionBridgePayload
-import moe.antimony.hoshi.features.reader.mediaType
 import org.json.JSONArray
 import org.json.JSONObject
 
-internal data class PopupWebViewCallbacks(
+internal class PopupWebViewCallbacks(
     val onTapOutside: () -> Unit = {},
     val onSwipeDismiss: () -> Unit = {},
     val onOpenLink: (String) -> Unit = {},
@@ -43,12 +43,21 @@ internal data class PopupWebViewCallbacks(
     val onScroll: () -> Unit = {},
     val onMineEntry: (String) -> Boolean = { false },
     val onDuplicateCheck: (String, (Boolean) -> Unit) -> Unit = { _, reply -> reply(false) },
-    val onButtonFrames: (List<PopupButtonFrame>) -> Unit = {},
+)
+
+internal class PopupWebViewCallbackHolder(
+    var callbacks: PopupWebViewCallbacks,
 )
 
 internal enum class PopupButtonKind(val rawValue: String) {
     Audio("audio"),
     Mine("mine");
+
+    fun actionScript(entryIndex: Int): String =
+        when (this) {
+            Audio -> "playEntryAudio($entryIndex)"
+            Mine -> "mineEntryAtIndex($entryIndex)"
+        }
 
     companion object {
         fun fromRawValue(value: String): PopupButtonKind? =
@@ -77,26 +86,16 @@ internal data class PopupButtonFrame(
     val state: PopupButtonState = PopupButtonState.Default,
     val enabled: Boolean = true,
 ) {
-    val actionScript: String
-        get() = when (kind) {
-            PopupButtonKind.Audio -> "playEntryAudio($entryIndex)"
-            PopupButtonKind.Mine -> "mineEntryAtIndex($entryIndex)"
-    }
+    val key: String = "${kind.rawValue}-$entryIndex"
 }
 
 private val popupButtonFrameJson = Json { ignoreUnknownKeys = true }
 
-internal fun popupButtonFramesFromJson(json: String): List<PopupButtonFrame> =
-    runCatching {
-        val element = popupButtonFrameJson.parseToJsonElement(json)
-        popupButtonFramesFromJsonArray(element as? KotlinJsonArray ?: return@runCatching emptyList())
-    }.getOrDefault(emptyList())
-
 internal fun popupButtonFramesFromMessageJson(message: String): List<PopupButtonFrame> =
     runCatching {
-        val element = popupButtonFrameJson.parseToJsonElement(message) as? KotlinJsonObject
+        val payload = popupButtonFrameJson.parseToJsonElement(message) as? KotlinJsonObject
             ?: return@runCatching emptyList()
-        popupButtonFramesFromJsonArray(element["body"] as? KotlinJsonArray ?: return@runCatching emptyList())
+        popupButtonFramesFromJsonArray(payload["body"] as? KotlinJsonArray ?: return@runCatching emptyList())
     }.getOrDefault(emptyList())
 
 internal fun popupButtonFramesFromJson(array: JSONArray?): List<PopupButtonFrame> {
@@ -108,10 +107,6 @@ internal fun popupButtonFramesFromJson(array: JSONArray?): List<PopupButtonFrame
         }
     }
 }
-
-internal class PopupWebViewCallbackHolder(
-    var callbacks: PopupWebViewCallbacks,
-)
 
 internal class PopupLookupResultsHolder(
     var results: List<LookupResult>,
@@ -204,7 +199,7 @@ internal class PopupMessageWebViewClient(
         val fileName = uri.lastPathSegment?.takeIf { uri.path.orEmpty().startsWith("/fonts/") } ?: return null
         val fontFile = fontManager.fontFileForRequest(fileName) ?: return null
         return WebResourceResponse(
-            fontFile.mediaType(),
+            fontFile.popupFontMediaType(),
             null,
             fontFile.inputStream(),
         )
@@ -306,7 +301,9 @@ internal class PopupWebViewBridge(
             "popupScrolled" -> mainHandler.post(callbacks.onScroll)
             "buttonFrames" -> {
                 val frames = popupButtonFramesFromMessageJson(message)
-                mainHandler.post { callbacks.onButtonFrames(frames) }
+                mainHandler.post {
+                    (webView as? PopupActionButtonWebView)?.updateActionButtonFrames(frames)
+                }
             }
             "playWordAudio" -> payload.optJSONObject("body")?.let { body ->
                 val url = body.optString("url").takeIf { it.isNotBlank() } ?: return
@@ -391,6 +388,15 @@ private fun JSONObject.toPopupButtonFrame(): PopupButtonFrame? {
 
 private fun JSONObject.finiteDouble(name: String): Double? =
     optDouble(name, Double.NaN).takeIf { it.isFinite() }
+
+private fun File.popupFontMediaType(): String =
+    when (extension.lowercase()) {
+        "ttf" -> "font/ttf"
+        "otf" -> "font/otf"
+        "woff" -> "font/woff"
+        "woff2" -> "font/woff2"
+        else -> "application/octet-stream"
+    }
 
 private fun popupButtonFramesFromJsonArray(array: KotlinJsonArray): List<PopupButtonFrame> =
     array.mapNotNull { (it as? KotlinJsonObject)?.toPopupButtonFrame() }
