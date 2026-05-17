@@ -5,6 +5,8 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+## [v0.7.2] - 2026-05-18
+
 ### Fixed
 
 - Keep reader lookup popups pre-rendering at their real size before they become touchable, preventing slow first render, white popup flashes, and delayed content after autoplay starts.
