@@ -5,6 +5,8 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+## [v0.7.3] - 2026-05-18
+
 ### Fixed
 
 - Keep reader lookup highlights on ruby text starting at the tapped character instead of expanding to the whole ruby base.
