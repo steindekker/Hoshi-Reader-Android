@@ -402,29 +402,13 @@ window.hoshiSelection = {
         }
 
         const rects = [];
-        let remaining = charCount;
-
-        for (const r of this.selection.ranges) {
-            if (remaining <= 0) {
-                break;
-            }
-
-            let end = r.start;
-            while (end < r.end && remaining > 0) {
-                const char = String.fromCodePoint(r.node.textContent.codePointAt(end));
-                end += char.length;
-                remaining--;
-            }
-
-            const range = document.createRange();
-            range.setStart(r.node, r.start);
-            range.setEnd(r.node, end);
+        for (const range of this.selectionCharacterRanges(charCount)) {
             Array.from(range.getClientRects()).forEach(rect => {
                 rects.push({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
             });
         }
 
-        return rects;
+        return this.mergeSelectionRects(rects);
     },
 
     highlightSelection(charCount) {
@@ -432,7 +416,16 @@ window.hoshiSelection = {
             return;
         }
 
-        const highlights = [];
+        const highlights = this.selectionCharacterRanges(charCount);
+        CSS.highlights?.set('hoshi-selection', new Highlight(...highlights));
+    },
+
+    selectionCharacterRanges(charCount) {
+        if (!this.selection?.ranges.length) {
+            return [];
+        }
+
+        const ranges = [];
         let remaining = charCount;
 
         for (const r of this.selection.ranges) {
@@ -440,20 +433,59 @@ window.hoshiSelection = {
                 break;
             }
 
-            let end = r.start;
+            let start = r.start;
+            let end = start;
             while (end < r.end && remaining > 0) {
                 const char = String.fromCodePoint(r.node.textContent.codePointAt(end));
                 end += char.length;
                 remaining--;
-            }
 
-            const range = document.createRange();
-            range.setStart(r.node, r.start);
-            range.setEnd(r.node, end);
-            highlights.push(range);
+                const range = document.createRange();
+                range.setStart(r.node, start);
+                range.setEnd(r.node, end);
+                ranges.push(range);
+                start = end;
+            }
         }
 
-        CSS.highlights?.set('hoshi-selection', new Highlight(...highlights));
+        return ranges;
+    },
+
+    mergeSelectionRects(rects) {
+        const merged = [];
+
+        for (const rect of rects) {
+            const current = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+            const previous = merged[merged.length - 1];
+            if (previous && this.selectionRectsTouch(previous, current)) {
+                const left = Math.min(previous.x, current.x);
+                const top = Math.min(previous.y, current.y);
+                const right = Math.max(previous.x + previous.width, current.x + current.width);
+                const bottom = Math.max(previous.y + previous.height, current.y + current.height);
+                previous.x = left;
+                previous.y = top;
+                previous.width = right - left;
+                previous.height = bottom - top;
+            } else {
+                merged.push(current);
+            }
+        }
+
+        return merged;
+    },
+
+    selectionRectsTouch(a, b) {
+        const tolerance = 0.5;
+        if (this.isVertical()) {
+            return Math.abs(a.x - b.x) <= tolerance &&
+                Math.abs(a.width - b.width) <= tolerance &&
+                b.y <= a.y + a.height + tolerance &&
+                b.y + b.height >= a.y - tolerance;
+        }
+        return Math.abs(a.y - b.y) <= tolerance &&
+            Math.abs(a.height - b.height) <= tolerance &&
+            b.x <= a.x + a.width + tolerance &&
+            b.x + b.width >= a.x - tolerance;
     },
 
     getNormalizedOffset(targetNode, offset) {

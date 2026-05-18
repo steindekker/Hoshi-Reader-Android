@@ -7,6 +7,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ### Fixed
 
+- Keep reader lookup highlights on ruby text starting at the tapped character instead of expanding to the whole ruby base.
 - Prevent scrolled reader lookup popups from leaving the hidden warm shell at the old position and blocking reader input after dismissal.
 - Prevent stale native lookup popup audio and Anki button positions from being drawn while dictionary sections expand or collapse on slow E-ink devices.
 

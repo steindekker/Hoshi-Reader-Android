@@ -128,6 +128,25 @@ internal object ReaderSelectionScripts {
             }, this);
             return this.rectObject(result);
           },
+          rubyAwareSelectionRect: function(rect, node) {
+            if (!this.isVertical()) return this.rectObject(rect);
+            var rubyRects = this.rubyTextRects(node);
+            if (!rubyRects.length) {
+              return this.rectObject(rect);
+            }
+            var result = this.rectWithBounds(rect);
+            rubyRects.forEach(function(rubyRect) {
+              if (this.rubyRectMatchesLine(result, rubyRect)) {
+                var left = Math.min(result.left, rubyRect.left);
+                var right = Math.max(result.right, rubyRect.right);
+                result.x = left;
+                result.left = left;
+                result.width = right - left;
+                result.right = right;
+              }
+            }, this);
+            return this.rectObject(result);
+          },
           rubyRectMatchesLine: function(lineRect, rubyRect) {
             var rubyCenterX = (rubyRect.left + rubyRect.right) / 2;
             return rubyCenterX >= lineRect.left && rubyCenterX <= lineRect.right + lineRect.width;
@@ -344,45 +363,73 @@ internal object ReaderSelectionScripts {
           },
           highlightSelection: function(charCount) {
             if (!this.selection || !this.selection.ranges.length || !CSS.highlights) return;
-            var highlights = [];
-            var remaining = charCount;
-            for (var i = 0; i < this.selection.ranges.length; i++) {
-              var r = this.selection.ranges[i];
-              if (remaining <= 0) break;
-              var end = r.start;
-              while (end < r.end && remaining > 0) {
-                var char = String.fromCodePoint(r.node.textContent.codePointAt(end));
-                end += char.length;
-                remaining--;
-              }
-              var range = document.createRange();
-              range.setStart(r.node, r.start);
-              range.setEnd(r.node, end);
-              highlights.push(range);
-            }
+            var highlights = this.selectionCharacterRanges(charCount);
             CSS.highlights.set('hoshi-selection', new Highlight(...highlights));
           },
           selectionRects: function(charCount) {
             if (!this.selection || !this.selection.ranges.length) return [];
             var rects = [];
+            this.selectionCharacterRanges(charCount).forEach(function(range) {
+              Array.from(range.getClientRects()).forEach(function(rect) {
+                rects.push(this.rubyAwareSelectionRect(rect, range.startContainer));
+              }, this);
+            }, this);
+            return this.unifyVerticalColumnRects(this.mergeSelectionRects(rects));
+          },
+          selectionCharacterRanges: function(charCount) {
+            if (!this.selection || !this.selection.ranges.length) return [];
+            var ranges = [];
             var remaining = charCount;
             for (var i = 0; i < this.selection.ranges.length; i++) {
               var r = this.selection.ranges[i];
               if (remaining <= 0) break;
-              var end = r.start;
+              var start = r.start;
+              var end = start;
               while (end < r.end && remaining > 0) {
                 var char = String.fromCodePoint(r.node.textContent.codePointAt(end));
                 end += char.length;
                 remaining--;
+                var range = document.createRange();
+                range.setStart(r.node, start);
+                range.setEnd(r.node, end);
+                ranges.push(range);
+                start = end;
               }
-              var range = document.createRange();
-              range.setStart(r.node, r.start);
-              range.setEnd(r.node, end);
-              Array.from(range.getClientRects()).forEach(function(rect) {
-                rects.push(this.rubyAwareRect(rect, r.node));
-              }, this);
             }
-            return this.unifyVerticalColumnRects(rects);
+            return ranges;
+          },
+          mergeSelectionRects: function(rects) {
+            var merged = [];
+            rects.forEach(function(rect) {
+              var current = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+              var previous = merged[merged.length - 1];
+              if (previous && this.selectionRectsTouch(previous, current)) {
+                var left = Math.min(previous.x, current.x);
+                var top = Math.min(previous.y, current.y);
+                var right = Math.max(previous.x + previous.width, current.x + current.width);
+                var bottom = Math.max(previous.y + previous.height, current.y + current.height);
+                previous.x = left;
+                previous.y = top;
+                previous.width = right - left;
+                previous.height = bottom - top;
+              } else {
+                merged.push(current);
+              }
+            }, this);
+            return merged;
+          },
+          selectionRectsTouch: function(a, b) {
+            var tolerance = 0.5;
+            if (this.isVertical()) {
+              return Math.abs(a.x - b.x) <= tolerance &&
+                Math.abs(a.width - b.width) <= tolerance &&
+                b.y <= a.y + a.height + tolerance &&
+                b.y + b.height >= a.y - tolerance;
+            }
+            return Math.abs(a.y - b.y) <= tolerance &&
+              Math.abs(a.height - b.height) <= tolerance &&
+              b.x <= a.x + a.width + tolerance &&
+              b.x + b.width >= a.x - tolerance;
           },
           getNormalizedOffset: function(targetNode, offset) {
             if (!window.hoshiReader || !window.hoshiReader.nodeStartOffsets) return null;
