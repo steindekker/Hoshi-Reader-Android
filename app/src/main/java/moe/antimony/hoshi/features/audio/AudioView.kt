@@ -367,6 +367,7 @@ fun AudioSettingsView(
                                             selected = loadedSettings.playbackMode == mode,
                                             onClick = { save(loadedSettings.copy(playbackMode = mode)) },
                                             shape = SegmentedButtonDefaults.itemShape(index, AudioPlaybackMode.entries.size),
+                                            icon = {},
                                         ) {
                                             Text(mode.displayName)
                                         }

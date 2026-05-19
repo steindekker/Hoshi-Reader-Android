@@ -53,6 +53,7 @@ This file is the short operational handoff for future agents.
 ### Dictionary
 
 - Device-validate recommended dictionary downloads from the Dictionaries screen, covering JMdict, JMnedict, Jiten, and Jitendex individual downloads and confirming each imported dictionary remains updatable.
+- Device-validate settings segmented controls in Dictionaries, Dictionary Settings, and Advanced Audio, confirming selected labels no longer shift.
 - For deinflection regressions, verify conjugated lookup results such as `食べた` show iOS-style explanation overlays when tapping deinflection tags.
 - Keep frequency and pitch dictionaries type-specific; do not treat metadata dictionaries as term fallback dictionaries.
 - Do not reimplement Yomitan import, lookup, media, or style extraction outside `third_party/hoshidicts-kotlin-bridge` unless the bridge gap is documented first.

@@ -12,6 +12,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 ### Fixed
 
 - Keep Dictionary tab recursive lookup highlights and popup placement aligned in E-ink mode, including line-style selection marks and lower-screen child popups.
+- Prevent settings segmented controls from shifting option labels when changing selection.
 
 ## [v0.7.3] - 2026-05-18
 

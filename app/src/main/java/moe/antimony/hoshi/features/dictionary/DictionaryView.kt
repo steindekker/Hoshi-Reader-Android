@@ -493,6 +493,7 @@ fun DictionaryView(
                                         inactiveContentColor = colorScheme.onSurface,
                                         inactiveBorderColor = colorScheme.outline,
                                     ),
+                                    icon = {},
                                 ) {
                                     Text(type.displayName)
                                 }
@@ -979,6 +980,7 @@ private fun DictionarySettingsView(
                                             index = index,
                                             count = DictionaryCollapseMode.entries.size,
                                         ),
+                                        icon = {},
                                     ) {
                                         Text(mode.rawValue)
                                     }
