@@ -20,8 +20,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.epub.ReadingStatistics
 import kotlin.math.max
 
@@ -66,18 +68,18 @@ internal fun ReaderStatisticsSheet(
         ) {
             item {
                 StatisticsSection(
-                    title = "Session",
+                    title = stringResource(R.string.reader_statistics_session),
                     statistic = state.session,
                     isTracking = state.isTracking,
                     onToggleTracking = onToggleTracking,
                     extraRows = listOf(
-                        "Time to finish Book:" to formatDurationSeconds(
+                        stringResource(R.string.reader_statistics_time_to_finish_book) to formatDurationSeconds(
                             secondsRemaining(
                                 remainingCharacters = totalCharacters - currentCharacter,
                                 speed = state.session.lastReadingSpeed,
                             ),
                         ),
-                        "Time to finish Chapter:" to formatDurationSeconds(
+                        stringResource(R.string.reader_statistics_time_to_finish_chapter) to formatDurationSeconds(
                             secondsRemaining(
                                 remainingCharacters = currentChapterEndCharacter - currentCharacter,
                                 speed = state.session.lastReadingSpeed,
@@ -87,10 +89,10 @@ internal fun ReaderStatisticsSheet(
                 )
             }
             item {
-                StatisticsSection(title = "Today", statistic = state.today)
+                StatisticsSection(title = stringResource(R.string.reader_statistics_today), statistic = state.today)
             }
             item {
-                StatisticsSection(title = "All Time", statistic = state.allTime)
+                StatisticsSection(title = stringResource(R.string.reader_statistics_all_time), statistic = state.allTime)
             }
         }
     }
@@ -123,7 +125,11 @@ private fun StatisticsSection(
                 IconButton(onClick = onToggleTracking) {
                     Icon(
                         imageVector = if (isTracking) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                        contentDescription = if (isTracking) "Pause statistics" else "Start statistics",
+                        contentDescription = if (isTracking) {
+                            stringResource(R.string.reader_statistics_pause)
+                        } else {
+                            stringResource(R.string.reader_statistics_start)
+                        },
                     )
                 }
             }
@@ -136,11 +142,11 @@ private fun StatisticsSection(
             tonalElevation = 0.dp,
         ) {
             Column {
-                StatisticRow("Characters Read:", statistic.charactersRead.toString())
+                StatisticRow(stringResource(R.string.reader_statistics_characters_read), statistic.charactersRead.toString())
                 StatisticsDivider()
-                StatisticRow("Reading Speed:", "${statistic.lastReadingSpeed} / h")
+                StatisticRow(stringResource(R.string.reader_statistics_reading_speed), "${statistic.lastReadingSpeed} / h")
                 StatisticsDivider()
-                StatisticRow("Reading Time:", formatDurationSeconds(statistic.readingTime))
+                StatisticRow(stringResource(R.string.reader_statistics_reading_time), formatDurationSeconds(statistic.readingTime))
                 extraRows.forEach { (label, value) ->
                     StatisticsDivider()
                     StatisticRow(label, value)

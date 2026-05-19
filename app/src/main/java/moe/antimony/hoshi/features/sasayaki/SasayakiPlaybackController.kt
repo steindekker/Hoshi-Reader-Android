@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import kotlinx.coroutines.CoroutineScope
+import moe.antimony.hoshi.ui.UiText
 import java.io.File
 
 internal interface SasayakiPlaybackControllerContract {
@@ -16,7 +17,7 @@ internal interface SasayakiPlaybackControllerContract {
     val currentTime: Double
     val duration: Double
     val isPlaying: Boolean
-    val errorMessage: String?
+    val errorMessage: UiText?
     var autoScroll: Boolean
     var readerSkipButtonAction: SasayakiReaderSkipButtonAction
     val hasAudio: Boolean
@@ -176,7 +177,7 @@ internal class SasayakiPlaybackController(
     override val currentTime: Double get() = playbackState.currentTime
     override val duration: Double get() = playbackState.duration
     override val isPlaying: Boolean get() = playbackState.isPlaying
-    override val errorMessage: String? get() = audioAvailability.errorMessage
+    override val errorMessage: UiText? get() = audioAvailability.errorMessage
     override var autoScroll: Boolean
         get() = cuePresentation.autoScroll
         set(value) {

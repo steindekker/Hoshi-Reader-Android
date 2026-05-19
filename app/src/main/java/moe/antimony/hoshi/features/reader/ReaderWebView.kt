@@ -98,6 +98,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -112,6 +113,7 @@ import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.epub.EpubBook
 import moe.antimony.hoshi.epub.ReadingStatistics
 import moe.antimony.hoshi.features.audio.AudioSettings
@@ -1254,7 +1256,11 @@ private fun ReaderTopInfo(
                     ) {
                         Icon(
                             imageVector = readerStatisticsTopToggleIcon(statisticsTracking),
-                            contentDescription = if (statisticsTracking) "Pause statistics" else "Start statistics",
+                            contentDescription = if (statisticsTracking) {
+                                stringResource(R.string.reader_statistics_pause)
+                            } else {
+                                stringResource(R.string.reader_statistics_start)
+                            },
                             modifier = Modifier.size(metrics.topStatisticsIconSizeDp.dp),
                             tint = Color(colors.buttonContent),
                         )
@@ -1265,7 +1271,7 @@ private fun ReaderTopInfo(
                         character = requireNotNull(state.backTargetCharacter),
                         icon = readerJumpBackIcon(),
                         iconFirst = true,
-                        contentDescription = "Return to previous jump position",
+                        contentDescription = stringResource(R.string.reader_jump_back),
                         colors = colors,
                         heightDp = metrics.topStatisticsButtonSizeDp,
                         onClick = requireNotNull(onJumpBack),
@@ -1286,7 +1292,7 @@ private fun ReaderTopInfo(
                         character = requireNotNull(state.forwardTargetCharacter),
                         icon = readerJumpForwardIcon(),
                         iconFirst = false,
-                        contentDescription = "Return to later jump position",
+                        contentDescription = stringResource(R.string.reader_jump_forward),
                         colors = colors,
                         heightDp = metrics.topSasayakiButtonSizeDp,
                         onClick = requireNotNull(onJumpForward),
@@ -1300,7 +1306,11 @@ private fun ReaderTopInfo(
                     ) {
                         Icon(
                             imageVector = readerSasayakiTopToggleIcon(sasayakiPlaying),
-                            contentDescription = if (sasayakiPlaying) "Pause Sasayaki" else "Play Sasayaki",
+                            contentDescription = if (sasayakiPlaying) {
+                                stringResource(R.string.sasayaki_pause)
+                            } else {
+                                stringResource(R.string.sasayaki_play)
+                            },
                             modifier = Modifier.size(metrics.topSasayakiIconSizeDp.dp),
                             tint = Color(colors.buttonContent),
                         )
@@ -1481,7 +1491,7 @@ private fun BoxScope.ReaderBottomChrome(
             ReaderGlassButton(colors = colors, metrics = metrics, onClick = onClose) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(R.string.action_back),
                     modifier = Modifier.size(metrics.primaryIconSizeDp.dp),
                     tint = Color(colors.buttonContent),
                 )
@@ -1491,7 +1501,7 @@ private fun BoxScope.ReaderBottomChrome(
                 ReaderGlassButton(colors = colors, metrics = metrics, onClick = onSasayakiSkipBackward) {
                     Icon(
                         imageVector = Icons.Rounded.FastRewind,
-                        contentDescription = "Sasayaki Rewind",
+                        contentDescription = stringResource(R.string.sasayaki_rewind),
                         modifier = Modifier.size(sasayakiSkipButtons.iconSizeDp.dp),
                         tint = Color(colors.buttonContent),
                     )
@@ -1502,7 +1512,7 @@ private fun BoxScope.ReaderBottomChrome(
                 ReaderGlassButton(colors = colors, metrics = metrics, onClick = onSasayakiSkipForward) {
                     Icon(
                         imageVector = Icons.Rounded.FastForward,
-                        contentDescription = "Sasayaki Fast-forward",
+                        contentDescription = stringResource(R.string.sasayaki_fast_forward),
                         modifier = Modifier.size(sasayakiSkipButtons.iconSizeDp.dp),
                         tint = Color(colors.buttonContent),
                     )
@@ -1512,7 +1522,7 @@ private fun BoxScope.ReaderBottomChrome(
             ReaderGlassButton(colors = colors, metrics = metrics, onClick = onMenu) {
                 Icon(
                     imageVector = Icons.Rounded.Tune,
-                    contentDescription = "Reader Menu",
+                    contentDescription = stringResource(R.string.reader_menu),
                     modifier = Modifier.size(metrics.secondaryIconSizeDp.dp),
                     tint = Color(colors.buttonContent),
                 )
@@ -1545,7 +1555,7 @@ private fun ReaderMenuCard(
             modifier = Modifier.padding(vertical = metrics.menuVerticalPaddingDp.dp),
         ) {
             ReaderMenuItem(
-                text = "Chapters",
+                text = stringResource(R.string.reader_chapters),
                 icon = {
                     Icon(
                         imageVector = Icons.AutoMirrored.Rounded.List,
@@ -1562,7 +1572,7 @@ private fun ReaderMenuCard(
                 color = Color(colors.menuBorder),
             )
             ReaderMenuItem(
-                text = "Highlights",
+                text = stringResource(R.string.reader_highlights),
                 icon = {
                     Icon(
                         imageVector = Icons.Rounded.BorderColor,
@@ -1579,7 +1589,7 @@ private fun ReaderMenuCard(
                 color = Color(colors.menuBorder),
             )
             ReaderMenuItem(
-                text = "Appearance",
+                text = stringResource(R.string.settings_appearance),
                 icon = {
                     Icon(
                         imageVector = Icons.Rounded.Palette,
@@ -1597,7 +1607,7 @@ private fun ReaderMenuCard(
                     color = Color(colors.menuBorder),
                 )
                 ReaderMenuItem(
-                    text = "Statistics",
+                    text = stringResource(R.string.reader_statistics),
                     icon = {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.ShowChart,
@@ -1616,7 +1626,7 @@ private fun ReaderMenuCard(
                     color = Color(colors.menuBorder),
                 )
                 ReaderMenuItem(
-                    text = "Sasayaki",
+                    text = stringResource(R.string.sasayaki_title),
                     icon = {
                         Icon(
                             imageVector = Icons.Rounded.GraphicEq,
@@ -2159,7 +2169,7 @@ private class ReaderHighlightActionModeCallback(
                 ReaderHighlightSelectionMenu.groupId,
                 item.id,
                 item.order,
-                item.title,
+                webView.context.getString(R.string.reader_highlight_action),
             ).setShowAsAction(item.showAsAction)
         }
     }

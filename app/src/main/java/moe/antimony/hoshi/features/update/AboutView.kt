@@ -1,6 +1,7 @@
 package moe.antimony.hoshi.features.update
 
 import android.content.Intent
+import android.content.res.Resources
 import android.net.Uri
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.foundation.BorderStroke
@@ -38,15 +39,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import moe.antimony.hoshi.BuildConfig
 import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.settings.SettingsDetailScaffold
 import moe.antimony.hoshi.features.settings.SettingsLoadState
 import moe.antimony.hoshi.features.settings.collectAsSettingsLoadState
+import moe.antimony.hoshi.features.storage.StorageCleanupCategoryId
 import moe.antimony.hoshi.features.storage.StorageCleanupReport
 import java.io.File
 import java.util.Locale
@@ -59,6 +64,7 @@ fun AboutScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val appContainer = LocalHoshiAppContainer.current
     val scope = rememberCoroutineScope()
     val recordLoadState = appContainer.updateDownloadStore.record.collectAsSettingsLoadState()
@@ -73,11 +79,13 @@ fun AboutScreen(
     pendingCleanupConfirmation?.let { report ->
         AlertDialog(
             onDismissRequest = { pendingCleanupConfirmation = null },
-            title = { Text("Clean Up Storage") },
+            title = { Text(stringResource(R.string.about_storage_cleanup_confirm_title)) },
             text = {
                 Text(
-                    "Delete ${formatStorageSize(report.totalSizeBytes)} of cache and leftover files? " +
-                        "This cannot be undone.",
+                    stringResource(
+                        R.string.about_storage_cleanup_confirm_message_format,
+                        formatStorageSize(report.totalSizeBytes),
+                    ),
                 )
             },
             confirmButton = {
@@ -94,19 +102,20 @@ fun AboutScreen(
                                 onSuccess = { StorageCleanupUiState.Ready(it) },
                                 onFailure = { error ->
                                     StorageCleanupUiState.Error(
-                                        error.localizedMessage ?: "Unable to clean up storage.",
+                                        error.localizedMessage
+                                            ?: resources.getString(R.string.about_storage_cleanup_failed),
                                     )
                                 },
                             )
                         }
                     },
                 ) {
-                    Text("Delete")
+                    Text(stringResource(R.string.action_delete))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingCleanupConfirmation = null }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             },
         )
@@ -137,7 +146,10 @@ fun AboutScreen(
                     }.fold(
                         onSuccess = { AboutUpdateCheckState.Result(it) },
                         onFailure = { error ->
-                            AboutUpdateCheckState.Error(error.localizedMessage ?: "Failed to download update.")
+                            AboutUpdateCheckState.Error(
+                                error.localizedMessage
+                                    ?: resources.getString(R.string.about_update_download_failed),
+                            )
                         },
                     )
                     checkState = outcome
@@ -153,7 +165,7 @@ fun AboutScreen(
     }
 
     SettingsDetailScaffold(
-        title = "About",
+        title = stringResource(R.string.settings_about),
         onClose = onClose,
         modifier = modifier,
     ) { innerPadding ->
@@ -171,7 +183,13 @@ fun AboutScreen(
                         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
                         headlineContent = { Text("Hoshi Reader") },
                         supportingContent = {
-                            Text("Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                            Text(
+                                stringResource(
+                                    R.string.about_version_format,
+                                    BuildConfig.VERSION_NAME,
+                                    BuildConfig.VERSION_CODE,
+                                ),
+                            )
                         },
                     )
                 }
@@ -185,7 +203,7 @@ fun AboutScreen(
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = "If you like this app, consider starring the project on GitHub.",
+                            text = stringResource(R.string.about_github_body),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -211,12 +229,12 @@ fun AboutScreen(
                 AboutCard {
                     Column(Modifier.padding(16.dp)) {
                         Text(
-                            text = "Storage Cleanup",
+                            text = stringResource(R.string.about_storage_cleanup),
                             style = MaterialTheme.typography.titleMedium,
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = storageCleanupStatusText(cleanupState),
+                            text = storageCleanupStatusText(resources, cleanupState),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -225,7 +243,12 @@ fun AboutScreen(
                             Spacer(Modifier.height(12.dp))
                             report.categories.forEach { category ->
                                 Text(
-                                    text = "${category.title}: ${formatStorageSize(category.sizeBytes)} (${formatItemCount(category.itemCount)})",
+                                    text = resources.getString(
+                                        R.string.about_storage_category_format,
+                                        resources.getString(category.id.titleRes),
+                                        formatStorageSize(category.sizeBytes),
+                                        formatItemCount(resources, category.itemCount),
+                                    ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -249,7 +272,8 @@ fun AboutScreen(
                                             onSuccess = { StorageCleanupUiState.Ready(it) },
                                             onFailure = { error ->
                                                 StorageCleanupUiState.Error(
-                                                    error.localizedMessage ?: "Unable to scan storage.",
+                                                    error.localizedMessage
+                                                        ?: resources.getString(R.string.about_storage_scan_failed),
                                                 )
                                             },
                                         )
@@ -271,14 +295,14 @@ fun AboutScreen(
                                         modifier = Modifier.padding(end = 8.dp),
                                     )
                                 }
-                                Text("Scan")
+                                Text(stringResource(R.string.action_scan))
                             }
                             if (report?.hasCleanableItems == true) {
                                 OutlinedButton(
                                     onClick = { pendingCleanupConfirmation = report },
                                     enabled = !cleanupState.isBusy,
                                 ) {
-                                    Text("Clean Up")
+                                    Text(stringResource(R.string.about_clean_up))
                                 }
                             }
                         }
@@ -289,12 +313,12 @@ fun AboutScreen(
                 AboutCard {
                     Column(Modifier.padding(16.dp)) {
                         Text(
-                            text = "Updates",
+                            text = stringResource(R.string.about_updates),
                             style = MaterialTheme.typography.titleMedium,
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = updateStatusText(checkState, actionableRecord),
+                            text = updateStatusText(resources, checkState, actionableRecord),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -321,7 +345,8 @@ fun AboutScreen(
                                             },
                                             onFailure = { error ->
                                                 AboutUpdateCheckState.Error(
-                                                    error.localizedMessage ?: "Failed to check for updates.",
+                                                    error.localizedMessage
+                                                        ?: resources.getString(R.string.about_update_check_failed),
                                                 )
                                             },
                                         )
@@ -337,7 +362,7 @@ fun AboutScreen(
                                         strokeWidth = 2.dp,
                                     )
                                 }
-                                Text("Check for Updates")
+                                Text(stringResource(R.string.about_check_updates))
                             }
                             val downloadedFile = actionableRecord
                                 ?.takeIf { it.status == UpdateDownloadRecordStatus.Downloaded }
@@ -362,7 +387,8 @@ fun AboutScreen(
                                                 onSuccess = { AboutUpdateCheckState.Result(it) },
                                                 onFailure = { error ->
                                                     AboutUpdateCheckState.Error(
-                                                        error.localizedMessage ?: "Failed to download update.",
+                                                        error.localizedMessage
+                                                            ?: resources.getString(R.string.about_update_download_failed),
                                                     )
                                                 },
                                             )
@@ -370,7 +396,7 @@ fun AboutScreen(
                                     },
                                     enabled = checkState !is AboutUpdateCheckState.Checking,
                                 ) {
-                                    Text("Download")
+                                    Text(stringResource(R.string.action_download))
                                 }
                             }
                             if (downloadedFile != null) {
@@ -386,7 +412,7 @@ fun AboutScreen(
                                         contentDescription = null,
                                         modifier = Modifier.padding(end = 8.dp),
                                     )
-                                    Text("Install")
+                                    Text(stringResource(R.string.action_install))
                                 }
                             }
                         }
@@ -435,17 +461,21 @@ private fun StorageCleanupUiState.reportOrNull(): StorageCleanupReport? =
         else -> null
     }
 
-private fun storageCleanupStatusText(state: StorageCleanupUiState): String =
+private fun storageCleanupStatusText(resources: Resources, state: StorageCleanupUiState): String =
     when (state) {
-        StorageCleanupUiState.Idle -> "Scan for interrupted imports, restore leftovers, orphaned audio, and media cache."
-        StorageCleanupUiState.Scanning -> "Scanning app storage..."
-        is StorageCleanupUiState.Cleaning -> "Cleaning selected files..."
+        StorageCleanupUiState.Idle -> resources.getString(R.string.about_storage_cleanup_scan_hint)
+        StorageCleanupUiState.Scanning -> resources.getString(R.string.about_storage_scanning)
+        is StorageCleanupUiState.Cleaning -> resources.getString(R.string.about_storage_cleaning)
         is StorageCleanupUiState.Error -> state.message
         is StorageCleanupUiState.Ready -> {
             if (state.report.hasCleanableItems) {
-                "${formatStorageSize(state.report.totalSizeBytes)} can be cleaned across ${state.report.categories.size} categories."
+                resources.getString(
+                    R.string.about_storage_cleanable_format,
+                    formatStorageSize(state.report.totalSizeBytes),
+                    state.report.categories.size,
+                )
             } else {
-                "No cleanable app storage leftovers were found."
+                resources.getString(R.string.about_storage_no_leftovers)
             }
         }
     }
@@ -468,31 +498,48 @@ private fun formatStorageSize(bytes: Long): String {
     return "$bytes B"
 }
 
-private fun formatItemCount(count: Int): String =
-    "$count ${if (count == 1) "item" else "items"}"
+private fun formatItemCount(resources: Resources, count: Int): String =
+    resources.getQuantityString(R.plurals.about_item_count, count, count)
+
+private val StorageCleanupCategoryId.titleRes: Int
+    get() = when (this) {
+        StorageCleanupCategoryId.AnkiMediaCache -> R.string.about_storage_category_anki_media_cache
+        StorageCleanupCategoryId.EpubImportResidue -> R.string.about_storage_category_epub_import_residue
+        StorageCleanupCategoryId.BackupRestoreResidue -> R.string.about_storage_category_backup_restore_residue
+        StorageCleanupCategoryId.DictionaryImportResidue -> R.string.about_storage_category_dictionary_import_residue
+        StorageCleanupCategoryId.LocalAudioImportResidue -> R.string.about_storage_category_local_audio_import_residue
+        StorageCleanupCategoryId.OrphanSasayakiAudio -> R.string.about_storage_category_orphan_sasayaki_audio
+    }
 
 private fun updateStatusText(
+    resources: Resources,
     checkState: AboutUpdateCheckState,
     record: UpdateDownloadRecord?,
 ): String =
     when (checkState) {
         AboutUpdateCheckState.Idle -> when (record?.status) {
-            UpdateDownloadRecordStatus.Available -> "Update ${record.versionName} is available."
-            UpdateDownloadRecordStatus.Skipped -> "Update ${record.versionName} has been skipped."
-            UpdateDownloadRecordStatus.Downloading -> "An update is downloading."
-            UpdateDownloadRecordStatus.Downloaded -> "Update ${record.versionName} has been downloaded."
-            UpdateDownloadRecordStatus.Failed -> "The last update download failed."
-            null -> "Check GitHub Releases for a newer Hoshi Reader APK."
+            UpdateDownloadRecordStatus.Available -> resources.getString(R.string.about_update_available_format, record.versionName)
+            UpdateDownloadRecordStatus.Skipped -> resources.getString(R.string.about_update_skipped_format, record.versionName)
+            UpdateDownloadRecordStatus.Downloading -> resources.getString(R.string.about_update_downloading)
+            UpdateDownloadRecordStatus.Downloaded -> resources.getString(R.string.about_update_downloaded_format, record.versionName)
+            UpdateDownloadRecordStatus.Failed -> resources.getString(R.string.about_update_last_download_failed)
+            null -> resources.getString(R.string.about_update_check_github)
         }
-        AboutUpdateCheckState.Checking -> "Checking GitHub Releases..."
+        AboutUpdateCheckState.Checking -> resources.getString(R.string.about_update_checking_github)
         is AboutUpdateCheckState.Error -> checkState.message
         is AboutUpdateCheckState.Result -> when (val outcome = checkState.outcome) {
-            UpdateCheckOutcome.UpToDate -> "You are running the latest version."
-            UpdateCheckOutcome.NoInstallableAsset -> "A newer release was found, but it does not include a single matching APK."
-            is UpdateCheckOutcome.Skipped -> "Update ${outcome.update.versionName} has been skipped."
-            is UpdateCheckOutcome.Available -> "Update ${outcome.update.versionName} is available."
-            is UpdateCheckOutcome.DownloadStarted -> "Downloading update ${outcome.update.versionName}."
-            is UpdateCheckOutcome.DownloadInProgress -> "Update ${outcome.update.versionName} is already downloading."
-            is UpdateCheckOutcome.DownloadAlreadyFinished -> "Update ${outcome.update.versionName} has already been downloaded."
+            UpdateCheckOutcome.UpToDate -> resources.getString(R.string.about_update_latest)
+            UpdateCheckOutcome.NoInstallableAsset -> resources.getString(R.string.about_update_no_matching_apk)
+            is UpdateCheckOutcome.Skipped -> resources.getString(R.string.about_update_skipped_format, outcome.update.versionName)
+            is UpdateCheckOutcome.Available -> resources.getString(R.string.about_update_available_format, outcome.update.versionName)
+            is UpdateCheckOutcome.DownloadStarted -> resources.getString(R.string.about_update_downloading_format, outcome.update.versionName)
+            is UpdateCheckOutcome.DownloadInProgress -> resources.getString(
+                R.string.about_update_already_downloading_format,
+                outcome.update.versionName,
+            )
+            is UpdateCheckOutcome.DownloadAlreadyFinished -> resources.getString(
+                R.string.about_update_already_downloaded_format,
+                outcome.update.versionName,
+            )
         }
     }

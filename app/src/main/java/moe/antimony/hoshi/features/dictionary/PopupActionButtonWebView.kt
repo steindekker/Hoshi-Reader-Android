@@ -211,8 +211,8 @@ internal class PopupActionButtonWebView @JvmOverloads constructor(
 
     private val PopupButtonFrame.contentDescription: String
         get() = when (kind) {
-            PopupButtonKind.Audio -> "Play Audio"
-            PopupButtonKind.Mine -> "Add to Anki"
+            PopupButtonKind.Audio -> context.getString(R.string.dictionary_play_audio)
+            PopupButtonKind.Mine -> context.getString(R.string.dictionary_add_to_anki)
         }
 
     private companion object {

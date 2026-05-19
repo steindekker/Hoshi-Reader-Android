@@ -1,5 +1,6 @@
 package moe.antimony.hoshi.features.reader
 
+import moe.antimony.hoshi.R
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -8,11 +9,11 @@ class ReaderBehaviorSasayakiTest {
     fun behaviorShowsKeepScreenOnBeforeSasayakiVolumeSeek() {
         assertEquals(
             listOf(
-                "Volume Keys Turn Pages",
-                "Volume Keys Seek Sasayaki",
-                "Reverse Volume Key Direction",
-                "Keep Screen On",
-                "Automatically Check for Updates",
+                R.string.reader_behavior_volume_keys_turn_pages,
+                R.string.reader_behavior_volume_keys_seek_sasayaki,
+                R.string.reader_behavior_reverse_volume_key_direction,
+                R.string.reader_behavior_keep_screen_on,
+                R.string.reader_behavior_auto_check_updates,
             ),
             readerBehaviorRows(),
         )
@@ -21,7 +22,7 @@ class ReaderBehaviorSasayakiTest {
     @Test
     fun behaviorAlwaysShowsSasayakiVolumeSeek() {
         assertEquals(
-            listOf("Volume Keys Seek Sasayaki"),
+            listOf(R.string.reader_behavior_volume_keys_seek_sasayaki),
             readerBehaviorSasayakiRows(),
         )
     }

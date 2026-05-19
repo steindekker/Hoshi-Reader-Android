@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import moe.antimony.hoshi.R
 
 class AdvancedSettingsRowsTest {
     @Test
@@ -12,11 +13,11 @@ class AdvancedSettingsRowsTest {
 
         assertEquals(
             listOf(
-                listOf("Audio", "Statistics", "Sasayaki (Audiobooks)"),
-                listOf("ッツ Sync", "AnkiConnect"),
-                listOf("Backup"),
+                listOf(R.string.advanced_audio, R.string.advanced_statistics, R.string.advanced_sasayaki_audiobooks),
+                listOf(R.string.sync_ttu_sync, R.string.anki_connect_use),
+                listOf(R.string.settings_backup),
             ),
-            sections.map { section -> section.rows.map { it.title } },
+            sections.map { section -> section.rows.map { it.titleRes } },
         )
 
         val syncRow = sections.flatMap { it.rows }.single { it.destination == AdvancedDestination.Syncing }

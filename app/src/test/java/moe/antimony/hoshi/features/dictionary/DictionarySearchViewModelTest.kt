@@ -17,6 +17,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import moe.antimony.hoshi.ui.UiText
 
 class DictionarySearchViewModelTest {
     @Test
@@ -106,7 +107,7 @@ class DictionarySearchViewModelTest {
         assertEquals(emptyList<LookupPopupItem>(), state.popups)
         assertTrue(state.hasSearched)
         assertFalse(state.isSearching)
-        assertEquals("native lookup failed", state.errorMessage)
+        assertEquals(UiText.Literal("native lookup failed"), state.errorMessage)
     }
 
     @Test

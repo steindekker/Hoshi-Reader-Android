@@ -4,6 +4,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.dictionary.DictionaryIndex
 import moe.antimony.hoshi.dictionary.DictionaryInfo
 import moe.antimony.hoshi.dictionary.DictionaryRename
@@ -14,6 +15,7 @@ import moe.antimony.hoshi.dictionary.DictionaryUpdateProgress
 import moe.antimony.hoshi.dictionary.DictionaryUpdateStage
 import moe.antimony.hoshi.dictionary.DictionaryUpdateSummary
 import moe.antimony.hoshi.features.anki.AnkiSettings
+import moe.antimony.hoshi.ui.UiText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -41,7 +43,7 @@ class DictionaryViewModelTest {
         assertEquals(listOf(term), viewModel.uiState.value.currentDictionaries)
         assertEquals(7, viewModel.uiState.value.settings.maxResults)
         assertFalse(viewModel.uiState.value.isImporting)
-        assertNull(viewModel.uiState.value.errorMessage)
+        assertNull(viewModel.uiState.value.errorMessage.testString())
         assertEquals(1, repository.rebuildCount)
     }
 
@@ -87,8 +89,8 @@ class DictionaryViewModelTest {
         )
 
         assertFalse(viewModel.uiState.value.isImporting)
-        assertNull(viewModel.uiState.value.currentImportMessage)
-        assertNull(viewModel.uiState.value.errorMessage)
+        assertNull(viewModel.uiState.value.currentImportMessage.testString())
+        assertNull(viewModel.uiState.value.errorMessage.testString())
         assertEquals(listOf(imported), viewModel.uiState.value.dictionaries[DictionaryType.Pitch])
         assertEquals(1, repository.rebuildCount)
     }
@@ -109,15 +111,15 @@ class DictionaryViewModelTest {
             importItems = listOf(first, second),
             importOperation = { onProgress ->
                 onProgress(first)
-                messages += viewModel.uiState.value.currentImportMessage
+                messages += viewModel.uiState.value.currentImportMessage.testString()
                 onProgress(second)
-                messages += viewModel.uiState.value.currentImportMessage
+                messages += viewModel.uiState.value.currentImportMessage.testString()
             },
         )
 
         assertEquals(listOf("Importing JMdict.zip", "Importing Jiten.zip"), messages)
         assertFalse(viewModel.uiState.value.isImporting)
-        assertNull(viewModel.uiState.value.currentImportMessage)
+        assertNull(viewModel.uiState.value.currentImportMessage.testString())
     }
 
     @Test
@@ -139,7 +141,7 @@ class DictionaryViewModelTest {
             repository.progressMessages,
         )
         assertFalse(viewModel.uiState.value.isImporting)
-        assertNull(viewModel.uiState.value.currentImportMessage)
+        assertNull(viewModel.uiState.value.currentImportMessage.testString())
     }
 
     @Test
@@ -171,7 +173,7 @@ class DictionaryViewModelTest {
             repository.recommendedProgressMessages,
         )
         assertFalse(viewModel.uiState.value.isImporting)
-        assertNull(viewModel.uiState.value.currentImportMessage)
+        assertNull(viewModel.uiState.value.currentImportMessage.testString())
         assertEquals(1, repository.rebuildCount)
     }
 
@@ -239,13 +241,13 @@ class DictionaryViewModelTest {
         viewModel.updateDictionaries(
             updateOperation = { onProgress ->
                 repository.onUpdate!!.invoke(onProgress).also {
-                    messages += viewModel.uiState.value.currentImportMessage
+                    messages += viewModel.uiState.value.currentImportMessage.testString()
                 }
             },
         )
 
         assertFalse(viewModel.uiState.value.isUpdating)
-        assertNull(viewModel.uiState.value.currentImportMessage)
+        assertNull(viewModel.uiState.value.currentImportMessage.testString())
         assertEquals(listOf(updated), viewModel.uiState.value.currentDictionaries)
         assertEquals(emptyList<DictionaryUpdateCandidate>(), viewModel.uiState.value.updatableDictionaries)
         assertEquals(setOf(updated.index.title, "Other"), viewModel.uiState.value.settings.collapsedDictionaries)
@@ -284,8 +286,8 @@ class DictionaryViewModelTest {
         )
 
         assertFalse(viewModel.uiState.value.isImporting)
-        assertNull(viewModel.uiState.value.currentImportMessage)
-        assertEquals("bad archive", viewModel.uiState.value.errorMessage)
+        assertNull(viewModel.uiState.value.currentImportMessage.testString())
+        assertEquals("bad archive", viewModel.uiState.value.errorMessage.testString())
         assertEquals(listOf(existing), viewModel.uiState.value.currentDictionaries)
 
         viewModel.importDictionaries(
@@ -293,9 +295,9 @@ class DictionaryViewModelTest {
             importOperation = { _ -> },
         )
 
-        assertNull(viewModel.uiState.value.errorMessage)
+        assertNull(viewModel.uiState.value.errorMessage.testString())
         assertFalse(viewModel.uiState.value.isImporting)
-        assertNull(viewModel.uiState.value.currentImportMessage)
+        assertNull(viewModel.uiState.value.currentImportMessage.testString())
     }
 
     @Test
@@ -391,6 +393,20 @@ class DictionaryViewModelTest {
         )
     }
 }
+
+private fun UiText?.testString(): String? =
+    when (this) {
+        null -> null
+        is UiText.Literal -> value
+        is UiText.Resource -> when (id) {
+            R.string.dictionary_fetching_named_format -> "Fetching ${args[0]}"
+            R.string.dictionary_checking_named_format -> "Checking ${args[0]}"
+            R.string.dictionary_importing_named_format -> "Importing ${args[0]}"
+            R.string.dictionary_downloading_named_format -> "Downloading ${args[0]}"
+            else -> "resource:$id:${args.joinToString()}"
+        }
+        is UiText.Plural -> "plural:$id:$quantity:${args.joinToString()}"
+    }
 
 private class FakeDictionaryRepository(
     var dictionaries: Map<DictionaryType, List<DictionaryInfo>> = emptyMap(),

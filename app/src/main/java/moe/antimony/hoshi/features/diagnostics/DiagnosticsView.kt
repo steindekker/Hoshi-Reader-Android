@@ -33,11 +33,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import moe.antimony.hoshi.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,6 +49,7 @@ fun DiagnosticsView(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val report by produceState<ProcessExitDiagnosticsReport?>(initialValue = null) {
@@ -65,7 +69,13 @@ fun DiagnosticsView(
                     } != null
                 }.getOrDefault(false)
             }
-            snackbarHostState.showSnackbar(if (saved) "Diagnostics saved." else "Unable to save diagnostics.")
+            snackbarHostState.showSnackbar(
+                if (saved) {
+                    resources.getString(R.string.diagnostics_saved)
+                } else {
+                    resources.getString(R.string.diagnostics_save_failed)
+                },
+            )
         }
     }
 
@@ -76,10 +86,10 @@ fun DiagnosticsView(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Diagnostics") },
+                title = { Text(stringResource(R.string.settings_diagnostics)) },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
                 actions = {
@@ -87,19 +97,21 @@ fun DiagnosticsView(
                         enabled = shareText.isNotBlank(),
                         onClick = { saveLauncher.launch(diagnosticsExportFileName()) },
                     ) {
-                        Icon(Icons.Rounded.SaveAlt, contentDescription = "Save Diagnostics")
+                        Icon(Icons.Rounded.SaveAlt, contentDescription = stringResource(R.string.diagnostics_save))
                     }
                     IconButton(
                         enabled = shareText.isNotBlank(),
                         onClick = {
                             val sendIntent = Intent(Intent.ACTION_SEND)
                                 .setType("text/plain")
-                                .putExtra(Intent.EXTRA_SUBJECT, "Hoshi diagnostics")
+                                .putExtra(Intent.EXTRA_SUBJECT, resources.getString(R.string.diagnostics_share_subject))
                                 .putExtra(Intent.EXTRA_TEXT, shareText)
-                            context.startActivity(Intent.createChooser(sendIntent, "Share Diagnostics"))
+                            context.startActivity(
+                                Intent.createChooser(sendIntent, resources.getString(R.string.diagnostics_share)),
+                            )
                         },
                     ) {
-                        Icon(Icons.Rounded.Share, contentDescription = "Share Diagnostics")
+                        Icon(Icons.Rounded.Share, contentDescription = stringResource(R.string.diagnostics_share))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

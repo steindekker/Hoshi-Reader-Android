@@ -5,7 +5,9 @@ import java.nio.file.Files
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.audio.LocalAudioRepository
+import moe.antimony.hoshi.ui.UiText
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -18,7 +20,8 @@ class AnkiRepositoryFetchTest {
 
         assertEquals(
             AnkiFetchResult.Error(
-                "AnkiDroid is unavailable. Install AnkiDroid, then try again.",
+                UiText.Resource(R.string.anki_fetch_api_unavailable),
+                AnkiFetchFailure.ApiUnavailable,
             ),
             result,
         )
@@ -34,7 +37,8 @@ class AnkiRepositoryFetchTest {
 
         assertEquals(
             AnkiFetchResult.Error(
-                "AnkiDroid database access was denied. Grant the permission to fetch decks and note types.",
+                UiText.Resource(R.string.anki_fetch_permission_denied),
+                AnkiFetchFailure.PermissionDenied,
             ),
             result,
         )
@@ -46,7 +50,7 @@ class AnkiRepositoryFetchTest {
 
         val result = repository.fetchConfiguration()
 
-        assertEquals(AnkiFetchResult.Error("No AnkiDroid decks were found."), result)
+        assertEquals(AnkiFetchResult.Error(UiText.Resource(R.string.anki_fetch_no_ankidroid_decks)), result)
     }
 
     @Test
@@ -55,7 +59,7 @@ class AnkiRepositoryFetchTest {
 
         val result = repository.fetchConfiguration()
 
-        assertEquals(AnkiFetchResult.Error("No AnkiDroid note types were found."), result)
+        assertEquals(AnkiFetchResult.Error(UiText.Resource(R.string.anki_fetch_no_ankidroid_note_types)), result)
     }
 
     @Test

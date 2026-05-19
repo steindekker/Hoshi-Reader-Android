@@ -5,6 +5,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import moe.antimony.hoshi.R
+import moe.antimony.hoshi.ui.UiText
 
 class SasayakiAudioAvailabilityStateTest {
     @Test
@@ -26,7 +28,7 @@ class SasayakiAudioAvailabilityStateTest {
         state.markRestoreFailed(IllegalStateException("bad audio"))
 
         assertFalse(state.hasAudio)
-        assertEquals("bad audio", state.errorMessage)
+        assertEquals(UiText.Literal("bad audio"), state.errorMessage)
     }
 
     @Test
@@ -36,7 +38,7 @@ class SasayakiAudioAvailabilityStateTest {
         state.markRestoreFailed(object : Throwable() {})
 
         assertFalse(state.hasAudio)
-        assertEquals("Unable to load audiobook.", state.errorMessage)
+        assertEquals(UiText.Resource(R.string.sasayaki_import_audiobook_failed), state.errorMessage)
     }
 
     @Test
@@ -47,7 +49,7 @@ class SasayakiAudioAvailabilityStateTest {
         state.markAudioUnavailable()
 
         assertFalse(state.hasAudio)
-        assertEquals("still visible", state.errorMessage)
+        assertEquals(UiText.Literal("still visible"), state.errorMessage)
 
         state.markAudioCleared()
 

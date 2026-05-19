@@ -51,6 +51,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.text.intl.LocaleList
@@ -61,6 +62,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.manhhao.hoshi.LookupResult
 import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.audio.AudioRequestHandler
 import moe.antimony.hoshi.features.audio.AudioSettings
 import moe.antimony.hoshi.features.audio.LocalAudioRepository
@@ -70,6 +72,7 @@ import moe.antimony.hoshi.features.anki.AnkiViewModel
 import moe.antimony.hoshi.features.reader.ReaderFontManager
 import moe.antimony.hoshi.features.reader.ReaderSettings
 import moe.antimony.hoshi.features.reader.ReaderSelectionRect
+import moe.antimony.hoshi.ui.asString
 import moe.antimony.hoshi.webview.applyHoshiWebViewSecurityDefaults
 import kotlin.math.abs
 
@@ -271,7 +274,7 @@ fun DictionarySearchView(
                     ),
             )
             uiState.errorMessage != null -> DictionarySearchMessage(
-                text = requireNotNull(uiState.errorMessage),
+                text = requireNotNull(uiState.errorMessage).asString(),
                 modifier = Modifier.fillMaxSize(),
             )
             uiState.hasSearched && !uiState.isSearching -> DictionarySearchMessage(
@@ -379,7 +382,7 @@ private fun DictionarySearchBar(
                 val fieldForegroundColor = MaterialTheme.colorScheme.onSurface
                 if (query.isEmpty()) {
                     Text(
-                        text = "Search",
+                        text = stringResource(R.string.dictionary_search_placeholder),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.titleLarge,
                     )
@@ -432,7 +435,7 @@ private fun SearchGlyph(modifier: Modifier = Modifier) {
 private fun ClearGlyph(modifier: Modifier = Modifier) {
     Icon(
         imageVector = Icons.Rounded.Cancel,
-        contentDescription = "Clear",
+        contentDescription = stringResource(R.string.action_clear),
         tint = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier,
     )

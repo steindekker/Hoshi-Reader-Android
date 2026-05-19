@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import moe.antimony.hoshi.R
 import java.io.File
 import java.security.MessageDigest
 
@@ -70,7 +71,7 @@ internal class AndroidUpdateDownloadManager(
         }
         val request = DownloadManager.Request(Uri.parse(downloadUrl))
             .setTitle("Hoshi Reader ${update.versionName}")
-            .setDescription("Downloading update")
+            .setDescription(appContext.getString(R.string.update_downloading_notification))
             .setMimeType(ApkMimeType)
             .setAllowedOverMetered(true)
             .setAllowedOverRoaming(false)

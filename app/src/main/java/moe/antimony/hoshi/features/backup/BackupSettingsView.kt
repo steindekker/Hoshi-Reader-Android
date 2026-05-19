@@ -36,12 +36,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.settings.SettingsDetailScaffold
 import moe.antimony.hoshi.importing.FileImportContent
 import moe.antimony.hoshi.importing.ImportFileType
+import moe.antimony.hoshi.importing.localizedImportMessage
 import moe.antimony.hoshi.importing.validateImportFile
 import moe.antimony.hoshi.ui.HoshiBlockingProgressOverlay
 
@@ -58,6 +61,14 @@ fun BackupSettingsView(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     var operation by remember { mutableStateOf<BackupOperation?>(null) }
+    val booksBackupSaved = stringResource(R.string.backup_books_saved)
+    val booksBackupSaveFailed = stringResource(R.string.backup_books_save_failed)
+    val dictionariesBackupSaved = stringResource(R.string.backup_dictionaries_saved)
+    val dictionariesBackupSaveFailed = stringResource(R.string.backup_dictionaries_save_failed)
+    val booksRestored = stringResource(R.string.backup_books_restored)
+    val booksRestoreFailed = stringResource(R.string.backup_books_restore_failed)
+    val dictionariesRestored = stringResource(R.string.backup_dictionaries_restored)
+    val dictionariesRestoreFailed = stringResource(R.string.backup_dictionaries_restore_failed)
     val booksExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri == null || operation != null) return@rememberLauncherForActivityResult
         operation = BackupOperation.Exporting
@@ -68,9 +79,9 @@ fun BackupSettingsView(
             operation = null
             snackbarHostState.showSnackbar(
                 if (result.isSuccess) {
-                    "Books backup saved."
+                    booksBackupSaved
                 } else {
-                    result.exceptionOrNull()?.message ?: "Unable to save Books backup."
+                    result.exceptionOrNull()?.message ?: booksBackupSaveFailed
                 },
             )
         }
@@ -85,9 +96,9 @@ fun BackupSettingsView(
             operation = null
             snackbarHostState.showSnackbar(
                 if (result.isSuccess) {
-                    "Dictionaries backup saved."
+                    dictionariesBackupSaved
                 } else {
-                    result.exceptionOrNull()?.message ?: "Unable to save Dictionaries backup."
+                    result.exceptionOrNull()?.message ?: dictionariesBackupSaveFailed
                 },
             )
         }
@@ -106,9 +117,9 @@ fun BackupSettingsView(
             }
             snackbarHostState.showSnackbar(
                 if (result.isSuccess) {
-                    "Books restored."
+                    booksRestored
                 } else {
-                    result.exceptionOrNull()?.message ?: "Unable to restore Books backup."
+                    result.exceptionOrNull()?.localizedImportMessage(context, booksRestoreFailed) ?: booksRestoreFailed
                 },
             )
         }
@@ -125,16 +136,17 @@ fun BackupSettingsView(
             operation = null
             snackbarHostState.showSnackbar(
                 if (result.isSuccess) {
-                    "Dictionaries restored."
+                    dictionariesRestored
                 } else {
-                    result.exceptionOrNull()?.message ?: "Unable to restore Dictionaries backup."
+                    result.exceptionOrNull()?.localizedImportMessage(context, dictionariesRestoreFailed)
+                        ?: dictionariesRestoreFailed
                 },
             )
         }
     }
 
     SettingsDetailScaffold(
-        title = "Backup",
+        title = stringResource(R.string.settings_backup),
         onClose = {
             if (operation == null) {
                 onClose()
@@ -155,7 +167,7 @@ fun BackupSettingsView(
             ) {
                 item {
                     BackupSection(
-                        title = "Books",
+                        title = stringResource(R.string.backup_books),
                         footer = null,
                         onBackup = { booksExporter.launch(booksBackupFileName()) },
                         onRestore = { booksImporter.launch(ImportFileType.HoshiBackup.mimeTypes) },
@@ -164,8 +176,8 @@ fun BackupSettingsView(
                 }
                 item {
                     BackupSection(
-                        title = "Dictionaries",
-                        footer = "Restoring will overwrite the current collection.",
+                        title = stringResource(R.string.backup_dictionaries),
+                        footer = stringResource(R.string.backup_restore_overwrites),
                         onBackup = { dictionariesExporter.launch(dictionariesBackupFileName()) },
                         onRestore = { dictionariesImporter.launch(ImportFileType.HoshiBackup.mimeTypes) },
                         enabled = operation == null,
@@ -174,7 +186,7 @@ fun BackupSettingsView(
             }
             operation?.let { current ->
                 HoshiBlockingProgressOverlay(
-                    current.label,
+                    stringResource(current.labelRes),
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -204,7 +216,7 @@ private fun BackupSection(
         ListItem(
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
             leadingContent = { Icon(Icons.Rounded.Upload, contentDescription = null) },
-            headlineContent = { Text("Backup") },
+            headlineContent = { Text(stringResource(R.string.backup_action_backup)) },
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(enabled = enabled, onClick = onBackup),
@@ -216,7 +228,7 @@ private fun BackupSection(
         ListItem(
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
             leadingContent = { Icon(Icons.Rounded.Download, contentDescription = null) },
-            headlineContent = { Text("Restore") },
+            headlineContent = { Text(stringResource(R.string.backup_action_restore)) },
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(enabled = enabled, onClick = onRestore),
@@ -245,7 +257,7 @@ private fun BackupGroupCard(content: @Composable () -> Unit) {
     }
 }
 
-private enum class BackupOperation(val label: String) {
-    Exporting("Archiving..."),
-    Restoring("Restoring..."),
+private enum class BackupOperation(val labelRes: Int) {
+    Exporting(R.string.backup_archiving),
+    Restoring(R.string.backup_restoring),
 }

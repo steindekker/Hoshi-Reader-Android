@@ -3,6 +3,7 @@ package moe.antimony.hoshi.features.bookshelf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.epub.BookEntry
 import moe.antimony.hoshi.epub.BookMetadata
 import moe.antimony.hoshi.epub.BookShelf
@@ -10,6 +11,7 @@ import moe.antimony.hoshi.epub.BookSortOption
 import moe.antimony.hoshi.features.sync.StatisticsSyncMode
 import moe.antimony.hoshi.features.sync.SyncDirection
 import moe.antimony.hoshi.features.sync.SyncResult
+import moe.antimony.hoshi.ui.UiText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -47,7 +49,7 @@ class BookshelfViewModelTest {
         assertTrue(viewModel.uiState.value.hasLoadedBooks)
         assertTrue(viewModel.uiState.value.sasayakiEnabled)
         assertFalse(viewModel.uiState.value.isLoading)
-        assertNull(viewModel.uiState.value.errorMessage)
+        assertNull(viewModel.uiState.value.errorMessage.testString())
     }
 
     @Test
@@ -110,8 +112,8 @@ class BookshelfViewModelTest {
         assertNull(viewModel.uiState.value.openReaderBookId)
         assertEquals(listOf(BookSortOption.Recent), repository.loadRequests)
         assertFalse(viewModel.uiState.value.isLoading)
-        assertNull(viewModel.uiState.value.blockingProgressMessage)
-        assertNull(viewModel.uiState.value.errorMessage)
+        assertNull(viewModel.uiState.value.blockingProgressMessage.testString())
+        assertNull(viewModel.uiState.value.errorMessage.testString())
     }
 
     @Test
@@ -128,12 +130,12 @@ class BookshelfViewModelTest {
             "imported-book"
         }
 
-        assertEquals("Importing import.epub...", viewModel.uiState.value.blockingProgressMessage)
+        assertEquals("Importing import.epub...", viewModel.uiState.value.blockingProgressMessage.testString())
 
         continueImport.complete(Unit)
 
         assertNull(viewModel.uiState.value.openReaderBookId)
-        assertNull(viewModel.uiState.value.blockingProgressMessage)
+        assertNull(viewModel.uiState.value.blockingProgressMessage.testString())
         assertFalse(viewModel.uiState.value.isLoading)
     }
 
@@ -149,9 +151,9 @@ class BookshelfViewModelTest {
             error("bad epub")
         }
 
-        assertEquals("bad epub", viewModel.uiState.value.errorMessage)
+        assertEquals("bad epub", viewModel.uiState.value.errorMessage.testString())
         assertFalse(viewModel.uiState.value.isLoading)
-        assertNull(viewModel.uiState.value.blockingProgressMessage)
+        assertNull(viewModel.uiState.value.blockingProgressMessage.testString())
 
         viewModel.importBook(
             importKey = "content://books/import.epub",
@@ -161,7 +163,7 @@ class BookshelfViewModelTest {
         }
 
         assertNull(viewModel.uiState.value.openReaderBookId)
-        assertNull(viewModel.uiState.value.errorMessage)
+        assertNull(viewModel.uiState.value.errorMessage.testString())
     }
 
     @Test
@@ -189,13 +191,13 @@ class BookshelfViewModelTest {
         }
 
         assertEquals(1, importCount)
-        assertEquals("Importing import.epub...", viewModel.uiState.value.blockingProgressMessage)
+        assertEquals("Importing import.epub...", viewModel.uiState.value.blockingProgressMessage.testString())
 
         continueImport.complete(Unit)
 
         assertNull(viewModel.uiState.value.openReaderBookId)
         assertEquals(1, importCount)
-        assertNull(viewModel.uiState.value.blockingProgressMessage)
+        assertNull(viewModel.uiState.value.blockingProgressMessage.testString())
     }
 
     @Test
@@ -227,12 +229,12 @@ class BookshelfViewModelTest {
             ),
         )
 
-        assertEquals("Importing 1 / 2...", viewModel.uiState.value.blockingProgressMessage)
+        assertEquals("Importing 1 / 2...", viewModel.uiState.value.blockingProgressMessage.testString())
         assertEquals(listOf("content://books/first.epub"), importedKeys)
 
         firstImport.complete(Unit)
 
-        assertEquals("Importing 2 / 2...", viewModel.uiState.value.blockingProgressMessage)
+        assertEquals("Importing 2 / 2...", viewModel.uiState.value.blockingProgressMessage.testString())
         assertEquals(
             listOf("content://books/first.epub", "content://books/second.epub"),
             importedKeys,
@@ -243,8 +245,8 @@ class BookshelfViewModelTest {
         assertNull(viewModel.uiState.value.openReaderBookId)
         assertEquals(listOf(BookSortOption.Recent), repository.loadRequests)
         assertFalse(viewModel.uiState.value.isLoading)
-        assertNull(viewModel.uiState.value.blockingProgressMessage)
-        assertNull(viewModel.uiState.value.errorMessage)
+        assertNull(viewModel.uiState.value.blockingProgressMessage.testString())
+        assertNull(viewModel.uiState.value.errorMessage.testString())
     }
 
     @Test
@@ -273,11 +275,11 @@ class BookshelfViewModelTest {
         )
 
         assertEquals(listOf("bad", "good"), importedKeys)
-        assertEquals("Failed to import:\nbad.epub", viewModel.uiState.value.errorMessage)
+        assertEquals("Failed to import:\nbad.epub", viewModel.uiState.value.errorMessage.testString())
         assertNull(viewModel.uiState.value.openReaderBookId)
         assertEquals(listOf(BookSortOption.Recent), repository.loadRequests)
         assertFalse(viewModel.uiState.value.isLoading)
-        assertNull(viewModel.uiState.value.blockingProgressMessage)
+        assertNull(viewModel.uiState.value.blockingProgressMessage.testString())
     }
 
     @Test
@@ -384,11 +386,11 @@ class BookshelfViewModelTest {
             syncAudioBook = false,
         )
 
-        assertEquals("book-a is already synced", viewModel.uiState.value.statusMessage)
+        assertEquals("book-a is already synced", viewModel.uiState.value.statusMessage.testString())
 
         viewModel.consumeStatusMessage()
 
-        assertNull(viewModel.uiState.value.statusMessage)
+        assertNull(viewModel.uiState.value.statusMessage.testString())
     }
 
     @Test
@@ -402,11 +404,11 @@ class BookshelfViewModelTest {
             error("bad epub")
         }
 
-        assertEquals("bad epub", viewModel.uiState.value.errorMessage)
+        assertEquals("bad epub", viewModel.uiState.value.errorMessage.testString())
 
         viewModel.consumeErrorMessage()
 
-        assertNull(viewModel.uiState.value.errorMessage)
+        assertNull(viewModel.uiState.value.errorMessage.testString())
     }
 
     @Test
@@ -516,3 +518,17 @@ class BookshelfViewModelTest {
         ): SyncResult = SyncResult.Synced(entry.metadata.title.orEmpty())
     }
 }
+
+private fun UiText?.testString(): String? =
+    when (this) {
+        null -> null
+        is UiText.Literal -> value
+        is UiText.Resource -> when (id) {
+            R.string.bookshelf_importing_named_format -> "Importing ${args[0]}..."
+            R.string.bookshelf_importing_progress_format -> "Importing ${args[0]} / ${args[1]}..."
+            R.string.bookshelf_import_failed_list_format -> "Failed to import:\n${args[0]}"
+            R.string.bookshelf_already_synced_format -> "${args[0]} is already synced"
+            else -> "resource:$id:${args.joinToString()}"
+        }
+        is UiText.Plural -> "plural:$id:$quantity:${args.joinToString()}"
+    }

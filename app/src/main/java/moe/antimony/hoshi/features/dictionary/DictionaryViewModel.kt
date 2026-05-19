@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.dictionary.DictionaryInfo
 import moe.antimony.hoshi.dictionary.DictionaryRename
 import moe.antimony.hoshi.dictionary.DictionaryRepository
@@ -26,6 +27,7 @@ import moe.antimony.hoshi.dictionary.DictionaryUpdateSummary
 import moe.antimony.hoshi.dictionary.RecommendedDictionary
 import moe.antimony.hoshi.features.anki.AnkiSettings
 import moe.antimony.hoshi.features.anki.AnkiSettingsRepository
+import moe.antimony.hoshi.ui.UiText
 
 internal interface DictionaryViewModelRepository {
     suspend fun loadDictionaries(): Map<DictionaryType, List<DictionaryInfo>>
@@ -188,7 +190,8 @@ internal class DictionaryViewModel(
             }.onFailure { error ->
                 _uiState.update {
                     it.copy(
-                        errorMessage = error.localizedMessage ?: "Failed to download dictionaries.",
+                        errorMessage = error.localizedMessage?.let(UiText::Literal)
+                            ?: UiText.Resource(R.string.dictionary_download_failed),
                     )
                 }
             }
@@ -215,7 +218,8 @@ internal class DictionaryViewModel(
             }.onFailure { error ->
                 _uiState.update {
                     it.copy(
-                        errorMessage = error.localizedMessage ?: "Failed to update dictionaries.",
+                        errorMessage = error.localizedMessage?.let(UiText::Literal)
+                            ?: UiText.Resource(R.string.dictionary_update_failed),
                     )
                 }
             }
@@ -234,7 +238,12 @@ internal class DictionaryViewModel(
                 withContext(ioDispatcher) {
                     importOperation { item ->
                         _uiState.update { state ->
-                            state.copy(currentImportMessage = "Importing ${item.displayName.ifBlank { "dictionary" }}")
+                            state.copy(
+                                currentImportMessage = UiText.Resource(
+                                    R.string.dictionary_importing_named_format,
+                                    item.displayName.ifBlank { "dictionary" },
+                                ),
+                            )
                         }
                     }
                 }
@@ -243,7 +252,8 @@ internal class DictionaryViewModel(
             }.onFailure { error ->
                 _uiState.update {
                     it.copy(
-                        errorMessage = error.localizedMessage ?: "Failed to import dictionary.",
+                        errorMessage = error.localizedMessage?.let(UiText::Literal)
+                            ?: UiText.Resource(R.string.dictionary_import_failed),
                     )
                 }
             }
@@ -301,7 +311,7 @@ internal class DictionaryViewModel(
         }
     }
 
-    fun showError(message: String) {
+    fun showError(message: UiText) {
         _uiState.update { it.copy(errorMessage = message) }
     }
 
@@ -351,10 +361,10 @@ internal class DictionaryViewModel(
     }
 }
 
-private fun DictionaryUpdateProgress.message(): String =
+private fun DictionaryUpdateProgress.message(): UiText =
     when (stage) {
-        DictionaryUpdateStage.Fetching -> "Fetching $title"
-        DictionaryUpdateStage.Checking -> "Checking $title"
-        DictionaryUpdateStage.Downloading -> "Downloading $title"
-        DictionaryUpdateStage.Importing -> "Importing $title"
+        DictionaryUpdateStage.Fetching -> UiText.Resource(R.string.dictionary_fetching_named_format, title)
+        DictionaryUpdateStage.Checking -> UiText.Resource(R.string.dictionary_checking_named_format, title)
+        DictionaryUpdateStage.Downloading -> UiText.Resource(R.string.dictionary_downloading_named_format, title)
+        DictionaryUpdateStage.Importing -> UiText.Resource(R.string.dictionary_importing_named_format, title)
     }

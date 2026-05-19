@@ -7,6 +7,7 @@ import moe.antimony.hoshi.epub.SasayakiMatch
 import android.content.Context
 import android.net.Uri
 import kotlinx.coroutines.CoroutineScope
+import moe.antimony.hoshi.ui.UiText
 import java.io.File
 
 class SasayakiPlayer internal constructor(
@@ -46,7 +47,7 @@ class SasayakiPlayer internal constructor(
     val currentTime: Double get() = controller.currentTime
     val duration: Double get() = controller.duration
     val isPlaying: Boolean get() = controller.isPlaying
-    val errorMessage: String? get() = controller.errorMessage
+    val errorMessage: UiText? get() = controller.errorMessage
     var autoScroll: Boolean
         get() = controller.autoScroll
         set(value) {

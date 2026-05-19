@@ -1,6 +1,7 @@
 package moe.antimony.hoshi.features.reader
 
 import moe.antimony.hoshi.features.sasayaki.SasayakiSettings
+import moe.antimony.hoshi.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -9,7 +10,11 @@ class ReaderAppearanceSasayakiTest {
     @Test
     fun appearanceShowsStatisticsRowsWhenStatisticsAreEnabled() {
         assertEquals(
-            listOf("Show Statistics Toggle", "Show Reading Speed", "Show Reading Time"),
+            listOf(
+                ReaderAppearanceStatisticsRow.Toggle,
+                ReaderAppearanceStatisticsRow.ReadingSpeed,
+                ReaderAppearanceStatisticsRow.ReadingTime,
+            ),
             readerAppearanceStatisticsRows(ReaderSettings(enableStatistics = true)),
         )
     }
@@ -22,7 +27,7 @@ class ReaderAppearanceSasayakiTest {
     @Test
     fun appearanceShowsSasayakiToggleWhenSasayakiIsEnabled() {
         assertEquals(
-            listOf("Show Sasayaki Toggle"),
+            listOf(R.string.reader_appearance_show_sasayaki_toggle),
             readerAppearanceSasayakiRows(SasayakiSettings(enabled = true)),
         )
     }

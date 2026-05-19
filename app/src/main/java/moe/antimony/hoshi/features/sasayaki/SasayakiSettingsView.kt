@@ -36,10 +36,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.settings.collectAsLoadedSettings
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,10 +74,10 @@ fun SasayakiSettingsView(
                     containerColor = colorScheme.background,
                     scrolledContainerColor = colorScheme.background,
                 ),
-                title = { Text("Sasayaki", fontWeight = FontWeight.SemiBold) },
+                title = { Text(stringResource(R.string.sasayaki_title), fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
             )
@@ -94,7 +96,7 @@ fun SasayakiSettingsView(
                 SettingsCard {
                     ListItem(
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        headlineContent = { Text("Enable") },
+                        headlineContent = { Text(stringResource(R.string.action_enable)) },
                         trailingContent = {
                             Switch(
                                 checked = loadedSettings.enabled,
@@ -106,8 +108,8 @@ fun SasayakiSettingsView(
                         SettingsDivider()
                         ListItem(
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            headlineContent = { Text("Copy Audiobook to App Storage") },
-                            supportingContent = { Text("Keep a private copy instead of linking to the selected external media file") },
+                            headlineContent = { Text(stringResource(R.string.sasayaki_copy_audiobook_to_storage)) },
+                            supportingContent = { Text(stringResource(R.string.sasayaki_copy_audiobook_to_storage_help)) },
                             trailingContent = {
                                 Switch(
                                     checked = loadedSettings.copyAudiobookToPrivateStorage,
@@ -119,7 +121,7 @@ fun SasayakiSettingsView(
                             SettingsDivider()
                             ListItem(
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                headlineContent = { Text("ッツ Sync") },
+                                headlineContent = { Text(stringResource(R.string.sync_ttu_sync)) },
                                 trailingContent = {
                                     Switch(
                                         checked = loadedSettings.syncEnabled,
@@ -131,8 +133,8 @@ fun SasayakiSettingsView(
                         SettingsDivider()
                         ListItem(
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            headlineContent = { Text("Show Skip Buttons") },
-                            supportingContent = { Text("Add rewind and fast-forward buttons to the bottom of the reader.") },
+                            headlineContent = { Text(stringResource(R.string.sasayaki_show_skip_buttons)) },
+                            supportingContent = { Text(stringResource(R.string.sasayaki_show_skip_buttons_help)) },
                             trailingContent = {
                                 Switch(
                                     checked = loadedSettings.showReaderSkipButtons,
@@ -143,11 +145,11 @@ fun SasayakiSettingsView(
                         SettingsDivider()
                         ListItem(
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            headlineContent = { Text("Skip Action") },
+                            headlineContent = { Text(stringResource(R.string.sasayaki_skip_action)) },
                             trailingContent = {
                                 Box {
                                     TextButton(onClick = { skipActionMenuExpanded = true }) {
-                                        Text(loadedSettings.readerSkipButtonAction.label)
+                                        Text(loadedSettings.readerSkipButtonAction.labelText())
                                     }
                                     DropdownMenu(
                                         expanded = skipActionMenuExpanded,
@@ -155,7 +157,7 @@ fun SasayakiSettingsView(
                                     ) {
                                         SasayakiReaderSkipButtonAction.entries.forEach { action ->
                                             DropdownMenuItem(
-                                                text = { Text(action.label) },
+                                                text = { Text(action.labelText()) },
                                                 onClick = {
                                                     skipActionMenuExpanded = false
                                                     save(loadedSettings.copy(readerSkipButtonAction = action))
@@ -169,7 +171,7 @@ fun SasayakiSettingsView(
                         SettingsDivider()
                         ListItem(
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            headlineContent = { Text("Auto-Scroll") },
+                            headlineContent = { Text(stringResource(R.string.sasayaki_auto_scroll)) },
                             trailingContent = {
                                 Switch(
                                     checked = loadedSettings.autoScroll,
@@ -180,7 +182,7 @@ fun SasayakiSettingsView(
                         SettingsDivider()
                         ListItem(
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            headlineContent = { Text("Auto-Pause on Lookup") },
+                            headlineContent = { Text(stringResource(R.string.sasayaki_auto_pause_on_lookup)) },
                             trailingContent = {
                                 Switch(
                                     checked = loadedSettings.autoPause,
@@ -191,7 +193,7 @@ fun SasayakiSettingsView(
                     }
                 }
                 Text(
-                    text = "Sasayaki syncs an audiobook with reader text. Long press a book and choose Match Sasayaki, select the matching .srt file, then open the reader and load an .mp3 or .m4b audiobook.",
+                    text = stringResource(R.string.sasayaki_settings_description),
                     color = colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(start = 16.dp, top = 8.dp),

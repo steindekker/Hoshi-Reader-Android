@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -49,6 +50,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringArrayResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -63,6 +67,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.settings.collectAsLoadedSettings
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,6 +77,7 @@ fun SyncSettingsView(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val appContainer = LocalHoshiAppContainer.current
     val repository = appContainer.syncSettingsRepository
     val authorizer = appContainer.deviceCodeDriveAuthorizer
@@ -117,7 +123,9 @@ fun SyncSettingsView(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                DriveAuthorizationResult.Failed(error.message ?: "Google Drive authorization failed.")
+                DriveAuthorizationResult.Failed(
+                    error.message ?: resources.getString(R.string.sync_google_drive_authorization_failed),
+                )
             }
             when (result) {
                 is DriveAuthorizationResult.Authorized -> {
@@ -135,7 +143,11 @@ fun SyncSettingsView(
                 DriveAuthorizationResult.TransientNetworkFailure -> {
                     nextIntervalSeconds = nextDeviceCodePollIntervalSeconds(nextIntervalSeconds, result)
                     pollIntervalSeconds = nextIntervalSeconds
-                    message = prompt.transientNetworkFailureMessage()
+                    message = resources.getString(
+                        R.string.sync_google_drive_transient_network_format,
+                        prompt.verificationUrl,
+                        prompt.userCode,
+                    )
                 }
                 is DriveAuthorizationResult.Failed -> {
                     isAuthorizing = false
@@ -150,7 +162,7 @@ fun SyncSettingsView(
             isAuthorizing = false
             devicePrompt = null
             authStatus = DriveAuthStatus.NotConnected
-            message = "Google Drive authorization code expired."
+            message = resources.getString(R.string.sync_google_drive_authorization_expired)
         }
     }
 
@@ -173,14 +185,18 @@ fun SyncSettingsView(
                     pollIntervalSeconds = prompt.intervalSeconds
                     devicePrompt = prompt
                     authStatus = DriveAuthStatus.NotConnected
-                    message = prompt.authorizationMessage()
+                    message = resources.getString(
+                        R.string.sync_google_drive_open_code_format,
+                        prompt.verificationUrl,
+                        prompt.userCode,
+                    )
                     runCatching {
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(prompt.verificationUrl)))
                     }
                 }
                 .onFailure { error ->
                     isAuthorizing = false
-                    val text = error.message ?: "Google Drive authorization failed."
+                    val text = error.message ?: resources.getString(R.string.sync_google_drive_authorization_failed)
                     authStatus = DriveAuthStatus.Failed(text)
                     message = text
                 }
@@ -210,10 +226,10 @@ fun SyncSettingsView(
                     containerColor = colorScheme.background,
                     scrolledContainerColor = colorScheme.background,
                 ),
-                title = { Text("Syncing", fontWeight = FontWeight.SemiBold) },
+                title = { Text(stringResource(R.string.sync_title), fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
             )
@@ -234,7 +250,7 @@ fun SyncSettingsView(
                 SettingsCard {
                     ListItem(
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        headlineContent = { Text("Enable") },
+                        headlineContent = { Text(stringResource(R.string.action_enable)) },
                         trailingContent = {
                             Switch(
                                 checked = currentSettings.enabled,
@@ -245,11 +261,11 @@ fun SyncSettingsView(
                     SettingsDivider()
                     ListItem(
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        headlineContent = { Text("Direction") },
+                        headlineContent = { Text(stringResource(R.string.sync_direction)) },
                         trailingContent = {
                             Box {
                                 TextButton(onClick = { directionMenuExpanded = true }) {
-                                    Text(currentSettings.mode.rawValue)
+                                    Text(stringResource(currentSettings.mode.labelRes))
                                 }
                                 DropdownMenu(
                                     expanded = directionMenuExpanded,
@@ -257,7 +273,7 @@ fun SyncSettingsView(
                                 ) {
                                     SyncMode.entries.forEach { mode ->
                                         DropdownMenuItem(
-                                            text = { Text(mode.rawValue) },
+                                            text = { Text(stringResource(mode.labelRes)) },
                                             onClick = {
                                                 directionMenuExpanded = false
                                                 save(currentSettings.copy(mode = mode))
@@ -271,7 +287,7 @@ fun SyncSettingsView(
                     SettingsDivider()
                     ListItem(
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        headlineContent = { Text("Auto Sync") },
+                        headlineContent = { Text(stringResource(R.string.sync_auto_sync)) },
                         trailingContent = {
                             Switch(
                                 checked = currentSettings.autoSyncEnabled,
@@ -288,8 +304,8 @@ fun SyncSettingsView(
                 SettingsCard {
                     ListItem(
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        headlineContent = { Text("Google Drive") },
-                        supportingContent = { Text(currentAuthStatus.label()) },
+                        headlineContent = { Text(stringResource(R.string.sync_google_drive)) },
+                        supportingContent = { Text(currentAuthStatus.labelText()) },
                     )
                     SettingsDivider()
                     Column(
@@ -299,14 +315,14 @@ fun SyncSettingsView(
                         OutlinedTextField(
                             value = clientId,
                             onValueChange = { clientId = it },
-                            label = { Text("Device client ID") },
+                            label = { Text(stringResource(R.string.sync_device_client_id)) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                         )
                         OutlinedTextField(
                             value = clientSecret,
                             onValueChange = { clientSecret = it },
-                            label = { Text("Device client secret") },
+                            label = { Text(stringResource(R.string.sync_device_client_secret)) },
                             singleLine = true,
                             visualTransformation = PasswordVisualTransformation(),
                             modifier = Modifier.fillMaxWidth(),
@@ -320,12 +336,12 @@ fun SyncSettingsView(
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             Text(
-                                text = "Authorize Google Drive",
+                                text = stringResource(R.string.sync_authorize_google_drive),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
-                                text = "Open this link on this device or another phone/computer:",
+                                text = stringResource(R.string.sync_google_drive_open_link_prompt),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = colorScheme.onSurfaceVariant,
                             )
@@ -341,7 +357,7 @@ fun SyncSettingsView(
                             OutlinedButton(
                                 onClick = {
                                     context.copyTextToClipboard("Google device code", prompt.userCode)
-                                    copyMessage = "Device code copied"
+                                    copyMessage = resources.getString(R.string.sync_device_code_copied)
                                 },
                             ) {
                                 Icon(
@@ -349,7 +365,7 @@ fun SyncSettingsView(
                                     contentDescription = null,
                                     modifier = Modifier.padding(end = 8.dp),
                                 )
-                                Text("Copy code")
+                                Text(stringResource(R.string.action_copy_code))
                             }
                         }
                     }
@@ -382,7 +398,7 @@ fun SyncSettingsView(
                             enabled = connectionActions.connectEnabled,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("Connect Google Drive")
+                            Text(stringResource(R.string.sync_connect_google_drive))
                         }
                     }
                     if (connectionActions.showSignOut) {
@@ -391,7 +407,7 @@ fun SyncSettingsView(
                             enabled = connectionActions.signOutEnabled,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("Sign out")
+                            Text(stringResource(R.string.action_sign_out))
                         }
                     }
                     GoogleCloudOAuthSetupCard()
@@ -404,27 +420,28 @@ fun SyncSettingsView(
 @Composable
 private fun GoogleCloudOAuthSetupCard() {
     val colorScheme = MaterialTheme.colorScheme
+    val instructions = stringArrayResource(R.array.sync_device_code_instructions)
     SettingsCard {
         Column(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                text = "Device Code setup",
+                text = stringResource(R.string.sync_device_code_setup),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = colorScheme.onSurface,
             )
             Text(
-                text = GoogleCloudOAuthConfiguration.introduction,
+                text = stringResource(R.string.sync_device_code_intro),
                 style = MaterialTheme.typography.bodyMedium,
                 color = colorScheme.onSurfaceVariant,
             )
             SettingsLinkText(
-                text = GoogleCloudOAuthConfiguration.ttuSetupLinkLabel,
+                text = stringResource(R.string.sync_ttu_google_cloud_setup),
                 url = GoogleCloudOAuthConfiguration.ttuSetupUrl,
             )
-            GoogleCloudOAuthConfiguration.instructions.forEachIndexed { index, instruction ->
+            instructions.forEachIndexed { index, instruction ->
                 GoogleCloudOAuthInstructionText(index = index, instruction = instruction)
             }
         }
@@ -528,23 +545,25 @@ private fun CopyValueButton(label: String, value: String, onCopied: () -> Unit) 
             onCopied()
         },
     ) {
-        Icon(Icons.Rounded.ContentCopy, contentDescription = "Copy $label")
+        Icon(Icons.Rounded.ContentCopy, contentDescription = stringResource(R.string.action_copy_code))
     }
 }
 
-private fun DriveAuthStatus.label(): String =
+@Composable
+private fun DriveAuthStatus.labelText(): String =
     when (this) {
-        DriveAuthStatus.Connected -> "Connected"
-        DriveAuthStatus.NotConnected -> "Not connected"
-        DriveAuthStatus.MissingConfiguration -> "OAuth client not configured"
+        DriveAuthStatus.Connected -> stringResource(R.string.sync_status_connected)
+        DriveAuthStatus.NotConnected -> stringResource(R.string.sync_status_not_connected)
+        DriveAuthStatus.MissingConfiguration -> stringResource(R.string.sync_status_missing_configuration)
         is DriveAuthStatus.Failed -> message
     }
 
-private fun DeviceCodePrompt.authorizationMessage(): String =
-    "Open $verificationUrl on this device or another phone/computer and enter $userCode."
-
-private fun DeviceCodePrompt.transientNetworkFailureMessage(): String =
-    "Hoshi cannot reach Google from this device right now. Keep this screen open, or open $verificationUrl on another phone/computer and enter $userCode."
+@get:StringRes
+private val SyncMode.labelRes: Int
+    get() = when (this) {
+        SyncMode.Auto -> R.string.sync_mode_auto
+        SyncMode.Manual -> R.string.sync_mode_manual
+    }
 
 @Composable
 private fun SettingsCard(content: @Composable () -> Unit) {

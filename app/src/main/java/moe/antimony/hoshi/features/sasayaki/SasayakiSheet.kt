@@ -37,17 +37,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import moe.antimony.hoshi.epub.SasayakiPlaybackData
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.reader.ReaderBottomPanel
 import moe.antimony.hoshi.features.reader.readerSheetDensityMetrics
 import moe.antimony.hoshi.features.reader.readerSheetStyle
 import moe.antimony.hoshi.importing.ImportFileType
 import moe.antimony.hoshi.importing.OpenDocumentContent
+import moe.antimony.hoshi.importing.localizedImportMessage
 import moe.antimony.hoshi.importing.validateImportFile
+import moe.antimony.hoshi.ui.asString
 import moe.antimony.hoshi.ui.HoshiBlockingProgressOverlay
 
 @Composable
@@ -65,6 +70,7 @@ fun SasayakiSheet(
     var isImporting by remember { mutableStateOf(false) }
     var importError by remember { mutableStateOf<String?>(null) }
     var skipActionMenuExpanded by remember { mutableStateOf(false) }
+    val importFailedMessage = stringResource(R.string.sasayaki_import_audiobook_failed)
     val importer = rememberLauncherForActivityResult(OpenDocumentContent()) { uri ->
         if (uri == null || isImporting) return@rememberLauncherForActivityResult
         isImporting = true
@@ -90,7 +96,7 @@ fun SasayakiSheet(
                     copiedAudioFileName = copiedFileName,
                 )
             }.onFailure { error ->
-                importError = error.localizedMessage ?: "Unable to import audiobook."
+                importError = error.localizedImportMessage(context, importFailedMessage)
             }
             isImporting = false
         }
@@ -125,16 +131,20 @@ fun SasayakiSheet(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         IconButton(onClick = player::previousCue) {
-                            Icon(Icons.Rounded.FastRewind, contentDescription = "Previous Cue")
+                            Icon(Icons.Rounded.FastRewind, contentDescription = stringResource(R.string.sasayaki_previous_cue))
                         }
                         IconButton(onClick = player::togglePlayback) {
                             Icon(
                                 if (player.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                contentDescription = if (player.isPlaying) "Pause" else "Play",
+                                contentDescription = if (player.isPlaying) {
+                                    stringResource(R.string.sasayaki_pause)
+                                } else {
+                                    stringResource(R.string.sasayaki_play)
+                                },
                             )
                         }
                         IconButton(onClick = player::nextCue) {
-                            Icon(Icons.Rounded.FastForward, contentDescription = "Next Cue")
+                            Icon(Icons.Rounded.FastForward, contentDescription = stringResource(R.string.sasayaki_next_cue))
                         }
                     }
                     Text(
@@ -145,8 +155,14 @@ fun SasayakiSheet(
                     )
                 }
                 SasayakiLoadAudioRow(
-                    summary = player.audioStorageSummary,
-                    button = if (player.hasAudio) "Remove" else if (isImporting) "Importing" else "Open",
+                    summary = player.playback.audioStorageSummaryText(),
+                    button = if (player.hasAudio) {
+                        stringResource(R.string.sasayaki_remove_audio)
+                    } else if (isImporting) {
+                        stringResource(R.string.reader_appearance_importing)
+                    } else {
+                        stringResource(R.string.action_open)
+                    },
                     enabled = !isImporting,
                     onClick = {
                         if (player.hasAudio) {
@@ -157,7 +173,7 @@ fun SasayakiSheet(
                     },
                 )
                 SasayakiSettingsSwitchRow(
-                    label = "Copy Audiobook to App Storage",
+                    label = stringResource(R.string.sasayaki_copy_audiobook_to_storage),
                     checked = settings.copyAudiobookToPrivateStorage,
                     onCheckedChange = { onSettingsChange(settings.copy(copyAudiobookToPrivateStorage = it)) },
                 )
@@ -170,14 +186,14 @@ fun SasayakiSheet(
                 }
                 player.errorMessage?.let { message ->
                     Text(
-                        text = message,
+                        text = message.asString(),
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
                 SliderRow(
-                    label = "Delay",
+                    label = stringResource(R.string.sasayaki_delay),
                     valueText = String.format(java.util.Locale.US, "%+.2fs", player.delay),
                     value = player.delay.toFloat(),
                     range = -2f..2f,
@@ -185,7 +201,7 @@ fun SasayakiSheet(
                     onValueChange = { player.setDelay(it.toDouble()) },
                 )
                 SliderRow(
-                    label = "Speed",
+                    label = stringResource(R.string.sasayaki_speed),
                     valueText = String.format(java.util.Locale.US, "%.2fx", player.rate),
                     value = player.rate,
                     range = 0.5f..1.5f,
@@ -194,19 +210,19 @@ fun SasayakiSheet(
                 )
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
                 Text(
-                    text = "Reader Controls",
+                    text = stringResource(R.string.sasayaki_reader_controls),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
                 )
                 SasayakiSettingsSwitchRow(
-                    label = "Show Skip Buttons",
+                    label = stringResource(R.string.sasayaki_show_skip_buttons),
                     checked = settings.showReaderSkipButtons,
                     onCheckedChange = { onSettingsChange(settings.copy(showReaderSkipButtons = it)) },
                 )
                 SasayakiSettingsActionRow(
-                    label = "Skip Action",
+                    label = stringResource(R.string.sasayaki_skip_action),
                     selected = settings.readerSkipButtonAction,
                     expanded = skipActionMenuExpanded,
                     onExpandedChange = { skipActionMenuExpanded = it },
@@ -217,26 +233,26 @@ fun SasayakiSheet(
                 )
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
                 Text(
-                    text = "Playback",
+                    text = stringResource(R.string.sasayaki_playback),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
                 )
                 SasayakiSettingsSwitchRow(
-                    label = "Auto-Scroll",
+                    label = stringResource(R.string.sasayaki_auto_scroll),
                     checked = settings.autoScroll,
                     onCheckedChange = { onSettingsChange(settings.copy(autoScroll = it)) },
                 )
                 SasayakiSettingsSwitchRow(
-                    label = "Auto-Pause on Lookup",
+                    label = stringResource(R.string.sasayaki_auto_pause_on_lookup),
                     checked = settings.autoPause,
                     onCheckedChange = { onSettingsChange(settings.copy(autoPause = it)) },
                 )
             }
             if (isImporting) {
                 HoshiBlockingProgressOverlay(
-                    message = "Importing audio...",
+                    message = stringResource(R.string.sasayaki_importing_audio),
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -283,7 +299,7 @@ private fun SasayakiLoadAudioRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text("Load Audio", style = MaterialTheme.typography.bodyLarge)
+            Text(stringResource(R.string.sasayaki_load_audio), style = MaterialTheme.typography.bodyLarge)
             Text(
                 text = summary,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -315,7 +331,7 @@ private fun SasayakiSettingsActionRow(
         Text(label, style = MaterialTheme.typography.bodyLarge)
         Box {
             TextButton(onClick = { onExpandedChange(true) }) {
-                Text(selected.label)
+                Text(selected.labelText())
             }
             DropdownMenu(
                 expanded = expanded,
@@ -323,7 +339,7 @@ private fun SasayakiSettingsActionRow(
             ) {
                 SasayakiReaderSkipButtonAction.entries.forEach { action ->
                     DropdownMenuItem(
-                        text = { Text(action.label) },
+                        text = { Text(action.labelText()) },
                         onClick = { onSelected(action) },
                     )
                 }
@@ -356,3 +372,11 @@ private fun SasayakiSettingsSwitchRow(
 
 private fun formatDuration(seconds: Double): String =
     DateUtils.formatElapsedTime(seconds.toLong().coerceAtLeast(0L))
+
+@Composable
+private fun SasayakiPlaybackData.audioStorageSummaryText(): String =
+    when {
+        audioFileName != null -> stringResource(R.string.sasayaki_storage_copied)
+        audioUri != null -> stringResource(R.string.sasayaki_storage_linked)
+        else -> stringResource(R.string.sasayaki_storage_select_audio)
+    }

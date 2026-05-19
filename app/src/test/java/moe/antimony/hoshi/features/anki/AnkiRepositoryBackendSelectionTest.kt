@@ -5,6 +5,7 @@ import java.nio.file.Files
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
+import moe.antimony.hoshi.ui.UiText
 import moe.antimony.hoshi.features.audio.LocalAudioRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -61,7 +62,7 @@ class AnkiRepositoryBackendSelectionTest {
         )
 
         assertEquals(
-            AnkiFetchResult.Error("Public AnkiConnect HTTP URLs are blocked. Use HTTPS for internet hosts."),
+            AnkiFetchResult.Error(UiText.Literal("Public AnkiConnect HTTP URLs are blocked. Use HTTPS for internet hosts.")),
             repository.fetchConfiguration(),
         )
         assertEquals(0, ankiConnect.fetchDecksCalls)

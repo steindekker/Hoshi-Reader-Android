@@ -43,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -51,8 +52,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.dictionary.DictionaryType
 import moe.antimony.hoshi.features.settings.SettingsDetailScaffold
+import moe.antimony.hoshi.ui.asString
 
 @Composable
 fun AnkiView(
@@ -108,7 +111,7 @@ fun AnkiView(
     }
 
     SettingsDetailScaffold(
-        title = "Anki",
+        title = stringResource(R.string.settings_anki),
         onClose = onClose,
         modifier = modifier,
     ) { innerPadding ->
@@ -126,10 +129,10 @@ fun AnkiView(
                         supportingContent = {
                             Column {
                                 Text(
-                                    uiState.errorMessage ?: if (uiState.settings.backendKind == AnkiBackendKind.AnkiConnect) {
-                                        "Fetch decks and note types from AnkiConnect."
+                                    uiState.errorMessage?.asString() ?: if (uiState.settings.backendKind == AnkiBackendKind.AnkiConnect) {
+                                        stringResource(R.string.anki_fetch_decks_ankiconnect)
                                     } else {
-                                        "Fetch decks and note types from AnkiDroid."
+                                        stringResource(R.string.anki_fetch_decks_ankidroid)
                                     },
                                 )
                                 if (uiState.errorAction == AnkiErrorAction.OpenPermissionSettings) {
@@ -140,14 +143,20 @@ fun AnkiView(
                                             }
                                         },
                                     ) {
-                                        Text("Open App Settings")
+                                        Text(stringResource(R.string.anki_open_app_settings))
                                     }
                                 }
                             }
                         },
                         trailingContent = {
                             TextButton(onClick = fetchAnki, enabled = !uiState.isFetching) {
-                                Text(if (uiState.isFetching) "Fetching" else "Fetch")
+                                Text(
+                                    if (uiState.isFetching) {
+                                        stringResource(R.string.anki_fetching)
+                                    } else {
+                                        stringResource(R.string.action_fetch)
+                                    },
+                                )
                             }
                         },
                     )
@@ -163,13 +172,13 @@ fun AnkiView(
             item {
                 AnkiCard {
                     AnkiSwitchRow(
-                        label = "Allow Duplicates",
+                        label = stringResource(R.string.anki_allow_duplicates),
                         checked = uiState.settings.allowDupes,
                         onCheckedChange = viewModel::updateAllowDupes,
                     )
                     AnkiDivider()
                     AnkiSwitchRow(
-                        label = "Check for duplicates across all models",
+                        label = stringResource(R.string.anki_check_duplicates_all_models),
                         checked = uiState.settings.checkDuplicatesAcrossAllModels,
                         onCheckedChange = viewModel::updateCheckDuplicatesAcrossAllModels,
                     )
@@ -180,7 +189,7 @@ fun AnkiView(
                     )
                     AnkiDivider()
                     AnkiSwitchRow(
-                        label = "Compact Glossaries",
+                        label = stringResource(R.string.anki_compact_glossaries),
                         checked = uiState.settings.compactGlossaries,
                         onCheckedChange = viewModel::updateCompactGlossaries,
                     )
@@ -190,7 +199,7 @@ fun AnkiView(
             if (selectedNoteType != null) {
                 item {
                     Text(
-                        text = "Fields",
+                        text = stringResource(R.string.anki_fields),
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(top = 18.dp, bottom = 8.dp),
                     )
@@ -209,10 +218,10 @@ fun AnkiView(
                 }
                 item {
                     AnkiTextValueRow(
-                        label = "Tags",
+                        label = stringResource(R.string.anki_tags),
                         value = uiState.settings.tags,
                         onValueChange = viewModel::updateTags,
-                        dialogLabel = "Tags",
+                        dialogLabel = stringResource(R.string.anki_tags),
                     )
                 }
             }
@@ -252,8 +261,8 @@ private fun AnkiDeckRow(
     onSelect: (AnkiDeck) -> Unit,
 ) {
     AnkiDropdownRow(
-        label = "Deck",
-        value = uiState.settings.selectedDeckName ?: "None",
+        label = stringResource(R.string.anki_deck),
+        value = uiState.settings.selectedDeckName ?: stringResource(R.string.none),
         enabled = uiState.availableDecks.isNotEmpty(),
         items = uiState.availableDecks,
         itemLabel = { it.name },
@@ -267,8 +276,8 @@ private fun AnkiNoteTypeRow(
     onSelect: (AnkiNoteType) -> Unit,
 ) {
     AnkiDropdownRow(
-        label = "Model",
-        value = uiState.settings.selectedNoteTypeName ?: "None",
+        label = stringResource(R.string.anki_model),
+        value = uiState.settings.selectedNoteTypeName ?: stringResource(R.string.none),
         enabled = uiState.availableNoteTypes.isNotEmpty(),
         items = uiState.availableNoteTypes,
         itemLabel = { it.name },
@@ -282,21 +291,14 @@ private fun AnkiDuplicateScopeRow(
     onSelect: (AnkiDuplicateScope) -> Unit,
 ) {
     AnkiDropdownRow(
-        label = "Duplicate Check Scope",
-        value = scope.displayName,
+        label = stringResource(R.string.anki_duplicate_check_scope),
+        value = stringResource(scope.labelRes),
         enabled = true,
         items = AnkiDuplicateScope.entries,
-        itemLabel = { it.displayName },
+        itemLabel = { stringResource(it.labelRes) },
         onSelect = onSelect,
     )
 }
-
-private val AnkiDuplicateScope.displayName: String
-    get() = when (this) {
-        AnkiDuplicateScope.Collection -> "Collection"
-        AnkiDuplicateScope.Deck -> "Deck"
-        AnkiDuplicateScope.DeckRoot -> "Deck Root"
-    }
 
 @Composable
 private fun <T> AnkiDropdownRow(
@@ -304,7 +306,7 @@ private fun <T> AnkiDropdownRow(
     value: String,
     enabled: Boolean,
     items: List<T>,
-    itemLabel: (T) -> String,
+    itemLabel: @Composable (T) -> String,
     onSelect: (T) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -314,7 +316,7 @@ private fun <T> AnkiDropdownRow(
         supportingContent = { Text(value) },
         trailingContent = {
             TextButton(onClick = { expanded = true }, enabled = enabled) {
-                Text("Choose")
+                Text(stringResource(R.string.action_choose))
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 items.forEach { item ->
@@ -356,7 +358,7 @@ private fun AnkiFieldMappingRow(
         label = field,
         value = value,
         onValueChange = onValueChange,
-        dialogLabel = "Handlebar",
+        dialogLabel = stringResource(R.string.anki_handlebar),
         trailingContent = {
             Column {
                 TextButton(onClick = { expanded = true }) { Text("{}") }
@@ -385,6 +387,7 @@ private fun AnkiTextValueRow(
     trailingContent: (@Composable () -> Unit)? = null,
 ) {
     var editing by remember { mutableStateOf(false) }
+    val noneLabel = stringResource(R.string.none)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -402,7 +405,7 @@ private fun AnkiTextValueRow(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = value.ifBlank { "None" },
+                text = value.ifBlank { noneLabel },
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
@@ -451,12 +454,12 @@ private fun AnkiTextValueDialog(
         },
         confirmButton = {
             Button(onClick = { onSave(draft) }) {
-                Text("Save")
+                Text(stringResource(R.string.action_save))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.action_cancel))
             }
         },
     )

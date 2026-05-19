@@ -38,9 +38,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.epub.EpubBook
 import moe.antimony.hoshi.epub.EpubTocItem
 import moe.antimony.hoshi.ui.theme.LocalHoshiEInkMode
@@ -163,7 +165,7 @@ private fun ReaderChapterBookHeader(
         }
         Icon(
             imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-            contentDescription = "Jump to character",
+            contentDescription = stringResource(R.string.reader_jump_to_character),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(26.dp),
         )
@@ -239,7 +241,7 @@ private fun ReaderChapterListRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text(
-            text = row.label.ifBlank { "Untitled" },
+            text = row.label.ifBlank { stringResource(R.string.reader_untitled_chapter) },
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.titleMedium,
             color = rowContentColor,
@@ -264,12 +266,12 @@ private fun JumpToCharacterDialog(
     val parsed = input.filter(Char::isDigit).toIntOrNull()
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Jump to Character") },
+        title = { Text(stringResource(R.string.reader_jump_to_character)) },
         text = {
             OutlinedTextField(
                 value = input,
                 onValueChange = { input = it.filter(Char::isDigit) },
-                label = { Text("Character") },
+                label = { Text(stringResource(R.string.reader_character)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
             )
@@ -279,12 +281,12 @@ private fun JumpToCharacterDialog(
                 enabled = parsed != null,
                 onClick = { onConfirm((parsed ?: 0).coerceIn(0, totalCharacters)) },
             ) {
-                Text("Jump")
+                Text(stringResource(R.string.reader_jump))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.action_cancel))
             }
         },
     )

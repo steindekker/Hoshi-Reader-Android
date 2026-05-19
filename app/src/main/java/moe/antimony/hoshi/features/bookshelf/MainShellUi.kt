@@ -1,13 +1,15 @@
 package moe.antimony.hoshi.features.bookshelf
 
+import androidx.annotation.StringRes
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.epub.BookEntry
 import moe.antimony.hoshi.epub.BookShelf
 import moe.antimony.hoshi.epub.BookSortOption
 
-enum class MainTab(val label: String) {
-    Books("Books"),
-    Dictionary("Dictionary"),
-    Settings("Settings"),
+enum class MainTab(@param:StringRes val labelRes: Int) {
+    Books(R.string.main_tab_books),
+    Dictionary(R.string.main_tab_dictionary),
+    Settings(R.string.main_tab_settings),
 }
 
 enum class MainShellNavigationLayout {
@@ -147,13 +149,14 @@ enum class SettingsDestination {
 }
 
 data class SettingsRowModel(
-    val label: String,
+    @param:StringRes val labelRes: Int,
     val destination: SettingsDestination,
 )
 
 data class BookshelfSectionModel(
     val title: String,
     val books: List<BookEntry>,
+    @param:StringRes val titleRes: Int? = null,
     val shelfName: String? = null,
     val isReading: Boolean = false,
     val isCollapsible: Boolean = false,
@@ -168,16 +171,16 @@ data class BookshelfSectionModel(
 
 fun settingsGroups(): List<List<SettingsRowModel>> = listOf(
     listOf(
-        SettingsRowModel("Dictionaries", SettingsDestination.Dictionaries),
-        SettingsRowModel("Anki", SettingsDestination.Anki),
-        SettingsRowModel("Appearance", SettingsDestination.Appearance),
-        SettingsRowModel("Behavior", SettingsDestination.Behavior),
-        SettingsRowModel("Advanced", SettingsDestination.Advanced),
+        SettingsRowModel(R.string.settings_dictionaries, SettingsDestination.Dictionaries),
+        SettingsRowModel(R.string.settings_anki, SettingsDestination.Anki),
+        SettingsRowModel(R.string.settings_appearance, SettingsDestination.Appearance),
+        SettingsRowModel(R.string.settings_behavior, SettingsDestination.Behavior),
+        SettingsRowModel(R.string.settings_advanced, SettingsDestination.Advanced),
     ),
     listOf(
-        SettingsRowModel("Report an Issue", SettingsDestination.ReportIssue),
-        SettingsRowModel("Diagnostics", SettingsDestination.Diagnostics),
-        SettingsRowModel("About", SettingsDestination.About),
+        SettingsRowModel(R.string.settings_report_issue, SettingsDestination.ReportIssue),
+        SettingsRowModel(R.string.settings_diagnostics, SettingsDestination.Diagnostics),
+        SettingsRowModel(R.string.settings_about, SettingsDestination.About),
     ),
 )
 
@@ -209,6 +212,7 @@ fun bookshelfSections(
             sections += BookshelfSectionModel(
                 title = "Reading",
                 books = reading,
+                titleRes = R.string.bookshelf_section_reading,
                 isReading = true,
                 isCollapsible = true,
             )
@@ -229,7 +233,7 @@ fun bookshelfSections(
         .filterNot { it.metadata.id in shelvedIds }
         .sortedForShelf()
     if (unshelved.isNotEmpty()) {
-        sections += BookshelfSectionModel("Unshelved", unshelved)
+        sections += BookshelfSectionModel("Unshelved", unshelved, titleRes = R.string.bookshelf_section_unshelved)
     }
     return sections
 }

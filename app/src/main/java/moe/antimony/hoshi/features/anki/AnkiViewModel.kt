@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import moe.antimony.hoshi.R
+import moe.antimony.hoshi.ui.UiText
 
 data class AnkiUiState(
     val settings: AnkiSettings = AnkiSettings(),
@@ -16,8 +18,8 @@ data class AnkiUiState(
     val isFetching: Boolean = false,
     val isConnectingAnkiConnect: Boolean = false,
     val isAnkiConnectReachable: Boolean = false,
-    val ankiConnectMessage: String? = null,
-    val errorMessage: String? = null,
+    val ankiConnectMessage: UiText? = null,
+    val errorMessage: UiText? = null,
     val errorAction: AnkiErrorAction? = null,
 ) {
     val availableDecks: List<AnkiDeck>
@@ -95,7 +97,7 @@ class AnkiViewModel(
                 is AnkiFetchResult.Error -> _uiState.value = _uiState.value.copy(
                     isFetching = false,
                     errorMessage = result.message,
-                    errorAction = if (result.message == AnkiFetchFailure.PermissionDenied.userMessage) {
+                    errorAction = if (result.failure == AnkiFetchFailure.PermissionDenied) {
                         AnkiErrorAction.OpenPermissionSettings
                     } else {
                         null
@@ -110,7 +112,7 @@ class AnkiViewModel(
     fun showFetchApiUnavailable() {
         _uiState.value = _uiState.value.copy(
             isFetching = false,
-            errorMessage = AnkiFetchFailure.ApiUnavailable.userMessage,
+            errorMessage = UiText.Resource(AnkiFetchFailure.ApiUnavailable.userMessageRes),
             errorAction = null,
         )
     }
@@ -118,7 +120,7 @@ class AnkiViewModel(
     fun showFetchPermissionDenied() {
         _uiState.value = _uiState.value.copy(
             isFetching = false,
-            errorMessage = AnkiFetchFailure.PermissionDenied.userMessage,
+            errorMessage = UiText.Resource(AnkiFetchFailure.PermissionDenied.userMessageRes),
             errorAction = AnkiErrorAction.OpenPermissionSettings,
         )
     }
@@ -202,7 +204,7 @@ class AnkiViewModel(
                 AnkiConnectConnectionResult.Connected -> _uiState.value = _uiState.value.copy(
                     isConnectingAnkiConnect = false,
                     isAnkiConnectReachable = true,
-                    ankiConnectMessage = "Connected",
+                    ankiConnectMessage = UiText.Resource(R.string.anki_connect_connected),
                 )
                 is AnkiConnectConnectionResult.Error -> _uiState.value = _uiState.value.copy(
                     isConnectingAnkiConnect = false,

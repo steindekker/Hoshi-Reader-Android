@@ -722,9 +722,15 @@ private class LookupPopupHostView(
                 firstIcon = R.drawable.ic_material_rounded_replay,
                 secondIcon = if (sasayakiIsPlaying || sasayakiWasPaused) R.drawable.ic_material_rounded_pause else R.drawable.ic_material_rounded_play_arrow,
                 thirdIcon = R.drawable.ic_material_rounded_start,
-                firstDescription = "Replay Sasayaki Cue",
-                secondDescription = if (sasayakiIsPlaying || sasayakiWasPaused) "Pause Sasayaki" else "Play Sasayaki",
-                thirdDescription = "Play From Sasayaki Cue",
+                firstDescription = context.getString(R.string.sasayaki_replay_cue),
+                secondDescription = context.getString(
+                    if (sasayakiIsPlaying || sasayakiWasPaused) {
+                        R.string.sasayaki_pause
+                    } else {
+                        R.string.sasayaki_play
+                    },
+                ),
+                thirdDescription = context.getString(R.string.sasayaki_play_from_cue),
                 firstEnabled = true,
                 secondEnabled = true,
                 thirdEnabled = true,
@@ -755,9 +761,9 @@ private class LookupPopupHostView(
             firstIcon = R.drawable.ic_material_rounded_arrow_back,
             secondIcon = R.drawable.ic_material_rounded_arrow_forward,
             thirdIcon = R.drawable.ic_material_rounded_close,
-            firstDescription = "Back",
-            secondDescription = "Forward",
-            thirdDescription = "Close",
+            firstDescription = context.getString(R.string.action_back),
+            secondDescription = context.getString(R.string.action_forward),
+            thirdDescription = context.getString(R.string.action_close),
             firstEnabled = backCount > 0,
             secondEnabled = forwardCount > 0,
             thirdEnabled = true,

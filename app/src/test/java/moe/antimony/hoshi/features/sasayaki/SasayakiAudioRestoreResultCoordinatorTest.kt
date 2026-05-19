@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import moe.antimony.hoshi.ui.UiText
 
 class SasayakiAudioRestoreResultCoordinatorTest {
     @Test
@@ -20,7 +21,7 @@ class SasayakiAudioRestoreResultCoordinatorTest {
         coordinator.handleFailure(IllegalStateException("decode failed"))
 
         assertFalse(availability.hasAudio)
-        assertEquals("decode failed", availability.errorMessage)
+        assertEquals(UiText.Literal("decode failed"), availability.errorMessage)
     }
 
     @Test

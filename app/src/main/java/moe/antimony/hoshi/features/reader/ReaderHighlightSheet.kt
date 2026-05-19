@@ -26,9 +26,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.epub.EpubBook
 import moe.antimony.hoshi.epub.ReaderHighlight
 import java.time.Instant
@@ -75,7 +77,7 @@ internal fun ReaderHighlightSheet(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    text = "No Highlights",
+                    text = stringResource(R.string.reader_no_highlights),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(top = 8.dp),
@@ -91,7 +93,7 @@ internal fun ReaderHighlightSheet(
             ) {
                 sections.forEach { section ->
                     Text(
-                        text = section.label.ifBlank { "Untitled" },
+                        text = section.label.ifBlank { stringResource(R.string.reader_untitled_chapter) },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold,
@@ -155,7 +157,7 @@ private fun ReaderHighlightRow(
         IconButton(onClick = onDelete) {
             Icon(
                 imageVector = Icons.Rounded.Delete,
-                contentDescription = "Delete highlight",
+                contentDescription = stringResource(R.string.reader_delete_highlight),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

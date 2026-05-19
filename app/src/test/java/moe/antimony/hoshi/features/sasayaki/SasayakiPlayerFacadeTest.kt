@@ -1,6 +1,7 @@
 package moe.antimony.hoshi.features.sasayaki
 
 import moe.antimony.hoshi.epub.SasayakiPlaybackData
+import moe.antimony.hoshi.ui.UiText
 import moe.antimony.hoshi.epub.SasayakiMatch
 
 import org.junit.Assert.assertEquals
@@ -22,7 +23,7 @@ class SasayakiPlayerFacadeTest {
         assertEquals(12.5, player.currentTime, 0.0)
         assertEquals(90.0, player.duration, 0.0)
         assertTrue(player.isPlaying)
-        assertEquals("restore failed", player.errorMessage)
+        assertEquals(UiText.Literal("restore failed"), player.errorMessage)
         assertFalse(player.autoScroll)
         assertTrue(player.hasAudio)
         assertTrue(player.hasMatch)
@@ -83,7 +84,7 @@ class SasayakiPlayerFacadeTest {
         override val currentTime = 12.5
         override val duration = 90.0
         override val isPlaying = true
-        override val errorMessage = "restore failed"
+        override val errorMessage = UiText.Literal("restore failed")
         override var autoScroll = false
         override var readerSkipButtonAction = SasayakiReaderSkipButtonAction.Cue
         override val hasAudio = true

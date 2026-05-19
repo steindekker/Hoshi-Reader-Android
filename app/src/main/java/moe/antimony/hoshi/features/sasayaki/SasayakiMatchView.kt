@@ -41,18 +41,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.epub.BookEntry
 import moe.antimony.hoshi.epub.EpubBookParser
 import moe.antimony.hoshi.epub.SasayakiSidecarRepository
 import moe.antimony.hoshi.importing.FileImportContent
 import moe.antimony.hoshi.importing.ImportFileType
 import moe.antimony.hoshi.importing.importDisplayName
+import moe.antimony.hoshi.importing.localizedImportMessage
 import moe.antimony.hoshi.importing.validateImportFile
 import kotlin.math.roundToInt
 
@@ -65,6 +69,7 @@ fun SasayakiMatchView(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var selectedSrtUri by remember { mutableStateOf<Uri?>(null) }
     var selectedSrtName by remember { mutableStateOf<String?>(null) }
@@ -72,6 +77,9 @@ fun SasayakiMatchView(
     var isMatching by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var currentMatch by remember(bookEntry.root) { mutableStateOf<SasayakiMatchData?>(null) }
+    val selectSrtMessage = stringResource(R.string.sasayaki_select_srt_file)
+    val selectedSrtFallback = stringResource(R.string.sasayaki_selected_srt)
+    val matchFailedMessage = stringResource(R.string.sasayaki_match_failed)
     LaunchedEffect(bookEntry.root, bookRepository) {
         currentMatch = bookRepository.loadSasayakiMatch(bookEntry.root)
     }
@@ -80,11 +88,11 @@ fun SasayakiMatchView(
         runCatching {
             context.contentResolver.validateImportFile(uri, ImportFileType.SasayakiSubtitle)
         }.onFailure { error ->
-            errorMessage = error.localizedMessage ?: "Select an .srt subtitle file."
+            errorMessage = error.localizedImportMessage(context, selectSrtMessage)
             return@rememberLauncherForActivityResult
         }
         selectedSrtUri = uri
-        selectedSrtName = context.contentResolver.importDisplayName(uri).ifBlank { "Selected SRT" }
+        selectedSrtName = context.contentResolver.importDisplayName(uri).ifBlank { selectedSrtFallback }
         errorMessage = null
     }
 
@@ -97,7 +105,7 @@ fun SasayakiMatchView(
             runCatching {
                 withContext(Dispatchers.IO) {
                     val srtBytes = context.contentResolver.openInputStream(uri).use { input ->
-                        requireNotNull(input) { "Unable to open selected SRT." }.readBytes()
+                        requireNotNull(input) { resources.getString(R.string.sasayaki_open_srt_failed) }.readBytes()
                     }
                     val book = EpubBookParser().parse(bookEntry.root)
                     val nextMatch = SasayakiMatcher.match(
@@ -111,7 +119,7 @@ fun SasayakiMatchView(
             }.onSuccess { nextMatch ->
                 currentMatch = nextMatch
             }.onFailure { error ->
-                errorMessage = error.localizedMessage ?: "Failed to match Sasayaki subtitles."
+                errorMessage = error.localizedMessage ?: matchFailedMessage
             }
             isMatching = false
         }
@@ -128,10 +136,10 @@ fun SasayakiMatchView(
                     containerColor = colorScheme.background,
                     scrolledContainerColor = colorScheme.background,
                 ),
-                title = { Text("Match", fontWeight = FontWeight.SemiBold) },
+                title = { Text(stringResource(R.string.sasayaki_match_title), fontWeight = FontWeight.SemiBold) },
                 actions = {
                     TextButton(onClick = onClose) {
-                        Text("Done")
+                        Text(stringResource(R.string.action_done))
                     }
                 },
             )
@@ -145,13 +153,13 @@ fun SasayakiMatchView(
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             item {
-                MatchSectionHeader("File")
+                MatchSectionHeader(stringResource(R.string.sasayaki_file))
                 MatchCard {
                     ListItem(
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                         headlineContent = {
                             Text(
-                                text = selectedSrtName ?: "No file selected",
+                                text = selectedSrtName ?: stringResource(R.string.sasayaki_no_file_selected),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -163,7 +171,7 @@ fun SasayakiMatchView(
                                     importer.launch(ImportFileType.SasayakiSubtitle.mimeTypes)
                                 },
                             ) {
-                                Text("Open")
+                                Text(stringResource(R.string.action_open))
                             }
                         },
                     )
@@ -183,7 +191,7 @@ fun SasayakiMatchView(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = "Search Window",
+                                text = stringResource(R.string.sasayaki_search_window),
                                 style = MaterialTheme.typography.titleMedium,
                                 modifier = Modifier.weight(1f),
                             )
@@ -221,11 +229,11 @@ fun SasayakiMatchView(
                                         modifier = Modifier.size(18.dp),
                                         strokeWidth = 2.dp,
                                     )
-                                    Text("Matching...")
+                                    Text(stringResource(R.string.sasayaki_matching))
                                 }
                             } else {
                                 Text(
-                                    text = "Match",
+                                    text = stringResource(R.string.sasayaki_match_title),
                                     color = if (selectedSrtUri == null) {
                                         colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
                                     } else {
@@ -248,11 +256,11 @@ fun SasayakiMatchView(
 
             currentMatch?.let { match ->
                 item {
-                    MatchSectionHeader("Current Match")
+                    MatchSectionHeader(stringResource(R.string.sasayaki_current_match))
                     MatchCard {
                         ListItem(
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            headlineContent = { Text("Match Rate") },
+                            headlineContent = { Text(stringResource(R.string.sasayaki_match_rate)) },
                             trailingContent = {
                                 Text(
                                     text = match.matchRateText(),

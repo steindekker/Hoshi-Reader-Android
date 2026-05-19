@@ -1,5 +1,8 @@
 package moe.antimony.hoshi.features.anki
 
+import androidx.annotation.StringRes
+import moe.antimony.hoshi.R
+
 interface AnkiBackend {
     fun isAvailable(): Boolean
     fun fetchDecks(): List<AnkiDeck>
@@ -26,24 +29,31 @@ interface AnkiBackend {
 }
 
 enum class AnkiFetchFailure(
+    @StringRes val userMessageRes: Int,
     val userMessage: String,
 ) {
     ApiUnavailable(
+        R.string.anki_fetch_api_unavailable,
         "AnkiDroid is unavailable. Install AnkiDroid, then try again.",
     ),
     PermissionDenied(
+        R.string.anki_fetch_permission_denied,
         "AnkiDroid database access was denied. Grant the permission to fetch decks and note types.",
     ),
     DeckListUnavailable(
+        R.string.anki_fetch_deck_list_unavailable,
         "Unable to read AnkiDroid decks. Open AnkiDroid and try again.",
     ),
     ModelListUnavailable(
+        R.string.anki_fetch_model_list_unavailable,
         "Unable to read AnkiDroid note types. Open AnkiDroid and try again.",
     ),
     ModelFieldsUnavailable(
+        R.string.anki_fetch_model_fields_unavailable,
         "Unable to read fields for one or more AnkiDroid note types.",
     ),
     ProviderFailure(
+        R.string.anki_fetch_provider_failure,
         "AnkiDroid did not respond while fetching decks and note types. Open AnkiDroid and try again.",
     ),
 }

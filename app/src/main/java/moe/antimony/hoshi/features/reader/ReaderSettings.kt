@@ -1,6 +1,7 @@
 package moe.antimony.hoshi.features.reader
 
 import android.content.Context
+import androidx.annotation.StringRes
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
@@ -13,6 +14,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.sync.StatisticsSyncMode
 import java.util.Locale
 
@@ -157,10 +159,10 @@ enum class ReaderTheme(val label: String) {
     Sepia("Sepia"),
 }
 
-enum class StatisticsAutostartMode(val rawValue: String) {
-    Off("Off"),
-    PageTurn("Page Turn"),
-    On("On");
+enum class StatisticsAutostartMode(val rawValue: String, @get:StringRes val labelRes: Int) {
+    Off("Off", R.string.reader_statistics_autostart_off),
+    PageTurn("Page Turn", R.string.reader_statistics_autostart_page_turn),
+    On("On", R.string.reader_statistics_autostart_on);
 
     companion object {
         fun fromRawValue(rawValue: String?): StatisticsAutostartMode =

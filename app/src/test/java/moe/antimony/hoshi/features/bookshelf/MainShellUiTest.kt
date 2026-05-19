@@ -1,6 +1,7 @@
 package moe.antimony.hoshi.features.bookshelf
 
 import kotlinx.coroutines.runBlocking
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.epub.BookMetadata
 import moe.antimony.hoshi.epub.BookEntry
 import moe.antimony.hoshi.epub.BookInfo
@@ -18,7 +19,11 @@ import java.nio.file.Files
 class MainShellUiTest {
     @Test
     fun mainTabsMatchIosOrder() {
-        assertEquals(listOf("Books", "Dictionary", "Settings"), MainTab.entries.map { it.label })
+        assertEquals(listOf(MainTab.Books, MainTab.Dictionary, MainTab.Settings), MainTab.entries)
+        assertEquals(
+            listOf(R.string.main_tab_books, R.string.main_tab_dictionary, R.string.main_tab_settings),
+            MainTab.entries.map { it.labelRes },
+        )
     }
 
     @Test
@@ -26,10 +31,19 @@ class MainShellUiTest {
         val groups = settingsGroups()
 
         assertEquals(
-            listOf("Dictionaries", "Anki", "Appearance", "Behavior", "Advanced"),
-            groups.first().map { it.label },
+            listOf(
+                R.string.settings_dictionaries,
+                R.string.settings_anki,
+                R.string.settings_appearance,
+                R.string.settings_behavior,
+                R.string.settings_advanced,
+            ),
+            groups.first().map { it.labelRes },
         )
-        assertEquals(listOf("Report an Issue", "Diagnostics", "About"), groups.last().map { it.label })
+        assertEquals(
+            listOf(R.string.settings_report_issue, R.string.settings_diagnostics, R.string.settings_about),
+            groups.last().map { it.labelRes },
+        )
     }
 
     @Test

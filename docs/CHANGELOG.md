@@ -5,6 +5,10 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+### Added
+
+- Add initial Simplified Chinese localization support for core Bookshelf, Dictionary, Reader, Backup, and update prompt flows, with Android system/app-language resource support and translator contribution docs.
+
 ### Changed
 
 - Rewrite lookup popup presentation around a shared native Android overlay for reader, Dictionary tab, and Process Text popups. Popup WebViews now render through Android-managed popup hosts instead of Compose popup surfaces, while preserving the warmed reader root popup path for faster repeated lookups, keeping recursive popup placement aligned after internal dictionary redirects, and preserving popup gestures that cross the popup edge.

@@ -16,11 +16,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import moe.antimony.hoshi.BuildConfig
 import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.R
 
 @Composable
 internal fun DownloadedUpdatePrompt(
@@ -90,11 +92,11 @@ internal fun DownloadedUpdatePrompt(
                     dismissedDownloadedKey = downloadedRecord.promptKey()
                     promptMessage = null
                 },
-                title = { Text("Update Downloaded") },
+                title = { Text(stringResource(R.string.update_downloaded_title)) },
                 text = {
                     Text(
                         promptMessage
-                            ?: "Update ${downloadedRecord.versionName} has been downloaded.",
+                            ?: stringResource(R.string.update_downloaded_message_format, downloadedRecord.versionName),
                     )
                 },
                 confirmButton = {
@@ -110,7 +112,7 @@ internal fun DownloadedUpdatePrompt(
                             }
                         },
                     ) {
-                        Text("Install")
+                        Text(stringResource(R.string.action_install))
                     }
                 },
                 dismissButton = {
@@ -120,7 +122,7 @@ internal fun DownloadedUpdatePrompt(
                             promptMessage = null
                         },
                     ) {
-                        Text("Later")
+                        Text(stringResource(R.string.action_later))
                     }
                 },
             )
@@ -138,9 +140,9 @@ internal fun AvailableUpdatePromptDialog(
 ) {
     AlertDialog(
         onDismissRequest = onLater,
-        title = { Text("Update Available") },
+        title = { Text(stringResource(R.string.update_available_title)) },
         text = {
-            Text(message ?: "Hoshi Reader $versionName is available.")
+            Text(message ?: stringResource(R.string.update_available_message_format, versionName))
         },
         confirmButton = {
             Row(
@@ -148,13 +150,13 @@ internal fun AvailableUpdatePromptDialog(
                 horizontalArrangement = Arrangement.End,
             ) {
                 TextButton(onClick = onLater) {
-                    Text("Later")
+                    Text(stringResource(R.string.action_later))
                 }
                 TextButton(onClick = onSkip) {
-                    Text("Skip")
+                    Text(stringResource(R.string.action_skip))
                 }
                 Button(onClick = onDownload) {
-                    Text("Download")
+                    Text(stringResource(R.string.action_download))
                 }
             }
         },

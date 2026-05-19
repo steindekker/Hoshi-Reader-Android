@@ -4,9 +4,11 @@ import android.content.Context
 import android.util.Log
 import androidx.core.content.FileProvider
 import de.manhhao.hoshi.HoshiDicts
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.audio.LocalAudioFile
 import moe.antimony.hoshi.features.audio.LocalAudioRepository
 import moe.antimony.hoshi.features.audio.LocalAudioResolver
+import moe.antimony.hoshi.ui.UiText
 import java.io.File
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
@@ -32,15 +34,22 @@ class AnkiRepository(
     suspend fun fetchConfiguration(): AnkiFetchResult = withContext(Dispatchers.IO) {
         val currentSettings = settings.first()
         val activeBackend = activeBackendOrError(currentSettings).getOrElse { error ->
-            return@withContext AnkiFetchResult.Error(error.message ?: "Unable to configure Anki.")
+            return@withContext AnkiFetchResult.Error(
+                error.message?.let(UiText::Literal) ?: UiText.Resource(R.string.anki_fetch_configure_failed),
+            )
         }
         val fetched = runCatching {
             if (!activeBackend.isAvailable()) {
                 return@withContext AnkiFetchResult.Error(
-                    if (currentSettings.backendKind == AnkiBackendKind.AnkiDroid) {
-                        AnkiFetchFailure.ApiUnavailable.userMessage
+                    message = if (currentSettings.backendKind == AnkiBackendKind.AnkiDroid) {
+                        UiText.Resource(AnkiFetchFailure.ApiUnavailable.userMessageRes)
                     } else {
-                        "Unable to connect to AnkiConnect. Check the URL and try again."
+                        UiText.Resource(R.string.anki_fetch_connect_ankiconnect_failed)
+                    },
+                    failure = if (currentSettings.backendKind == AnkiBackendKind.AnkiDroid) {
+                        AnkiFetchFailure.ApiUnavailable
+                    } else {
+                        null
                     },
                 )
             }
@@ -48,14 +57,22 @@ class AnkiRepository(
         }.getOrElse { error ->
             if (error is AnkiFetchException) {
                 logAnkiFetchFailure("Unable to fetch Anki configuration: ${error.failure}", error)
-                return@withContext AnkiFetchResult.Error(error.message ?: error.failure.userMessage)
+                return@withContext AnkiFetchResult.Error(
+                    message = if (error.message != error.failure.userMessage) {
+                        UiText.Literal(error.message ?: error.failure.userMessage)
+                    } else {
+                        UiText.Resource(error.failure.userMessageRes)
+                    },
+                    failure = error.failure,
+                )
             }
             logAnkiFetchFailure("Unable to fetch Anki configuration.", error)
             return@withContext AnkiFetchResult.Error(
                 if (currentSettings.backendKind == AnkiBackendKind.AnkiDroid) {
-                    "AnkiDroid did not respond while fetching decks and note types. Open AnkiDroid and try again."
+                    UiText.Resource(AnkiFetchFailure.ProviderFailure.userMessageRes)
                 } else {
-                    error.message ?: "AnkiConnect did not respond while fetching decks and note types."
+                    error.message?.let(UiText::Literal)
+                        ?: UiText.Resource(R.string.anki_fetch_ankiconnect_provider_failure)
                 },
             )
         }
@@ -63,18 +80,18 @@ class AnkiRepository(
         if (decks.isEmpty()) {
             return@withContext AnkiFetchResult.Error(
                 if (currentSettings.backendKind == AnkiBackendKind.AnkiDroid) {
-                    "No AnkiDroid decks were found."
+                    UiText.Resource(R.string.anki_fetch_no_ankidroid_decks)
                 } else {
-                    "No AnkiConnect decks were found."
+                    UiText.Resource(R.string.anki_fetch_no_ankiconnect_decks)
                 },
             )
         }
         if (noteTypes.isEmpty()) {
             return@withContext AnkiFetchResult.Error(
                 if (currentSettings.backendKind == AnkiBackendKind.AnkiDroid) {
-                    "No AnkiDroid note types were found."
+                    UiText.Resource(R.string.anki_fetch_no_ankidroid_note_types)
                 } else {
-                    "No AnkiConnect note types were found."
+                    UiText.Resource(R.string.anki_fetch_no_ankiconnect_note_types)
                 },
             )
         }
@@ -99,12 +116,14 @@ class AnkiRepository(
         val endpoint = runCatching {
             AnkiConnectUrlValidator.requireValidEndpoint(currentSettings.ankiConnectUrl).toString()
         }.getOrElse { error ->
-            return@withContext AnkiConnectConnectionResult.Error(error.message ?: "Invalid AnkiConnect URL.")
+            return@withContext AnkiConnectConnectionResult.Error(
+                error.message?.let(UiText::Literal) ?: UiText.Resource(R.string.anki_connect_invalid_url),
+            )
         }
         if (ankiConnectBackendFactory(endpoint).isAvailable()) {
             AnkiConnectConnectionResult.Connected
         } else {
-            AnkiConnectConnectionResult.Error("Unable to connect to AnkiConnect. Check the URL and try again.")
+            AnkiConnectConnectionResult.Error(UiText.Resource(R.string.anki_fetch_connect_ankiconnect_failed))
         }
     }
 
@@ -313,12 +332,15 @@ sealed interface AnkiFetchResult {
         val noteTypes: List<AnkiNoteType>,
     ) : AnkiFetchResult
 
-    data class Error(val message: String) : AnkiFetchResult
+    data class Error(
+        val message: UiText,
+        val failure: AnkiFetchFailure? = null,
+    ) : AnkiFetchResult
 }
 
 sealed interface AnkiConnectConnectionResult {
     data object Connected : AnkiConnectConnectionResult
-    data class Error(val message: String) : AnkiConnectConnectionResult
+    data class Error(val message: UiText) : AnkiConnectConnectionResult
 }
 
 fun mimeTypeForPath(path: String): String =

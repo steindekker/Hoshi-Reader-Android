@@ -3,16 +3,19 @@ package moe.antimony.hoshi.features.sasayaki
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import moe.antimony.hoshi.R
+import moe.antimony.hoshi.ui.UiText
 
 class SasayakiAudioAvailabilityState {
-    var errorMessage by mutableStateOf<String?>(null)
+    var errorMessage by mutableStateOf<UiText?>(null)
         private set
 
     var hasAudio by mutableStateOf(false)
         private set
 
     fun markRestoreFailed(error: Throwable) {
-        errorMessage = error.localizedMessage ?: "Unable to load audiobook."
+        errorMessage = error.localizedMessage?.let(UiText::Literal)
+            ?: UiText.Resource(R.string.sasayaki_import_audiobook_failed)
         hasAudio = false
     }
 

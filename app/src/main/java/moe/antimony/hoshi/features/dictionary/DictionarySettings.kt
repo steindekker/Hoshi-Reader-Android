@@ -1,6 +1,7 @@
 package moe.antimony.hoshi.features.dictionary
 
 import android.content.Context
+import androidx.annotation.StringRes
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
@@ -13,11 +14,12 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
+import moe.antimony.hoshi.R
 
-enum class DictionaryCollapseMode(val rawValue: String) {
-    ExpandAll("Expand All"),
-    CollapseAll("Collapse All"),
-    Custom("Custom"),
+enum class DictionaryCollapseMode(val rawValue: String, @get:StringRes val labelRes: Int) {
+    ExpandAll("Expand All", R.string.dictionary_collapse_mode_expand_all),
+    CollapseAll("Collapse All", R.string.dictionary_collapse_mode_collapse_all),
+    Custom("Custom", R.string.dictionary_collapse_mode_custom),
     ;
 
     companion object {

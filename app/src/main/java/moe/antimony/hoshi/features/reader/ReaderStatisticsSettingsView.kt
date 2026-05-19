@@ -34,9 +34,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.settings.collectAsLoadedSettings
 import moe.antimony.hoshi.features.sync.StatisticsSyncMode
 
@@ -63,10 +65,10 @@ fun ReaderStatisticsSettingsView(
                     containerColor = colorScheme.background,
                     scrolledContainerColor = colorScheme.background,
                 ),
-                title = { Text("Statistics", fontWeight = FontWeight.SemiBold) },
+                title = { Text(stringResource(R.string.reader_statistics), fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
             )
@@ -83,7 +85,7 @@ fun ReaderStatisticsSettingsView(
                 StatisticsSettingsCard {
                     ListItem(
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        headlineContent = { Text("Enable") },
+                        headlineContent = { Text(stringResource(R.string.action_enable)) },
                         trailingContent = {
                             Switch(
                                 checked = settings.enableStatistics,
@@ -97,11 +99,11 @@ fun ReaderStatisticsSettingsView(
                         StatisticsSettingsDivider()
                         ListItem(
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            headlineContent = { Text("Autostart") },
+                            headlineContent = { Text(stringResource(R.string.reader_statistics_autostart)) },
                             trailingContent = {
                                 Box {
                                     TextButton(onClick = { autostartMenuExpanded = true }) {
-                                        Text(settings.statisticsAutostartMode.rawValue)
+                                        Text(stringResource(settings.statisticsAutostartMode.labelRes))
                                     }
                                     DropdownMenu(
                                         expanded = autostartMenuExpanded,
@@ -109,7 +111,7 @@ fun ReaderStatisticsSettingsView(
                                     ) {
                                         StatisticsAutostartMode.entries.forEach { mode ->
                                             DropdownMenuItem(
-                                                text = { Text(mode.rawValue) },
+                                                text = { Text(stringResource(mode.labelRes)) },
                                                 onClick = {
                                                     autostartMenuExpanded = false
                                                     onSettingsChange(settings.copy(statisticsAutostartMode = mode))
@@ -124,7 +126,7 @@ fun ReaderStatisticsSettingsView(
                             StatisticsSettingsDivider()
                             ListItem(
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                headlineContent = { Text("ッツ Sync") },
+                                headlineContent = { Text(stringResource(R.string.sync_ttu_sync)) },
                                 trailingContent = {
                                     Switch(
                                         checked = settings.statisticsSyncEnabled,
@@ -137,7 +139,7 @@ fun ReaderStatisticsSettingsView(
                             StatisticsSettingsDivider()
                             ListItem(
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                headlineContent = { Text("Sync Behaviour") },
+                                headlineContent = { Text(stringResource(R.string.reader_statistics_sync_behaviour)) },
                                 trailingContent = {
                                     Box {
                                         TextButton(onClick = { syncModeMenuExpanded = true }) {
@@ -164,7 +166,7 @@ fun ReaderStatisticsSettingsView(
                     }
                 }
                 Text(
-                    text = "Statistics can be accessed from the Reader's context menu.",
+                    text = stringResource(R.string.reader_statistics_settings_hint),
                     color = colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(start = 16.dp, top = 8.dp),

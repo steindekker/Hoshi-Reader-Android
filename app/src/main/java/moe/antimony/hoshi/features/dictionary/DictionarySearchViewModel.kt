@@ -20,6 +20,8 @@ import moe.antimony.hoshi.features.audio.AudioSettings
 import moe.antimony.hoshi.features.audio.AudioSettingsRepository
 import moe.antimony.hoshi.features.anki.AnkiPopupSettings
 import moe.antimony.hoshi.features.reader.ReaderSelectionData
+import moe.antimony.hoshi.R
+import moe.antimony.hoshi.ui.UiText
 
 internal interface DictionarySearchRepository {
     val dictionarySettings: Flow<DictionarySettings>
@@ -158,7 +160,8 @@ internal class DictionarySearchViewModel(
                         results = emptyList(),
                         hasSearched = true,
                         isSearching = false,
-                        errorMessage = error.localizedMessage ?: "Lookup failed.",
+                        errorMessage = error.localizedMessage?.let(UiText::Literal)
+                            ?: UiText.Resource(R.string.dictionary_lookup_failed),
                         dictionaryStyles = emptyMap(),
                         popups = emptyList(),
                         resultClearSelectionSignal = 0,

@@ -53,12 +53,12 @@ class SasayakiMediaSession(
     )
     private val mediaButtons = listOf(
         CommandButton.Builder(CommandButton.ICON_PREVIOUS)
-            .setDisplayName("Previous Cue")
+            .setDisplayName(appContext.getString(R.string.sasayaki_previous_cue))
             .setPlayerCommand(Player.COMMAND_SEEK_TO_PREVIOUS)
             .setSlots(CommandButton.SLOT_BACK)
             .build(),
         CommandButton.Builder(CommandButton.ICON_NEXT)
-            .setDisplayName("Next Cue")
+            .setDisplayName(appContext.getString(R.string.sasayaki_next_cue))
             .setPlayerCommand(Player.COMMAND_SEEK_TO_NEXT)
             .setSlots(CommandButton.SLOT_FORWARD)
             .build(),
@@ -122,7 +122,7 @@ class SasayakiMediaSession(
         notificationManager.createNotificationChannel(
             NotificationChannel(
                 ChannelId,
-                "Sasayaki Playback",
+                appContext.getString(R.string.sasayaki_playback),
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
                 setSound(null, null)
@@ -136,7 +136,7 @@ class SasayakiMediaSession(
         val builder = NotificationCompat.Builder(appContext, ChannelId)
             .setSmallIcon(R.drawable.ic_stat_hoshi)
             .setContentTitle(title)
-            .setContentText("Sasayaki")
+            .setContentText(appContext.getString(R.string.sasayaki_title))
             .setContentIntent(contentIntent())
             .setCategory(Notification.CATEGORY_TRANSPORT)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)

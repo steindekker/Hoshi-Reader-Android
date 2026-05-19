@@ -3,6 +3,7 @@ package moe.antimony.hoshi.features.dictionary
 import moe.antimony.hoshi.dictionary.DictionaryInfo
 import moe.antimony.hoshi.dictionary.DictionaryType
 import moe.antimony.hoshi.dictionary.DictionaryUpdateCandidate
+import moe.antimony.hoshi.ui.UiText
 
 internal data class DictionaryUiState(
     val selectedType: DictionaryType = DictionaryType.Term,
@@ -11,8 +12,8 @@ internal data class DictionaryUiState(
     val settings: DictionarySettings = DictionarySettings(),
     val isImporting: Boolean = false,
     val isUpdating: Boolean = false,
-    val currentImportMessage: String? = null,
-    val errorMessage: String? = null,
+    val currentImportMessage: UiText? = null,
+    val errorMessage: UiText? = null,
 ) {
     val currentDictionaries: List<DictionaryInfo>
         get() = dictionaries[selectedType].orEmpty()

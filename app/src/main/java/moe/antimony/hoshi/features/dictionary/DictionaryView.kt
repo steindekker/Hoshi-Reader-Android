@@ -86,6 +86,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -101,6 +103,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.dictionary.DictionaryInfo
 import moe.antimony.hoshi.dictionary.DictionaryType
 import moe.antimony.hoshi.dictionary.RecommendedDictionaries
@@ -108,8 +111,11 @@ import moe.antimony.hoshi.features.settings.SettingsDetailScaffold
 import moe.antimony.hoshi.features.reader.ReaderFontManager
 import moe.antimony.hoshi.importing.ImportFileType
 import moe.antimony.hoshi.importing.MultipleFileImportContent
+import moe.antimony.hoshi.importing.localizedImportMessage
 import moe.antimony.hoshi.importing.validateImportFile
 import moe.antimony.hoshi.ui.HoshiBlockingProgressOverlay
+import moe.antimony.hoshi.ui.UiText
+import moe.antimony.hoshi.ui.asString
 import kotlin.math.roundToInt
 
 private val DictionarySwitchColor = Color(0xFF34C759)
@@ -121,6 +127,7 @@ fun DictionaryView(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val appContainer = LocalHoshiAppContainer.current
     val dictionaryViewModel: DictionaryViewModel = viewModel(
         factory = remember(context, appContainer) {
@@ -149,7 +156,14 @@ fun DictionaryView(
                 )
             }
         }.onFailure { error ->
-            dictionaryViewModel.showError(error.localizedMessage ?: "Select a .zip dictionary archive.")
+            dictionaryViewModel.showError(
+                UiText.Literal(
+                    error.localizedImportMessage(
+                        context,
+                        resources.getString(R.string.dictionary_select_zip_archive),
+                    ),
+                ),
+            )
             return@rememberLauncherForActivityResult
         }.getOrThrow()
         uris.forEach { uri ->
@@ -334,7 +348,7 @@ fun DictionaryView(
     val colorScheme = MaterialTheme.colorScheme
 
     SettingsDetailScaffold(
-        title = "Dictionaries",
+        title = stringResource(R.string.settings_dictionaries),
         onClose = {
             if (!isBusy) {
                 onClose()
@@ -350,7 +364,7 @@ fun DictionaryView(
             ) {
                 Icon(
                     imageVector = Icons.Rounded.DataObject,
-                    contentDescription = "Custom CSS",
+                    contentDescription = stringResource(R.string.dictionary_custom_css),
                 )
             }
             IconButton(
@@ -362,7 +376,7 @@ fun DictionaryView(
                 } else {
                     Icon(
                         imageVector = Icons.Rounded.Add,
-                        contentDescription = "Import Dictionary",
+                        contentDescription = stringResource(R.string.dictionary_import_action),
                     )
                 }
             }
@@ -395,7 +409,7 @@ fun DictionaryView(
                                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                                     headlineContent = {
                                         Text(
-                                            text = "Download Recommended Dictionaries",
+                                            text = stringResource(R.string.dictionary_download_recommended),
                                             color = colorScheme.primary,
                                         )
                                     },
@@ -412,7 +426,7 @@ fun DictionaryView(
                                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                                         headlineContent = {
                                             Text(
-                                                text = "Update Dictionaries",
+                                                text = stringResource(R.string.dictionary_update_title),
                                                 color = colorScheme.primary,
                                             )
                                         },
@@ -424,7 +438,7 @@ fun DictionaryView(
                             }
                         }
                         Text(
-                            text = "Yomitan term, frequency and pitch dictionaries (.zip) are supported",
+                            text = stringResource(R.string.dictionary_supported_archive_types),
                             color = colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -440,7 +454,7 @@ fun DictionaryView(
                             Column {
                                 ListItem(
                                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                    headlineContent = { Text("Default to Dictionary Tab") },
+                                    headlineContent = { Text(stringResource(R.string.dictionary_default_tab)) },
                                     trailingContent = {
                                         Switch(
                                             checked = uiState.settings.dictionaryTabDefault,
@@ -458,7 +472,7 @@ fun DictionaryView(
                                 )
                                 ListItem(
                                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                    headlineContent = { Text("Settings") },
+                                    headlineContent = { Text(stringResource(R.string.settings_title)) },
                                     trailingContent = {
                                         Icon(
                                             imageVector = Icons.Rounded.ChevronRight,
@@ -495,13 +509,15 @@ fun DictionaryView(
                                     ),
                                     icon = {},
                                 ) {
-                                    Text(type.displayName)
+                                    Text(stringResource(type.displayNameRes))
                                 }
                             }
                         }
                     }
                 }
-                uiState.errorMessage?.let { item { Text(it, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) } }
+                uiState.errorMessage?.let {
+                    item { Text(it.asString(), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
+                }
                 if (currentDictionaries.isEmpty()) {
                     item {
                         Box(
@@ -510,7 +526,7 @@ fun DictionaryView(
                                 .padding(top = 80.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text("No ${selectedType.displayName} Dictionaries")
+                            Text(stringResource(R.string.dictionary_empty_type_format, stringResource(selectedType.displayNameRes)))
                         }
                     }
                 } else {
@@ -578,7 +594,7 @@ fun DictionaryView(
             }
             if (isBusy) {
                 HoshiBlockingProgressOverlay(
-                    message = uiState.currentImportMessage ?: "Loading...",
+                    message = uiState.currentImportMessage?.asString() ?: stringResource(R.string.loading),
                     modifier = Modifier
                         .fillMaxSize()
                         .zIndex(2f),
@@ -589,11 +605,13 @@ fun DictionaryView(
     if (showUpdateConfirmation) {
         AlertDialog(
             onDismissRequest = { showUpdateConfirmation = false },
-            title = { Text("Update Dictionaries") },
+            title = { Text(stringResource(R.string.dictionary_update_title)) },
             text = {
                 Text(
-                    "This will check for and install updates for these dictionaries:\n" +
+                    stringResource(
+                        R.string.dictionary_update_confirmation_format,
                         uiState.updatableDictionaries.joinToString(separator = "\n") { it.dictionary.index.title },
+                    ),
                 )
             },
             confirmButton = {
@@ -603,12 +621,12 @@ fun DictionaryView(
                         dictionaryViewModel.updateDictionaries()
                     },
                 ) {
-                    Text("Update")
+                    Text(stringResource(R.string.action_update))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showUpdateConfirmation = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             },
         )
@@ -616,10 +634,10 @@ fun DictionaryView(
     if (showDownloadConfirmation) {
         AlertDialog(
             onDismissRequest = { showDownloadConfirmation = false },
-            title = { Text("Download Dictionaries") },
+            title = { Text(stringResource(R.string.dictionary_download_title)) },
             text = {
                 Column {
-                    Text("Choose a dictionary to download and import:")
+                    Text(stringResource(R.string.dictionary_download_prompt))
                     Spacer(modifier = Modifier.height(8.dp))
                     RecommendedDictionaries.forEach { dictionary ->
                         Row(
@@ -632,7 +650,13 @@ fun DictionaryView(
                                 .padding(vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text("${dictionary.name} (${dictionary.type.displayName})")
+                            Text(
+                                stringResource(
+                                    R.string.dictionary_download_item_format,
+                                    dictionary.name,
+                                    stringResource(dictionary.type.displayNameRes),
+                                ),
+                            )
                         }
                     }
                 }
@@ -640,7 +664,7 @@ fun DictionaryView(
             confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { showDownloadConfirmation = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             },
         )
@@ -652,11 +676,11 @@ private enum class DictionaryDestination {
     CustomCss,
 }
 
-private val DictionaryType.displayName: String
+private val DictionaryType.displayNameRes: Int
     get() = when (this) {
-        DictionaryType.Term -> "Term"
-        DictionaryType.Frequency -> "Frequency"
-        DictionaryType.Pitch -> "Pitch"
+        DictionaryType.Term -> R.string.dictionary_type_term
+        DictionaryType.Frequency -> R.string.dictionary_type_frequency
+        DictionaryType.Pitch -> R.string.dictionary_type_pitch
     }
 
 private enum class DictionarySwipeRevealValue {
@@ -737,7 +761,7 @@ private fun DictionaryRow(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Delete,
-                        contentDescription = "Delete Dictionary",
+                        contentDescription = stringResource(R.string.dictionary_delete_action),
                         tint = colorScheme.onError,
                     )
                 }
@@ -815,11 +839,12 @@ private fun DictionaryRow(
 @Composable
 private fun DictionaryDragHandle(modifier: Modifier = Modifier) {
     val color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+    val reorderDescription = stringResource(R.string.dictionary_reorder_action)
     Box(
         modifier = modifier
             .width(32.dp)
             .height(56.dp)
-            .semantics { contentDescription = "Reorder Dictionary" },
+            .semantics { contentDescription = reorderDescription },
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -866,7 +891,7 @@ private fun HoshiIconBackButton(onClick: () -> Unit) {
     IconButton(onClick = onClick) {
         Icon(
             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = stringResource(R.string.action_back),
         )
     }
 }
@@ -920,7 +945,7 @@ private fun DictionarySettingsView(
                     titleContentColor = colorScheme.onBackground,
                     navigationIconContentColor = colorScheme.onBackground,
                 ),
-                title = { Text("Settings") },
+                title = { Text(stringResource(R.string.settings_title)) },
                 navigationIcon = { HoshiIconBackButton(onClose) },
             )
         },
@@ -933,14 +958,14 @@ private fun DictionarySettingsView(
                 .padding(horizontal = 16.dp),
         ) {
             item {
-                SectionLabel("Lookup")
+                SectionLabel(stringResource(R.string.dictionary_settings_lookup))
                 SettingsGroup {
-                    ToggleRow("Scan Non-Japanese Text", settings.scanNonJapaneseText) {
+                    ToggleRow(stringResource(R.string.dictionary_scan_non_japanese), settings.scanNonJapaneseText) {
                         onSettingsChange { current -> current.copy(scanNonJapaneseText = it) }
                     }
                     GroupDivider()
                     StepperRow(
-                        title = "Max Results",
+                        title = stringResource(R.string.dictionary_max_results),
                         value = settings.maxResults,
                         onDecrease = {
                             onSettingsChange { it.copy(maxResults = it.maxResults - 1) }
@@ -953,7 +978,7 @@ private fun DictionarySettingsView(
                     )
                     GroupDivider()
                     StepperRow(
-                        title = "Scan Length",
+                        title = stringResource(R.string.dictionary_scan_length),
                         value = settings.scanLength,
                         onDecrease = {
                             onSettingsChange { it.copy(scanLength = it.scanLength - 1) }
@@ -965,11 +990,11 @@ private fun DictionarySettingsView(
                         canIncrease = settings.scanLength < DictionarySettings.MAX_SCAN_LENGTH,
                     )
                 }
-                SectionLabel("Collapse Dictionaries")
+                SectionLabel(stringResource(R.string.dictionary_collapse_dictionaries))
                 SettingsGroup {
                     ListItem(
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        headlineContent = { Text("Mode") },
+                        headlineContent = { Text(stringResource(R.string.dictionary_mode)) },
                         supportingContent = {
                             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                                 DictionaryCollapseMode.entries.forEachIndexed { index, mode ->
@@ -982,7 +1007,7 @@ private fun DictionarySettingsView(
                                         ),
                                         icon = {},
                                     ) {
-                                        Text(mode.rawValue)
+                                        Text(stringResource(mode.labelRes))
                                     }
                                 }
                             }
@@ -990,7 +1015,7 @@ private fun DictionarySettingsView(
                     )
                     if (settings.collapseMode != DictionaryCollapseMode.ExpandAll) {
                         GroupDivider()
-                        ToggleRow("Expand First Dictionary", settings.expandFirstDictionary) {
+                        ToggleRow(stringResource(R.string.dictionary_expand_first), settings.expandFirstDictionary) {
                             onSettingsChange { current -> current.copy(expandFirstDictionary = it) }
                         }
                     }
@@ -999,7 +1024,7 @@ private fun DictionarySettingsView(
                         ListItem(
                             modifier = Modifier.clickable { showCollapsedDictionaries = true },
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            headlineContent = { Text("Configure") },
+                            headlineContent = { Text(stringResource(R.string.action_configure)) },
                             trailingContent = {
                                 Icon(
                                     imageVector = Icons.Rounded.ChevronRight,
@@ -1009,25 +1034,25 @@ private fun DictionarySettingsView(
                         )
                     }
                 }
-                SectionLabel("Behaviour")
+                SectionLabel(stringResource(R.string.dictionary_settings_behaviour))
                 SettingsGroup {
-                    ToggleRow("Compact Glossaries", settings.compactGlossaries) {
+                    ToggleRow(stringResource(R.string.dictionary_compact_glossaries), settings.compactGlossaries) {
                         onSettingsChange { current -> current.copy(compactGlossaries = it) }
                     }
                     GroupDivider()
-                    ToggleRow("Show Expression Tags", settings.showExpressionTags) {
+                    ToggleRow(stringResource(R.string.dictionary_show_expression_tags), settings.showExpressionTags) {
                         onSettingsChange { current -> current.copy(showExpressionTags = it) }
                     }
                     GroupDivider()
-                    ToggleRow("Harmonic Frequency", settings.harmonicFrequency) {
+                    ToggleRow(stringResource(R.string.dictionary_harmonic_frequency), settings.harmonicFrequency) {
                         onSettingsChange { current -> current.copy(harmonicFrequency = it) }
                     }
                     GroupDivider()
-                    ToggleRow("Deduplicate Pitch Accents", settings.deduplicatePitchAccents) {
+                    ToggleRow(stringResource(R.string.dictionary_deduplicate_pitch), settings.deduplicatePitchAccents) {
                         onSettingsChange { current -> current.copy(deduplicatePitchAccents = it) }
                     }
                     GroupDivider()
-                    ToggleRow("Compact Pitch Accents", settings.compactPitchAccents) {
+                    ToggleRow(stringResource(R.string.dictionary_compact_pitch), settings.compactPitchAccents) {
                         onSettingsChange { current -> current.copy(compactPitchAccents = it) }
                     }
                 }
@@ -1048,7 +1073,7 @@ private fun CollapsedDictionariesView(
     BackHandler(onBack = onClose)
     val colorScheme = MaterialTheme.colorScheme
     SettingsDetailScaffold(
-        title = "Collapse Dictionaries",
+        title = stringResource(R.string.dictionary_collapse_dictionaries),
         onClose = onClose,
         modifier = modifier.fillMaxSize(),
         containerColor = colorScheme.background,
@@ -1063,7 +1088,7 @@ private fun CollapsedDictionariesView(
             if (dictionaries.isEmpty()) {
                 item {
                     Text(
-                        text = "No term dictionaries",
+                        text = stringResource(R.string.dictionary_no_term_dictionaries),
                         color = colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.padding(16.dp),
@@ -1084,7 +1109,11 @@ private fun CollapsedDictionariesView(
                         },
                         trailingContent = {
                             Text(
-                                text = if (collapsedDictionaries.contains(title)) "Collapsed" else "Expanded",
+                                text = if (collapsedDictionaries.contains(title)) {
+                                    stringResource(R.string.dictionary_collapsed)
+                                } else {
+                                    stringResource(R.string.dictionary_expanded)
+                                },
                                 color = colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
@@ -1147,11 +1176,11 @@ private fun DictionaryCustomCssView(
                     titleContentColor = colorScheme.onBackground,
                     navigationIconContentColor = colorScheme.onBackground,
                 ),
-                title = { Text("Custom CSS") },
+                title = { Text(stringResource(R.string.dictionary_custom_css)) },
                 navigationIcon = { HoshiIconBackButton(onClose) },
                 actions = {
                     TextButton(onClick = { onSettingsChange { it.copy(customCSS = "") } }) {
-                        Text("Reset")
+                        Text(stringResource(R.string.action_reset))
                     }
                 },
             )
@@ -1183,7 +1212,7 @@ private fun DictionaryCustomCssView(
                                 modifier = Modifier.size(18.dp),
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Font")
+                            Text(stringResource(R.string.dictionary_custom_css_font))
                         }
                         DropdownMenu(
                             expanded = fontMenuExpanded,
@@ -1213,7 +1242,7 @@ private fun DictionaryCustomCssView(
                                 modifier = Modifier.size(18.dp),
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Selector")
+                            Text(stringResource(R.string.dictionary_custom_css_selector))
                         }
                         DropdownMenu(
                             expanded = selectorMenuExpanded,
@@ -1332,7 +1361,7 @@ private fun StepperRow(
                         IconButton(onClick = onDecrease, enabled = canDecrease) {
                             Icon(
                                 imageVector = Icons.Rounded.Remove,
-                                contentDescription = "Decrease",
+                                contentDescription = stringResource(R.string.action_decrease),
                                 tint = if (canDecrease) {
                                     colorScheme.onSurface
                                 } else {
@@ -1348,7 +1377,7 @@ private fun StepperRow(
                         IconButton(onClick = onIncrease, enabled = canIncrease) {
                             Icon(
                                 imageVector = Icons.Rounded.Add,
-                                contentDescription = "Increase",
+                                contentDescription = stringResource(R.string.action_increase),
                                 tint = if (canIncrease) {
                                     colorScheme.onSurface
                                 } else {

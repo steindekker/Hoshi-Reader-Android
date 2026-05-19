@@ -12,6 +12,8 @@
 - 涉及 Android 系统能力、平台限制、权限、Intent、DocumentsUI、WebView、Media3、WorkManager、Google/Jetpack API、打包安装或后台任务时，优先查询 Android/Google/Jetpack 官方文档确认当前推荐实现和限制；iOS 只作为用户交互和行为逻辑参考，具体实现方式以 Android 官方文档和本仓库 Android 架构为准。
 - 推进顺序：model/storage -> bookshelf import -> reader -> dictionary popup -> Anki -> sync -> settings。
 - 主路径：bookshelf -> import EPUB -> open reader -> select text -> lookup。
+- 所有用户可见 UI 字符串必须使用 Android 本地化资源，禁止在 Compose/ViewModel/Repository 中新增硬编码显示文案；Compose 使用 `stringResource()` / `pluralStringResource()`，非 UI 层发出的可见消息使用 `UiText` 或等价资源引用，避免持有 `Context`。
+- 新增或修改任何用户可见文案时，必须同时更新默认英文 `app/src/main/res/values/strings.xml` 和简体中文 `app/src/main/res/values-zh-rCN/strings.xml`；保留格式占位符、plural quantity、CDATA/转义和 `translatable="false"` 语义一致。
 - 完成需求时先更新 `docs/TODO.md`，再把代码和 TODO 放进同一个 commit；用户明确要求不 commit 时不要提交。
 - `docs/TODO.md` 只记录当前状态、下一步、阻塞项和长期有效的验证入口；不要把它当流水账。不要粘贴长 emulator/adb 验证记录、截图观察、发布历史或每次提交的详细复现过程。
 - 用户可见变更写入 `docs/CHANGELOG.md`；架构重构方向保留在 `docs/ARCHITECTURE_REFACTORING.md`，具体执行流程和切片状态不要写入 tracked 文档，优先使用仓库本地 `.codex/skills/hoshi-refactoring-workflow`；详细调查和验证证据优先放在 issue、PR、commit message 或专门文档中。

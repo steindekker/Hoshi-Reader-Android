@@ -27,12 +27,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.settings.SettingsDetailScaffold
+import moe.antimony.hoshi.ui.asString
 
 @Composable
 fun AnkiConnectView(
@@ -57,12 +60,12 @@ fun AnkiConnectView(
     if (editingAddress) {
         AlertDialog(
             onDismissRequest = { editingAddress = false },
-            title = { Text("Address") },
+            title = { Text(stringResource(R.string.anki_connect_address)) },
             text = {
                 OutlinedTextField(
                     value = addressInput,
                     onValueChange = { addressInput = it },
-                    label = { Text("AnkiConnect URL") },
+                    label = { Text(stringResource(R.string.anki_connect_url)) },
                     placeholder = { Text("https://anki.example.com:8765") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -75,19 +78,19 @@ fun AnkiConnectView(
                         editingAddress = false
                     },
                 ) {
-                    Text("Save")
+                    Text(stringResource(R.string.action_save))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { editingAddress = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             },
         )
     }
 
     SettingsDetailScaffold(
-        title = "AnkiConnect",
+        title = stringResource(R.string.anki_connect_use),
         onClose = onClose,
         modifier = modifier,
     ) { innerPadding ->
@@ -101,9 +104,9 @@ fun AnkiConnectView(
                 AnkiConnectCard {
                     ListItem(
                         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-                        headlineContent = { Text("Use AnkiConnect") },
+                        headlineContent = { Text(stringResource(R.string.anki_connect_use)) },
                         supportingContent = {
-                            Text("This replaces AnkiDroid requests with AnkiConnect JSON requests.")
+                            Text(stringResource(R.string.anki_connect_use_description))
                         },
                         trailingContent = {
                             Switch(
@@ -123,12 +126,13 @@ fun AnkiConnectView(
                     AnkiConnectCard {
                         ListItem(
                             colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-                            headlineContent = { Text("Address") },
+                            headlineContent = { Text(stringResource(R.string.anki_connect_address)) },
                             supportingContent = {
+                                val noneLabel = stringResource(R.string.none)
                                 Column {
-                                    Text(uiState.settings.ankiConnectUrl.ifBlank { "None" })
+                                    Text(uiState.settings.ankiConnectUrl.ifBlank { noneLabel })
                                     Text(
-                                        text = "Use HTTPS for internet hosts. HTTP is accepted only for localhost and private network addresses.",
+                                        text = stringResource(R.string.anki_connect_address_help),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -141,18 +145,22 @@ fun AnkiConnectView(
                                         editingAddress = true
                                     },
                                 ) {
-                                    Text("Edit")
+                                    Text(stringResource(R.string.action_edit))
                                 }
                             },
                         )
                         HorizontalDivider()
                         ListItem(
                             colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-                            headlineContent = { Text("Connection") },
+                            headlineContent = { Text(stringResource(R.string.anki_connect_connection)) },
                             supportingContent = {
                                 Text(
-                                    uiState.ankiConnectMessage
-                                        ?: if (uiState.isAnkiConnectReachable) "Connected" else "Not connected",
+                                    uiState.ankiConnectMessage?.asString()
+                                        ?: if (uiState.isAnkiConnectReachable) {
+                                            stringResource(R.string.anki_connect_connected)
+                                        } else {
+                                            stringResource(R.string.anki_connect_not_connected)
+                                        },
                                 )
                             },
                             trailingContent = {
@@ -160,7 +168,13 @@ fun AnkiConnectView(
                                     onClick = viewModel::pingAnkiConnect,
                                     enabled = !uiState.isConnectingAnkiConnect,
                                 ) {
-                                    Text(if (uiState.isConnectingAnkiConnect) "Connecting" else "Connect")
+                                    Text(
+                                        if (uiState.isConnectingAnkiConnect) {
+                                            stringResource(R.string.anki_connect_connecting)
+                                        } else {
+                                            stringResource(R.string.action_connect)
+                                        },
+                                    )
                                 }
                             },
                         )
@@ -174,13 +188,13 @@ fun AnkiConnectView(
                         )
                         HorizontalDivider()
                         AnkiConnectSwitchRow(
-                            label = "Check All Models",
+                            label = stringResource(R.string.anki_connect_check_all_models),
                             checked = uiState.settings.checkDuplicatesAcrossAllModels,
                             onCheckedChange = viewModel::updateCheckDuplicatesAcrossAllModels,
                         )
                         HorizontalDivider()
                         AnkiConnectSwitchRow(
-                            label = "Force Sync on adding card",
+                            label = stringResource(R.string.anki_connect_force_sync),
                             checked = uiState.settings.ankiConnectForceSync,
                             onCheckedChange = viewModel::updateAnkiConnectForceSync,
                         )
@@ -229,16 +243,16 @@ private fun AnkiConnectDuplicateScopeRow(
     var expanded by remember { mutableStateOf(false) }
     ListItem(
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-        headlineContent = { Text("Duplicate Scope") },
-        supportingContent = { Text(scope.ankiConnectDisplayName) },
+        headlineContent = { Text(stringResource(R.string.anki_connect_duplicate_scope)) },
+        supportingContent = { Text(stringResource(scope.labelRes)) },
         trailingContent = {
             TextButton(onClick = { expanded = true }) {
-                Text("Choose")
+                Text(stringResource(R.string.action_choose))
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 AnkiDuplicateScope.entries.forEach { item ->
                     DropdownMenuItem(
-                        text = { Text(item.ankiConnectDisplayName) },
+                        text = { Text(stringResource(item.labelRes)) },
                         onClick = {
                             expanded = false
                             onSelect(item)
@@ -249,10 +263,3 @@ private fun AnkiConnectDuplicateScopeRow(
         },
     )
 }
-
-private val AnkiDuplicateScope.ankiConnectDisplayName: String
-    get() = when (this) {
-        AnkiDuplicateScope.Collection -> "Collection"
-        AnkiDuplicateScope.Deck -> "Deck"
-        AnkiDuplicateScope.DeckRoot -> "Deck Root"
-    }

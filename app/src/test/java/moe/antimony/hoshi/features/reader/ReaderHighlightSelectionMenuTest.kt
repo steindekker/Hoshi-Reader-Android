@@ -14,7 +14,6 @@ class ReaderHighlightSelectionMenuTest {
             listOf(ReaderHighlightSelectionMenu.parentItemId),
             ReaderHighlightSelectionMenu.actionModeItems.map { it.id },
         )
-        assertEquals("Highlight", ReaderHighlightSelectionMenu.parentTitle)
     }
 
     @Test
