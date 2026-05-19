@@ -5,6 +5,8 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+## [v0.7.4] - 2026-05-20
+
 ### Added
 
 - Add initial Simplified Chinese localization support for core Bookshelf, Dictionary, Reader, Backup, and update prompt flows, with Android system/app-language resource support and translator contribution docs.
