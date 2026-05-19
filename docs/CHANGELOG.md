@@ -11,6 +11,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ### Fixed
 
+- Keep Google Drive Device Code authorization polling through transient DNS, timeout, and network failures, restore clearer Google Cloud Console client setup guidance, and clarify the fallback of opening the device-code page on another phone or computer.
 - Keep Dictionary tab recursive lookup highlights and popup placement aligned in E-ink mode, including line-style selection marks and lower-screen child popups.
 - Prevent settings segmented controls from shifting option labels when changing selection.
 

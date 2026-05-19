@@ -50,6 +50,7 @@ sealed interface DriveAuthorizationResult {
     data class Authorized(val accessToken: String) : DriveAuthorizationResult
     data object Pending : DriveAuthorizationResult
     data object SlowDown : DriveAuthorizationResult
+    data object TransientNetworkFailure : DriveAuthorizationResult
     data class Failed(val message: String) : DriveAuthorizationResult
 }
 

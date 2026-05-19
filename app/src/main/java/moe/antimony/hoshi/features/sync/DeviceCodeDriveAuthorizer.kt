@@ -1,6 +1,7 @@
 package moe.antimony.hoshi.features.sync
 
 import android.content.Context
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -65,15 +66,19 @@ class DeviceCodeDriveAuthorizer(
 
     suspend fun pollAuthorization(prompt: DeviceCodePrompt): DriveAuthorizationResult {
         val client = configuredClient() ?: return DriveAuthorizationResult.Failed(MissingConfigurationMessage)
-        val response = postForm(
-            url = TokenUrl,
-            parameters = mapOf(
-                "client_id" to client.clientId,
-                "client_secret" to client.clientSecret,
-                "device_code" to prompt.deviceCode,
-                "grant_type" to DeviceCodeGrantType,
-            ),
-        )
+        val response = try {
+            postForm(
+                url = TokenUrl,
+                parameters = mapOf(
+                    "client_id" to client.clientId,
+                    "client_secret" to client.clientSecret,
+                    "device_code" to prompt.deviceCode,
+                    "grant_type" to DeviceCodeGrantType,
+                ),
+            )
+        } catch (error: IOException) {
+            return error.toDeviceCodePollingFailureResult()
+        }
         if (response.statusCode < 400) {
             val token = DeviceCodeJson.decodeFromString(TokenResponse.serializer(), response.body.decodeToString())
             saveTokens(token)
@@ -230,6 +235,8 @@ class DeviceCodeDriveAuthorizer(
         private const val RefreshTokenGrantType = "refresh_token"
         private const val DefaultPollIntervalSeconds = 5L
         const val SlowDownIncrementSeconds = 5L
+        const val TransientNetworkBackoffMultiplier = 2L
+        const val MaxTransientNetworkBackoffSeconds = 60L
         private const val TokenRefreshSkewMillis = 60_000L
         private const val RequestTimeoutMillis = 15_000
     }

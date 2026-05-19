@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +19,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -49,8 +49,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -122,8 +129,13 @@ fun SyncSettingsView(
                 }
                 DriveAuthorizationResult.Pending -> Unit
                 DriveAuthorizationResult.SlowDown -> {
-                    nextIntervalSeconds += DeviceCodeDriveAuthorizer.SlowDownIncrementSeconds
+                    nextIntervalSeconds = nextDeviceCodePollIntervalSeconds(nextIntervalSeconds, result)
                     pollIntervalSeconds = nextIntervalSeconds
+                }
+                DriveAuthorizationResult.TransientNetworkFailure -> {
+                    nextIntervalSeconds = nextDeviceCodePollIntervalSeconds(nextIntervalSeconds, result)
+                    pollIntervalSeconds = nextIntervalSeconds
+                    message = prompt.transientNetworkFailureMessage()
                 }
                 is DriveAuthorizationResult.Failed -> {
                     isAuthorizing = false
@@ -161,7 +173,7 @@ fun SyncSettingsView(
                     pollIntervalSeconds = prompt.intervalSeconds
                     devicePrompt = prompt
                     authStatus = DriveAuthStatus.NotConnected
-                    message = "Open ${prompt.verificationUrl} and enter ${prompt.userCode}."
+                    message = prompt.authorizationMessage()
                     runCatching {
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(prompt.verificationUrl)))
                     }
@@ -313,9 +325,13 @@ fun SyncSettingsView(
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
-                                text = prompt.verificationUrl,
+                                text = "Open this link on this device or another phone/computer:",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = colorScheme.onSurfaceVariant,
+                            )
+                            SettingsLinkText(
+                                text = prompt.verificationUrl,
+                                url = prompt.verificationUrl,
                             )
                             Text(
                                 text = prompt.userCode,
@@ -387,7 +403,6 @@ fun SyncSettingsView(
 
 @Composable
 private fun GoogleCloudOAuthSetupCard() {
-    val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
     SettingsCard {
         Column(
@@ -405,28 +420,102 @@ private fun GoogleCloudOAuthSetupCard() {
                 style = MaterialTheme.typography.bodyMedium,
                 color = colorScheme.onSurfaceVariant,
             )
-            OutlinedButton(
-                onClick = {
-                    context.startActivity(
-                        Intent(Intent.ACTION_VIEW, Uri.parse(GoogleCloudOAuthConfiguration.ttuSetupUrl)),
-                    )
-                },
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
-                    contentDescription = null,
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-                Text("TTU Google Cloud setup")
-            }
+            SettingsLinkText(
+                text = GoogleCloudOAuthConfiguration.ttuSetupLinkLabel,
+                url = GoogleCloudOAuthConfiguration.ttuSetupUrl,
+            )
             GoogleCloudOAuthConfiguration.instructions.forEachIndexed { index, instruction ->
-                Text(
-                    text = "${index + 1}. $instruction",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colorScheme.onSurfaceVariant,
-                )
+                GoogleCloudOAuthInstructionText(index = index, instruction = instruction)
             }
         }
+    }
+}
+
+@Composable
+private fun GoogleCloudOAuthInstructionText(index: Int, instruction: String) {
+    val linkColor = MaterialTheme.colorScheme.primary
+    val text = buildAnnotatedString {
+        append("${index + 1}. ")
+        appendTextWithLinks(
+            text = instruction,
+            links = GoogleCloudOAuthConfiguration.instructionLinks,
+            color = linkColor,
+        )
+    }
+    SettingsAnnotatedLinkText(
+        text = text,
+    )
+}
+
+@Composable
+private fun SettingsLinkText(
+    text: String,
+    url: String,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.primary,
+        textDecoration = TextDecoration.Underline,
+        modifier = modifier.clickable {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        },
+    )
+}
+
+@Composable
+private fun SettingsAnnotatedLinkText(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
+        modifier = modifier,
+    )
+}
+
+private fun AnnotatedString.Builder.appendTextWithLinks(
+    text: String,
+    links: Map<String, String>,
+    color: Color,
+) {
+    var cursor = 0
+    while (cursor < text.length) {
+        val nextLink = links.keys
+            .mapNotNull { label ->
+                val start = text.indexOf(label, startIndex = cursor)
+                if (start >= 0) label to start else null
+            }
+            .minByOrNull { it.second }
+
+        if (nextLink == null) {
+            append(text.substring(cursor))
+            break
+        }
+
+        val (label, start) = nextLink
+        append(text.substring(cursor, start))
+        appendLink(text = label, url = links.getValue(label), color = color)
+        cursor = start + label.length
+    }
+}
+
+private fun AnnotatedString.Builder.appendLink(text: String, url: String, color: Color) {
+    withLink(
+        LinkAnnotation.Url(
+            url = url,
+            styles = TextLinkStyles(
+                style = SpanStyle(
+                    color = color,
+                    textDecoration = TextDecoration.Underline,
+                ),
+            ),
+        ),
+    ) {
+        append(text)
     }
 }
 
@@ -450,6 +539,12 @@ private fun DriveAuthStatus.label(): String =
         DriveAuthStatus.MissingConfiguration -> "OAuth client not configured"
         is DriveAuthStatus.Failed -> message
     }
+
+private fun DeviceCodePrompt.authorizationMessage(): String =
+    "Open $verificationUrl on this device or another phone/computer and enter $userCode."
+
+private fun DeviceCodePrompt.transientNetworkFailureMessage(): String =
+    "Hoshi cannot reach Google from this device right now. Keep this screen open, or open $verificationUrl on another phone/computer and enter $userCode."
 
 @Composable
 private fun SettingsCard(content: @Composable () -> Unit) {
