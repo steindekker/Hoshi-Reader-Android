@@ -82,7 +82,7 @@ data class LookupPopupLayout(
     private fun spaceRight(): Double = screenWidth - selectionRect.x - selectionRect.width - popupPadding
     private fun spaceAbove(): Double = selectionRect.y - topInset - popupPadding
     private fun spaceBelow(): Double = screenHeight - bottomInset - selectionRect.y - selectionRect.height - popupPadding
-    private fun showOnRight(): Boolean = spaceRight() >= spaceLeft()
+    private fun showOnRight(): Boolean = spaceRight() >= spaceLeft() || spaceRight() >= maxWidth
     private fun showBelow(height: Double): Boolean = spaceBelow() >= height
 
     private fun clampLikeIos(value: Double, minimum: Double, maximum: Double): Double =

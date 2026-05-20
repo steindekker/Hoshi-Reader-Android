@@ -31,6 +31,23 @@ class LookupPopupTest {
     }
 
     @Test
+    fun verticalLayoutPrefersRightSideWhenItCanFitPopupLikeIosPopupLayout() {
+        val layout = LookupPopupLayout(
+            selectionRect = ReaderSelectionRect(x = 450.0, y = 200.0, width = 20.0, height = 30.0),
+            screenWidth = 800.0,
+            screenHeight = 800.0,
+            maxWidth = 320.0,
+            maxHeight = 250.0,
+            isVertical = true,
+        )
+
+        val result = layout.calculate()
+
+        assertEquals(320.0, result.width, 0.0)
+        assertEquals(634.0, result.centerX, 0.0)
+    }
+
+    @Test
     fun horizontalLayoutAppearsBelowSelectionWhenThereIsRoom() {
         val layout = LookupPopupLayout(
             selectionRect = ReaderSelectionRect(x = 100.0, y = 100.0, width = 20.0, height = 30.0),

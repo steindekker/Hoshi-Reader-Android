@@ -5,6 +5,10 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep lookup popup audio and Anki buttons aligned after toggling harmonic frequency rows, and prefer the fitting right side for vertical-text lookup popups.
+
 ## [v0.7.4] - 2026-05-20
 
 ### Added

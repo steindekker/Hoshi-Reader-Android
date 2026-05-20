@@ -40,7 +40,7 @@ Validation:
 
 ### 2. Popup action-button frame refresh fixes
 
-Status: pending Android review/sync.
+Status: synced on Android 2026-05-20.
 
 Commits:
 
@@ -53,11 +53,11 @@ iOS behavior to mirror:
 - Button rect refresh uses the same rect-report path after scale changes, resize, redirect, restore, and slot state changes.
 - Tapping harmonic frequency rows to swap between harmonic and normal frequency display triggers a native button-frame refresh.
 
-Android notes:
+Android sync notes:
 
-- Android currently reports popup `buttonFrames` from JS and converts CSS pixels to Android pixels in `PopupActionButtonWebView`.
-- Android popup scale uses CSS `zoom`; verify whether `getBoundingClientRect()` already reports coordinates in the coordinate system expected by native child views on current Android WebView.
-- Android `popup.js` currently toggles harmonic frequency rows without scheduling `syncButtonFrames()`, so native action buttons may drift if the row height changes.
+- Android continues to report popup `buttonFrames` from JS and convert CSS pixels to Android pixels in `PopupActionButtonWebView`.
+- Android popup scale uses CSS `zoom`; the existing `getBoundingClientRect()` path remains the shared source for scaled native action-button placement.
+- Android `popup.js` now schedules visual-state button-frame sync after harmonic frequency row toggles so native action buttons refresh after the row height changes.
 
 Validation:
 
@@ -67,7 +67,7 @@ Validation:
 
 ### 3. Vertical popup placement preference
 
-Status: pending Android review/sync.
+Status: synced on Android 2026-05-20.
 
 Commit:
 
@@ -79,10 +79,9 @@ iOS behavior to mirror:
 - If the right side can fit the popup's maximum width, iOS places the popup on the right even when the left side has more space.
 - This avoids unnecessarily placing vertical popups opposite the selected text when the preferred side has enough room.
 
-Android notes:
+Android sync notes:
 
-- Android `LookupPopupLayout.showOnRight()` currently chooses right only when `spaceRight >= spaceLeft`.
-- Match iOS by allowing right placement when `spaceRight >= maxWidth` before comparing with left.
+- Android `LookupPopupLayout.showOnRight()` now allows right placement when `spaceRight >= maxWidth` before falling back to the left/right space comparison.
 - Re-check existing lower-screen recursive popup and continuous-mode popup placement expectations after this change.
 
 Validation:
@@ -164,10 +163,10 @@ Validation:
 
 | Commit | Date | iOS summary | Android status |
 | --- | --- | --- | --- |
-| `958be70` | 2026-05-17 | Popup button rect scaling under zoom | Needs review/sync |
+| `958be70` | 2026-05-17 | Popup button rect scaling under zoom | Existing Android path retained |
 | `73a9e62` | 2026-05-18 | Dictionary pull-to-clear/show-keyboard gesture | Pending |
-| `edf8606` | 2026-05-18 | Refresh popup buttons after harmonic frequency toggle | Pending |
-| `e63d2c4` | 2026-05-18 | Prefer fitting popup side before vertical reading direction | Pending |
+| `edf8606` | 2026-05-18 | Refresh popup buttons after harmonic frequency toggle | Synced |
+| `e63d2c4` | 2026-05-18 | Prefer fitting popup side before vertical reading direction | Synced |
 | `94d0c41` | 2026-05-19 | Automatic dictionary updates | Pending |
 | `a713c0c` | 2026-05-19 | Keep cue controls wired with skip controls | Covered; re-test |
 | `f286108` | 2026-05-19 | Blur reader images until tapped | Pending |
@@ -175,7 +174,6 @@ Validation:
 
 ## Suggested Implementation Order
 
-1. Popup fixes: harmonic frequency frame refresh and vertical placement are small, high-impact corrections to existing Android popup behavior.
-2. Reader image blur setting: self-contained reader appearance slice with clear manual validation.
-3. Dictionary pull-to-clear: user-facing gesture/UI slice in the Dictionary tab.
-4. Dictionary automatic updates: broader settings, repository, networking, and lifecycle slice; implement after deciding Android's network constraint mechanism.
+1. Reader image blur setting: self-contained reader appearance slice with clear manual validation.
+2. Dictionary pull-to-clear: user-facing gesture/UI slice in the Dictionary tab.
+3. Dictionary automatic updates: broader settings, repository, networking, and lifecycle slice; implement after deciding Android's network constraint mechanism.

@@ -1164,6 +1164,7 @@ function createTags(entry) {
                 const swap = harmonicRow.style.display !== 'none';
                 harmonicRow.style.display = swap ? 'none' : '';
                 normalRow.style.display = swap ? '' : 'none';
+                scheduleButtonFrameSyncAtVisualState();
             };
 
             normalRow.addEventListener('click', toggle);
