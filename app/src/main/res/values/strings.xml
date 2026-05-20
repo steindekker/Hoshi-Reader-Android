@@ -214,6 +214,7 @@
     <string name="reader_appearance_vertical_padding">Vertical Padding</string>
     <string name="reader_appearance_avoid_page_break">Avoid Page Break</string>
     <string name="reader_appearance_justify_text">Justify Text</string>
+    <string name="reader_appearance_blur_images">Blur Images</string>
     <string name="reader_appearance_line_height">Line Height</string>
     <string name="reader_appearance_character_spacing">Character Spacing</string>
     <string name="reader_appearance_show_title">Show Title</string>

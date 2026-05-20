@@ -22,6 +22,7 @@ class ReaderSettingsTest {
         assertFalse(settings.systemLightSepia)
         assertFalse(settings.sepiaInvertInDark)
         assertFalse(settings.continuousMode)
+        assertFalse(settings.blurImages)
         assertFalse(settings.enableStatistics)
         assertEquals(StatisticsAutostartMode.Off, settings.statisticsAutostartMode)
         assertFalse(settings.showStatisticsToggle)
@@ -320,6 +321,16 @@ class ReaderSettingsTest {
         assertTrue(css.contains("display: none !important;"))
         assertTrue(css.contains("break-inside: avoid !important;"))
         assertFalse(css.contains("text-align: start !important;"))
+    }
+
+    @Test
+    fun readerCssIncludesIosImageBlurRules() {
+        val css = ReaderContentStyles.styleTag()
+
+        assertTrue(css.contains("img.block-img.blurred,"))
+        assertTrue(css.contains("svg.blurred {"))
+        assertTrue(css.contains("filter: blur(24px) !important;"))
+        assertTrue(css.contains("clip-path: inset(0);"))
     }
 
     @Test

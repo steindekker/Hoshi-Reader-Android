@@ -666,6 +666,7 @@ internal object ReaderPaginationScripts {
           document.documentElement.style.setProperty('--hoshi-image-max-height', Math.max(1, pageHeight - ${settings.bottomOverlapPx}) + 'px');
           window.hoshiReader.pageHeight = pageHeight;
           window.hoshiReader.pageWidth = pageWidth;
+          ${readerImageBlurScript(settings)}
           Array.from(document.querySelectorAll('svg')).forEach(function(svg) {
             if (svg.querySelector('image') && svg.getAttribute('preserveAspectRatio') === 'none') {
               svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
@@ -677,6 +678,9 @@ internal object ReaderPaginationScripts {
               var mark = function() {
                 if (!isGaiji && (img.naturalWidth > 256 || img.naturalHeight > 256)) {
                   img.classList.add('block-img');
+                  if (${settings.blurImages}) {
+                    blurImage(img);
+                  }
                 }
                 resolve();
               };
@@ -1125,6 +1129,7 @@ internal object ReaderPaginationScripts {
           document.documentElement.style.setProperty('--hoshi-continuous-height', window.innerHeight + 'px');
           document.documentElement.style.setProperty('--hoshi-image-max-width', Math.max(1, Math.floor(window.innerWidth * ${settings.imageWidthViewportRatio})) + 'px');
           document.documentElement.style.setProperty('--hoshi-image-max-height', Math.max(1, window.innerHeight - ${settings.bottomOverlapPx}) + 'px');
+          ${readerImageBlurScript(settings)}
           Array.from(document.querySelectorAll('svg')).forEach(function(svg) {
             if (svg.querySelector('image') && svg.getAttribute('preserveAspectRatio') === 'none') {
               svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
@@ -1136,6 +1141,9 @@ internal object ReaderPaginationScripts {
               var mark = function() {
                 if (!isGaiji && (img.naturalWidth > 256 || img.naturalHeight > 256)) {
                   img.classList.add('block-img');
+                  if (${settings.blurImages}) {
+                    blurImage(img);
+                  }
                 }
                 resolve();
               };
@@ -1166,6 +1174,24 @@ internal object ReaderPaginationScripts {
         """.trimIndent()
     }
 }
+
+private fun readerImageBlurScript(settings: ReaderSettings): String = """
+    function blurImage(element) {
+      element.classList.add('blurred');
+      element.addEventListener('click', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        element.classList.remove('blurred');
+      }, { once: true });
+    }
+    if (${settings.blurImages}) {
+      Array.from(document.querySelectorAll('svg')).forEach(function(svg) {
+        if (svg.querySelector('image')) {
+          blurImage(svg);
+        }
+      });
+    }
+""".trimIndent()
 
 private fun readerHighlightsScript(): String = """
     window.hoshiHighlights = {

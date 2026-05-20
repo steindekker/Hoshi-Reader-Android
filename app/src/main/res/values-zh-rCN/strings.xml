@@ -214,6 +214,7 @@
     <string name="reader_appearance_vertical_padding">垂直边距</string>
     <string name="reader_appearance_avoid_page_break">避免分页断开</string>
     <string name="reader_appearance_justify_text">两端对齐</string>
+    <string name="reader_appearance_blur_images">模糊图片</string>
     <string name="reader_appearance_line_height">行高</string>
     <string name="reader_appearance_character_spacing">字距</string>
     <string name="reader_appearance_show_title">显示标题</string>

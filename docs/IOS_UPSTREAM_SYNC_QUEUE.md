@@ -126,7 +126,7 @@ Validation:
 
 ### 5. Reader image blur setting
 
-Status: pending Android sync.
+Status: synced on Android 2026-05-20.
 
 Commit:
 
@@ -140,12 +140,12 @@ iOS behavior to mirror:
 - Tapping a blurred image prevents normal tap handling for that tap, removes the blur once, and leaves the image unblurred.
 - Small inline images and gaiji images are not blurred.
 
-Android notes:
+Android sync notes:
 
-- Android already classifies large EPUB images as `block-img` and handles SVG image containers in reader pagination scripts.
-- Add the setting to `ReaderSettings`, persistence, Appearance UI, content CSS, and both paginated/continuous preparation scripts.
-- Tapping to unblur must not trigger reader chrome toggles, lookup selection, or page-turn gestures.
-- New visible setting label must be localized in English and Simplified Chinese.
+- Android now stores `blurImages` in `ReaderSettings`, legacy SharedPreferences, and the reader DataStore.
+- Appearance includes the localized `Blur Images` toggle in English and Simplified Chinese.
+- Reader CSS now mirrors iOS blur styling for `img.block-img.blurred` and `svg.blurred`.
+- Paginated and continuous reader setup scripts blur SVG containers with embedded images and large non-gaiji images, then remove the blur once on tap while preventing normal reader tap handling for that tap.
 
 Validation:
 
@@ -169,11 +169,10 @@ Validation:
 | `e63d2c4` | 2026-05-18 | Prefer fitting popup side before vertical reading direction | Synced |
 | `94d0c41` | 2026-05-19 | Automatic dictionary updates | Pending |
 | `a713c0c` | 2026-05-19 | Keep cue controls wired with skip controls | Covered; re-test |
-| `f286108` | 2026-05-19 | Blur reader images until tapped | Pending |
+| `f286108` | 2026-05-19 | Blur reader images until tapped | Synced |
 | `09951b4` | 2026-05-19 | iOS build bump | No Android action |
 
 ## Suggested Implementation Order
 
-1. Reader image blur setting: self-contained reader appearance slice with clear manual validation.
-2. Dictionary pull-to-clear: user-facing gesture/UI slice in the Dictionary tab.
-3. Dictionary automatic updates: broader settings, repository, networking, and lifecycle slice; implement after deciding Android's network constraint mechanism.
+1. Dictionary pull-to-clear: user-facing gesture/UI slice in the Dictionary tab.
+2. Dictionary automatic updates: broader settings, repository, networking, and lifecycle slice; implement after deciding Android's network constraint mechanism.

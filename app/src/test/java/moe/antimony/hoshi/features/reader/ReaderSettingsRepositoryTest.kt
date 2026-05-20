@@ -33,6 +33,7 @@ class ReaderSettingsRepositoryTest {
             assertEquals(22, settings.fontSize)
             assertFalse(settings.hideFurigana)
             assertFalse(settings.continuousMode)
+            assertFalse(settings.blurImages)
             assertFalse(settings.enableStatistics)
             assertEquals(StatisticsAutostartMode.Off, settings.statisticsAutostartMode)
             assertFalse(settings.showStatisticsToggle)
@@ -116,6 +117,7 @@ class ReaderSettingsRepositoryTest {
                     fontSize = 24,
                     hideFurigana = true,
                     continuousMode = true,
+                    blurImages = true,
                     enableStatistics = true,
                     statisticsAutostartMode = StatisticsAutostartMode.PageTurn,
                     showStatisticsToggle = true,
@@ -157,6 +159,7 @@ class ReaderSettingsRepositoryTest {
             assertEquals(24, saved.fontSize)
             assertTrue(saved.hideFurigana)
             assertTrue(saved.continuousMode)
+            assertTrue(saved.blurImages)
             assertTrue(saved.enableStatistics)
             assertEquals(StatisticsAutostartMode.PageTurn, saved.statisticsAutostartMode)
             assertTrue(saved.showStatisticsToggle)

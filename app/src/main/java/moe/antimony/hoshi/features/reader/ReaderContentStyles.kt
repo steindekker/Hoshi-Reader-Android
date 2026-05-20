@@ -171,6 +171,11 @@ internal object ReaderContentStyles {
             -webkit-column-break-inside: avoid !important;
             object-fit: contain !important;
         }
+        img.block-img.blurred,
+        svg.blurred {
+            filter: blur(24px) !important;
+            clip-path: inset(0);
+        }
         svg {
             max-width: var(--hoshi-image-max-width, ${settings.imageMaxWidthFallbackCss}) !important;
             max-height: var(--hoshi-image-max-height, ${settings.imageMaxHeightFallbackCss}) !important;

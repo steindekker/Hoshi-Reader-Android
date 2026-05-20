@@ -90,6 +90,27 @@ class ReaderPaginationScriptsTest {
     }
 
     @Test
+    fun blurImagesScriptRunsForPagedAndContinuousReadersLikeIos() {
+        val scripts = listOf(
+            ReaderPaginationScripts.shellScript(settings = ReaderSettings(blurImages = true)),
+            ReaderPaginationScripts.shellScript(settings = ReaderSettings(continuousMode = true, blurImages = true)),
+        )
+
+        scripts.forEach { script ->
+            assertTrue(script.contains("function blurImage(element)"))
+            assertTrue(script.contains("element.classList.add('blurred');"))
+            assertTrue(script.contains("event.preventDefault();"))
+            assertTrue(script.contains("event.stopPropagation();"))
+            assertTrue(script.contains("element.classList.remove('blurred');"))
+            assertTrue(script.contains("if (true) {"))
+            assertTrue(script.contains("if (svg.querySelector('image'))"))
+            assertTrue(script.contains("blurImage(svg);"))
+            assertTrue(script.contains("img.classList.add('block-img');"))
+            assertTrue(script.contains("blurImage(img);"))
+        }
+    }
+
+    @Test
     fun verticalPageHeightIncludesIosBottomOverlap() {
         val script = ReaderPaginationScripts.shellScript()
 

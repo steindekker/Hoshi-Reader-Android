@@ -40,6 +40,7 @@ data class ReaderSettings(
     val verticalPadding: Int = 0,
     val avoidPageBreak: Boolean = false,
     val justifyText: Boolean = false,
+    val blurImages: Boolean = false,
     val layoutAdvanced: Boolean = false,
     val lineHeight: Double = 1.65,
     val characterSpacing: Double = 0.0,
@@ -218,6 +219,7 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
         verticalPadding = preferences.getInt("layoutVerticalPadding", 0),
         avoidPageBreak = preferences.getBoolean("avoidPageBreak", false),
         justifyText = preferences.getBoolean("justifyText", false),
+        blurImages = preferences.getBoolean("blurImages", false),
         layoutAdvanced = preferences.getBoolean("layoutAdvanced", false),
         lineHeight = preferences.getFloat("lineHeight", 1.65f).toDouble(),
         characterSpacing = preferences.getFloat("characterSpacing", 0f).toDouble(),
@@ -264,6 +266,7 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
             .putInt("layoutVerticalPadding", settings.verticalPadding)
             .putBoolean("avoidPageBreak", settings.avoidPageBreak)
             .putBoolean("justifyText", settings.justifyText)
+            .putBoolean("blurImages", settings.blurImages)
             .putBoolean("layoutAdvanced", settings.layoutAdvanced)
             .putFloat("lineHeight", settings.lineHeight.toFloat())
             .putFloat("characterSpacing", settings.characterSpacing.toFloat())
@@ -349,6 +352,7 @@ class ReaderSettingsRepository(
             verticalPadding = this[KEY_VERTICAL_PADDING] ?: 0,
             avoidPageBreak = this[KEY_AVOID_PAGE_BREAK] ?: false,
             justifyText = this[KEY_JUSTIFY_TEXT] ?: false,
+            blurImages = this[KEY_BLUR_IMAGES] ?: false,
             layoutAdvanced = this[KEY_LAYOUT_ADVANCED] ?: false,
             lineHeight = (this[KEY_LINE_HEIGHT] ?: 1.65f).toDouble(),
             characterSpacing = (this[KEY_CHARACTER_SPACING] ?: 0f).toDouble(),
@@ -394,6 +398,7 @@ class ReaderSettingsRepository(
         this[KEY_VERTICAL_PADDING] = settings.verticalPadding
         this[KEY_AVOID_PAGE_BREAK] = settings.avoidPageBreak
         this[KEY_JUSTIFY_TEXT] = settings.justifyText
+        this[KEY_BLUR_IMAGES] = settings.blurImages
         this[KEY_LAYOUT_ADVANCED] = settings.layoutAdvanced
         this[KEY_LINE_HEIGHT] = settings.lineHeight.toFloat()
         this[KEY_CHARACTER_SPACING] = settings.characterSpacing.toFloat()
@@ -443,6 +448,7 @@ class ReaderSettingsRepository(
         private val KEY_VERTICAL_PADDING = intPreferencesKey("layoutVerticalPadding")
         private val KEY_AVOID_PAGE_BREAK = booleanPreferencesKey("avoidPageBreak")
         private val KEY_JUSTIFY_TEXT = booleanPreferencesKey("justifyText")
+        private val KEY_BLUR_IMAGES = booleanPreferencesKey("blurImages")
         private val KEY_LAYOUT_ADVANCED = booleanPreferencesKey("layoutAdvanced")
         private val KEY_LINE_HEIGHT = floatPreferencesKey("lineHeight")
         private val KEY_CHARACTER_SPACING = floatPreferencesKey("characterSpacing")

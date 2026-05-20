@@ -356,6 +356,12 @@ private fun ReaderAppearanceContent(
                     )
                     AppearanceDivider(palette)
                     SwitchRow(
+                        label = stringResource(R.string.reader_appearance_blur_images),
+                        checked = settings.blurImages,
+                        onCheckedChange = { onSettingsChange(settings.copy(blurImages = it)) },
+                    )
+                    AppearanceDivider(palette)
+                    SwitchRow(
                         label = stringResource(R.string.settings_advanced),
                         checked = settings.layoutAdvanced,
                         onCheckedChange = { onSettingsChange(settings.copy(layoutAdvanced = it)) },
