@@ -5,6 +5,8 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+## [v1.0.1] - 2026-05-22
+
 ### Added
 
 - Add a Sasayaki setting to reverse only the reader bottom skip button actions in vertical writing mode.
@@ -15,9 +17,9 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ### Fixed
 
-- Keep editable text-field cursors visible in dark and E-ink themes, and keep single-line fields horizontally scrolling with cursor movement when editing long text.
+- Keep editable text-field cursors visible in dark and E-ink themes, and keep single-line fields horizontally scrolling with cursor movement when editing long text. #79
 - Keep continuous reader backward chapter turns landing at the previous chapter end after jumping to a mid-book chapter.
-- Allow AnkiconnectAndroid's Local Audio URL to be added as an external reusable audio source without being swallowed by Hoshi's built-in Local Audio source.
+- Allow AnkiconnectAndroid's Local Audio URL to be added as an external reusable audio source without being swallowed by Hoshi's built-in Local Audio source. #80
 
 ## [v1.0.0] - 2026-05-21
 
