@@ -175,6 +175,22 @@ class ReaderPaginationScriptsTest {
     }
 
     @Test
+    fun continuousRestoreProgressOneKeepsLastTextTargetLikeIos() {
+        val script = ReaderPaginationScripts.shellScript(
+            settings = ReaderSettings(continuousMode = true),
+        )
+        val restoreProgress = script.substringAfter("restoreProgress: async function(progress)")
+            .substringBefore("jumpToFragment: async function(fragment)")
+
+        assertTrue(restoreProgress.contains("var lastTargetNode = null"))
+        assertTrue(restoreProgress.contains("lastTargetNode = node"))
+        assertTrue(restoreProgress.contains("if (!targetNode) targetNode = lastTargetNode"))
+        assertTrue(restoreProgress.contains("if (progress >= 0.999999 && targetNode.parentElement)"))
+        assertTrue(restoreProgress.contains("targetNode.parentElement.scrollIntoView({"))
+        assertTrue(restoreProgress.contains("block: 'end'"))
+    }
+
+    @Test
     fun exposesSasayakiCueWrappingAndHighlightingLikeIos() {
         val script = ReaderPaginationScripts.shellScript()
 

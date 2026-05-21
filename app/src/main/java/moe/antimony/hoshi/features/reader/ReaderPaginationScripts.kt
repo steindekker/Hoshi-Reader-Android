@@ -1053,9 +1053,11 @@ internal object ReaderPaginationScripts {
             var runningSum = 0;
             var targetNode = null;
             var targetOffset = 0;
+            var lastTargetNode = null;
             walker = this.createWalker();
             while (node = walker.nextNode()) {
               var nodeLen = this.countChars(node.textContent);
+              if (nodeLen > 0) lastTargetNode = node;
               if ((runningSum + nodeLen) > targetCharCount) {
                 targetNode = node;
                 targetOffset = this.textOffsetForCharCount(node, Math.max(0, targetCharCount - runningSum));
@@ -1063,7 +1065,15 @@ internal object ReaderPaginationScripts {
               }
               runningSum += nodeLen;
             }
+            if (!targetNode) targetNode = lastTargetNode;
             if (targetNode) {
+              if (progress >= 0.999999 && targetNode.parentElement) {
+                targetNode.parentElement.scrollIntoView({
+                  block: 'end',
+                  inline: 'nearest',
+                  behavior: 'instant'
+                });
+              } else {
               var range = document.createRange();
               var targetText = targetNode.textContent || '';
               var targetChar = String.fromCodePoint(targetText.codePointAt(targetOffset));
@@ -1082,6 +1092,7 @@ internal object ReaderPaginationScripts {
               var parent = marker.parentNode;
               marker.remove();
               if (parent) parent.normalize();
+              }
             }
             requestAnimationFrame(() => {
               requestAnimationFrame(() => this.notifyRestoreComplete());

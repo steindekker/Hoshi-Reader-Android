@@ -5,6 +5,10 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep continuous reader backward chapter turns landing at the previous chapter end after jumping to a mid-book chapter.
+
 ## [v1.0.0] - 2026-05-21
 
 ### Added
