@@ -14,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -38,6 +39,9 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.automirrored.rounded.Sort
@@ -102,8 +106,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -137,6 +142,13 @@ data class SasayakiMatchRequest(
     val bookId: String,
     val bookEntry: BookEntry,
 )
+
+internal fun TextFieldState.resetRenameText(title: String) {
+    edit {
+        replace(0, length, title)
+        selection = TextRange.Zero
+    }
+}
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -174,7 +186,8 @@ fun BookshelfView(
     var deleteCandidate by remember { mutableStateOf<BookEntry?>(null) }
     var markReadCandidate by remember { mutableStateOf<BookEntry?>(null) }
     var renameCandidate by remember { mutableStateOf<BookEntry?>(null) }
-    var renameText by remember { mutableStateOf("") }
+    val renameTextState = rememberTextFieldState()
+    val renameScrollState = rememberScrollState()
     var showBulkDeleteConfirmation by remember { mutableStateOf(false) }
     var showShelfManagement by remember { mutableStateOf(false) }
 
@@ -259,7 +272,7 @@ fun BookshelfView(
         onMarkReadCandidate = { markReadCandidate = it },
         onRenameCandidate = {
             renameCandidate = it
-            renameText = it.displayTitle
+            renameTextState.resetRenameText(it.displayTitle)
         },
         onMoveBook = booksViewModel::moveBook,
         sasayakiEnabled = uiState.sasayakiEnabled,
@@ -348,22 +361,26 @@ fun BookshelfView(
     }
 
     renameCandidate?.let { candidate ->
+        LaunchedEffect(candidate.metadata.id) {
+            renameScrollState.scrollTo(0)
+        }
+
         AlertDialog(
             onDismissRequest = { renameCandidate = null },
             title = { Text(stringResource(R.string.action_rename)) },
             text = {
                 OutlinedTextField(
-                    value = renameText,
-                    onValueChange = { renameText = it },
+                    state = renameTextState,
                     label = { Text(stringResource(R.string.bookshelf_title_label)) },
-                    singleLine = true,
+                    lineLimits = TextFieldLineLimits.SingleLine,
+                    scrollState = renameScrollState,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        booksViewModel.renameBook(candidate, renameText)
+                        booksViewModel.renameBook(candidate, renameTextState.text.toString())
                         renameCandidate = null
                     },
                 ) {

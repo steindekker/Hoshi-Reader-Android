@@ -7,6 +7,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ### Fixed
 
+- Keep the Books rename field horizontally scrolling with cursor movement when editing long titles.
 - Keep continuous reader backward chapter turns landing at the previous chapter end after jumping to a mid-book chapter.
 
 ## [v1.0.0] - 2026-05-21
