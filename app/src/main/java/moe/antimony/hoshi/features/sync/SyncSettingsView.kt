@@ -9,6 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedSecureTextField
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -59,7 +61,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
@@ -69,6 +70,9 @@ import kotlinx.coroutines.launch
 import moe.antimony.hoshi.LocalHoshiAppContainer
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.settings.collectAsLoadedSettings
+import moe.antimony.hoshi.ui.hoshiOutlinedTextFieldColors
+import moe.antimony.hoshi.ui.hoshiSingleLineTextFieldLineLimits
+import moe.antimony.hoshi.ui.rememberSyncedTextFieldState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -312,19 +316,28 @@ fun SyncSettingsView(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        OutlinedTextField(
+                        val clientIdScrollState = rememberScrollState()
+                        val clientIdState = rememberSyncedTextFieldState(
                             value = clientId,
                             onValueChange = { clientId = it },
-                            label = { Text(stringResource(R.string.sync_device_client_id)) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            scrollState = clientIdScrollState,
                         )
-                        OutlinedTextField(
+                        val clientSecretState = rememberSyncedTextFieldState(
                             value = clientSecret,
                             onValueChange = { clientSecret = it },
+                        )
+                        OutlinedTextField(
+                            state = clientIdState,
+                            label = { Text(stringResource(R.string.sync_device_client_id)) },
+                            lineLimits = hoshiSingleLineTextFieldLineLimits(),
+                            scrollState = clientIdScrollState,
+                            colors = hoshiOutlinedTextFieldColors(),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedSecureTextField(
+                            state = clientSecretState,
                             label = { Text(stringResource(R.string.sync_device_client_secret)) },
-                            singleLine = true,
-                            visualTransformation = PasswordVisualTransformation(),
+                            colors = hoshiOutlinedTextFieldColors(),
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }

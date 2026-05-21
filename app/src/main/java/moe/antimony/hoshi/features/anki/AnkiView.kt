@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -56,6 +56,9 @@ import moe.antimony.hoshi.R
 import moe.antimony.hoshi.dictionary.DictionaryType
 import moe.antimony.hoshi.features.settings.SettingsDetailScaffold
 import moe.antimony.hoshi.ui.asString
+import moe.antimony.hoshi.ui.hoshiOutlinedTextFieldColors
+import moe.antimony.hoshi.ui.hoshiSingleLineTextFieldLineLimits
+import moe.antimony.hoshi.ui.rememberSyncedTextFieldState
 
 @Composable
 fun AnkiView(
@@ -438,17 +441,24 @@ private fun AnkiTextValueDialog(
     onSave: (String) -> Unit,
 ) {
     var draft by remember(title, value) { mutableStateOf(value) }
+    val draftScrollState = rememberScrollState()
+    val draftState = rememberSyncedTextFieldState(
+        value = draft,
+        onValueChange = { draft = it },
+        scrollState = draftScrollState,
+    )
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
             OutlinedTextField(
-                value = draft,
-                onValueChange = { draft = it },
+                state = draftState,
                 label = { Text(textFieldLabel) },
-                singleLine = true,
+                lineLimits = hoshiSingleLineTextFieldLineLimits(),
+                scrollState = draftScrollState,
+                colors = hoshiOutlinedTextFieldColors(),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { onSave(draft) }),
+                onKeyboardAction = { onSave(draftState.text.toString()) },
                 modifier = Modifier.fillMaxWidth(),
             )
         },

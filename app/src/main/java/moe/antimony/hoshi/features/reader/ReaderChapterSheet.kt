@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,6 +46,9 @@ import androidx.compose.ui.unit.dp
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.epub.EpubBook
 import moe.antimony.hoshi.epub.EpubTocItem
+import moe.antimony.hoshi.ui.hoshiOutlinedTextFieldColors
+import moe.antimony.hoshi.ui.hoshiSingleLineTextFieldLineLimits
+import moe.antimony.hoshi.ui.rememberSyncedTextFieldState
 import moe.antimony.hoshi.ui.theme.LocalHoshiEInkMode
 import java.text.NumberFormat
 import java.util.Locale
@@ -263,17 +267,24 @@ private fun JumpToCharacterDialog(
     onConfirm: (Int) -> Unit,
 ) {
     var input by remember { mutableStateOf("") }
+    val inputScrollState = rememberScrollState()
+    val inputState = rememberSyncedTextFieldState(
+        value = input,
+        onValueChange = { input = it.filter(Char::isDigit) },
+        scrollState = inputScrollState,
+    )
     val parsed = input.filter(Char::isDigit).toIntOrNull()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.reader_jump_to_character)) },
         text = {
             OutlinedTextField(
-                value = input,
-                onValueChange = { input = it.filter(Char::isDigit) },
+                state = inputState,
                 label = { Text(stringResource(R.string.reader_character)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                singleLine = true,
+                lineLimits = hoshiSingleLineTextFieldLineLimits(),
+                scrollState = inputScrollState,
+                colors = hoshiOutlinedTextFieldColors(),
             )
         },
         confirmButton = {

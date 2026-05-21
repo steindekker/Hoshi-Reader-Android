@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -78,6 +79,9 @@ import moe.antimony.hoshi.features.sasayaki.SasayakiSettingsView
 import moe.antimony.hoshi.importing.FileImportContent
 import moe.antimony.hoshi.importing.ImportFileType
 import moe.antimony.hoshi.importing.localizedImportMessage
+import moe.antimony.hoshi.ui.hoshiSingleLineTextFieldLineLimits
+import moe.antimony.hoshi.ui.hoshiTextFieldCursorBrush
+import moe.antimony.hoshi.ui.rememberSyncedTextFieldState
 import moe.antimony.hoshi.features.sync.SyncSettingsView
 import moe.antimony.hoshi.ui.HoshiBlockingProgressOverlay
 
@@ -526,11 +530,18 @@ private fun TextInputRow(label: String, value: String, onValueChange: (String) -
 private fun TextInputRowContent(label: String, value: String, onValueChange: (String) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, modifier = Modifier.width(72.dp))
-        BasicTextField(
+        val fieldScrollState = rememberScrollState()
+        val fieldState = rememberSyncedTextFieldState(
             value = value,
             onValueChange = onValueChange,
-            singleLine = true,
+            scrollState = fieldScrollState,
+        )
+        BasicTextField(
+            state = fieldState,
+            lineLimits = hoshiSingleLineTextFieldLineLimits(),
+            scrollState = fieldScrollState,
             textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+            cursorBrush = hoshiTextFieldCursorBrush(),
             modifier = Modifier.weight(1f),
         )
     }

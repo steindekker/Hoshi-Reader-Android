@@ -116,6 +116,7 @@ import moe.antimony.hoshi.importing.validateImportFile
 import moe.antimony.hoshi.ui.HoshiBlockingProgressOverlay
 import moe.antimony.hoshi.ui.UiText
 import moe.antimony.hoshi.ui.asString
+import moe.antimony.hoshi.ui.hoshiTextFieldCursorBrush
 import kotlin.math.roundToInt
 
 private val DictionarySwitchColor = Color(0xFF34C759)
@@ -1279,6 +1280,7 @@ private fun DictionaryCustomCssView(
                         onSettingsChange { it.copy(customCSS = value.text) }
                     },
                     textStyle = MaterialTheme.typography.bodyLarge.copy(color = colorScheme.onSurface),
+                    cursorBrush = hoshiTextFieldCursorBrush(colorScheme.onSurface),
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(16.dp),

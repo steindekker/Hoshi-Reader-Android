@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Cancel
@@ -37,7 +37,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.focus.FocusRequester
@@ -73,13 +72,14 @@ import moe.antimony.hoshi.features.reader.ReaderFontManager
 import moe.antimony.hoshi.features.reader.ReaderSettings
 import moe.antimony.hoshi.features.reader.ReaderSelectionRect
 import moe.antimony.hoshi.ui.asString
+import moe.antimony.hoshi.ui.hoshiSingleLineTextFieldLineLimits
+import moe.antimony.hoshi.ui.hoshiTextFieldCursorBrush
+import moe.antimony.hoshi.ui.rememberSyncedTextFieldState
 import moe.antimony.hoshi.webview.applyHoshiWebViewSecurityDefaults
 import kotlin.math.abs
 
 private const val DictionaryPopupTopInset = 118.0
 private const val DictionaryPopupBottomInset = 0.0
-
-internal fun dictionarySearchCursorColor(foregroundColor: Color): Color = foregroundColor
 
 internal fun dictionarySearchKeyboardOptions(): KeyboardOptions = KeyboardOptions(
     imeAction = ImeAction.Search,
@@ -380,6 +380,12 @@ private fun DictionarySearchBar(
             SearchGlyph(modifier = Modifier.size(20.dp))
             Box(modifier = Modifier.weight(1f)) {
                 val fieldForegroundColor = MaterialTheme.colorScheme.onSurface
+                val fieldScrollState = rememberScrollState()
+                val fieldState = rememberSyncedTextFieldState(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    scrollState = fieldScrollState,
+                )
                 if (query.isEmpty()) {
                     Text(
                         text = stringResource(R.string.dictionary_search_placeholder),
@@ -388,8 +394,7 @@ private fun DictionarySearchBar(
                     )
                 }
                 BasicTextField(
-                    value = query,
-                    onValueChange = onQueryChange,
+                    state = fieldState,
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(focusRequester)
@@ -402,11 +407,12 @@ private fun DictionarySearchBar(
                             }
                         },
                     enabled = !isSearching,
-                    singleLine = true,
+                    lineLimits = hoshiSingleLineTextFieldLineLimits(),
+                    scrollState = fieldScrollState,
                     textStyle = MaterialTheme.typography.titleLarge.copy(color = fieldForegroundColor),
-                    cursorBrush = SolidColor(dictionarySearchCursorColor(fieldForegroundColor)),
+                    cursorBrush = hoshiTextFieldCursorBrush(fieldForegroundColor),
                     keyboardOptions = dictionarySearchKeyboardOptions(),
-                    keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
+                    onKeyboardAction = { onSubmit() },
                 )
             }
             if (query.isNotEmpty()) {

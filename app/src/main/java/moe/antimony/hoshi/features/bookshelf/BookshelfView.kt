@@ -39,8 +39,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.input.TextFieldLineLimits
-import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.MenuBook
@@ -107,7 +105,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -133,6 +130,10 @@ import moe.antimony.hoshi.importing.importDisplayName
 import moe.antimony.hoshi.ui.HoshiBlockingProgressOverlay
 import moe.antimony.hoshi.ui.UiText
 import moe.antimony.hoshi.ui.asString
+import moe.antimony.hoshi.ui.hoshiOutlinedTextFieldColors
+import moe.antimony.hoshi.ui.hoshiSingleLineTextFieldLineLimits
+import moe.antimony.hoshi.ui.rememberSyncedTextFieldState
+import moe.antimony.hoshi.ui.replaceTextAndSelectStart
 import moe.antimony.hoshi.ui.theme.LocalHoshiDarkTheme
 import moe.antimony.hoshi.ui.theme.LocalHoshiEInkMode
 import java.io.File
@@ -142,13 +143,6 @@ data class SasayakiMatchRequest(
     val bookId: String,
     val bookEntry: BookEntry,
 )
-
-internal fun TextFieldState.resetRenameText(title: String) {
-    edit {
-        replace(0, length, title)
-        selection = TextRange.Zero
-    }
-}
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -272,7 +266,7 @@ fun BookshelfView(
         onMarkReadCandidate = { markReadCandidate = it },
         onRenameCandidate = {
             renameCandidate = it
-            renameTextState.resetRenameText(it.displayTitle)
+            renameTextState.replaceTextAndSelectStart(it.displayTitle)
         },
         onMoveBook = booksViewModel::moveBook,
         sasayakiEnabled = uiState.sasayakiEnabled,
@@ -372,8 +366,9 @@ fun BookshelfView(
                 OutlinedTextField(
                     state = renameTextState,
                     label = { Text(stringResource(R.string.bookshelf_title_label)) },
-                    lineLimits = TextFieldLineLimits.SingleLine,
+                    lineLimits = hoshiSingleLineTextFieldLineLimits(),
                     scrollState = renameScrollState,
+                    colors = hoshiOutlinedTextFieldColors(),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 )
             },
@@ -1413,6 +1408,12 @@ private fun ShelfManagementDialog(
     onDismiss: () -> Unit,
 ) {
     var newShelfName by remember { mutableStateOf("") }
+    val newShelfNameScrollState = rememberScrollState()
+    val newShelfNameState = rememberSyncedTextFieldState(
+        value = newShelfName,
+        onValueChange = { newShelfName = it },
+        scrollState = newShelfNameScrollState,
+    )
     val trimmedName = newShelfName.trim()
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1478,10 +1479,11 @@ private fun ShelfManagementDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     OutlinedTextField(
-                        value = newShelfName,
-                        onValueChange = { newShelfName = it },
+                        state = newShelfNameState,
                         label = { Text(stringResource(R.string.bookshelf_shelf_name)) },
-                        singleLine = true,
+                        lineLimits = hoshiSingleLineTextFieldLineLimits(),
+                        scrollState = newShelfNameScrollState,
+                        colors = hoshiOutlinedTextFieldColors(),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         modifier = Modifier.weight(1f),
                     )

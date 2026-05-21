@@ -1,6 +1,7 @@
 package moe.antimony.hoshi.features.anki
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,6 +37,9 @@ import moe.antimony.hoshi.LocalHoshiAppContainer
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.settings.SettingsDetailScaffold
 import moe.antimony.hoshi.ui.asString
+import moe.antimony.hoshi.ui.hoshiOutlinedTextFieldColors
+import moe.antimony.hoshi.ui.hoshiSingleLineTextFieldLineLimits
+import moe.antimony.hoshi.ui.rememberSyncedTextFieldState
 
 @Composable
 fun AnkiConnectView(
@@ -58,16 +62,23 @@ fun AnkiConnectView(
     var addressInput by remember { mutableStateOf("") }
 
     if (editingAddress) {
+        val addressScrollState = rememberScrollState()
+        val addressState = rememberSyncedTextFieldState(
+            value = addressInput,
+            onValueChange = { addressInput = it },
+            scrollState = addressScrollState,
+        )
         AlertDialog(
             onDismissRequest = { editingAddress = false },
             title = { Text(stringResource(R.string.anki_connect_address)) },
             text = {
                 OutlinedTextField(
-                    value = addressInput,
-                    onValueChange = { addressInput = it },
+                    state = addressState,
                     label = { Text(stringResource(R.string.anki_connect_url)) },
                     placeholder = { Text("https://anki.example.com:8765") },
-                    singleLine = true,
+                    lineLimits = hoshiSingleLineTextFieldLineLimits(),
+                    scrollState = addressScrollState,
+                    colors = hoshiOutlinedTextFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                 )
             },

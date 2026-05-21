@@ -28,7 +28,7 @@ This file is the short operational handoff for future agents.
 ### Bookshelf, Import, And Backup
 
 - Device-validate shelf-name entry and multi-EPUB DocumentsUI import in a session where text input and picker interaction can be driven reliably.
-- Device-validate long book-title renaming, confirming cursor movement can scroll from the visible start to the end and back without pre-scrolling manually.
+- Device-validate editable text fields in dark and E-ink themes, confirming visible cursors and cursor-driven horizontal scrolling for long search, Audio source, Sync, Anki, shelf, and book-title values.
 - Cross-validate Android-created `Books` and `Dictionaries` `.hoshi` archives restored by iOS.
 
 ### Reader And Lookup
