@@ -281,7 +281,7 @@ fun readerChromeColors(settings: ReaderSettings, systemDark: Boolean): ReaderChr
         buttonContent = 0xFF111111,
         menuContainer = 0xFAFFFFFF,
         menuContent = 0xFF111111,
-        menuBorder = 0xCCFFFFFF,
+        menuBorder = 0x1F000000,
         infoText = 0x8A000000,
     )
 }

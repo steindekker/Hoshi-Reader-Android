@@ -433,6 +433,13 @@ class ReaderChromeTest {
     }
 
     @Test
+    fun lightReaderMenuUsesVisibleOutlineAgainstWhiteReaderBackground() {
+        val colors = readerChromeColors(ReaderSettings(theme = ReaderTheme.Light), systemDark = false)
+
+        assertEquals(0x1F000000L, colors.menuBorder)
+    }
+
+    @Test
     fun systemThemeChromeUsesSepiaColorsWhenSepiaIsEnabledAsLightTheme() {
         val settings = ReaderSettings(theme = ReaderTheme.System, systemLightSepia = true)
 

@@ -5,6 +5,10 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep the light reader bottom menu outline visible against the white reader background.
+
 ## [v1.0.1] - 2026-05-22
 
 ### Added

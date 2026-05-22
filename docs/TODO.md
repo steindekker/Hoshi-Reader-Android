@@ -111,7 +111,7 @@ For reader/dictionary theme regressions, verify open Dictionary tab results, the
 
 For Dictionary tab input regressions, verify opening the tab focuses the search field, shows the soft keyboard, and hints Japanese input when a Japanese-capable keyboard is installed.
 
-For reader appearance chrome regressions, verify Show Title off, Progress Position Bottom, compact bottom buttons, Sasayaki top-right toggle spacing, top title centering with asymmetric top buttons, bottom reader-menu spacing, focus mode status-bar hiding without text reflow, and all progress indicators hidden against the paginated reader text area.
+For reader appearance chrome regressions, verify Show Title off, Progress Position Bottom, compact bottom buttons, Sasayaki top-right toggle spacing, top title centering with asymmetric top buttons, bottom reader-menu spacing and light-mode menu outline visibility, focus mode status-bar hiding without text reflow, and all progress indicators hidden against the paginated reader text area.
 
 For reader appearance controls, verify Layout Mode shows both Paginated and Continuous labels without truncation in the settings page and reader sheet.
 
