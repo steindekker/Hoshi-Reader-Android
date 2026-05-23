@@ -50,6 +50,33 @@ class ReaderWebResourceBridgeTest {
     }
 
     @Test
+    fun servesEpubHtmlWithSingleEarlyViewportMeta() {
+        val bridge = ReaderWebResourceBridge(
+            book = bookWithResource(
+                path = "chapter.xhtml",
+                mediaType = "application/xhtml+xml",
+                bytes = """
+                    <html>
+                    <head><meta name="viewport" content="width=320"></head>
+                    <body><p>Reader text</p></body>
+                    </html>
+                """.trimIndent().toByteArray(),
+            ),
+            fontFileForRequest = { null },
+        )
+
+        val resource = bridge.resourceForUrl("https://hoshi.local/epub/chapter.xhtml")
+        val html = resource!!.data.decodeToString()
+
+        assertEquals("application/xhtml+xml", resource.mediaType)
+        assertEquals("UTF-8", resource.encoding)
+        assertEquals(1, Regex("""<meta\s+name=["']viewport["']""").findAll(html).count())
+        assertTrue(html.contains("width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"))
+        assertTrue(html.contains("""user-scalable=no" />"""))
+        assertTrue(html.contains("<p>Reader text</p>"))
+    }
+
+    @Test
     fun rejectsMissingAndMalformedResources() {
         val bridge = ReaderWebResourceBridge(
             book = bookWithResource("chapter.xhtml", "application/xhtml+xml", ByteArray(0)),

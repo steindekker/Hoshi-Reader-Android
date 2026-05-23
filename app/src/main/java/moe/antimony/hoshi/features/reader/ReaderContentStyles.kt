@@ -19,6 +19,49 @@ internal object ReaderLayoutDefaults {
     const val trailingSpacerWidthCss: String = "0"
 }
 
+internal data class ReaderGeneratedLayout(
+    val viewportHorizontalPaddingRatio: Double,
+    val viewportVerticalPaddingRatio: Double,
+    val continuousBodyPaddingCss: String,
+    val continuousBodyBottomPaddingCss: String,
+    val paginatedColumnWidthCss: String,
+    val imageWidthViewportRatio: Double,
+) {
+    companion object {
+        fun from(settings: ReaderSettings): ReaderGeneratedLayout {
+            val verticalPaddingBlock = "var(--hoshi-vertical-padding-block, ${(settings.verticalPadding / 2.0).cssNumber()}vh)"
+            val continuousBodyPadding = if (settings.verticalWriting) {
+                "$verticalPaddingBlock 0"
+            } else {
+                "0 ${(settings.horizontalPadding / 2.0).cssNumber()}vw"
+            }
+            val continuousBottomPadding = if (settings.verticalWriting) {
+                settings.bottomPaddingCss
+            } else {
+                "0"
+            }
+            val columnWidth = if (settings.verticalWriting) {
+                "var(--page-height, 100vh)"
+            } else {
+                "var(--page-width, 100vw)"
+            }
+            val imageRatio = if (settings.continuousMode && settings.verticalWriting) {
+                1.0
+            } else {
+                settings.imageWidthViewportRatio
+            }
+            return ReaderGeneratedLayout(
+                viewportHorizontalPaddingRatio = settings.continuousViewportHorizontalPaddingRatio,
+                viewportVerticalPaddingRatio = settings.continuousViewportVerticalPaddingRatio,
+                continuousBodyPaddingCss = continuousBodyPadding,
+                continuousBodyBottomPaddingCss = continuousBottomPadding,
+                paginatedColumnWidthCss = columnWidth,
+                imageWidthViewportRatio = imageRatio,
+            )
+        }
+    }
+}
+
 internal object ReaderContentStyles {
     fun styleTag(
         settings: ReaderSettings = ReaderSettings(),
@@ -88,6 +131,7 @@ internal object ReaderContentStyles {
             }
             """.trimIndent()
         }
+        val generatedLayout = ReaderGeneratedLayout.from(settings)
         val layoutCss = if (settings.continuousMode) {
             val hiddenOverflowAxis = if (settings.verticalWriting) "overflow-y" else "overflow-x"
             val viewportConstraintCss = if (settings.verticalWriting) {
@@ -114,8 +158,8 @@ internal object ReaderContentStyles {
                 $textSpacingCss
                 box-sizing: border-box !important;
                 $viewportConstraintCss
-                padding: ${settings.pagePaddingCss} !important;
-                padding-bottom: ${settings.bottomPaddingCss} !important;
+                padding: ${generatedLayout.continuousBodyPaddingCss} !important;
+                padding-bottom: ${generatedLayout.continuousBodyBottomPaddingCss} !important;
                 $gridCss
                 text-orientation: mixed;
             }
@@ -138,7 +182,7 @@ internal object ReaderContentStyles {
                 -webkit-text-size-adjust: none !important;
                 $textSpacingCss
                 box-sizing: border-box !important;
-                column-width: var(--page-width, 100vw) !important;
+                column-width: ${generatedLayout.paginatedColumnWidthCss} !important;
                 column-gap: ${settings.columnGapCss};
                 padding: ${settings.pagePaddingCss} !important;
                 padding-bottom: ${settings.bottomPaddingCss} !important;

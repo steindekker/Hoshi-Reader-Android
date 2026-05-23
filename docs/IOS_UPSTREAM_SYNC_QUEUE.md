@@ -11,7 +11,7 @@ This document was rewritten from scratch after checking every iOS upstream commi
 
 ### 1. Reader pagination and continuous-layout correctness
 
-Status: pending Android review; likely partially covered.
+Status: completed on Android in `codex/reader-pagination-layout-sync`.
 
 Commits:
 
@@ -33,17 +33,13 @@ iOS behavior to mirror:
 - Paginated vertical-rl uses page height for CSS column width, avoiding width/height mismatch in vertical writing.
 - iPad-specific reader geometry avoids first-load safe-area layout shifts.
 
-Android current gap:
+Android result:
 
-- Android already has continuous viewport padding ratios in `ReaderSettings`, but it needs to be rechecked against iOS for both writing directions and restore timing.
-- Android WebView setup should be audited for whether viewport injection happens early enough before restore scripts run; do not copy the reverted wait-for-frames workaround.
-- Android paginated CSS still deserves a focused check for vertical-rl `column-width`, page width/height variables, trailing spacer behavior, and image page overflow.
-- iPad-specific SwiftUI layout fixes are context only unless Android tablet/emulator validation shows matching layout drift.
-
-Suggested slice:
-
-- First add or update JVM coverage around generated reader CSS/scripts where possible, including continuous viewport meta timing assumptions, then device-validate continuous restore and paginated vertical writing.
-- Keep this as a layout bugfix slice; do not bundle reader chrome redesign.
+- Continuous layout now splits padding by writing direction so the Compose viewport owns the padding along the reading axis, while body CSS keeps only cross-axis padding.
+- Paginated vertical writing resolves CSS `column-width` from `--page-height`; horizontal writing keeps `--page-width`.
+- Chapter XHTML/HTML resources get a single early viewport meta before reader setup runs, while chapter navigation keeps the existing `loadUrl` path instead of the slower `loadDataWithBaseURL` main-document load.
+- The reverted three-animation-frame restore wait was not copied. `b84bb79` remains tablet validation context only.
+- Covered by focused JVM tests plus emulator WebView inspection on `emulator-5554`: continuous vertical restore and paginated vertical both loaded text with one viewport meta and zero XHTML parser errors; paginated vertical reported `columnWidth` equal to `--page-height`.
 
 Validation:
 
@@ -306,12 +302,12 @@ Validation:
 | `ebf5423` | 2026-05-21 | Reader paragraph spacing setting | Pending setting/CSS sync |
 | `76409c9` | 2026-05-22 | Reader controls status bar ownership | Pending chrome comparison |
 | `3c0de23` | 2026-05-22 | Reader UI redesign | Pending chrome comparison |
-| `7057771` | 2026-05-22 | Continuous reader padding in reading direction | Pending layout review |
+| `7057771` | 2026-05-22 | Continuous reader padding in reading direction | Synced in Android slice 1 |
 | `79fef08` | 2026-05-22 | Zoomed popup recursive selection coordinate fix | Pending popup audit |
 | `027ea05` | 2026-05-22 | SVG container image click targeting | Pending image UX sync |
 | `4438de8` | 2026-05-22 | Reader UI minor adjustments | Pending chrome comparison |
-| `8705f86` | 2026-05-23 | Vertical-rl column width uses page height | Pending layout review |
-| `9b3e135` | 2026-05-23 | Continuous WebView early viewport injection crash fix | Pending layout review |
+| `8705f86` | 2026-05-23 | Vertical-rl column width uses page height | Synced in Android slice 1 |
+| `9b3e135` | 2026-05-23 | Continuous WebView early viewport injection crash fix | Synced in Android slice 1 |
 
 ## Suggested Implementation Order
 

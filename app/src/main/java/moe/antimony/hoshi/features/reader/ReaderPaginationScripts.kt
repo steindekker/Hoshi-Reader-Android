@@ -51,6 +51,7 @@ internal object ReaderPaginationScripts {
         val initialRestoreScript = initialFragment?.let { fragment ->
             "window.hoshiReader.jumpToFragment(${fragment.javaScriptStringLiteral()});"
         } ?: "window.hoshiReader.restoreProgress($initialProgress);"
+        val generatedLayout = ReaderGeneratedLayout.from(settings)
         return """
         <script>
         window.hoshiReader = {
@@ -662,7 +663,7 @@ internal object ReaderPaginationScripts {
           document.documentElement.style.setProperty('--hoshi-vertical-padding-gap', (window.innerHeight * ${settings.verticalPadding / 100.0}) + 'px');
           document.documentElement.style.setProperty('--page-height', pageHeight + 'px');
           document.documentElement.style.setProperty('--page-width', pageWidth + 'px');
-          document.documentElement.style.setProperty('--hoshi-image-max-width', Math.max(1, Math.floor(pageWidth * ${settings.imageWidthViewportRatio})) + 'px');
+          document.documentElement.style.setProperty('--hoshi-image-max-width', Math.max(1, Math.floor(pageWidth * ${generatedLayout.imageWidthViewportRatio})) + 'px');
           document.documentElement.style.setProperty('--hoshi-image-max-height', Math.max(1, pageHeight - ${settings.bottomOverlapPx}) + 'px');
           window.hoshiReader.pageHeight = pageHeight;
           window.hoshiReader.pageWidth = pageWidth;
@@ -727,6 +728,7 @@ internal object ReaderPaginationScripts {
         val initialRestoreScript = initialFragment?.let { fragment ->
             "window.hoshiReader.jumpToFragment(${fragment.javaScriptStringLiteral()});"
         } ?: "window.hoshiReader.restoreProgress($initialProgress);"
+        val generatedLayout = ReaderGeneratedLayout.from(settings)
         return """
         <script>
         window.hoshiReader = {
@@ -1138,7 +1140,7 @@ internal object ReaderPaginationScripts {
           document.documentElement.style.setProperty('--hoshi-vertical-padding-block', (window.innerHeight * ${settings.verticalPadding / 200.0}) + 'px');
           document.documentElement.style.setProperty('--hoshi-vertical-padding-gap', (window.innerHeight * ${settings.verticalPadding / 100.0}) + 'px');
           document.documentElement.style.setProperty('--hoshi-continuous-height', window.innerHeight + 'px');
-          document.documentElement.style.setProperty('--hoshi-image-max-width', Math.max(1, Math.floor(window.innerWidth * ${settings.imageWidthViewportRatio})) + 'px');
+          document.documentElement.style.setProperty('--hoshi-image-max-width', Math.max(1, Math.floor(window.innerWidth * ${generatedLayout.imageWidthViewportRatio})) + 'px');
           document.documentElement.style.setProperty('--hoshi-image-max-height', Math.max(1, window.innerHeight - ${settings.bottomOverlapPx}) + 'px');
           ${readerImageBlurScript(settings)}
           Array.from(document.querySelectorAll('svg')).forEach(function(svg) {

@@ -161,6 +161,58 @@ class ReaderSettingsTest {
     }
 
     @Test
+    fun verticalContinuousLayoutMovesHorizontalPaddingToViewportOnly() {
+        val layout = ReaderGeneratedLayout.from(
+            ReaderSettings(
+                continuousMode = true,
+                verticalWriting = true,
+                horizontalPadding = 24,
+                verticalPadding = 10,
+                fontSize = 28,
+            ),
+        )
+
+        assertEquals(0.12, layout.viewportHorizontalPaddingRatio, 0.0)
+        assertEquals(0.0, layout.viewportVerticalPaddingRatio, 0.0)
+        assertEquals("var(--hoshi-vertical-padding-block, 5.0vh) 0", layout.continuousBodyPaddingCss)
+        assertEquals(
+            "calc(var(--hoshi-vertical-padding-block, 5.0vh) + 28px)",
+            layout.continuousBodyBottomPaddingCss,
+        )
+        assertEquals(1.0, layout.imageWidthViewportRatio, 0.0)
+    }
+
+    @Test
+    fun horizontalContinuousLayoutMovesVerticalPaddingToViewportOnly() {
+        val layout = ReaderGeneratedLayout.from(
+            ReaderSettings(
+                continuousMode = true,
+                verticalWriting = false,
+                horizontalPadding = 24,
+                verticalPadding = 10,
+            ),
+        )
+
+        assertEquals(0.0, layout.viewportHorizontalPaddingRatio, 0.0)
+        assertEquals(0.05, layout.viewportVerticalPaddingRatio, 0.0)
+        assertEquals("0 12.0vw", layout.continuousBodyPaddingCss)
+        assertEquals("0", layout.continuousBodyBottomPaddingCss)
+        assertEquals(0.76, layout.imageWidthViewportRatio, 0.0)
+    }
+
+    @Test
+    fun paginatedVerticalLayoutUsesPageHeightAsColumnWidth() {
+        assertEquals(
+            "var(--page-height, 100vh)",
+            ReaderGeneratedLayout.from(ReaderSettings(verticalWriting = true)).paginatedColumnWidthCss,
+        )
+        assertEquals(
+            "var(--page-width, 100vw)",
+            ReaderGeneratedLayout.from(ReaderSettings(verticalWriting = false)).paginatedColumnWidthCss,
+        )
+    }
+
+    @Test
     fun verticalContinuousReaderUsesHorizontalPaddingAsViewportInset() {
         assertEquals(
             0.125,

@@ -204,6 +204,29 @@ class ReaderWebViewStateHolderTest {
     }
 
     @Test
+    fun readerChapterHtmlInjectsSingleEarlyViewportMetaBeforeBodyContent() {
+        val html = """
+            <!doctype html>
+            <html>
+            <head>
+                <title>Chapter</title>
+                <meta name="viewport" content="width=320">
+            </head>
+            <body><p>Reader text</p></body>
+            </html>
+        """.trimIndent()
+
+        val prepared = readerHtmlWithEarlyViewport(html)
+
+        assertEquals(1, Regex("""<meta\s+name=["']viewport["']""").findAll(prepared).count())
+        assertTrue(
+            prepared.indexOf("width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no") <
+                prepared.indexOf("<body>"),
+        )
+        assertTrue(prepared.contains("<p>Reader text</p>"))
+    }
+
+    @Test
     fun sasayakiTopToggleSpaceIsReservedBeforeSidecarsAreParsed() {
         val root = createTempDirectory("hoshi-sasayaki-sidecar").toFile()
         try {
