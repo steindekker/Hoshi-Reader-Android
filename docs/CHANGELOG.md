@@ -5,6 +5,8 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+## [v1.0.2] - 2026-05-24
+
 ### Fixed
 
 - Keep reader word lookup working when Android restores directly back into an open book after the app process is reclaimed in the background.
