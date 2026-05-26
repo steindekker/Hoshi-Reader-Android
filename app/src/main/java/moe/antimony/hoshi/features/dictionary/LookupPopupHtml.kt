@@ -306,6 +306,12 @@ internal object LookupPopupHtml {
                 <style>$androidColorSchemeCss</style>
                 $popupTypographyCss
                 $eInkCss
+                <style>
+                    html,
+                    body {
+                        overscroll-behavior: none;
+                    }
+                </style>
                 <script>
                     window.nativePopupButtons = false;
                     window.HoshiAndroidPopup = window.HoshiAndroidPopup || (function() {
@@ -408,9 +414,7 @@ internal object LookupPopupHtml {
                         function postReady() {
                             if (posted) return;
                             posted = true;
-                            requestAnimationFrame(function() {
-                                webkit.messageHandlers.contentReady.postMessage(collectButtonFrames());
-                            });
+                            webkit.messageHandlers.contentReady.postMessage(collectButtonFrames());
                         }
                         function hasRenderableContent() {
                             if (!container || !window.entryCount) {
@@ -455,15 +459,30 @@ internal object LookupPopupHtml {
                                 window.hoshiSelection?.clearSelection();
                                 return;
                             }
+                            if (message.type === 'resetPopup') {
+                                window.popupId = null;
+                                closeOverlay();
+                                window.hoshiSelection?.clearSelection();
+                                window.resetPopupResults?.();
+                                return;
+                            }
                             if (message.type === 'renderPopup') {
                                 window.popupId = message.popupId || null;
                                 closeOverlay();
-                                window.lookupEntries = [];
                                 window.entryCount = message.entriesCount || 0;
-                                window.hoshiPopupObserveContentReady?.();
+                                var initialEntries = [];
+                                if (message.initialEntryJson) {
+                                    try {
+                                        initialEntries[0] = JSON.parse(message.initialEntryJson);
+                                    } catch (e) {
+                                        initialEntries = [];
+                                    }
+                                }
                                 if (window.replacePopupResults) {
-                                    window.replacePopupResults(window.entryCount);
+                                    window.replacePopupResults(window.entryCount, initialEntries);
                                 } else {
+                                    window.lookupEntries = initialEntries;
+                                    window.hoshiPopupObserveContentReady?.();
                                     window.renderPopup();
                                 }
                                 return;

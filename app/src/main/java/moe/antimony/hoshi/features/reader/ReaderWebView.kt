@@ -310,24 +310,41 @@ fun ReaderWebView(
     val popupAssets = remember(context) { LookupPopupAssets.load(context) }
     val readerPopupBridgeHolder = remember { ReaderLookupPopupBridgeCallbackHolder() }
     val popupDarkMode = effectiveSettings.usesDarkInterface(systemDarkTheme)
-    val currentReaderPopupIframeDocument = rememberUpdatedState(
-        LookupPopupHtml.renderIframeDocument(
-            assets = null,
-            dictionaryStyles = dictionaryStyles,
-            settings = dictionarySettings,
-            swipeToDismiss = effectiveSettings.popupSwipeToDismiss,
-            swipeThreshold = effectiveSettings.popupSwipeThreshold,
-            reducedMotionScrolling = effectiveSettings.popupReducedMotionScrolling,
-            reducedMotionScrollPercent = effectiveSettings.popupReducedMotionScrollPercent,
-            reducedMotionSwipeThreshold = effectiveSettings.popupReducedMotionSwipeThreshold,
-            darkMode = popupDarkMode,
-            eInkMode = effectiveSettings.eInkMode,
-            audioSettings = audioSettings,
-            ankiSettings = ankiUiState.popupSettings,
-            fontFaceCss = fontManager.popupFontFaceCss(),
-            popupScale = effectiveSettings.popupScale,
-        ),
+    val readerPopupIframeDocument = LookupPopupHtml.renderIframeDocument(
+        assets = null,
+        dictionaryStyles = dictionaryStyles,
+        settings = dictionarySettings,
+        swipeToDismiss = effectiveSettings.popupSwipeToDismiss,
+        swipeThreshold = effectiveSettings.popupSwipeThreshold,
+        reducedMotionScrolling = effectiveSettings.popupReducedMotionScrolling,
+        reducedMotionScrollPercent = effectiveSettings.popupReducedMotionScrollPercent,
+        reducedMotionSwipeThreshold = effectiveSettings.popupReducedMotionSwipeThreshold,
+        darkMode = popupDarkMode,
+        eInkMode = effectiveSettings.eInkMode,
+        audioSettings = audioSettings,
+        ankiSettings = ankiUiState.popupSettings,
+        fontFaceCss = fontManager.popupFontFaceCss(),
+        popupScale = effectiveSettings.popupScale,
     )
+    val currentReaderPopupIframeDocument = rememberUpdatedState(readerPopupIframeDocument)
+    val readerPopupIframeUrl = remember(readerPopupIframeDocument) {
+        readerLookupPopupIframeUrl(readerPopupIframeDocument.hashCode())
+    }
+    LaunchedEffect(webView, readerPopupIframeUrl, readerIframePopupSupported) {
+        if (!readerIframePopupSupported) return@LaunchedEffect
+        webView?.evaluateJavascript(
+            """
+                (function() {
+                  var iframeUrl = ${readerPopupIframeUrl.javaScriptStringLiteral()};
+                  window.__hoshiReaderPopupIframeUrl = iframeUrl;
+                  if (window.hoshiReaderPopupHost) {
+                    window.hoshiReaderPopupHost.preloadRoot(iframeUrl);
+                  }
+                })();
+            """.trimIndent(),
+            null,
+        )
+    }
     val readerPopupResourceHandler = remember(context, popupAssets, fontManager) {
         ReaderLookupPopupResourceHandler(
             context = context.applicationContext,
@@ -1228,6 +1245,7 @@ fun ReaderWebView(
                                 forwardCount = history.forwardCount,
                                 sasayakiWasPaused = sasayakiWasPausedByLookup,
                                 sasayakiIsPlaying = sasayakiPlayer?.isPlaying == true,
+                                iframeUrl = readerPopupIframeUrl,
                             )
                         }
                     }

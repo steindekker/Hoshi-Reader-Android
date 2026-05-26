@@ -1,9 +1,13 @@
 package moe.antimony.hoshi.features.dictionary
 
+import de.manhhao.hoshi.GlossaryEntry
+import de.manhhao.hoshi.LookupResult
+import de.manhhao.hoshi.TermResult
 import moe.antimony.hoshi.features.reader.ReaderSelectionData
 import moe.antimony.hoshi.features.reader.ReaderSelectionRect
 import moe.antimony.hoshi.features.reader.ReaderLookupPopupFramePayload
 import moe.antimony.hoshi.features.reader.ReaderLookupPopupViewport
+import moe.antimony.hoshi.features.reader.readerLookupPopupIframeUrl
 import moe.antimony.hoshi.features.reader.readerLookupPopupTouchBlocksReaderGesture
 import moe.antimony.hoshi.features.audio.AudioSettings
 import android.view.MotionEvent
@@ -177,7 +181,39 @@ class LookupPopupTest {
         assertEquals(201.0, payload.selectionOffsetY, 0.0)
         assertTrue(payload.popupActionBar)
         assertEquals(3, payload.entriesCount)
-        assertEquals("https://hoshi.local/popup/iframe.html?popupId=root", payload.iframeUrl)
+        assertEquals("https://hoshi.local/popup/iframe.html", payload.iframeUrl)
+        assertEquals("https://hoshi.local/popup/iframe.html?v=123", readerLookupPopupIframeUrl(123))
+    }
+
+    @Test
+    fun readerIframeFramePayloadSeedsFirstEntryForInitialPaint() {
+        val popup = LookupPopupItem(
+            id = "root",
+            state = LookupPopupState(
+                selection = ReaderSelectionData(
+                    text = "root",
+                    sentence = "root",
+                    rect = ReaderSelectionRect(x = 100.0, y = 100.0, width = 20.0, height = 30.0),
+                    normalizedOffset = null,
+                ),
+                results = listOf(
+                    lookupResult(expression = "食べる", reading = "たべる", glossary = "to eat"),
+                    lookupResult(expression = "読む", reading = "よむ", glossary = "to read"),
+                ),
+                isVertical = false,
+                width = 320,
+                height = 250,
+            ),
+        )
+
+        val payload = ReaderLookupPopupFramePayload.fromPopup(
+            popup = popup,
+            popupIndex = 0,
+            viewport = ReaderLookupPopupViewport(width = 500.0, height = 800.0),
+        )
+
+        assertTrue(payload.initialEntryJson?.contains(""""expression":"食べる"""") == true)
+        assertFalse(payload.initialEntryJson?.contains(""""expression":"読む"""") == true)
     }
 
     @Test
@@ -430,4 +466,29 @@ class LookupPopupTest {
         assertFalse(shouldDismiss)
     }
 
+    private fun lookupResult(
+        expression: String,
+        reading: String,
+        glossary: String,
+    ): LookupResult = LookupResult(
+        expression,
+        expression,
+        emptyArray(),
+        TermResult(
+            expression = expression,
+            reading = reading,
+            rules = "",
+            glossaries = arrayOf(
+                GlossaryEntry(
+                    dictName = "JMdict",
+                    glossary = glossary,
+                    definitionTags = "",
+                    termTags = "",
+                ),
+            ),
+            frequencies = emptyArray(),
+            pitches = emptyArray(),
+        ),
+        0,
+    )
 }

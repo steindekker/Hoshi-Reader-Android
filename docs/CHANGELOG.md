@@ -7,7 +7,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ### Changed
 
-- Rework reader lookup popups to render inside the reader WebView through an iframe layer, improving popup dismissal and touch stability while preserving recursive lookup, audio, Anki, redirect history, and Sasayaki controls.
+- Rework reader lookup popups to render inside the reader WebView through an iframe layer, improving popup dismissal, touch stability, and large-result first paint while preserving recursive lookup, audio, Anki, redirect history, and Sasayaki controls.
 
 ## [v1.1.0] - 2026-05-24
 

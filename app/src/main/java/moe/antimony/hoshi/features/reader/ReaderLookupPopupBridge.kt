@@ -19,12 +19,12 @@ import moe.antimony.hoshi.features.audio.AudioPlaybackMode
 import moe.antimony.hoshi.features.audio.AudioRequestHandler
 import moe.antimony.hoshi.features.dictionary.DictionaryImageRequestHandler
 import moe.antimony.hoshi.features.dictionary.LookupPopupAssets
+import moe.antimony.hoshi.features.dictionary.LookupPopupHtml
 import moe.antimony.hoshi.features.dictionary.LookupPopupItem
 import moe.antimony.hoshi.features.dictionary.LookupPopupLayout
 import moe.antimony.hoshi.features.dictionary.popupSelectionOffsetY
 import java.io.ByteArrayInputStream
 import java.io.File
-import java.net.URLEncoder
 
 @Serializable
 internal data class ReaderLookupPopupViewport(
@@ -47,6 +47,7 @@ internal data class ReaderLookupPopupFramePayload(
     val id: String,
     val frame: ReaderLookupPopupFrameRect,
     val entriesCount: Int,
+    val initialEntryJson: String?,
     val popupActionBar: Boolean,
     val actionBarVisible: Boolean,
     val backCount: Int,
@@ -70,6 +71,7 @@ internal data class ReaderLookupPopupFramePayload(
             forwardCount: Int = 0,
             sasayakiWasPaused: Boolean = false,
             sasayakiIsPlaying: Boolean = false,
+            iframeUrl: String = readerLookupPopupIframeUrl(),
         ): ReaderLookupPopupFramePayload {
             val state = popup.state
             val baseRect = state.selection.rect
@@ -104,6 +106,9 @@ internal data class ReaderLookupPopupFramePayload(
                     height = frame.height,
                 ),
                 entriesCount = entriesCount,
+                initialEntryJson = popup.state.results.firstOrNull()
+                    ?.takeIf { entriesCount > 0 }
+                    ?.let(LookupPopupHtml::entryJsonString),
                 popupActionBar = state.popupActionBar,
                 actionBarVisible = actionBarVisible,
                 backCount = backCount,
@@ -121,7 +126,7 @@ internal data class ReaderLookupPopupFramePayload(
                     forwardCount = forwardCount,
                     hasSasayakiCue = hasSasayakiCue,
                 ),
-                iframeUrl = "$PopupIframeUrl?popupId=${popup.id.urlEncoded()}",
+                iframeUrl = iframeUrl,
             )
         }
     }
@@ -336,12 +341,12 @@ private fun JsonObject.double(name: String): Double? =
         ?.doubleOrNull
         ?.takeIf { it.isFinite() }
 
-private fun String.urlEncoded(): String =
-    URLEncoder.encode(this, Charsets.UTF_8.name())
-
 private val readerPopupJson = Json { encodeDefaults = true }
 
 private const val PopupIframeUrl = "https://hoshi.local/popup/iframe.html"
+
+internal fun readerLookupPopupIframeUrl(cacheKey: Int? = null): String =
+    cacheKey?.let { "$PopupIframeUrl?v=$it" } ?: PopupIframeUrl
 
 internal class ReaderLookupPopupBridgeCallbacks(
     val onMessage: (ReaderLookupPopupBridgeMessage) -> Unit = {},

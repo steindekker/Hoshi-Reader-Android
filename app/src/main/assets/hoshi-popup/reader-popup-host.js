@@ -5,6 +5,7 @@
     const SASAYAKI_BAR_HEIGHT = 37;
     const frames = new Map();
     const frameSources = new WeakMap();
+    let idleRootRecord = null;
 
     function ensureLayer() {
         let layer = document.getElementById(LAYER_ID);
@@ -105,30 +106,95 @@
         return {
             type: 'renderPopup',
             popupId: payload.id,
-            entriesCount: payload.entriesCount || 0
+            entriesCount: payload.entriesCount || 0,
+            initialEntryJson: payload.initialEntryJson || null
         };
     }
 
-    function renderPayload(payload) {
+    function renderIframe(record) {
+        record.iframe.contentWindow?.postMessage(iframeRenderMessage(record.payload), ORIGIN);
+    }
+
+    function setContentReady(record, ready) {
+        record.contentReady = ready;
+        record.shell.dataset.contentReady = String(ready);
+    }
+
+    function resetIframe(record) {
+        record.iframe.contentWindow?.postMessage({ type: 'resetPopup' }, ORIGIN);
+    }
+
+    function createRecord(payload = null) {
+        const shell = document.createElement('div');
+        shell.className = 'hoshi-reader-popup-shell';
+        shell.dataset.contentReady = 'false';
+        const iframe = document.createElement('iframe');
+        iframe.className = 'hoshi-reader-popup-iframe';
+        iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+        const record = { shell, iframe, payload, contentReady: false, loaded: false, root: false };
+        iframe.addEventListener('load', () => {
+            record.loaded = true;
+            if (record.payload) {
+                frameSources.set(iframe.contentWindow, record.payload.id);
+                renderIframe(record);
+            }
+        });
+        shell.appendChild(iframe);
+        return record;
+    }
+
+    function preloadRoot(iframeUrl) {
+        window.__hoshiReaderPopupIframeUrl = iframeUrl;
+        if (!iframeUrl || frames.size > 0) return;
         const layer = ensureLayer();
+        if (!idleRootRecord) {
+            idleRootRecord = createRecord();
+            layer.appendChild(idleRootRecord.shell);
+        }
+        setContentReady(idleRootRecord, false);
+        resetIframe(idleRootRecord);
+        idleRootRecord.payload = null;
+        idleRootRecord.root = false;
+        if (idleRootRecord.iframe.src !== iframeUrl) {
+            idleRootRecord.loaded = false;
+            idleRootRecord.iframe.src = iframeUrl;
+        }
+    }
+
+    function activateRecord(payload, isRoot) {
         let record = frames.get(payload.id);
+        let needsRender = false;
         if (!record) {
-            const shell = document.createElement('div');
-            shell.className = 'hoshi-reader-popup-shell';
-            const iframe = document.createElement('iframe');
-            iframe.className = 'hoshi-reader-popup-iframe';
-            iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
-            iframe.addEventListener('load', () => {
-                frameSources.set(iframe.contentWindow, payload.id);
-                iframe.contentWindow?.postMessage(iframeRenderMessage(payload), ORIGIN);
-            });
-            shell.appendChild(iframe);
-            layer.appendChild(shell);
-            record = { shell, iframe, payload };
+            if (isRoot && idleRootRecord) {
+                record = idleRootRecord;
+                idleRootRecord = null;
+                needsRender = true;
+            } else {
+                record = createRecord(payload);
+                ensureLayer().appendChild(record.shell);
+                needsRender = true;
+            }
             frames.set(payload.id, record);
         }
-
+        if (record.payload?.id !== payload.id) {
+            needsRender = true;
+        }
+        record.root = isRoot;
         record.payload = payload;
+        if (needsRender) {
+            setContentReady(record, false);
+            resetIframe(record);
+            if (record.iframe.contentWindow) {
+                frameSources.set(record.iframe.contentWindow, payload.id);
+            }
+        }
+        return { record, needsRender };
+    }
+
+    function renderPayload(payload, index) {
+        const isRoot = index === 0;
+        const { record, needsRender } = activateRecord(payload, isRoot);
+
         if (record.clearSelectionSignal !== undefined && record.clearSelectionSignal !== payload.clearSelectionSignal) {
             record.iframe.contentWindow?.postMessage({ type: 'clearSelection' }, ORIGIN);
         }
@@ -138,20 +204,39 @@
         record.iframe.style.top = `${frameContentTop(payload)}px`;
         record.iframe.style.height = `calc(100% - ${frameContentTop(payload)}px)`;
         if (record.iframe.src !== payload.iframeUrl) {
+            record.loaded = false;
             record.iframe.src = payload.iframeUrl;
-        } else {
-            record.iframe.contentWindow?.postMessage(iframeRenderMessage(payload), ORIGIN);
+        } else if (needsRender && record.loaded) {
+            renderIframe(record);
         }
+    }
+
+    function parkRootRecord(record) {
+        setContentReady(record, false);
+        resetIframe(record);
+        record.payload = null;
+        record.clearSelectionSignal = undefined;
+        record.root = false;
+        record.shell.dataset.popupId = '';
+        record.shell.querySelectorAll('.hoshi-reader-popup-bar').forEach(node => node.remove());
+        record.iframe.style.top = '0px';
+        record.iframe.style.height = '100%';
+        idleRootRecord = record;
     }
 
     function removeMissing(activeIds) {
         for (const [id, record] of frames.entries()) {
             if (activeIds.has(id)) continue;
-            record.shell.remove();
             frames.delete(id);
+            if (record.root && !idleRootRecord) {
+                parkRootRecord(record);
+            } else {
+                resetIframe(record);
+                record.shell.remove();
+            }
         }
         const layer = document.getElementById(LAYER_ID);
-        if (layer && frames.size === 0) {
+        if (layer && frames.size === 0 && !idleRootRecord) {
             layer.remove();
         }
     }
@@ -159,7 +244,7 @@
     function renderStack(payload) {
         const items = Array.isArray(payload) ? payload : (payload?.popups || []);
         const activeIds = new Set(items.map(item => item.id));
-        items.forEach(renderPayload);
+        items.forEach((item, index) => renderPayload(item, index));
         removeMissing(activeIds);
     }
 
@@ -188,9 +273,13 @@
 
     window.addEventListener('message', function(event) {
         if (event.origin !== ORIGIN) return;
-        const popupId = frameSources.get(event.source) || event.data?.popupId;
         const data = event.data || {};
+        const popupId = data.popupId || frameSources.get(event.source);
         if (data.source !== 'hoshi-popup-iframe' || !popupId) return;
+        const record = frames.get(popupId);
+        if (data.name === 'contentReady' && record) {
+            setContentReady(record, true);
+        }
         const body = data.name === 'textSelected' ? adjustSelectionBody(popupId, data.body) : data.body;
         postNative({
             name: data.name,
@@ -214,6 +303,14 @@
             border: 1px solid rgba(120, 120, 128, 0.36);
             border-radius: 10px;
             box-shadow: 0 3px 12px rgba(0, 0, 0, 0.22);
+            visibility: hidden;
+            opacity: 0;
+            pointer-events: none;
+        }
+        #${LAYER_ID} .hoshi-reader-popup-shell[data-content-ready="true"] {
+            visibility: visible;
+            opacity: 1;
+            pointer-events: auto;
         }
         #${LAYER_ID} .hoshi-reader-popup-shell[data-dark-mode="true"] {
             background: #000;
@@ -298,8 +395,12 @@
     window.hoshiReaderPopupHost = {
         renderStack,
         resolveMessage,
-        highlightSelection
+        highlightSelection,
+        preloadRoot
     };
+    if (window.__hoshiReaderPopupIframeUrl) {
+        preloadRoot(window.__hoshiReaderPopupIframeUrl);
+    }
     if (window.__hoshiPendingReaderPopupStack) {
         renderStack(window.__hoshiPendingReaderPopupStack);
         window.__hoshiPendingReaderPopupStack = null;

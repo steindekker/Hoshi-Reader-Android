@@ -97,6 +97,13 @@ class LookupPopupHtmlTest {
     }
 
     @Test
+    fun iframePopupShellDisablesOverscrollStretch() {
+        val html = LookupPopupHtml.renderIframeDocument()
+
+        assertTrue(html.contains("overscroll-behavior: none;"))
+    }
+
+    @Test
     fun popupHtmlInjectsFontFacesAndInitialScaleLikeIosPopupWebView() {
         val html = LookupPopupHtml.render(
             listOf(lookupResult(expression = "食べる", reading = "たべる", glossary = "to eat")),
