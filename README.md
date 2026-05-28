@@ -9,7 +9,7 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-A lightweight Android Japanese EPUB reader for immersion learning, with Yomitan lookup, Anki card creation, audiobook read-along, and e-ink mode options.
+Hoshi Reader Android is a lightweight Japanese EPUB reader app for Android, built for immersion learning with Yomitan lookup, Anki card creation, audiobook read-along, and e-ink mode options.
 
 This project is a native Android recreation of [Hoshi Reader](https://github.com/Manhhao/Hoshi-Reader).
 
@@ -78,9 +78,9 @@ This project is a native Android recreation of [Hoshi Reader](https://github.com
 - Sync reading progress and statistics through Google Drive, compatible with ッツ Reader.
 - Back up or restore books and dictionaries with `.hoshi` archives, compatible with Hoshi Reader iOS.
 
-## Download
+## Download Hoshi Reader Android APK
 
-Download the latest APK from [GitHub Releases](https://github.com/HuangAntimony/Hoshi-Reader-Android/releases/latest).
+Download the latest Hoshi Reader Android APK from [GitHub Releases](https://github.com/HuangAntimony/Hoshi-Reader-Android/releases/latest).
 
 Hoshi Reader Android requires Android 9 or later.
 
