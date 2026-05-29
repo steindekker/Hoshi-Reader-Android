@@ -123,7 +123,7 @@ For reader process-restore regressions, verify returning directly to an open boo
 
 For Dictionary tab input regressions, verify opening the tab focuses the search field, shows the soft keyboard, and hints Japanese input when a Japanese-capable keyboard is installed.
 
-For reader appearance chrome regressions, verify Show Title off, Show Back Button on/off, Progress Position Bottom, compact bottom buttons, Sasayaki top-right toggle spacing, top title centering with asymmetric top buttons, bottom reader-menu spacing and light-mode menu outline visibility, focus mode status-bar hiding without text reflow, Android Back revealing chrome before closing the reader, and all progress indicators hidden against the paginated reader text area.
+For reader appearance chrome regressions, verify Show Title off, Show Back Button on/off, Progress Position Bottom, compact bottom buttons, Sasayaki top-right toggle spacing, top title centering with asymmetric top buttons, bottom reader-menu spacing, iOS visual item order, light-mode menu outline visibility, focus mode status-bar hiding without text reflow, Android Back revealing chrome before closing the reader, and all progress indicators hidden against the paginated reader text area.
 
 For reader appearance controls, verify Layout Mode shows both Paginated and Continuous labels without truncation in the settings page and reader sheet.
 

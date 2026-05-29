@@ -15,6 +15,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ### Fixed
 
+- Match the reader's bottom-right menu order to iOS, with Sasayaki and Statistics appearing above Highlights, Chapters, and Appearance when available.
 - Show unselected bookshelf multi-select books with an empty circle instead of a check mark, keeping selected and unselected states distinguishable in E-ink mode.
 
 ## [v1.1.1] - 2026-05-27

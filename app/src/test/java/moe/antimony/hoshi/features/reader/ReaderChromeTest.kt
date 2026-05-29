@@ -548,6 +548,32 @@ class ReaderChromeTest {
     }
 
     @Test
+    fun bottomMenuVisualOrderMatchesIosUpwardMenu() {
+        assertEquals(
+            listOf(
+                ReaderMenuDestination.Sasayaki,
+                ReaderMenuDestination.Statistics,
+                ReaderMenuDestination.Highlights,
+                ReaderMenuDestination.Chapters,
+                ReaderMenuDestination.Appearance,
+            ),
+            readerBottomMenuVisualOrder(showStatistics = true, showSasayaki = true),
+        )
+    }
+
+    @Test
+    fun bottomMenuOmitsUnavailableOptionalDestinationsWithoutChangingIosOrder() {
+        assertEquals(
+            listOf(
+                ReaderMenuDestination.Highlights,
+                ReaderMenuDestination.Chapters,
+                ReaderMenuDestination.Appearance,
+            ),
+            readerBottomMenuVisualOrder(showStatistics = false, showSasayaki = false),
+        )
+    }
+
+    @Test
     fun usesThemeMatchedChromeColors() {
         assertEquals(0xFAF8F0E2L, readerChromeColors(ReaderSettings(theme = ReaderTheme.Sepia), systemDark = true).buttonContainer)
         assertEquals(0xE6141414L, readerChromeColors(ReaderSettings(theme = ReaderTheme.Dark), systemDark = false).buttonContainer)

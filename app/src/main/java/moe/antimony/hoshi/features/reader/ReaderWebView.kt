@@ -2505,90 +2505,87 @@ private fun ReaderMenuCard(
         Column(
             modifier = Modifier.padding(vertical = metrics.menuVerticalPaddingDp.dp),
         ) {
-            ReaderMenuItem(
-                text = stringResource(R.string.settings_appearance),
-                icon = {
-                    Icon(
-                        imageVector = Icons.Rounded.Palette,
-                        contentDescription = null,
-                        tint = Color(colors.menuContent),
+            readerBottomMenuVisualOrder(
+                showStatistics = onStatistics != null,
+                showSasayaki = onSasayaki != null,
+            ).forEachIndexed { index, destination ->
+                if (index > 0) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = metrics.menuItemHorizontalPaddingDp.dp),
+                        color = Color(colors.menuBorder),
                     )
-                },
-                colors = colors,
-                metrics = metrics,
-                onClick = onAppearance,
-            )
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = metrics.menuItemHorizontalPaddingDp.dp),
-                color = Color(colors.menuBorder),
-            )
-            ReaderMenuItem(
-                text = stringResource(R.string.reader_chapters),
-                icon = {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.List,
-                        contentDescription = null,
-                        tint = Color(colors.menuContent),
+                }
+                when (destination) {
+                    ReaderMenuDestination.Appearance -> ReaderMenuItem(
+                        text = stringResource(R.string.settings_appearance),
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Rounded.Palette,
+                                contentDescription = null,
+                                tint = Color(colors.menuContent),
+                            )
+                        },
+                        colors = colors,
+                        metrics = metrics,
+                        onClick = onAppearance,
                     )
-                },
-                colors = colors,
-                metrics = metrics,
-                onClick = onChapters,
-            )
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = metrics.menuItemHorizontalPaddingDp.dp),
-                color = Color(colors.menuBorder),
-            )
-            ReaderMenuItem(
-                text = stringResource(R.string.reader_highlights),
-                icon = {
-                    Icon(
-                        imageVector = Icons.Rounded.BorderColor,
-                        contentDescription = null,
-                        tint = Color(colors.menuContent),
+
+                    ReaderMenuDestination.Chapters -> ReaderMenuItem(
+                        text = stringResource(R.string.reader_chapters),
+                        icon = {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.List,
+                                contentDescription = null,
+                                tint = Color(colors.menuContent),
+                            )
+                        },
+                        colors = colors,
+                        metrics = metrics,
+                        onClick = onChapters,
                     )
-                },
-                colors = colors,
-                metrics = metrics,
-                onClick = onHighlights,
-            )
-            if (onStatistics != null) {
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = metrics.menuItemHorizontalPaddingDp.dp),
-                    color = Color(colors.menuBorder),
-                )
-                ReaderMenuItem(
-                    text = stringResource(R.string.reader_statistics),
-                    icon = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.ShowChart,
-                            contentDescription = null,
-                            tint = Color(colors.menuContent),
-                        )
-                    },
-                    colors = colors,
-                    metrics = metrics,
-                    onClick = onStatistics,
-                )
-            }
-            if (onSasayaki != null) {
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = metrics.menuItemHorizontalPaddingDp.dp),
-                    color = Color(colors.menuBorder),
-                )
-                ReaderMenuItem(
-                    text = stringResource(R.string.sasayaki_title),
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Rounded.GraphicEq,
-                            contentDescription = null,
-                            tint = Color(colors.menuContent),
-                        )
-                    },
-                    colors = colors,
-                    metrics = metrics,
-                    onClick = onSasayaki,
-                )
+
+                    ReaderMenuDestination.Highlights -> ReaderMenuItem(
+                        text = stringResource(R.string.reader_highlights),
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Rounded.BorderColor,
+                                contentDescription = null,
+                                tint = Color(colors.menuContent),
+                            )
+                        },
+                        colors = colors,
+                        metrics = metrics,
+                        onClick = onHighlights,
+                    )
+
+                    ReaderMenuDestination.Statistics -> ReaderMenuItem(
+                        text = stringResource(R.string.reader_statistics),
+                        icon = {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.ShowChart,
+                                contentDescription = null,
+                                tint = Color(colors.menuContent),
+                            )
+                        },
+                        colors = colors,
+                        metrics = metrics,
+                        onClick = onStatistics ?: return@forEachIndexed,
+                    )
+
+                    ReaderMenuDestination.Sasayaki -> ReaderMenuItem(
+                        text = stringResource(R.string.sasayaki_title),
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Rounded.GraphicEq,
+                                contentDescription = null,
+                                tint = Color(colors.menuContent),
+                            )
+                        },
+                        colors = colors,
+                        metrics = metrics,
+                        onClick = onSasayaki ?: return@forEachIndexed,
+                    )
+                }
             }
         }
     }

@@ -97,6 +97,14 @@ data class ReaderChromeVisibility(
     val showForwardJump: Boolean,
 )
 
+enum class ReaderMenuDestination {
+    Appearance,
+    Chapters,
+    Highlights,
+    Statistics,
+    Sasayaki,
+}
+
 data class ReaderSasayakiBottomPlaybackControls(
     val visible: Boolean,
     val rowHeightDp: Int,
@@ -271,6 +279,17 @@ fun readerBottomChromeMetrics(): ReaderBottomChromeMetrics =
         menuItemIconBoxSizeDp = 24,
         menuItemSpacingDp = 12,
     )
+
+fun readerBottomMenuVisualOrder(
+    showStatistics: Boolean,
+    showSasayaki: Boolean,
+): List<ReaderMenuDestination> = buildList {
+    if (showSasayaki) add(ReaderMenuDestination.Sasayaki)
+    if (showStatistics) add(ReaderMenuDestination.Statistics)
+    add(ReaderMenuDestination.Highlights)
+    add(ReaderMenuDestination.Chapters)
+    add(ReaderMenuDestination.Appearance)
+}
 
 fun readerSasayakiBottomPlaybackControls(
     settings: moe.antimony.hoshi.features.sasayaki.SasayakiSettings,
