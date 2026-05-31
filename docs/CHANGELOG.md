@@ -5,6 +5,8 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+## [v1.1.2] - 2026-05-31
+
 ### Added
 
 - Add a Reader Appearance switch to hide the reader's bottom back button while keeping Android system back gestures available.
