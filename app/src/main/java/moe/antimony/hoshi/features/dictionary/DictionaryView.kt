@@ -86,7 +86,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
@@ -111,10 +110,8 @@ import moe.antimony.hoshi.features.settings.SettingsDetailScaffold
 import moe.antimony.hoshi.features.reader.ReaderFontManager
 import moe.antimony.hoshi.importing.ImportFileType
 import moe.antimony.hoshi.importing.MultipleFileImportContent
-import moe.antimony.hoshi.importing.localizedImportMessage
-import moe.antimony.hoshi.importing.validateImportFile
+import moe.antimony.hoshi.importing.importDisplayName
 import moe.antimony.hoshi.ui.HoshiBlockingProgressOverlay
-import moe.antimony.hoshi.ui.UiText
 import moe.antimony.hoshi.ui.asString
 import moe.antimony.hoshi.ui.hoshiTextFieldCursorBrush
 import kotlin.math.roundToInt
@@ -128,7 +125,6 @@ fun DictionaryView(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val resources = LocalResources.current
     val appContainer = LocalHoshiAppContainer.current
     val dictionaryViewModel: DictionaryViewModel = viewModel(
         factory = remember(context, appContainer) {
@@ -148,25 +144,13 @@ fun DictionaryView(
 
     val importer = rememberLauncherForActivityResult(MultipleFileImportContent()) { uris: List<Uri> ->
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
-        val importItems = runCatching {
-            uris.map { uri ->
-                val displayName = context.contentResolver.validateImportFile(uri, ImportFileType.DictionaryArchive)
-                DictionaryImportItem(
-                    uri = uri,
-                    displayName = displayName.ifBlank { uri.lastPathSegment.orEmpty() },
-                )
-            }
-        }.onFailure { error ->
-            dictionaryViewModel.showError(
-                UiText.Literal(
-                    error.localizedImportMessage(
-                        context,
-                        resources.getString(R.string.dictionary_select_zip_archive),
-                    ),
-                ),
+        val importItems = uris.map { uri ->
+            val displayName = context.contentResolver.importDisplayName(uri)
+            DictionaryImportItem(
+                uri = uri,
+                displayName = displayName.ifBlank { uri.lastPathSegment.orEmpty() },
             )
-            return@rememberLauncherForActivityResult
-        }.getOrThrow()
+        }
         uris.forEach { uri ->
             runCatching {
                 context.contentResolver.takePersistableUriPermission(
@@ -181,6 +165,7 @@ fun DictionaryView(
     val selectedType = uiState.selectedType
     val currentDictionaries = uiState.currentDictionaries
     val isBusy = uiState.isImporting || uiState.isUpdating
+    val listLayout = DictionaryListLayout.from(uiState.errorMessage)
     val listState = rememberLazyListState()
     val density = LocalDensity.current
     val autoScrollEdgeThresholdPx = with(density) { 72.dp.toPx() }
@@ -195,7 +180,7 @@ fun DictionaryView(
     val coroutineScope = rememberCoroutineScope()
     var revealedFileName by remember(selectedType) { mutableStateOf<String?>(null) }
     val layoutDictionaries = dragWorkingDictionaries ?: currentDictionaries
-    val dictionaryStartGlobalIndex = 1 + if (uiState.errorMessage != null) 1 else 0
+    val dictionaryStartGlobalIndex = listLayout.dictionaryStartGlobalIndex
     val dragTargetIndex by remember(
         listState,
         layoutDictionaries,
@@ -516,9 +501,6 @@ fun DictionaryView(
                         }
                     }
                 }
-                uiState.errorMessage?.let {
-                    item { Text(it.asString(), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
-                }
                 if (currentDictionaries.isEmpty()) {
                     item {
                         Box(
@@ -601,6 +583,20 @@ fun DictionaryView(
                         .zIndex(2f),
                 )
             }
+        }
+    }
+    if (listLayout.showErrorDialog) {
+        uiState.errorMessage?.let { message ->
+            AlertDialog(
+                onDismissRequest = dictionaryViewModel::consumeErrorMessage,
+                title = { Text(stringResource(R.string.dialog_error_title)) },
+                text = { Text(message.asString()) },
+                confirmButton = {
+                    TextButton(onClick = dictionaryViewModel::consumeErrorMessage) {
+                        Text(stringResource(R.string.action_ok))
+                    }
+                },
+            )
         }
     }
     if (showUpdateConfirmation) {

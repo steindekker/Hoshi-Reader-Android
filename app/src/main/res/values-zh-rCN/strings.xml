@@ -57,7 +57,11 @@
     <string name="settings_title" comment="Shared label for settings page titles distinct from the main tab key.">设置</string>
     <string name="bookshelf_open_failed">无法打开 EPUB。</string>
     <string name="bookshelf_import_failed">无法导入 EPUB。</string>
-    <string name="bookshelf_import_failed_list_format">导入失败：\n%1$s</string>
+    <string name="bookshelf_import_failed_list_format" comment="Bookshelf batch import failure summary; intentionally matches the dictionary batch import format.">导入失败：\n%1$s</string>
+    <string name="bookshelf_import_files">导入文件</string>
+    <string name="bookshelf_import_folder">导入文件夹</string>
+    <string name="bookshelf_scanning_folder">正在扫描文件夹...</string>
+    <string name="bookshelf_no_epub_files_found">未找到 EPUB 文件。</string>
     <string name="bookshelf_importing_epub">正在导入 EPUB...</string>
     <string name="bookshelf_importing_named_format">正在导入 %1$s...</string>
     <string name="bookshelf_importing_progress_format">正在导入 %1$d / %2$d...</string>
@@ -108,10 +112,12 @@
     <string name="dictionary_download_failed">无法下载辞典。</string>
     <string name="dictionary_update_failed">无法更新辞典。</string>
     <string name="dictionary_import_failed">无法导入辞典。</string>
+    <string name="dictionary_import_failed_list_format" comment="Dictionary batch import failure summary; intentionally matches the bookshelf batch import format.">导入失败：\n%1$s</string>
     <string name="dictionary_fetching_named_format">正在获取 %1$s</string>
     <string name="dictionary_checking_named_format">正在检查 %1$s</string>
     <string name="dictionary_downloading_named_format">正在下载 %1$s</string>
     <string name="dictionary_importing_named_format">正在导入 %1$s</string>
+    <string name="dictionary_importing_default">正在导入辞典</string>
     <string name="dictionary_download_recommended">下载推荐辞典</string>
     <string name="dictionary_supported_archive_types">支持 Yomitan 词条、词频和音调辞典（.zip）</string>
     <string name="dictionary_default_tab">默认打开查词标签页</string>

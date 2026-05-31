@@ -85,6 +85,7 @@ class DictionaryViewModelTest {
             importOperation = { onProgress ->
                 onProgress(item)
                 repository.onImport!!.invoke()
+                DictionaryImportBatchResult(imported = listOf(item), failed = emptyList())
             },
         )
 
@@ -114,6 +115,7 @@ class DictionaryViewModelTest {
                 messages += viewModel.uiState.value.currentImportMessage.testString()
                 onProgress(second)
                 messages += viewModel.uiState.value.currentImportMessage.testString()
+                DictionaryImportBatchResult(imported = listOf(first, second), failed = emptyList())
             },
         )
 
@@ -140,6 +142,57 @@ class DictionaryViewModelTest {
             listOf("Importing First.zip", "Importing Second.zip"),
             repository.progressMessages,
         )
+        assertFalse(viewModel.uiState.value.isImporting)
+        assertNull(viewModel.uiState.value.currentImportMessage.testString())
+    }
+
+    @Test
+    fun publicImportContinuesAfterItemFailureAndReportsFailedNames() {
+        val first = DictionaryImportItem(displayName = "Bad.zip")
+        val second = DictionaryImportItem(displayName = "Good.zip")
+        val imported = dictionary("good", "Good")
+        val repository = FakeDictionaryRepository(
+            failedImportItems = setOf(first),
+        )
+        repository.onImport = {
+            repository.dictionaries = repository.dictionaries + (DictionaryType.Term to listOf(imported))
+        }
+        val viewModel = DictionaryViewModel(
+            repository = repository,
+            coroutineScope = testScope,
+            ioDispatcher = Dispatchers.Unconfined,
+        )
+
+        viewModel.importDictionaries(listOf(first, second))
+
+        assertEquals(listOf(first, second), repository.importedItems)
+        assertEquals(
+            listOf("Importing Bad.zip", "Importing Good.zip"),
+            repository.progressMessages,
+        )
+        assertEquals("Failed to import:\nBad.zip", viewModel.uiState.value.errorMessage.testString())
+        assertEquals(listOf(imported), viewModel.uiState.value.currentDictionaries)
+        assertFalse(viewModel.uiState.value.isImporting)
+        assertNull(viewModel.uiState.value.currentImportMessage.testString())
+    }
+
+    @Test
+    fun publicImportReportsAllFailedNamesWhenEveryItemFails() {
+        val first = DictionaryImportItem(displayName = "Bad.zip")
+        val second = DictionaryImportItem(displayName = "Worse.zip")
+        val repository = FakeDictionaryRepository(
+            failedImportItems = setOf(first, second),
+        )
+        val viewModel = DictionaryViewModel(
+            repository = repository,
+            coroutineScope = testScope,
+            ioDispatcher = Dispatchers.Unconfined,
+        )
+
+        viewModel.importDictionaries(listOf(first, second))
+
+        assertEquals(listOf(first, second), repository.importedItems)
+        assertEquals("Failed to import:\nBad.zip\nWorse.zip", viewModel.uiState.value.errorMessage.testString())
         assertFalse(viewModel.uiState.value.isImporting)
         assertNull(viewModel.uiState.value.currentImportMessage.testString())
     }
@@ -292,12 +345,41 @@ class DictionaryViewModelTest {
 
         viewModel.importDictionaries(
             importItems = listOf(DictionaryImportItem(displayName = "good.zip")),
-            importOperation = { _ -> },
+            importOperation = { _ ->
+                DictionaryImportBatchResult(
+                    imported = listOf(DictionaryImportItem(displayName = "good.zip")),
+                    failed = emptyList(),
+                )
+            },
         )
 
         assertNull(viewModel.uiState.value.errorMessage.testString())
         assertFalse(viewModel.uiState.value.isImporting)
         assertNull(viewModel.uiState.value.currentImportMessage.testString())
+    }
+
+    @Test
+    fun consumeErrorMessageClearsCurrentError() {
+        val repository = FakeDictionaryRepository()
+        val viewModel = DictionaryViewModel(
+            repository = repository,
+            coroutineScope = testScope,
+            ioDispatcher = Dispatchers.Unconfined,
+        )
+
+        viewModel.importDictionaries(
+            importItems = listOf(DictionaryImportItem(displayName = "bad.zip")),
+            importOperation = { onProgress ->
+                onProgress(DictionaryImportItem(displayName = "bad.zip"))
+                error("bad archive")
+            },
+        )
+
+        assertEquals("bad archive", viewModel.uiState.value.errorMessage.testString())
+
+        viewModel.consumeErrorMessage()
+
+        assertNull(viewModel.uiState.value.errorMessage.testString())
     }
 
     @Test
@@ -403,6 +485,7 @@ private fun UiText?.testString(): String? =
             R.string.dictionary_checking_named_format -> "Checking ${args[0]}"
             R.string.dictionary_importing_named_format -> "Importing ${args[0]}"
             R.string.dictionary_downloading_named_format -> "Downloading ${args[0]}"
+            R.string.dictionary_import_failed_list_format -> "Failed to import:\n${args[0]}"
             else -> "resource:$id:${args.joinToString()}"
         }
         is UiText.Plural -> "plural:$id:$quantity:${args.joinToString()}"
@@ -413,6 +496,7 @@ private class FakeDictionaryRepository(
     settings: DictionarySettings = DictionarySettings(),
     private var ankiSettings: AnkiSettings = AnkiSettings(),
     var updatableDictionaries: List<DictionaryUpdateCandidate> = emptyList(),
+    private val failedImportItems: Set<DictionaryImportItem> = emptySet(),
 ) : DictionaryViewModelRepository {
     private val settingsFlow = MutableStateFlow(settings)
     override val settings: StateFlow<DictionarySettings> = settingsFlow
@@ -439,12 +523,21 @@ private class FakeDictionaryRepository(
     override suspend fun importDictionaries(
         items: List<DictionaryImportItem>,
         onProgress: (DictionaryImportItem) -> Unit,
-    ) {
+    ): DictionaryImportBatchResult {
+        val imported = mutableListOf<DictionaryImportItem>()
+        val failed = mutableListOf<DictionaryImportItem>()
         items.forEach { item ->
             importedItems += item
             onProgress(item)
             progressMessages += "Importing ${item.displayName}"
+            if (item in failedImportItems) {
+                failed += item
+            } else {
+                imported += item
+                onImport?.invoke()
+            }
         }
+        return DictionaryImportBatchResult(imported = imported, failed = failed)
     }
 
     override suspend fun importRecommendedDictionaries(

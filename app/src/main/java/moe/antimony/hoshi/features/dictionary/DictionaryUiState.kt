@@ -18,3 +18,16 @@ internal data class DictionaryUiState(
     val currentDictionaries: List<DictionaryInfo>
         get() = dictionaries[selectedType].orEmpty()
 }
+
+internal data class DictionaryListLayout(
+    val dictionaryStartGlobalIndex: Int,
+    val showErrorDialog: Boolean,
+) {
+    companion object {
+        fun from(errorMessage: UiText?): DictionaryListLayout =
+            DictionaryListLayout(
+                dictionaryStartGlobalIndex = 1,
+                showErrorDialog = errorMessage != null,
+            )
+    }
+}

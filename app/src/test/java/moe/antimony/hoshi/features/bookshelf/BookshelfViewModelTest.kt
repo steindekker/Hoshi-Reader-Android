@@ -283,6 +283,53 @@ class BookshelfViewModelTest {
     }
 
     @Test
+    fun importingBookFolderReportsErrorWhenNoEpubFilesAreFound() {
+        val repository = FakeBookshelfRepository()
+        val viewModel = BookshelfViewModel(repository, testScope())
+
+        viewModel.importBookFolder {
+            emptyList()
+        }
+
+        assertEquals("No EPUB files found.", viewModel.uiState.value.errorMessage.testString())
+        assertEquals(emptyList<BookSortOption>(), repository.loadRequests)
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertNull(viewModel.uiState.value.blockingProgressMessage.testString())
+    }
+
+    @Test
+    fun importingBookFolderScansThenUsesBatchImportFlow() {
+        val repository = FakeBookshelfRepository()
+        val viewModel = BookshelfViewModel(repository, testScope())
+        val importedKeys = mutableListOf<String>()
+
+        viewModel.importBookFolder {
+            listOf(
+                PendingBookImport(
+                    importKey = "content://books/folder/first.epub",
+                    displayName = "Series/first.epub",
+                ) {
+                    importedKeys += "first"
+                    "first-book"
+                },
+                PendingBookImport(
+                    importKey = "content://books/folder/second.epub",
+                    displayName = "Series/second.epub",
+                ) {
+                    importedKeys += "second"
+                    "second-book"
+                },
+            )
+        }
+
+        assertEquals(listOf("first", "second"), importedKeys)
+        assertEquals(listOf(BookSortOption.Recent), repository.loadRequests)
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertNull(viewModel.uiState.value.blockingProgressMessage.testString())
+        assertNull(viewModel.uiState.value.errorMessage.testString())
+    }
+
+    @Test
     fun deleteBookReloadsBooksAfterRepositoryDeletion() {
         val entry = bookEntry("book-a")
         val repository = FakeBookshelfRepository(entries = emptyList())
@@ -527,6 +574,8 @@ private fun UiText?.testString(): String? =
             R.string.bookshelf_importing_named_format -> "Importing ${args[0]}..."
             R.string.bookshelf_importing_progress_format -> "Importing ${args[0]} / ${args[1]}..."
             R.string.bookshelf_import_failed_list_format -> "Failed to import:\n${args[0]}"
+            R.string.bookshelf_scanning_folder -> "Scanning folder..."
+            R.string.bookshelf_no_epub_files_found -> "No EPUB files found."
             R.string.bookshelf_already_synced_format -> "${args[0]} is already synced"
             else -> "resource:$id:${args.joinToString()}"
         }

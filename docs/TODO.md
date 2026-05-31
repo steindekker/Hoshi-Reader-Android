@@ -28,7 +28,7 @@ This file is the short operational handoff for future agents.
 ### Bookshelf, Import, And Backup
 
 - Device-validate bookshelf multi-select markers in E-ink mode, confirming unselected books show an empty circle and selected books show a check mark.
-- Device-validate shelf-name entry, including user shelves named Reading alongside the virtual Reading Shelf, and multi-EPUB DocumentsUI import in a session where text input and picker interaction can be driven reliably.
+- Device-validate shelf-name entry, including user shelves named Reading alongside the virtual Reading Shelf, multi-EPUB DocumentsUI import, and recursive EPUB folder import in a session where text input and picker interaction can be driven reliably.
 - Device-validate editable text fields in dark and E-ink themes, confirming visible cursors and cursor-driven horizontal scrolling for long search, Audio source, Sync, Anki, shelf, and book-title values.
 - Cross-validate Android-created `Books` and `Dictionaries` `.hoshi` archives restored by iOS.
 
@@ -63,6 +63,7 @@ This file is the short operational handoff for future agents.
 ### Dictionary
 
 - Device-validate recommended dictionary downloads from the Dictionaries screen, covering JMdict, JMnedict, Jiten, and Jitendex individual downloads and confirming each imported dictionary remains updatable.
+- Device-validate manual multi-dictionary import with one invalid archive, confirming later archives still import and the failed file list is reported at the end.
 - Device-validate Low Memory Usage Mode with a large Yomitan archive, confirming the setting defaults off, persists, reduces peak memory when enabled, and keeps imported term/frequency/pitch dictionaries usable.
 - Device-validate settings segmented controls in Dictionaries, Dictionary Settings, and Advanced Audio, confirming selected labels no longer shift.
 - Device-validate local audio database source ordering with imported MP3 and Opus `android.db` files, confirming default order generation, up/down moves, lookup playback, and Anki audio export.

@@ -125,8 +125,10 @@ import moe.antimony.hoshi.features.reader.ReaderSettings
 import moe.antimony.hoshi.features.sync.SyncDirection
 import moe.antimony.hoshi.features.sync.SyncMode
 import moe.antimony.hoshi.features.sync.SyncSettings
+import moe.antimony.hoshi.importing.DirectoryImportContent
 import moe.antimony.hoshi.importing.ImportFileType
 import moe.antimony.hoshi.importing.MultipleFileImportContent
+import moe.antimony.hoshi.importing.SafImportDirectoryScanner
 import moe.antimony.hoshi.importing.importDisplayName
 import moe.antimony.hoshi.ui.HoshiBlockingProgressOverlay
 import moe.antimony.hoshi.ui.UiText
@@ -181,6 +183,7 @@ fun BookshelfView(
     var deleteCandidate by remember { mutableStateOf<BookEntry?>(null) }
     var markReadCandidate by remember { mutableStateOf<BookEntry?>(null) }
     var renameCandidate by remember { mutableStateOf<BookEntry?>(null) }
+    val folderScanner = remember(context) { SafImportDirectoryScanner(context.contentResolver) }
     val renameTextState = rememberTextFieldState()
     val renameScrollState = rememberScrollState()
     var showBulkDeleteConfirmation by remember { mutableStateOf(false) }
@@ -203,8 +206,26 @@ fun BookshelfView(
         booksViewModel.importBooks(imports)
     }
 
+    val folderImporter = rememberLauncherForActivityResult(DirectoryImportContent()) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        booksViewModel.importBookFolderItems {
+            withContext(Dispatchers.IO) {
+                folderScanner.scan(uri, ImportFileType.Epub).map { file ->
+                    BookImportItem(
+                        uri = file.key,
+                        displayName = file.displayName,
+                    )
+                }
+            }
+        }
+    }
+
     fun launchBookImporter() {
         importer.launch(ImportFileType.Epub.mimeTypes)
+    }
+
+    fun launchBookFolderImporter() {
+        folderImporter.launch(Unit)
     }
 
     LaunchedEffect(refreshKey) {
@@ -259,7 +280,8 @@ fun BookshelfView(
         onMoveSelectedBooks = booksViewModel::moveSelectedBooks,
         onDeleteSelectedBooks = { showBulkDeleteConfirmation = true },
         onManageShelves = { showShelfManagement = true },
-        onImport = ::launchBookImporter,
+        onImportFiles = ::launchBookImporter,
+        onImportFolder = ::launchBookFolderImporter,
         onOpenBook = booksViewModel::openBook,
         contextMenuTarget = contextMenuTarget,
         onContextMenuTargetChange = { contextMenuTarget = it },
@@ -616,7 +638,8 @@ private fun BooksTab(
     onMoveSelectedBooks: (String?) -> Unit,
     onDeleteSelectedBooks: () -> Unit,
     onManageShelves: () -> Unit,
-    onImport: () -> Unit,
+    onImportFiles: () -> Unit,
+    onImportFolder: () -> Unit,
     onOpenBook: (BookEntry) -> Unit,
     contextMenuTarget: BookContextMenuTarget?,
     onContextMenuTargetChange: (BookContextMenuTarget?) -> Unit,
@@ -652,7 +675,8 @@ private fun BooksTab(
                 onMoveSelectedBooks = onMoveSelectedBooks,
                 onDeleteSelectedBooks = onDeleteSelectedBooks,
                 onManageShelves = onManageShelves,
-                onImport = onImport,
+                onImportFiles = onImportFiles,
+                onImportFolder = onImportFolder,
             )
         },
     ) { innerPadding ->
@@ -679,7 +703,7 @@ private fun BooksTab(
                 !hasLoadedBooks -> Box(Modifier.fillMaxSize())
                 hasLoadedBooks && bookEntries.isEmpty() -> EmptyBooksView(
                     enabled = !fileTaskBlocked,
-                    onImport = onImport,
+                    onImport = onImportFiles,
                     modifier = Modifier
                         .align(Alignment.Center)
                         .widthIn(max = layoutSpec.contentMaxWidthDp.dp)
@@ -821,9 +845,11 @@ private fun BooksTopAppBar(
     onMoveSelectedBooks: (String?) -> Unit,
     onDeleteSelectedBooks: () -> Unit,
     onManageShelves: () -> Unit,
-    onImport: () -> Unit,
+    onImportFiles: () -> Unit,
+    onImportFolder: () -> Unit,
 ) {
     var moveMenuExpanded by remember { mutableStateOf(false) }
+    var importMenuExpanded by remember { mutableStateOf(false) }
     CenterAlignedTopAppBar(
         title = {
             Text(
@@ -930,11 +956,32 @@ private fun BooksTopAppBar(
                         contentDescription = stringResource(R.string.bookshelf_manage_shelves),
                     )
                 }
-                IconButton(onClick = onImport, enabled = enabled) {
-                    Icon(
-                        imageVector = Icons.Rounded.Add,
-                        contentDescription = stringResource(R.string.bookshelf_import_epub),
-                    )
+                Box {
+                    IconButton(onClick = { importMenuExpanded = true }, enabled = enabled) {
+                        Icon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = stringResource(R.string.bookshelf_import_epub),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = importMenuExpanded,
+                        onDismissRequest = { importMenuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.bookshelf_import_files)) },
+                            onClick = {
+                                importMenuExpanded = false
+                                onImportFiles()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.bookshelf_import_folder)) },
+                            onClick = {
+                                importMenuExpanded = false
+                                onImportFolder()
+                            },
+                        )
+                    }
                 }
             }
         },

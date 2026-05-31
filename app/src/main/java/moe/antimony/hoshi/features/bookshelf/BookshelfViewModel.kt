@@ -135,42 +135,52 @@ internal class BookshelfViewModel(
         }
 
         workScope.launch {
-            val failed = mutableListOf<String>()
+            importBooksBatch(imports, importKey)
+        }
+    }
+
+    fun importBookFolderItems(importsProvider: suspend () -> List<BookImportItem>) {
+        importBookFolder {
+            importsProvider().map { import ->
+                PendingBookImport(
+                    importKey = import.uri.toString(),
+                    displayName = import.displayName,
+                ) {
+                    repository.importBook(import.uri)
+                }
+            }
+        }
+    }
+
+    internal fun importBookFolder(importsProvider: suspend () -> List<PendingBookImport>) {
+        workScope.launch {
             _uiState.update {
                 it.copy(
                     isLoading = true,
-                    blockingProgressMessage = UiText.Resource(R.string.bookshelf_importing_progress_format, 1, imports.size),
+                    blockingProgressMessage = UiText.Resource(R.string.bookshelf_scanning_folder),
+                    statusMessage = null,
                     errorMessage = null,
                 )
             }
             try {
-                imports.forEachIndexed { index, import ->
+                val imports = importsProvider()
+                if (imports.isEmpty()) {
                     _uiState.update {
-                        it.copy(
-                            blockingProgressMessage = UiText.Resource(
-                                R.string.bookshelf_importing_progress_format,
-                                index + 1,
-                                imports.size,
-                            ),
-                        )
+                        it.copy(errorMessage = UiText.Resource(R.string.bookshelf_no_epub_files_found))
                     }
-                    try {
-                        import.importOperation()
-                    } catch (_: Throwable) {
-                        failed += import.failureDisplayName()
-                    }
+                    return@launch
                 }
-                reloadBookEntriesSync()
-                if (failed.isNotEmpty()) {
-                    _uiState.update {
-                        it.copy(
-                            errorMessage = UiText.Resource(
-                                R.string.bookshelf_import_failed_list_format,
-                                failed.joinToString(separator = "\n"),
-                            ),
-                        )
-                    }
+                if (imports.size == 1) {
+                    _uiState.update { it.copy(isLoading = false, blockingProgressMessage = null) }
+                    val import = imports.single()
+                    importBook(import.importKey, import.displayName, import.importOperation)
+                    return@launch
                 }
+                val importKey = imports.joinToString(separator = "\n") { it.importKey }
+                if (!importGate.tryStart(importKey)) {
+                    return@launch
+                }
+                importBooksBatch(imports, importKey)
             } catch (error: Throwable) {
                 _uiState.update {
                     it.copy(
@@ -180,8 +190,57 @@ internal class BookshelfViewModel(
                 }
             } finally {
                 _uiState.update { it.copy(isLoading = false, blockingProgressMessage = null) }
-                importGate.finish(importKey)
             }
+        }
+    }
+
+    private suspend fun importBooksBatch(imports: List<PendingBookImport>, importKey: String) {
+        val failed = mutableListOf<String>()
+        _uiState.update {
+            it.copy(
+                isLoading = true,
+                blockingProgressMessage = UiText.Resource(R.string.bookshelf_importing_progress_format, 1, imports.size),
+                errorMessage = null,
+            )
+        }
+        try {
+            imports.forEachIndexed { index, import ->
+                _uiState.update {
+                    it.copy(
+                        blockingProgressMessage = UiText.Resource(
+                            R.string.bookshelf_importing_progress_format,
+                            index + 1,
+                            imports.size,
+                        ),
+                    )
+                }
+                try {
+                    import.importOperation()
+                } catch (_: Throwable) {
+                    failed += import.failureDisplayName()
+                }
+            }
+            reloadBookEntriesSync()
+            if (failed.isNotEmpty()) {
+                _uiState.update {
+                    it.copy(
+                        errorMessage = UiText.Resource(
+                            R.string.bookshelf_import_failed_list_format,
+                            failed.joinToString(separator = "\n"),
+                        ),
+                    )
+                }
+            }
+        } catch (error: Throwable) {
+            _uiState.update {
+                it.copy(
+                    errorMessage = error.localizedMessage?.let(UiText::Literal)
+                        ?: UiText.Resource(R.string.bookshelf_import_failed),
+                )
+            }
+        } finally {
+            _uiState.update { it.copy(isLoading = false, blockingProgressMessage = null) }
+            importGate.finish(importKey)
         }
     }
 

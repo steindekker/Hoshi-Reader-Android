@@ -10,6 +10,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 - Add a Reader Appearance switch to hide the reader's bottom back button while keeping Android system back gestures available.
 - Add an Anki setting to sync AnkiDroid automatically after a card is added. #86
 - Add local audio database source ordering, including automatic default order generation on import and simple up/down controls for lookup playback and Anki audio export.
+- Add EPUB folder import from the Books screen, recursively finding books in the selected folder and its subfolders.
 
 ### Changed
 
@@ -22,6 +23,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 - Keep lookup popup deinflection explanation overlays and JMdict forms tables readable across Light, Sepia Light, and Dark themes. #87 #88
 - Show unselected bookshelf multi-select books with an empty circle instead of a check mark, keeping selected and unselected states distinguishable in E-ink mode.
 - Play word audio from imported local audio databases that store entries as Opus/Ogg files, and export those clips to Anki with the correct audio type. #48
+- Continue importing later dictionary archives when one selected archive fails, then report the files that could not be imported.
 
 ## [v1.1.1] - 2026-05-27
 

@@ -72,6 +72,15 @@ class FileImportContentContractTest {
     }
 
     @Test
+    fun directoryImportUsesOpenDocumentTreeWithoutOpenableCategory() {
+        val intent = DirectoryImportContent().createIntent(context, Unit)
+
+        assertEquals(Intent.ACTION_OPEN_DOCUMENT_TREE, intent.action)
+        assertFalse(intent.categories.orEmpty().contains(Intent.CATEGORY_OPENABLE))
+        assertTrue(intent.flags.toInt() and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+    }
+
+    @Test
     fun multipleFileImportDeduplicatesDataAndClipDataUris() {
         val uri = Uri.parse("content://example/dictionary.zip")
         val result = Intent().apply {

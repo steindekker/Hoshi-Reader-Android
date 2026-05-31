@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -36,7 +37,7 @@ internal interface DictionaryViewModelRepository {
     suspend fun importDictionaries(
         items: List<DictionaryImportItem>,
         onProgress: (DictionaryImportItem) -> Unit,
-    )
+    ): DictionaryImportBatchResult
     suspend fun importRecommendedDictionaries(
         dictionaries: List<RecommendedDictionary>,
         onProgress: (DictionaryUpdateProgress) -> Unit,
@@ -56,6 +57,11 @@ internal data class DictionaryImportItem(
     val uri: Uri? = null,
 )
 
+internal data class DictionaryImportBatchResult(
+    val imported: List<DictionaryImportItem>,
+    val failed: List<DictionaryImportItem>,
+)
+
 internal class AndroidDictionaryViewModelRepository(
     private val contentResolver: ContentResolver,
     private val dictionaryRepository: DictionaryRepository,
@@ -72,16 +78,25 @@ internal class AndroidDictionaryViewModelRepository(
     override suspend fun importDictionaries(
         items: List<DictionaryImportItem>,
         onProgress: (DictionaryImportItem) -> Unit,
-    ) {
+    ): DictionaryImportBatchResult {
         val lowRamImport = settingsRepository.settings.first().lowRamDictionaryImport
+        val imported = mutableListOf<DictionaryImportItem>()
+        val failed = mutableListOf<DictionaryImportItem>()
         items.forEach { item ->
             onProgress(item)
-            dictionaryRepository.importDictionary(
-                contentResolver = contentResolver,
-                uri = requireNotNull(item.uri),
-                lowRamImport = lowRamImport,
-            )
+            try {
+                dictionaryRepository.importDictionary(
+                    contentResolver = contentResolver,
+                    uri = requireNotNull(item.uri),
+                    lowRamImport = lowRamImport,
+                )
+                imported += item
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                failed += item
+            }
         }
+        return DictionaryImportBatchResult(imported = imported, failed = failed)
     }
 
     override suspend fun updatableDictionaries(): List<DictionaryUpdateCandidate> =
@@ -242,7 +257,7 @@ internal class DictionaryViewModel(
 
     internal fun importDictionaries(
         importItems: List<DictionaryImportItem>,
-        importOperation: suspend ((DictionaryImportItem) -> Unit) -> Unit,
+        importOperation: suspend ((DictionaryImportItem) -> Unit) -> DictionaryImportBatchResult,
     ) {
         if (importItems.isEmpty()) return
         scope.launch {
@@ -252,16 +267,23 @@ internal class DictionaryViewModel(
                     importOperation { item ->
                         _uiState.update { state ->
                             state.copy(
-                                currentImportMessage = UiText.Resource(
-                                    R.string.dictionary_importing_named_format,
-                                    item.displayName.ifBlank { "dictionary" },
-                                ),
+                                currentImportMessage = item.importProgressMessage(),
                             )
                         }
                     }
                 }
-            }.onSuccess {
+            }.onSuccess { result ->
                 reloadDictionaries(clearError = true)
+                if (result.failed.isNotEmpty()) {
+                    _uiState.update {
+                        it.copy(
+                            errorMessage = UiText.Resource(
+                                R.string.dictionary_import_failed_list_format,
+                                result.failed.joinToString(separator = "\n") { item -> item.displayName },
+                            ),
+                        )
+                    }
+                }
             }.onFailure { error ->
                 _uiState.update {
                     it.copy(
@@ -324,8 +346,8 @@ internal class DictionaryViewModel(
         }
     }
 
-    fun showError(message: UiText) {
-        _uiState.update { it.copy(errorMessage = message) }
+    fun consumeErrorMessage() {
+        _uiState.update { it.copy(errorMessage = null) }
     }
 
     private suspend fun reloadDictionaries(clearError: Boolean) {
@@ -381,3 +403,8 @@ private fun DictionaryUpdateProgress.message(): UiText =
         DictionaryUpdateStage.Downloading -> UiText.Resource(R.string.dictionary_downloading_named_format, title)
         DictionaryUpdateStage.Importing -> UiText.Resource(R.string.dictionary_importing_named_format, title)
     }
+
+private fun DictionaryImportItem.importProgressMessage(): UiText =
+    displayName.takeIf { it.isNotBlank() }
+        ?.let { UiText.Resource(R.string.dictionary_importing_named_format, it) }
+        ?: UiText.Resource(R.string.dictionary_importing_default)

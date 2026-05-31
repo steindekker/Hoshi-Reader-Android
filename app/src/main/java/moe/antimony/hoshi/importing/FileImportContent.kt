@@ -27,6 +27,17 @@ class OpenDocumentContent : ActivityResultContract<Array<String>, Uri?>() {
     }
 }
 
+class DirectoryImportContent : ActivityResultContract<Unit, Uri?>() {
+    override fun createIntent(context: Context, input: Unit): Intent =
+        Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+    override fun parseResult(resultCode: Int, intent: Intent?): Uri? {
+        if (resultCode != Activity.RESULT_OK) return null
+        return intent?.data
+    }
+}
+
 class MultipleFileImportContent : ActivityResultContract<Array<String>, List<Uri>>() {
     override fun createIntent(context: Context, input: Array<String>): Intent =
         createImportIntent(input, allowMultiple = true)
