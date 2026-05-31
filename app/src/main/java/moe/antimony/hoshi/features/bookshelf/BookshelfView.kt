@@ -160,7 +160,6 @@ fun BookshelfView(
 ) {
     val context = LocalContext.current
     val appContainer = LocalHoshiAppContainer.current
-    val bookRepository = appContainer.bookRepository
     val syncSettings by appContainer.syncSettingsRepository.settings.collectAsState(initial = SyncSettings())
     val readerSettings by appContainer.readerSettingsRepository.settings.collectAsState(initial = ReaderSettings())
     val sasayakiSettings by appContainer.sasayakiSettingsRepository.settings.collectAsState(
@@ -258,8 +257,8 @@ fun BookshelfView(
         bookEntries = uiState.bookEntries,
         sections = uiState.sections,
         bookProgressById = uiState.bookProgressById,
+        coverSourcesById = uiState.coverSourcesById,
         sortOption = uiState.sortOption,
-        bookRepository = bookRepository,
         hasLoadedBooks = uiState.hasLoadedBooks,
         isLoading = uiState.isLoading,
         blockingProgressMessage = uiState.blockingProgressMessage,
@@ -619,8 +618,8 @@ private fun BooksTab(
     bookEntries: List<BookEntry>,
     sections: List<BookshelfSectionModel>,
     bookProgressById: Map<String, Double>,
+    coverSourcesById: Map<String, BookCoverSource>,
     sortOption: BookSortOption,
-    bookRepository: BookRepository,
     hasLoadedBooks: Boolean,
     isLoading: Boolean,
     blockingProgressMessage: UiText?,
@@ -732,6 +731,7 @@ private fun BooksTab(
                             }
                             item(
                                 key = "header:${section.layoutKey}",
+                                contentType = "sectionHeader",
                                 span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) },
                             ) {
                                 BookshelfSectionHeader(
@@ -751,12 +751,13 @@ private fun BooksTab(
                                 items(
                                     items = section.books,
                                     key = { "${section.layoutKey}:${it.metadata.id}" },
+                                    contentType = { "book" },
                                 ) { entry ->
                                     Box {
                                         BookGridCell(
                                             entry = entry,
                                             progress = bookProgressById[entry.metadata.id] ?: 0.0,
-                                            bookRepository = bookRepository,
+                                            coverSource = coverSourcesById[entry.metadata.id],
                                             layoutSpec = layoutSpec,
                                             isSelecting = isSelecting,
                                             isSelected = entry.metadata.id in selectedBookIds,
@@ -790,6 +791,7 @@ private fun BooksTab(
                             } else {
                                 item(
                                     key = "preview:${section.layoutKey}",
+                                    contentType = "collapsedPreview",
                                     span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) },
                                 ) {
                                     Row(
@@ -806,8 +808,7 @@ private fun BooksTab(
                                             layoutSpec.collapsedShelfPreviewCoverWidthDp(contentWidthDp)
                                         section.books.take(layoutSpec.collapsedShelfPreviewColumns(contentWidthDp)).forEach { entry ->
                                             BookCoverCard(
-                                                entry = entry,
-                                                bookRepository = bookRepository,
+                                                coverSource = coverSourcesById[entry.metadata.id],
                                                 modifier = Modifier.width(collapsedCoverWidthDp.dp),
                                             )
                                         }
@@ -1064,7 +1065,7 @@ private fun BookshelfSectionHeader(
 private fun BookGridCell(
     entry: BookEntry,
     progress: Double,
-    bookRepository: BookRepository,
+    coverSource: BookCoverSource?,
     layoutSpec: MainShellLayoutSpec,
     isSelecting: Boolean,
     isSelected: Boolean,
@@ -1087,7 +1088,7 @@ private fun BookGridCell(
         ),
     ) {
         Box {
-            BookCoverCard(entry = entry, bookRepository = bookRepository)
+            BookCoverCard(coverSource = coverSource)
             if (isSelecting) {
                 Icon(
                     imageVector = if (isSelected) {
@@ -1146,73 +1147,111 @@ internal suspend fun loadBookProgressById(
 
 @Composable
 private fun BookCoverCard(
-    entry: BookEntry,
-    bookRepository: BookRepository,
+    coverSource: BookCoverSource?,
     modifier: Modifier = Modifier,
 ) {
-    val coverFile by produceState<File?>(initialValue = null, key1 = entry, key2 = bookRepository) {
-        value = bookRepository.coverFile(entry)
+    val cachedBitmap = remember(coverSource?.cacheKey) {
+        BookCoverBitmapCache.get(coverSource)
     }
-    val bitmap by produceState<Bitmap?>(initialValue = null, key1 = coverFile) {
-        value = BookCoverBitmapCache.load(coverFile)
+    val bitmap by produceState<Bitmap?>(initialValue = cachedBitmap, key1 = coverSource) {
+        if (cachedBitmap == null) {
+            value = BookCoverBitmapCache.load(coverSource)
+        }
     }
-    val shape = RoundedCornerShape(10.dp)
-    val coverPlaceholderColor = MaterialTheme.colorScheme.background
+    val outerShape = RoundedCornerShape(7.dp)
+    val innerShape = RoundedCornerShape(6.dp)
+    val coverPlaceholderColor = Color.Gray.copy(alpha = 0.3f)
+    val coverContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
     val coverBorderColor = if (LocalHoshiDarkTheme.current) {
-        Color.White.copy(alpha = 0.9f)
+        Color.White.copy(alpha = 0.18f)
     } else {
-        Color.Black.copy(alpha = 0.18f)
+        Color.Black.copy(alpha = 0.06f)
     }
     Box(
         modifier = Modifier
             .then(modifier)
             .fillMaxWidth()
-            .aspectRatio(0.72f)
-            .clip(shape)
-            .background(coverPlaceholderColor)
-            .border(BorderStroke(1.dp, coverBorderColor), shape),
+            .aspectRatio(BookCoverAspectRatio)
+            .clip(outerShape)
+            .background(coverContainerColor)
+            .border(BorderStroke(1.dp, coverBorderColor), outerShape)
+            .padding(3.dp),
         contentAlignment = Alignment.Center,
     ) {
-        bitmap?.let { coverBitmap ->
+        val coverModifier = Modifier
+            .fillMaxSize()
+            .clip(innerShape)
+        if (bitmap != null) {
             Image(
-                bitmap = coverBitmap.asImageBitmap(),
+                bitmap = bitmap!!.asImageBitmap(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
+                modifier = coverModifier.background(coverPlaceholderColor),
+            )
+        } else {
+            Box(
+                modifier = coverModifier.background(coverPlaceholderColor),
             )
         }
     }
 }
 
 private object BookCoverBitmapCache {
-    private const val MaxCoverDimensionPx = 900
+    private const val MaxCoverDimensionPx = 768
     private val cache = object : LruCache<String, Bitmap>(24 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
 
-    suspend fun load(coverFile: File?): Bitmap? = withContext(Dispatchers.IO) {
-        coverFile ?: return@withContext null
-        val key = coverFile.cacheKey()
-        synchronized(cache) {
-            cache.get(key)?.let { return@withContext it }
+    fun get(coverSource: BookCoverSource?): Bitmap? {
+        coverSource ?: return null
+        return synchronized(cache) {
+            cache.get(coverSource.cacheKey)
         }
-        val bitmap = decodeSampledCoverBitmap(coverFile, MaxCoverDimensionPx) ?: return@withContext null
+    }
+
+    suspend fun load(coverSource: BookCoverSource?): Bitmap? = withContext(Dispatchers.IO) {
+        coverSource ?: return@withContext null
         synchronized(cache) {
-            cache.put(key, bitmap)
+            cache.get(coverSource.cacheKey)?.let { return@withContext it }
+        }
+        val bitmap = decodeSampledCoverBitmap(File(coverSource.path), MaxCoverDimensionPx) ?: return@withContext null
+        bitmap.prepareToDraw()
+        synchronized(cache) {
+            cache.put(coverSource.cacheKey, bitmap)
         }
         bitmap
     }
-
-    private fun File.cacheKey(): String = "$absolutePath:${lastModified()}:${length()}"
 }
+
+private const val BookCoverAspectRatio = 0.709f
 
 internal fun coverDecodeSampleSize(width: Int, height: Int, maxDimensionPx: Int): Int {
     if (width <= 0 || height <= 0 || maxDimensionPx <= 0) return 1
     var sampleSize = 1
-    while (max(width / sampleSize, height / sampleSize) > maxDimensionPx) {
+    while (max(width / (sampleSize * 2), height / (sampleSize * 2)) >= maxDimensionPx) {
         sampleSize *= 2
     }
     return sampleSize
+}
+
+internal data class CoverThumbnailSize(
+    val width: Int,
+    val height: Int,
+)
+
+internal fun coverThumbnailSize(width: Int, height: Int, maxDimensionPx: Int): CoverThumbnailSize {
+    if (width <= 0 || height <= 0 || maxDimensionPx <= 0) {
+        return CoverThumbnailSize(width = width, height = height)
+    }
+    val longest = max(width, height)
+    if (longest <= maxDimensionPx) {
+        return CoverThumbnailSize(width = width, height = height)
+    }
+    val scale = maxDimensionPx.toDouble() / longest.toDouble()
+    return CoverThumbnailSize(
+        width = max(1, (width * scale).toInt()),
+        height = max(1, (height * scale).toInt()),
+    )
 }
 
 private fun decodeSampledCoverBitmap(file: File, maxDimensionPx: Int): Bitmap? {
@@ -1221,7 +1260,16 @@ private fun decodeSampledCoverBitmap(file: File, maxDimensionPx: Int): Bitmap? {
     val options = BitmapFactory.Options().apply {
         inSampleSize = coverDecodeSampleSize(bounds.outWidth, bounds.outHeight, maxDimensionPx)
     }
-    return BitmapFactory.decodeFile(file.absolutePath, options)
+    val decoded = BitmapFactory.decodeFile(file.absolutePath, options) ?: return null
+    val targetSize = coverThumbnailSize(decoded.width, decoded.height, maxDimensionPx)
+    if (targetSize.width == decoded.width && targetSize.height == decoded.height) {
+        return decoded
+    }
+    val scaled = Bitmap.createScaledBitmap(decoded, targetSize.width, targetSize.height, true)
+    if (scaled !== decoded) {
+        decoded.recycle()
+    }
+    return scaled
 }
 
 @Composable

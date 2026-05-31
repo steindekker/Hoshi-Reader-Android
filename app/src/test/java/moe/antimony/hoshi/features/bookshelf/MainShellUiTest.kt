@@ -207,9 +207,16 @@ class MainShellUiTest {
 
     @Test
     fun coverDecodeSampleSizeKeepsCoversNearTargetSize() {
-        assertEquals(1, coverDecodeSampleSize(width = 600, height = 800, maxDimensionPx = 900))
-        assertEquals(2, coverDecodeSampleSize(width = 1200, height = 1800, maxDimensionPx = 900))
-        assertEquals(4, coverDecodeSampleSize(width = 2400, height = 3600, maxDimensionPx = 900))
+        assertEquals(1, coverDecodeSampleSize(width = 600, height = 800, maxDimensionPx = 768))
+        assertEquals(2, coverDecodeSampleSize(width = 1200, height = 1800, maxDimensionPx = 768))
+        assertEquals(4, coverDecodeSampleSize(width = 2400, height = 3600, maxDimensionPx = 768))
+    }
+
+    @Test
+    fun coverThumbnailSizeScalesLongestEdgeToTargetWithoutUpscaling() {
+        assertEquals(CoverThumbnailSize(width = 576, height = 768), coverThumbnailSize(600, 800, 768))
+        assertEquals(CoverThumbnailSize(width = 512, height = 768), coverThumbnailSize(1200, 1800, 768))
+        assertEquals(CoverThumbnailSize(width = 300, height = 400), coverThumbnailSize(300, 400, 768))
     }
 
     @Test

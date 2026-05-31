@@ -19,6 +19,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 ### Fixed
 
 - Match the reader's bottom-right menu order to iOS, with Sasayaki and Statistics appearing above Highlights, Chapters, and Appearance when available.
+- Keep bookshelf covers filled and cached when returning to Books, reducing cover flashes and scroll jank.
 - Keep reader lookup popup action buttons readable in dark mode while preserving a distinct disabled state.
 - Keep lookup popup deinflection explanation overlays and JMdict forms tables readable across Light, Sepia Light, and Dark themes. #87 #88
 - Show unselected bookshelf multi-select books with an empty circle instead of a check mark, keeping selected and unselected states distinguishable in E-ink mode.

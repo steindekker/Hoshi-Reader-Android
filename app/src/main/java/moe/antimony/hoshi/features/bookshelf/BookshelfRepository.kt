@@ -63,6 +63,7 @@ internal class AndroidBookshelfRepository(
         BookshelfLoadResult(
             entries = entries,
             progressById = loadBookProgressById(entries, bookRepository),
+            coverSourcesById = loadBookCoverSourcesById(entries, bookRepository),
             shelves = shelves,
             settings = settingsRepository.settings.first(),
         )
@@ -205,3 +206,19 @@ internal class AndroidBookshelfRepository(
         )
     }
 }
+
+internal suspend fun loadBookCoverSourcesById(
+    entries: List<BookEntry>,
+    bookRepository: BookRepository,
+): Map<String, BookCoverSource> =
+    entries.mapNotNull { entry ->
+        bookRepository.coverFile(entry)?.toBookCoverSource()?.let { source ->
+            entry.metadata.id to source
+        }
+    }.toMap()
+
+internal fun File.toBookCoverSource(): BookCoverSource =
+    BookCoverSource(
+        path = absolutePath,
+        cacheKey = "$absolutePath:${lastModified()}:${length()}",
+    )

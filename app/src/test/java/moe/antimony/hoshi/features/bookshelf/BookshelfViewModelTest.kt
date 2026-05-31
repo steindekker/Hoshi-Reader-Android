@@ -30,9 +30,14 @@ class BookshelfViewModelTest {
     @Test
     fun reloadBooksPublishesEntriesProgressAndSasayakiState() {
         val entry = bookEntry("book-a")
+        val coverSource = BookCoverSource(
+            path = "/tmp/book-a/cover.jpg",
+            cacheKey = "/tmp/book-a/cover.jpg:10:20",
+        )
         val repository = FakeBookshelfRepository(
             entries = listOf(entry),
             progressById = mapOf("book-a" to 0.25),
+            coverSourcesById = mapOf("book-a" to coverSource),
             shelves = listOf(BookShelf("Manga", listOf("book-a"))),
             settings = BookshelfSettings(sortOption = BookSortOption.Title, showReading = true),
         )
@@ -43,6 +48,7 @@ class BookshelfViewModelTest {
 
         assertEquals(listOf(entry), viewModel.uiState.value.bookEntries)
         assertEquals(mapOf("book-a" to 0.25), viewModel.uiState.value.bookProgressById)
+        assertEquals(mapOf("book-a" to coverSource), viewModel.uiState.value.coverSourcesById)
         assertEquals(listOf(BookShelf("Manga", listOf("book-a"))), viewModel.uiState.value.shelves)
         assertEquals(BookSortOption.Title, viewModel.uiState.value.sortOption)
         assertTrue(viewModel.uiState.value.showReading)
@@ -492,6 +498,7 @@ class BookshelfViewModelTest {
         var openBookId: String = "book-a",
         var importBookId: String = "imported-book",
         var shelves: List<BookShelf> = emptyList(),
+        var coverSourcesById: Map<String, BookCoverSource> = emptyMap(),
         var settings: BookshelfSettings = BookshelfSettings(),
     ) : BookshelfRepository {
         val loadRequests = mutableListOf<BookSortOption>()
@@ -506,7 +513,7 @@ class BookshelfViewModelTest {
 
         override suspend fun loadBooks(sortOption: BookSortOption): BookshelfLoadResult {
             loadRequests += sortOption
-            return BookshelfLoadResult(entries, progressById, shelves, settings)
+            return BookshelfLoadResult(entries, progressById, coverSourcesById, shelves, settings)
         }
 
         override suspend fun openBook(entry: BookEntry): String = openBookId

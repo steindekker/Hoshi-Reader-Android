@@ -421,6 +421,7 @@ internal class BookshelfViewModel(
             it.copy(
                 bookEntries = result.entries,
                 bookProgressById = result.progressById,
+                coverSourcesById = result.coverSourcesById,
                 shelves = result.shelves,
                 sections = bookshelfSections(
                     entries = result.entries,

@@ -8,6 +8,7 @@ import moe.antimony.hoshi.ui.UiText
 data class BookshelfUiState(
     val bookEntries: List<BookEntry> = emptyList(),
     val bookProgressById: Map<String, Double> = emptyMap(),
+    val coverSourcesById: Map<String, BookCoverSource> = emptyMap(),
     val shelves: List<BookShelf> = emptyList(),
     val sections: List<BookshelfSectionModel> = emptyList(),
     val sortOption: BookSortOption = BookSortOption.Recent,
@@ -24,9 +25,15 @@ data class BookshelfUiState(
     val openReaderBookId: String? = null,
 )
 
+data class BookCoverSource(
+    val path: String,
+    val cacheKey: String,
+)
+
 data class BookshelfLoadResult(
     val entries: List<BookEntry>,
     val progressById: Map<String, Double>,
+    val coverSourcesById: Map<String, BookCoverSource>,
     val shelves: List<BookShelf>,
     val settings: BookshelfSettings,
 )
