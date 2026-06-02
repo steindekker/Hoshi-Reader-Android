@@ -228,6 +228,10 @@ internal object ReaderContentStyles {
                 $gridCss
                 text-orientation: mixed;
             }
+            body * {
+                column-count: auto !important;
+                -webkit-column-count: auto !important;
+            }
             body, body * {
                 orphans: 1 !important;
                 widows: 1 !important;

@@ -430,6 +430,21 @@ class ReaderSettingsTest {
     }
 
     @Test
+    fun paginatedReaderCssResetsNestedColumnCounts() {
+        val paginatedCss = ReaderContentStyles.styleTag(
+            ReaderSettings(continuousMode = false),
+        )
+        val continuousCss = ReaderContentStyles.styleTag(
+            ReaderSettings(continuousMode = true),
+        )
+
+        assertTrue(paginatedCss.contains("body * {\n                column-count: auto !important;"))
+        assertTrue(paginatedCss.contains("-webkit-column-count: auto !important;"))
+        assertFalse(continuousCss.contains("column-count: auto !important;"))
+        assertFalse(continuousCss.contains("-webkit-column-count: auto !important;"))
+    }
+
+    @Test
     fun readerCssUsesIosAppearanceFlags() {
         val css = ReaderContentStyles.styleTag(
             ReaderSettings(
