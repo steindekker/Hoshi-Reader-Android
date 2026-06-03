@@ -1,10 +1,10 @@
-package moe.antimony.hoshi.features.audio
+package moe.antimony.hoshi.features.settings
 
+import moe.antimony.hoshi.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import moe.antimony.hoshi.R
 
 class AdvancedSettingsRowsTest {
     @Test

@@ -156,3 +156,5 @@ For continuous reader layout regressions, verify vertical-writing Horizontal Pad
 For reader popup settings regressions, verify changing every Popup section control while a continuous reader is open does not rebuild the WebView and does not stop scroll progress updates.
 
 For localization changes, run `./gradlew :app:testDebugUnitTest --tests moe.antimony.hoshi.LocalizationResourceTest` and keep `docs/TRANSLATING.md` aligned with supported locale resource directories.
+
+For app-language regressions, verify the Advanced settings Language card appears only on Android 13+, selection persists through Android system App Language, Follow system clears the app locale, and Android 12 or lower continues to follow the system language without showing the card.

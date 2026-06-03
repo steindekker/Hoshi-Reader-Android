@@ -27,7 +27,6 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.scene.Scene
 import androidx.navigation3.ui.NavDisplay
 import moe.antimony.hoshi.LocalHoshiAppContainer
-import moe.antimony.hoshi.features.audio.AdvancedSettingsView
 import moe.antimony.hoshi.features.anki.AnkiView
 import moe.antimony.hoshi.features.bookshelf.BookshelfView
 import moe.antimony.hoshi.features.bookshelf.HoshiMainShell
@@ -44,6 +43,7 @@ import moe.antimony.hoshi.features.reader.ReaderFontManager
 import moe.antimony.hoshi.features.reader.ReaderSettings
 import moe.antimony.hoshi.features.sasayaki.SasayakiMatchView
 import moe.antimony.hoshi.features.sasayaki.SasayakiSettings
+import moe.antimony.hoshi.features.settings.AdvancedSettingsView
 import moe.antimony.hoshi.features.update.AboutScreen
 import kotlinx.coroutines.launch
 
