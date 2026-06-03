@@ -5,6 +5,8 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+## [v1.1.3] - 2026-06-04
+
 ### Added
 
 - Add an Android 13+ app language picker in Advanced settings for following the system app language, English, or Simplified Chinese.
