@@ -62,3 +62,34 @@ def test_build_plan_is_readonly_and_maps(col):
     src, kino = plan["sources"]["MyNote"]["samples"][0]
     assert kino["Term"] == "一つ" and kino["Reading"] == "ひとつ"
     assert plan["errors"] == []
+
+
+def test_run_conversion_preserves_schedule_and_maps(col, tmp_path):
+    nid = convert.select_notes(col)["MyNote"][0]
+    card = col.get_card(col.card_ids_of_note(nid)[0])
+    # give the card a non-default schedule
+    card.ivl = 42; card.reps = 7; card.due = 12345; card.type = 2
+    col.update_card(card)
+    cid = card.id
+
+    result = convert.run_conversion(col, backup_dir=str(tmp_path / "bk"))
+
+    note = col.get_note(nid)
+    assert note.note_type()["name"] == config.TARGET_NOTETYPE
+    assert note["Term"] == "一つ" and note["Reading"] == "ひとつ"
+    assert note["Furigana"] == "一[ひと]つ"
+    assert note["Meaning"] == "one" and note["Term Audio"] == "[sound:a.mp3]"
+    # same card, schedule intact
+    c2 = col.get_card(cid)
+    assert (c2.ivl, c2.reps, c2.due, c2.type) == (42, 7, 12345, 2)
+    assert result["converted"]["MyNote"] == 1
+
+
+def test_run_conversion_aborts_without_target(tmp_path):
+    from anki.collection import Collection
+    c = Collection(str(tmp_path / "empty.anki2"))
+    try:
+        with pytest.raises(RuntimeError, match="target notetype"):
+            convert.run_conversion(c, backup_dir=str(tmp_path / "bk"))
+    finally:
+        c.close()

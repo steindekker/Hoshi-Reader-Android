@@ -47,3 +47,55 @@ def build_plan(col) -> dict:
                 samples.append((src, kino))
         plan["sources"][name] = {"count": len(nids), "samples": samples}
     return plan
+
+
+def run_conversion(col, backup_dir: str) -> dict:
+    """Backup, then convert all in-scope source notes to the target note type,
+    preserving card history. Returns {'converted': {name: n}}.
+
+    Each source notetype's change+repopulate is merged into one undo entry.
+    col.models.change() always creates a new undo step (it calls mod_schema
+    internally), so we anchor on the step it creates and merge subsequent
+    update_note calls into it.
+    """
+    target = col.models.by_name(config.TARGET_NOTETYPE)
+    if target is None:
+        raise RuntimeError("target notetype missing: " + config.TARGET_NOTETYPE)
+
+    selected = select_notes(col)
+    if not any(selected.values()):
+        raise RuntimeError("no in-scope notes to convert")
+
+    import os
+    os.makedirs(backup_dir, exist_ok=True)
+    col.create_backup(backup_folder=backup_dir, force=True, wait_for_completion=True)
+
+    converted = {}
+    target_field_names = {f["name"] for f in target["flds"]}
+
+    for name, nids in selected.items():
+        model = col.models.by_name(name)
+        names = _field_names(col, name)
+        # snapshot BEFORE change(), which discards source fields
+        snapshot = {nid: dict(zip(names, col.get_note(nid).fields)) for nid in nids}
+
+        # switch note type + map every template onto the target's first template
+        fmap = {i: None for i in range(len(names))}  # discard; repopulate below
+        cmap = {t["ord"]: 0 for t in model["tmpls"]}
+        col.models.change(model, list(nids), target, fmap, cmap)
+        # anchor = the undo step just created by models.change
+        anchor = col.undo_status().last_step
+
+        mapper = mapping.MAPPERS[name]
+        for nid in nids:
+            note = col.get_note(nid)
+            for fname, val in mapper(snapshot[nid]).items():
+                if fname in target_field_names:
+                    note[fname] = val
+            col.update_note(note)
+
+        # merge all update_note ops into the change_notetype undo entry
+        col.merge_undo_entries(anchor)
+        converted[name] = len(nids)
+
+    return {"converted": converted}
