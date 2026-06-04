@@ -82,3 +82,39 @@ def test_build_plan_classifies(kcol, tmp_path):
     assert len(plan["nohit_nids"]) == 1
     assert plan["samples"]                       # at least one before/after sample
     conn.close()
+
+
+def test_enrich_notes_writes_stashes_and_is_idempotent(kcol, tmp_path):
+    db = str(tmp_path / "defs.sqlite"); _make_db(db)
+    enrich.ensure_fields(kcol)
+    nid = _add_kino(kcol, "迷惑", "めいわく", meaning="OLD CLUTTER")
+    conn = enrich.open_index(db)
+
+    res = enrich.enrich_notes(kcol, conn)
+    n = kcol.get_note(nid)
+    assert n["Meaning"] == ('<div class="aa-jj" data-dict="sankoku8"><b>めいわく</b></div>'
+                            '<details class="aa-je" open><summary>English</summary>'
+                            '1. trouble; bother</details>')
+    assert n[config.ORIGINAL_MEANING_FIELD] == "OLD CLUTTER"
+    assert n[config.DEFINITION_SOURCE_FIELD] == "三省堂"
+    assert config.ENRICHED_TAG in n.tags
+    assert res["written"] == 1
+
+    # idempotent: re-run writes nothing and does not re-stash
+    res2 = enrich.enrich_notes(kcol, conn)
+    assert res2["written"] == 0
+    assert kcol.get_note(nid)[config.ORIGINAL_MEANING_FIELD] == "OLD CLUTTER"
+    conn.close()
+
+
+def test_enrich_notes_drops_few_nohit(kcol, tmp_path):
+    db = str(tmp_path / "defs.sqlite"); _make_db(db)
+    enrich.ensure_fields(kcol)
+    keep = _add_kino(kcol, "迷惑", "めいわく")
+    gone = _add_kino(kcol, "謎語", "なぞご")     # no hit, < threshold -> dropped
+    conn = enrich.open_index(db)
+    res = enrich.enrich_notes(kcol, conn)
+    assert res["dropped"] == 1
+    assert kcol.find_notes("nid:%d" % gone) == []
+    assert kcol.find_notes("nid:%d" % keep) != []
+    conn.close()

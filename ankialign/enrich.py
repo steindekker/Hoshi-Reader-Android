@@ -89,3 +89,52 @@ def build_plan(col, conn):
             samples.append((term, note["Meaning"], meaning, source))
     return {"counts": counts, "nohit_nids": nohit_nids,
             "samples": samples, "errors": errors}
+
+
+def enrich_notes(col, conn):
+    """Rewrite Meaning for in-scope Kinomoto notes. Returns counts. Idempotent.
+
+    Caller is responsible for the backup + schema acknowledgement (the preview
+    dialog does this). ensure_fields/apply_dict_styles are called here so the
+    function is self-contained for headless use.
+    """
+    ensure_fields(col)
+    apply_dict_styles(col)
+    written = 0
+    nohit_nids = []
+    for nid in _in_scope_nids(col):
+        note = col.get_note(nid)
+        term = note["Term"].strip()
+        if not term:
+            continue
+        meaning, source, kind = _compute(conn, term, note["Reading"].strip())
+        if kind == "nohit":
+            nohit_nids.append(nid)
+            continue
+        # stash the true original exactly once
+        if config.ENRICHED_TAG not in note.tags:
+            note[config.ORIGINAL_MEANING_FIELD] = note["Meaning"]
+        unchanged = (note["Meaning"] == meaning
+                     and note[config.DEFINITION_SOURCE_FIELD] == source
+                     and config.ENRICHED_TAG in note.tags)
+        if unchanged:
+            continue
+        note["Meaning"] = meaning
+        note[config.DEFINITION_SOURCE_FIELD] = source
+        if config.ENRICHED_TAG not in note.tags:
+            note.add_tag(config.ENRICHED_TAG)
+        col.update_note(note)
+        written += 1
+
+    dropped = 0
+    if nohit_nids and len(nohit_nids) < config.NO_HIT_DROP_THRESHOLD:
+        col.remove_notes(nohit_nids)
+        dropped = len(nohit_nids)
+    else:
+        for nid in nohit_nids:
+            note = col.get_note(nid)
+            if config.NO_DEF_TAG not in note.tags:
+                note.add_tag(config.NO_DEF_TAG)
+                col.update_note(note)
+    return {"written": written, "dropped": dropped,
+            "nohit_tagged": 0 if dropped else len(nohit_nids)}
