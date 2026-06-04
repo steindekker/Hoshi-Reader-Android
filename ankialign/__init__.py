@@ -21,6 +21,10 @@ try:
         repitch.triggered.connect(audio_preview.show_repitch)
         mw.form.menuTools.addAction(repitch)
 
+        pitch_graphs = QAction("AnkiAlign: Backfill pitch graphs…", mw)
+        pitch_graphs.triggered.connect(preview.show_pitch)
+        mw.form.menuTools.addAction(pitch_graphs)
+
     _add_menu()
 except ModuleNotFoundError as e:
     if not (e.name and e.name.split(".")[0] == "aqt"):

@@ -3,7 +3,7 @@ from aqt import mw
 from aqt.qt import (QDialog, QVBoxLayout, QLabel, QTextEdit, QPushButton, QHBoxLayout)
 from aqt.utils import showInfo
 from anki.errors import AbortSchemaModification
-from . import convert, template
+from . import convert, template, pitch
 
 
 def _plan_text(plan: dict) -> str:
@@ -78,4 +78,51 @@ def show() -> None:
             "(Ctrl+Z undoes only the last step, not the whole run.)")
 
     convert_btn.clicked.connect(do_convert)
+    dlg.exec()
+
+
+def _pitch_plan_text(plan: dict) -> str:
+    c = plan["counts"]
+    lines = [
+        f"Will fill:   {c['filled']} notes",
+        f"Not in dict: {c['not_found']} (left empty)",
+        f"No reading:  {c['skipped']} (skipped)",
+        "",
+        "Samples (term — reading — accent graph):",
+    ]
+    for term, reading, _svg in plan["samples"]:
+        lines.append(f"   • {term}  —  {reading}")
+    return "\n".join(lines)
+
+
+def show_pitch() -> None:
+    plan = pitch.build_pitch_plan(mw.col)
+    dlg = QDialog(mw)
+    dlg.setWindowTitle("AnkiAlign — Backfill pitch graphs (preview)")
+    lay = QVBoxLayout(dlg)
+    lay.addWidget(QLabel("Dry run — nothing has changed yet:"))
+    box = QTextEdit(); box.setReadOnly(True); box.setPlainText(_pitch_plan_text(plan))
+    lay.addWidget(box)
+    btns = QHBoxLayout()
+    cancel = QPushButton("Cancel"); run = QPushButton("Backup && Backfill")
+    btns.addWidget(cancel); btns.addWidget(run); lay.addLayout(btns)
+    cancel.clicked.connect(dlg.reject)
+
+    def do_run():
+        dlg.accept()
+        backup_dir = mw.pm.backupFolder()
+        convert.backup_collection(mw.col, backup_dir)   # forced, verified backup
+        mw.progress.start(label="AnkiAlign: backfilling pitch graphs…", immediate=True)
+        try:
+            res = pitch.backfill_pitch(mw.col)
+        finally:
+            mw.progress.finish()
+        mw.reset()
+        showInfo(
+            f"Filled: {res['filled']}\n"
+            f"Not in dict: {res['not_found']}\n"
+            f"Skipped (no reading): {res['skipped']}\n\n"
+            f"Rollback: restore the backup at\n{backup_dir}")
+
+    run.clicked.connect(do_run)
     dlg.exec()
