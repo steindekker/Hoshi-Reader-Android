@@ -11,11 +11,13 @@ def test_kana_only_run_is_untouched():
 
 def test_existing_unit_is_preserved():
     s = "{[異変|いへん];0}に気付いた"
-    assert splice(s, gen) == "{[異変|いへん];0}に<<気付いた>>"
+    # the whole plain run "に気付いた" (it contains kanji) goes to generate;
+    # the real generate keeps に bare via tokenization.
+    assert splice(s, gen) == "{[異変|いへん];0}<<に気付いた>>"
 
 def test_bracket_segment_is_preserved():
     s = "[気付|きづ]いて異端"
-    assert splice(s, gen) == "[気付|きづ]いて<<異端>>"
+    assert splice(s, gen) == "[気付|きづ]<<いて異端>>"
 
 def test_fully_marked_is_noop():
     s = "{[異変|いへん];0}に{[気付|きづ]いた;Y2}"

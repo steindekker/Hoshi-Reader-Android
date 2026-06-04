@@ -40,14 +40,8 @@ def _spans(s: str) -> list[tuple[str, str]]:
 def splice(sentence: str, generate: Callable[[str], str]) -> str:
     parts: list[str] = []
     for kind, text in _spans(sentence):
-        if kind == "plain":
-            m = _KANJI.search(text)
-            if m:
-                # Keep leading kana/punctuation prefix verbatim; generate from first kanji onward.
-                parts.append(text[: m.start()])
-                parts.append(generate(text[m.start() :]))
-            else:
-                parts.append(text)
+        if kind == "plain" and _KANJI.search(text):
+            parts.append(generate(text))
         else:
             parts.append(text)
     return "".join(parts)
