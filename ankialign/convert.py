@@ -74,16 +74,12 @@ def backup_collection(col, backup_dir: str) -> None:
 
 def run_conversion(col, backup_dir: str, make_backup: bool = True) -> dict:
     """Backup, then convert all in-scope source notes to the target note type,
-    preserving card history. Returns {'converted': {name: n}}.
+    preserving card review history. Returns {'converted': {name: n}}.
 
-    Card review history is preserved. Note: col.models.change() resets Anki's
-    undo queue per call, so Ctrl+Z reverts only the LAST source's change —
-    the forced backup is the full rollback path.
-
-    Each source notetype's change+repopulate is merged into one undo entry.
-    col.models.change() always creates a new undo step (it calls mod_schema
-    internally), so we anchor on the step it creates and merge subsequent
-    update_note calls into it.
+    Rollback is the forced backup, NOT Ctrl+Z: col.models.change() is a schema
+    op that clears Anki's undo queue, so the run is not cleanly undoable. We do
+    no undo bookkeeping for that reason. Card scheduling history is preserved
+    (change() operates at the note/field level, not on the cards table).
     """
     target = col.models.by_name(config.TARGET_NOTETYPE)
     if target is None:
@@ -109,9 +105,10 @@ def run_conversion(col, backup_dir: str, make_backup: bool = True) -> dict:
         fmap = {i: None for i in range(len(names))}  # discard; repopulate below
         cmap = {t["ord"]: 0 for t in model["tmpls"]}
         col.models.change(model, list(nids), target, fmap, cmap)
-        # anchor = the undo step just created by models.change
-        anchor = col.undo_status().last_step
 
+        # No undo bookkeeping: models.change is a schema op that clears Anki's
+        # undo queue, so there's nothing to merge into. Rollback is the forced
+        # backup, not Ctrl+Z (see backup_collection / preview messaging).
         mapper = mapping.MAPPERS[name]
         for nid in nids:
             try:
@@ -124,8 +121,6 @@ def run_conversion(col, backup_dir: str, make_backup: bool = True) -> dict:
                 raise RuntimeError(
                     f"failed repopulating note {nid} ({name}): {e!r}") from e
 
-        # merge all update_note ops into the change_notetype undo entry
-        col.merge_undo_entries(anchor)
         converted[name] = len(nids)
 
     return {"converted": converted}
