@@ -46,3 +46,29 @@ def test_numbered_glosses_cap_and_reading_filter():
 
 def test_numbered_glosses_empty():
     assert rd.numbered_glosses([], "あ", cap=4) == ""
+
+
+CHAIN = ["sankoku8", "koujien7", "jitsuyo", "daijisen"]
+
+
+def _jj(dict_id, reading, html):
+    return {"term": "x", "reading": reading, "dict_id": dict_id,
+            "kind": "jj", "sense_ord": 0, "html": html}
+
+
+def test_choose_jj_first_in_chain_wins():
+    rows = [_jj("daijisen", "あ", "D"), _jj("koujien7", "あ", "K"), _jj("sankoku8", "あ", "S")]
+    assert rd.choose_jj(rows, "あ", CHAIN) == ("sankoku8", "S")
+
+
+def test_choose_jj_reading_disambiguation():
+    rows = [_jj("sankoku8", "はし", "bridge"), _jj("sankoku8", "ばし", "wrong")]
+    assert rd.choose_jj(rows, "はし", CHAIN) == ("sankoku8", "bridge")
+
+
+def test_choose_jj_blank_reading_fallback_then_skip():
+    rows = [_jj("sankoku8", "", "S-noreading"), _jj("koujien7", "あ", "K")]
+    assert rd.choose_jj(rows, "あ", CHAIN) == ("sankoku8", "S-noreading")
+    assert rd.choose_jj([], "あ", CHAIN) is None
+    # dict not in chain is ignored
+    assert rd.choose_jj([_jj("smk8", "あ", "X")], "あ", CHAIN) is None

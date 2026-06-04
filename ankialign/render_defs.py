@@ -62,3 +62,19 @@ def _by_reading(rows, reading):
 def numbered_glosses(je_rows, reading, cap=4) -> str:
     rows = sorted(_by_reading(je_rows, reading), key=lambda r: r["sense_ord"])[:cap]
     return "<br>".join(f"{i}. {r['html']}" for i, r in enumerate(rows, 1))
+
+
+def choose_jj(jj_rows, reading, chain):
+    """First dictionary in `chain` order that has a reading-matching entry.
+
+    Returns (dict_id, html) or None. Reading match prefers exact reading, then a
+    reading-less entry, then any entry from that dict.
+    """
+    for dict_id in chain:
+        rows = [r for r in jj_rows if r["dict_id"] == dict_id]
+        if not rows:
+            continue
+        chosen = _by_reading(rows, reading)
+        if chosen:
+            return (dict_id, chosen[0]["html"])
+    return None
