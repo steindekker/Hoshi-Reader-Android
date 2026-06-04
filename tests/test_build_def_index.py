@@ -47,3 +47,15 @@ def test_build_indexes_jmdict_senses(tmp_path):
         "SELECT reading, sense_ord, html FROM defs WHERE kind='je' ORDER BY sense_ord").fetchall()
     assert rows == [("こうしょう", 1, "negotiations; bargaining"),
                     ("こうしょう", 2, "connection; relations")]
+
+
+def test_build_scopes_dict_styles(tmp_path):
+    dicts = tmp_path / "dicts"
+    _write_dict(dicts, "daijisen",
+                [["猫", "ねこ", "", "", 0, [{"type": "structured-content", "content": "ねこ"}], 1, ""]],
+                styles='[data-sc-content="extra"] { color: red; }')
+    styles_out = tmp_path / "dict_styles.css"
+    b.build(str(dicts), str(tmp_path / "defs.sqlite"), str(styles_out))
+    css = styles_out.read_text(encoding="utf-8")
+    assert '.aa-jj[data-dict="daijisen"] [data-sc-content="extra"]' in css
+    assert "color: red" in css
