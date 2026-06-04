@@ -10,10 +10,10 @@ import os, sys, gzip, marshal
 
 ROOT = os.path.expanduser("~/projects/anki-align")
 sys.path.insert(0, os.path.join(ROOT, "research/pitch-pipeline/work"))
+sys.path.insert(0, ROOT)
 import validate as V
+from ankialign.jrp_fill._utils import hira
 
-KATA = {chr(c): chr(c - 0x60) for c in range(0x30A1, 0x30F7)}
-def hira(s): return "".join(KATA.get(c, c) for c in s)
 def key(lemma, reading): return lemma + "\t" + hira(reading)
 
 def main():

@@ -5,20 +5,10 @@ Returns a list of (text, reading|None). reading is None for kana/other runs
 cleanly returns a single (surface, reading) segment, which always round-trips.
 """
 from __future__ import annotations
-import re
-
-# same kanji ranges as ankialign/markup.py, as a per-character class
-_KANJI = re.compile(
-    r"[㐀-鿿豈-﫿々\U00020000-\U0002A6DF\U0002A700-\U0002CEAF"
-    r"\U0002CEB0-\U0002EBEF]"
-)
-_KATA = {chr(c): chr(c - 0x60) for c in range(0x30A1, 0x30F7)}
-
-def _hira(s: str) -> str:
-    return "".join(_KATA.get(c, c) for c in s)
+from ._utils import KANJI_RE, hira
 
 def _is_kanji(ch: str) -> bool:
-    return bool(_KANJI.match(ch))
+    return bool(KANJI_RE.match(ch))
 
 def _runs(surface: str) -> list[tuple[bool, str]]:
     """Split into maximal (is_kanji, text) runs."""
@@ -38,19 +28,19 @@ def furigana_segments(surface: str, reading: str) -> list[tuple[str, str | None]
     if not any(k for k, _ in runs):           # no kanji at all -> all bare
         return [(surface, None)]
 
-    hread = _hira(reading)
+    hread = hira(reading)
     segs: list[tuple[str, str | None]] = []
     ri = 0
     for i, (is_k, text) in enumerate(runs):
         if not is_k:
-            anchor = _hira(text)
+            anchor = hira(text)
             if hread[ri:ri + len(anchor)] != anchor:
                 return [(surface, reading)]    # mismatch -> safe fallback
             segs.append((text, None))
             ri += len(anchor)
         else:
             if i + 1 < len(runs):              # next run is kana: find it to delimit
-                nxt = _hira(runs[i + 1][1])
+                nxt = hira(runs[i + 1][1])
                 j = hread.find(nxt, ri)
                 if j < 0 or j == ri:
                     return [(surface, reading)]

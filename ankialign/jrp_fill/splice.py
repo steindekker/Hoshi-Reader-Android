@@ -5,13 +5,8 @@ Plain runs containing at least one kanji are passed to `generate`; kana-only
 or punctuation-only runs are left untouched.
 """
 from __future__ import annotations
-import re
 from collections.abc import Callable
-
-_KANJI = re.compile(
-    r"[㐀-鿿豈-﫿々\U00020000-\U0002A6DF\U0002A700-\U0002CEAF"
-    r"\U0002CEB0-\U0002EBEF]"
-)
+from ._utils import KANJI_RE
 
 def _spans(s: str) -> list[tuple[str, str]]:
     """Tokenize into ('markup', text) for {...}/[...] and ('plain', text) runs."""
@@ -40,7 +35,7 @@ def _spans(s: str) -> list[tuple[str, str]]:
 def splice(sentence: str, generate: Callable[[str], str]) -> str:
     parts: list[str] = []
     for kind, text in _spans(sentence):
-        if kind == "plain" and _KANJI.search(text):
+        if kind == "plain" and KANJI_RE.search(text):
             parts.append(generate(text))
         else:
             parts.append(text)

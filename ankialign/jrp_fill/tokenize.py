@@ -9,10 +9,7 @@ from functools import lru_cache
 from collections.abc import Callable
 from .unit import Unit
 from .accent import AccentIndex
-
-_KATA = {chr(c): chr(c - 0x60) for c in range(0x30A1, 0x30F7)}
-def _hira(s: str) -> str:
-    return "".join(_KATA.get(c, c) for c in s)
+from ._utils import hira
 
 _CONTENT = {"名詞", "動詞", "形容詞", "副詞", "形状詞", "連体詞", "感動詞"}
 _YOUGEN = {"動詞", "形容詞"}
@@ -31,12 +28,12 @@ def _modes():
 def _lemma_reading(lemma: str) -> str:
     _, C = _modes()
     ms = _tok().tokenize(lemma, C)
-    return _hira("".join(m.reading_form() or m.surface() for m in ms))
+    return hira("".join(m.reading_form() or m.surface() for m in ms))
 
 def _to_unit(m, acc: AccentIndex) -> Unit:
     pos0 = m.part_of_speech()[0]
     surface = m.surface()
-    reading = _hira(m.reading_form() or surface)
+    reading = hira(m.reading_form() or surface)
     lemma = m.dictionary_form() or surface
     is_content = pos0 in _CONTENT
     if not is_content:
