@@ -79,3 +79,27 @@ Sample misses (term / reading):
 - 魔法陣 ／ まほうじん
 - でれる ／ でれる
 - 獣人 ／ じゅうじん
+
+---
+
+## Re-pitch existing audio (separate pass — `upgrade_spike.py`)
+
+Motivation: existing Term Audio is almost all jidoujisho-mined JapanesePod101, which
+has frequent wrong pitch. **Cannot identify jpod files forensically** — filenames are
+opaque jidoujisho timestamps (`1635235872.58.mp3`), clips (~0.9s) are too short for
+Chromaprint ("Empty fingerprint"), and card-vs-jpod durations are inconclusive
+(median |Δ| 0.11s but ±0.67s spread; local-audio trims silence). Doesn't matter:
+wherever an accent dictionary has a reading-correct recording, it is authoritative.
+
+Policy (decided): replace existing Term Audio **only** where nhk16 or shinmeikai8 has
+an exact (term, reading) hit (nhk16 preferred). Never replace with forvo/jpod.
+
+| Outcome | Cards | % of audio'd |
+|---|---:|---:|
+| **REPLACE** (nhk16/shinmeikai8 reading-hit) | **7185** | **93.9%** |
+| — nhk16 has it | 6164 | |
+| — shinmeikai8 has it | 6855 | |
+| leave: forvo-only (no dict) | 290 | 3.8% |
+| leave: no authoritative source | 180 | 2.4% |
+
+(of 7,655 in-scope Kinomoto cards with Term Audio; 68 have empty Reading.)

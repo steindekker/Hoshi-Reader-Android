@@ -118,6 +118,36 @@ Decisions the data settled:
 no further research needed. Optionally spot-check the 9 forvo-over-jpod cards by ear
 once built, but not a blocker.
 
+## Sibling task: re-pitch existing audio (SEPARATE action — keep out of goal #3)
+
+User decided to keep this distinct from the empty-fill backfill above. Same data
+source + media-copy mechanics, different population and intent.
+
+**Why:** existing Term Audio is almost all jidoujisho-mined JapanesePod101, which has
+frequent wrong pitch accent (the reason jpod is last in the fill chain). User wants it
+replaced with accent-dictionary audio.
+
+**Can't identify jpod forensically** — filenames are opaque jidoujisho timestamps;
+clips (~0.9s) are too short for Chromaprint; durations inconclusive. Irrelevant: a
+dictionary hit is authoritative regardless of the current file's origin.
+
+**Decided policy — dictionary-only replacement:**
+- Replace existing Term Audio **only** where `nhk16` OR `shinmeikai8` has an exact
+  (term, reading) hit (prefer nhk16). **Never** replace with forvo or jpod.
+- Leave forvo-only and no-source cards untouched.
+- **Non-destructive:** keep the old mp3 in `collection.media`; rewrite only the
+  `[sound:]` field reference. Plus backup-before-op. Fully reversible.
+- Worst case per card is lateral (current audio already good → swapped for NHK);
+  never a downgrade.
+
+**Population (`research/audio-compare/upgrade_spike.py` → COVERAGE.md):** of 7,655
+in-scope Kinomoto cards WITH Term Audio, **7,185 (93.9%) are replaceable** with a
+reading-correct dictionary recording (nhk16 6164 / shinmeikai8 6855 union); 290
+forvo-only + 180 no-source left as-is; 68 empty-reading.
+
+Build as its own Tools action (its own preview→apply), after the fill pass exists —
+it can reuse the same lookup + media-copy helpers.
+
 ## Mobile / AnkiDroid (from HANDOFF-mobile-review)
 Audio must be a `[sound:…]` field (native "Automatically play audio"), never
 JS-driven. Opus files are small — keep per-card media lean. No template changes
