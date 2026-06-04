@@ -169,6 +169,23 @@ when dicts change.
 - `uv` dependency group for the offline tool: `anki` (collection I/O), `sudachipy`,
   `sudachidict-full`, (optional) `marine` / `marine-plus`.
 
+## As-built notes (implemented on `feat/jrp-sentence-fill`, 2026-06-04/05)
+
+- **代名詞 (pronouns) are content** (彼/彼女/誰 get furigana + pitch) — a final-review fix; cut
+  bare-kanji sentences from 55/200 → 8/200 with zero wrong readings.
+- **接尾辞 (counters) deliberately stay bare.** Empirically, making them content introduced *wrong*
+  readings on irregular number compounds (二日 → ふたか instead of ふつか; risk to 一人/二人). A
+  bare-but-correct kanji beats a wrong furigana. A bare-kanji regression test guards the rate (≤15/200).
+- **deinflect.py omitted (YAGNI).** Sudachi `dictionary_form()` + lemma-reading + the Mode C→A split
+  cascade reached 98.9% strict coverage without a hand-rolled deinflector.
+- **`!` ambiguity mark deferred** — `emit` supports the syntax but nothing sets `Unit.ambiguous` yet.
+- **Idempotency caveat:** the first `--apply` is safe (surface round-trip guard + forced backup). A
+  *second* run can re-tokenize a leftover bare-counter kanji in isolation and write a different
+  (possibly wrong) reading that the surface-only guard won't catch (~4% of sentences). Treat as a
+  **one-time backfill**; don't re-run without reviewing. Full idempotency would need a
+  "fully-marked → skip" classifier (deferred).
+- Final strict-coverage gate: **98.96%** (1044/1055) on the 200-sentence seed-7 sample.
+
 ## Open / deferred
 
 - **marine integration depth** — wire as per-miss fallback first; whether to batch whole sentences
