@@ -2,7 +2,7 @@
 from aqt import mw
 from aqt.qt import (QDialog, QVBoxLayout, QLabel, QTextEdit, QPushButton, QHBoxLayout)
 from aqt.utils import showInfo
-from aqt.operations import CollectionOp
+from anki.errors import AbortSchemaModification
 from . import convert, template
 
 
@@ -39,19 +39,34 @@ def show() -> None:
         # Back up synchronously, before the background op, and verify it landed.
         convert.backup_collection(mw.col, backup_dir)
 
-        def op(col):
-            res = convert.run_conversion(col, backup_dir=backup_dir, make_backup=False)
-            template.apply(col)
-            return res
+        # col.models.change() calls mod_schema(check=True), which fires the
+        # schema_will_change hook — and that hook must run on the MAIN thread
+        # (it prompts about the full sync). CollectionOp runs op() on a worker
+        # thread, so acknowledge the schema change here first. Anki only fires
+        # the hook the first time the schema changes this session, so the
+        # change() calls inside the op then skip it.
+        try:
+            mw.col.mod_schema(check=True)
+        except AbortSchemaModification:
+            showInfo("Cancelled — schema change was not accepted.")
+            return
 
-        def done(res):
-            c = res["converted"]
-            showInfo(
-                "Converted: " + ", ".join(f"{k} {v}" for k, v in c.items())
-                + f"\n\nRollback: restore the backup at\n{backup_dir}\n"
-                + "(Ctrl+Z undoes only the last step, not the whole run.)")
+        # Run on the main thread (schema-modifying bulk op): a progress dialog
+        # keeps the UI responsive-looking; CollectionOp's worker thread can't
+        # run the schema hook and expects a changes object we don't produce.
+        mw.progress.start(label="AnkiAlign: converting notes…", immediate=True)
+        try:
+            res = convert.run_conversion(mw.col, backup_dir=backup_dir, make_backup=False)
+            template.apply(mw.col)
+        finally:
+            mw.progress.finish()
+        mw.reset()  # refresh browser/reviewer to show the converted notes
 
-        CollectionOp(parent=mw, op=op).success(done).run_in_background()
+        c = res["converted"]
+        showInfo(
+            "Converted: " + ", ".join(f"{k} {v}" for k, v in c.items())
+            + f"\n\nRollback: restore the backup at\n{backup_dir}\n"
+            + "(Ctrl+Z undoes only the last step, not the whole run.)")
 
     convert_btn.clicked.connect(do_convert)
     dlg.exec()
