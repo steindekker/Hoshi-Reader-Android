@@ -22,6 +22,12 @@ KINOMOTO_FIELDS = ["Term", "Reading", "Furigana", "Sentence", "SentenceFurigana"
     "Term Audio", "Sentence Audio"]
 MYNOTE_FIELDS = ["Sentence", "Translation", "Target Word", "Definitions", "Screenshot",
     "Sentence Audio", "Word Audio", "Images", "Example Sentences", "Frequency", "Pitch"]
+YUUNA_FIELDS = ["Sentence", "Term", "Reading", "Meaning", "Notes", "Image",
+    "Term Audio", "Pitch Accent", "Furigana", "Expanded Meaning",
+    "Collapsed Meaning", "Sentence Audio"]
+KANJISTUDY_FIELDS = ["ID", "Entry", "EntryFurigana", "Meaning", "Sentence",
+    "Translation", "Screenshot", "Word Audio", "Sentence Audio", "Images",
+    "Example Sentences", "Frequency"]
 
 
 @pytest.fixture
@@ -83,6 +89,34 @@ def test_run_conversion_preserves_schedule_and_maps(col, tmp_path):
     c2 = col.get_card(cid)
     assert (c2.ivl, c2.reps, c2.due, c2.type) == (42, 7, 12345, 2)
     assert result["converted"]["MyNote"] == 1
+
+
+def test_run_conversion_multi_source_and_leaves_excluded(col, tmp_path):
+    mined = col.decks.id("言葉文章")
+    yuuna = _new_notetype(col, "jidoujisho Yuuna", YUUNA_FIELDS)
+    ks = _new_notetype(col, "Kanji Study Word Model v3", KANJISTUDY_FIELDS)
+    ny = col.new_note(yuuna)
+    ny["Term"] = "{[土砂|どしゃ];1}"; ny["Reading"] = "どしゃ"
+    ny["Furigana"] = "土砂[どしゃ]"; ny["Meaning"] = "earth and sand"
+    col.add_note(ny, mined)
+    nk = col.new_note(ks)
+    nk["EntryFurigana"] = "有[あ]りそう"; nk["Meaning"] = "probable"
+    nk["Word Audio"] = "[sound:k.mp3]"
+    col.add_note(nk, mined)
+    core_nid = col.find_notes('note:MyNote deck:*Core2.3k*')[0]
+
+    result = convert.run_conversion(col, backup_dir=str(tmp_path / "bk"))
+
+    assert result["converted"] == {
+        "MyNote": 1, "jidoujisho Yuuna": 1, "Kanji Study Word Model v3": 1}
+    # excluded Core note untouched
+    assert col.get_note(core_nid).note_type()["name"] == "MyNote"
+    # Yuuna + KanjiStudy mapped onto Kinomoto
+    yn = col.get_note(ny.id)
+    assert yn.note_type()["name"] == config.TARGET_NOTETYPE
+    assert yn["Term"] == "土砂" and yn["Reading"] == "どしゃ"
+    kn = col.get_note(nk.id)
+    assert kn["Term"] == "有りそう" and kn["Reading"] == "ありそう"
 
 
 def test_run_conversion_aborts_without_target(tmp_path):

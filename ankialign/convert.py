@@ -1,5 +1,6 @@
 """Conversion engine. Uses the anki package; no aqt (GUI) imports so it can be
 tested headless."""
+import os
 from . import config, mapping
 
 
@@ -66,9 +67,12 @@ def run_conversion(col, backup_dir: str) -> dict:
     if not any(selected.values()):
         raise RuntimeError("no in-scope notes to convert")
 
-    import os
     os.makedirs(backup_dir, exist_ok=True)
     col.create_backup(backup_folder=backup_dir, force=True, wait_for_completion=True)
+    # create_backup(force=True) returns False + writes nothing when there are no
+    # pending changes; never mutate without a backup actually on disk.
+    if not any(f.endswith(".colpkg") for f in os.listdir(backup_dir)):
+        raise RuntimeError(f"no backup was created in {backup_dir}; aborting before mutation")
 
     converted = {}
     target_field_names = {f["name"] for f in target["flds"]}
@@ -88,11 +92,15 @@ def run_conversion(col, backup_dir: str) -> dict:
 
         mapper = mapping.MAPPERS[name]
         for nid in nids:
-            note = col.get_note(nid)
-            for fname, val in mapper(snapshot[nid]).items():
-                if fname in target_field_names:
-                    note[fname] = val
-            col.update_note(note)
+            try:
+                note = col.get_note(nid)
+                for fname, val in mapper(snapshot[nid]).items():
+                    if fname in target_field_names:
+                        note[fname] = val
+                col.update_note(note)
+            except Exception as e:
+                raise RuntimeError(
+                    f"failed repopulating note {nid} ({name}): {e!r}") from e
 
         # merge all update_note ops into the change_notetype undo entry
         col.merge_undo_entries(anchor)
