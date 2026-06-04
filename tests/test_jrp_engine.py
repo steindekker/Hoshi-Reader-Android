@@ -25,11 +25,11 @@ def test_plan_classifies_and_generates(tmp_path):
     plain = _add(col, m, "異端", "異端である")
     marked = _add(col, m, "異変", "{[異変|いへん];0}だ")
     empty = _add(col, m, "x", "")
-    # stub generate: wrap kanji-bearing plain runs
+    # stub generate: valid JRP whose surface reproduces the input
     plan = engine.build_plan(col, "jidoujisho Kinomoto", "Sentence",
-                             generate=lambda t: "<<" + t + ">>")
+                             generate=lambda t: "{" + t + ";0}")
     by_id = {p.note_id: p for p in plan}
-    assert by_id[plain].new_value == "<<異端である>>"
+    assert by_id[plain].new_value == "{異端である;0}"
     assert marked not in by_id            # fully marked -> no change -> skipped
     assert empty not in by_id             # empty -> skipped
     col.close()
@@ -38,7 +38,7 @@ def test_apply_writes_through_col(tmp_path):
     col, m = _make_col(tmp_path)
     nid = _add(col, m, "異端", "異端である")
     plan = engine.build_plan(col, "jidoujisho Kinomoto", "Sentence",
-                             generate=lambda t: "<<" + t + ">>")
+                             generate=lambda t: "{" + t + ";0}")
     engine.apply_plan(col, plan)
-    assert col.get_note(nid)["Sentence"] == "<<異端である>>"
+    assert col.get_note(nid)["Sentence"] == "{異端である;0}"
     col.close()

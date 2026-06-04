@@ -3,6 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from collections.abc import Callable
 from .splice import splice
+from ankialign import markup
+
+
+def _norm(s: str) -> str:
+    return s.replace("<br>", " ").replace("<br/>", " ").replace(" ", " ")
 
 
 @dataclass(frozen=True)
@@ -30,6 +35,9 @@ def build_plan(col, note_type: str, field: str,
             continue
         new = splice(old, generate)
         if new == old:
+            continue
+        # round-trip guard: visible surface must be unchanged
+        if _norm(markup.jrp_surface(new)) != _norm(markup.jrp_surface(old)):
             continue
         plan.append(Fill(nid, old, new))
     return plan
