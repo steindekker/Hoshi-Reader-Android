@@ -2,7 +2,7 @@
    Lapis serif everywhere + Lapis "feel" (bg / text / elevated card),
    toned down: softer cream, muted accent, lighter shadows.
    Kinomoto font-sizes kept untouched. -------------------------------- */
-.card { font-family: {LAPIS_SERIF}; font-weight: 500; }
+.card { font-family: "Hiragino Mincho ProN", "Noto Serif CJK JP", "Noto Serif JP", "Yu Mincho", HanaMinA, HanaMinB, serif; font-weight: 500; }
 
 .card:not(.nightMode) {
   --bg: #fbf8f1;            /* Lapis cream #fffaf0, softened */

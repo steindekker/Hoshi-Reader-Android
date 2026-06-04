@@ -29,6 +29,8 @@ def test_apply_injects_strip_marker_and_css(col):
     m = col.models.by_name(config.TARGET_NOTETYPE)
     assert "ankialign-front-strip" in m["tmpls"][0]["qfmt"]
     assert "AnkiAlign custom" in m["css"]
+    assert "Hiragino Mincho ProN" in m["css"]   # real font stack, not a placeholder
+    assert "{LAPIS" not in m["css"]              # no unsubstituted f-string placeholder
 
 def test_apply_is_idempotent(col):
     template.apply(col); first = col.models.by_name(config.TARGET_NOTETYPE)["css"]
