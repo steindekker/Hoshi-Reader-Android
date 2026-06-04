@@ -14,6 +14,9 @@ EXCLUDE_DECK_SUBSTRINGS = ["Core2.3k", "文法"]
 # How many before/after samples per source to show in the preview dialog.
 SAMPLE_N = 5
 
+# local-audio-yomichan add-on (AnkiWeb code) — source of term-audio backfill.
+LOCAL_AUDIO_ADDON_ID = "1045800357"
+
 
 def in_scope(deck_name: str) -> bool:
     """True if a deck name is an in-scope mined deck (not Core2.3k / 文法)."""

@@ -2,12 +2,16 @@
 try:
     from aqt import mw
     from aqt.qt import QAction
-    from . import preview
+    from . import preview, audio_preview
 
     def _add_menu():
-        action = QAction("AnkiAlign: Unify note types…", mw)
-        action.triggered.connect(preview.show)
-        mw.form.menuTools.addAction(action)
+        unify = QAction("AnkiAlign: Unify note types…", mw)
+        unify.triggered.connect(preview.show)
+        mw.form.menuTools.addAction(unify)
+
+        backfill = QAction("AnkiAlign: Backfill word audio…", mw)
+        backfill.triggered.connect(audio_preview.show)
+        mw.form.menuTools.addAction(backfill)
 
     _add_menu()
 except ModuleNotFoundError as e:
