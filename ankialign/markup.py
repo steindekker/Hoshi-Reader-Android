@@ -6,7 +6,7 @@ import re
 
 # matches an Anki furigana segment: base[reading]
 _RUBY = re.compile(r"([^\s\[\]<>]+)\[([^\]]+)\]")
-_HAS_KANJI = re.compile(r"[㐀-鿿豈-﫿々]")
+_HAS_KANJI = re.compile(r"[㐀-鿿豈-﫿々\U00020000-\U0002A6DF\U0002A700-\U0002CEAF\U0002CEB0-\U0002EBEF]")
 
 
 def _anki_surface(s: str) -> str:
@@ -23,7 +23,7 @@ def jrp_to_furigana(s: str) -> str:
     """jidoujisho/JRP markup -> Anki furigana notation, e.g.
     '{[一|ひと]つ;2}' -> '一[ひと]つ'."""
     def _unit(m: re.Match) -> str:
-        return re.sub(r";[^;]*$", "", m.group(1))            # drop trailing ;accent
+        return re.sub(r";[^;]*$", "", m.group(1))            # drop accent suffix (last ;…)
     s = re.sub(r"\{([^{}]*)\}", _unit, s)
     s = re.sub(r"\[([^\[\]|=]*)=([^\[\]]*)\]", r"\1", s)       # [surface=base] -> surface
     s = re.sub(r"\[([^\[\]|]+)\|([^\[\]]+)\]", r" \1[\2]", s)  # [漢字|かな] -> ' 漢字[かな]'
@@ -31,6 +31,7 @@ def jrp_to_furigana(s: str) -> str:
 
 
 def jrp_surface(s: str) -> str:
+    """JRP markup -> plain surface string."""
     return _anki_surface(jrp_to_furigana(s))
 
 
@@ -41,9 +42,11 @@ def jrp_reading(s: str) -> str:
 
 
 def entryfurigana_surface(s: str) -> str:
+    """Anki EntryFurigana -> plain surface string."""
     return _anki_surface(s)
 
 
 def entryfurigana_reading(s: str) -> str:
+    """Anki EntryFurigana -> kana reading, or '' when bare kanji remains."""
     r = _anki_reading(s)
     return "" if _HAS_KANJI.search(r) else r

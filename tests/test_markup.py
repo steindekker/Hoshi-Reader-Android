@@ -14,6 +14,7 @@ def test_jrp_to_furigana():
     assert markup.jrp_to_furigana("{[一|ひと]つ;2}") == "一[ひと]つ"
     assert markup.jrp_to_furigana("{[気付|きづ][いた=く];Y2}") == "気付[きづ]いた"
     assert markup.jrp_to_furigana("一") == "一"
+    assert markup.jrp_to_furigana("{[気付|きづ];0}{[いた=く];Y2}") == "気付[きづ]いた"
 
 def test_jrp_reading():
     assert markup.jrp_reading("{[異変|いへん];0}") == "いへん"
@@ -21,9 +22,11 @@ def test_jrp_reading():
     assert markup.jrp_reading("{[気付|きづ][いた=く];Y2}") == "きづいた"
     assert markup.jrp_reading("それ") == "それ"
     assert markup.jrp_reading("一") == ""
+    assert markup.jrp_reading("{[気付|きづ];0}{[いた=く];Y2}") == "きづいた"
 
 def test_entryfurigana_split():
     assert markup.entryfurigana_surface("有[あ]りそう") == "有りそう"
     assert markup.entryfurigana_reading("有[あ]りそう") == "ありそう"
     assert markup.entryfurigana_surface("気[き] 合[あい]") == "気合"
     assert markup.entryfurigana_reading("気[き] 合[あい]") == "きあい"
+    assert markup.entryfurigana_reading("未[み]定") == ""  # 定 has no reading -> no clean reading
