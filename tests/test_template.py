@@ -37,6 +37,19 @@ def test_apply_is_idempotent(col):
     template.apply(col); second = col.models.by_name(config.TARGET_NOTETYPE)["css"]
     assert first == second
 
+def test_apply_replaces_stale_custom_block(col):
+    # Regression: an earlier run can leave a definition-less AnkiAlign block.
+    # apply() must REPLACE it (not skip on marker presence) so an updated
+    # kinomoto.css lands; otherwise .aa-je never reaches the card.
+    m = col.models.by_name(config.TARGET_NOTETYPE)
+    m["css"] = ".card{}\n\n/* ---- AnkiAlign custom (OLD) ---- */\n.aa-jj{color:OLD}"
+    col.models.update_dict(m)
+    template.apply(col)
+    css = col.models.by_name(config.TARGET_NOTETYPE)["css"]
+    assert ".aa-je" in css                       # updated block landed
+    assert "color:OLD" not in css                # stale block replaced, not kept
+    assert css.count("AnkiAlign custom") == 1     # marker not duplicated
+
 def test_kinomoto_css_has_definition_styles():
     import os
     from ankialign import template

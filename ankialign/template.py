@@ -33,9 +33,12 @@ def apply(col) -> None:
     m = col.models.by_name(config.TARGET_NOTETYPE)
     if m is None:
         raise RuntimeError("target notetype missing: " + config.TARGET_NOTETYPE)
-    css = _css()
-    if _CSS_MARKER not in m["css"]:
-        m["css"] = m["css"].rstrip() + "\n\n" + css
+    # Replace (don't skip on marker presence) so an updated kinomoto.css always
+    # lands. split()[0] keeps the original Kinomoto CSS; the old AnkiAlign block
+    # (and any dict styles appended after it) is dropped — enrich re-appends the
+    # dict styles right after this.
+    base = m["css"].split(_CSS_MARKER)[0].rstrip()
+    m["css"] = base + "\n\n" + _css()
     tmpl = m["tmpls"][0]
     if _FRONT_MARKER not in tmpl["qfmt"]:
         tmpl["qfmt"] = tmpl["qfmt"].rstrip() + "\n" + _FRONT_SCRIPT
