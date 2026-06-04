@@ -78,3 +78,26 @@ def choose_jj(jj_rows, reading, chain):
         if chosen:
             return (dict_id, chosen[0]["html"])
     return None
+
+
+def assemble_meaning(jj, je_html, english_open=True) -> str:
+    """jj = (dict_id, html) or None; je_html = numbered string or ''.
+
+    English is a collapsible <details> (tap-to-toggle on desktop + AnkiDroid).
+    english_open bakes the `open` attribute (default-visible vs default-collapsed).
+    """
+    parts = []
+    if jj:
+        parts.append(f'<div class="aa-jj" data-dict="{jj[0]}">{jj[1]}</div>')
+    if je_html:
+        op = " open" if english_open else ""
+        parts.append(f'<details class="aa-je"{op}><summary>English</summary>{je_html}</details>')
+    return "".join(parts)
+
+
+def source_label(jj, has_je, labels) -> str:
+    if jj:
+        return labels.get(jj[0], jj[0])
+    if has_je:
+        return labels.get("jmdict", "JMdict")
+    return "—"

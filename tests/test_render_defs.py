@@ -72,3 +72,23 @@ def test_choose_jj_blank_reading_fallback_then_skip():
     assert rd.choose_jj([], "あ", CHAIN) is None
     # dict not in chain is ignored
     assert rd.choose_jj([_jj("smk8", "あ", "X")], "あ", CHAIN) is None
+
+
+def test_assemble_meaning_jj_and_je():
+    out = rd.assemble_meaning(("sankoku8", "<b>def</b>"), "1. a; b", english_open=True)
+    assert out == ('<div class="aa-jj" data-dict="sankoku8"><b>def</b></div>'
+                   '<details class="aa-je" open><summary>English</summary>1. a; b</details>')
+
+
+def test_assemble_meaning_collapsed_and_jj_only_and_empty():
+    assert rd.assemble_meaning(None, "1. a", english_open=False) == \
+        '<details class="aa-je"><summary>English</summary>1. a</details>'
+    assert rd.assemble_meaning(("sankoku8", "x"), "") == '<div class="aa-jj" data-dict="sankoku8">x</div>'
+    assert rd.assemble_meaning(None, "") == ""
+
+
+def test_source_label():
+    labels = {"sankoku8": "三省堂", "jmdict": "JMdict"}
+    assert rd.source_label(("sankoku8", "x"), has_je=True, labels=labels) == "三省堂"
+    assert rd.source_label(None, has_je=True, labels=labels) == "JMdict"
+    assert rd.source_label(None, has_je=False, labels=labels) == "—"
