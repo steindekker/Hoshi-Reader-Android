@@ -148,16 +148,22 @@ def plan_backfill(col, conn, user_files_dir: str) -> dict:
 def run_backfill(col, conn, user_files_dir: str) -> dict:
     """Copy each picked recording into collection.media and write `[sound:...]`
     into the note's Term Audio. Caller is responsible for backup. Only writes
-    notes that are still empty (re-run safe). Returns {'filled': {src: n}}.
+    notes that are still empty (re-run safe). Per-card errors are collected, not
+    raised, so one bad recording can't strand the rest of the batch.
+    Returns {'filled': {src: n}, 'errors': [(nid, repr)]}.
     """
     plan = plan_backfill(col, conn, user_files_dir)
     filled = {}
+    errors = []
     for nid, pick in plan["picks"].items():
-        note = col.get_note(nid)
-        if _SOUND.search(note["Term Audio"] or ""):
-            continue  # already has audio (race / re-run)
-        fname = col.media.add_file(source_file_path(user_files_dir, pick))
-        note["Term Audio"] = f"[sound:{fname}]"
-        col.update_note(note)
-        filled[pick.source] = filled.get(pick.source, 0) + 1
-    return {"filled": filled}
+        try:
+            note = col.get_note(nid)
+            if _SOUND.search(note["Term Audio"] or ""):
+                continue  # already has audio (race / re-run)
+            fname = col.media.add_file(source_file_path(user_files_dir, pick))
+            note["Term Audio"] = f"[sound:{fname}]"
+            col.update_note(note)
+            filled[pick.source] = filled.get(pick.source, 0) + 1
+        except Exception as e:
+            errors.append((nid, repr(e)))
+    return {"filled": filled, "errors": errors}

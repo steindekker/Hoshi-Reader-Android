@@ -191,3 +191,22 @@ def test_run_backfill_is_rerun_safe(col, laudio):
     audio.run_backfill(c, con, uf)
     res2 = audio.run_backfill(c, con, uf)   # nothing left empty (except 造語)
     assert res2["filled"] == {}
+
+
+def test_run_backfill_one_bad_card_does_not_strand_batch(col, laudio, monkeypatch):
+    c, ids = col
+    con, uf = laudio
+    real_add = c.media.add_file
+    calls = {"n": 0}
+
+    def flaky_add(path):
+        calls["n"] += 1
+        if calls["n"] == 1:          # first card errors
+            raise RuntimeError("simulated media failure")
+        return real_add(path)
+
+    monkeypatch.setattr(c.media, "add_file", flaky_add)
+    res = audio.run_backfill(c, con, uf)
+    # one card errored, the other still got filled (batch not stranded)
+    assert len(res["errors"]) == 1
+    assert sum(res["filled"].values()) == 1

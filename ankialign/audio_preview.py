@@ -76,8 +76,10 @@ def show() -> None:
         filled = res["filled"]
         line = ", ".join(f"{k} {v}" for k, v in filled.items()) or "none"
         total = sum(filled.values())
+        errs = res.get("errors", [])
+        err_line = f"\n⚠ {len(errs)} card(s) errored and were skipped." if errs else ""
         showInfo(
-            f"Filled Term Audio on {total} card(s): {line}\n\n"
+            f"Filled Term Audio on {total} card(s): {line}{err_line}\n\n"
             f"Rollback: restore the backup at\n{backup_dir}\n"
             "(or Ctrl+Z to undo the last note edits).")
 
