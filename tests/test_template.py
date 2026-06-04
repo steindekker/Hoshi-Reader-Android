@@ -36,3 +36,11 @@ def test_apply_is_idempotent(col):
     template.apply(col); first = col.models.by_name(config.TARGET_NOTETYPE)["css"]
     template.apply(col); second = col.models.by_name(config.TARGET_NOTETYPE)["css"]
     assert first == second
+
+def test_kinomoto_css_has_definition_styles():
+    import os
+    from ankialign import template
+    css = template._css()
+    assert ".aa-jj" in css and ".aa-je" in css
+    assert ".aa-jj ruby rt" in css            # furigana polish present
+    assert ".aa-je > summary" in css          # English toggle styling present
