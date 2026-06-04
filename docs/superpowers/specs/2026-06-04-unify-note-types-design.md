@@ -136,12 +136,12 @@ In-process add-on, triggered from **Tools → "AnkiAlign: Unify note types…"**
 4. **One undoable `CollectionOp`**: per source `models.change(...)` (cmap `{0:0}`), then
    post-transform repopulates Kinomoto fields from the snapshot. Save.
 5. Apply the template front fix once.
-6. **Report**: N converted, fields dropped, backup path. Reversible via Ctrl+Z + backup.
+6. **Report**: N converted, fields dropped, backup path. Rollback via the backup (Ctrl+Z reverts only the last step).
 
 ## Safety / error handling
 
 - Forced full `.colpkg` backup before any write; path surfaced in the report.
-- Whole run merges into **one undo entry** (Ctrl+Z reverts everything).
+- Forced `.colpkg` backup is the rollback path; `col.models.change()` resets the undo queue per call, so Ctrl+Z reverts only the last source's change, not the whole multi-source run.
 - Preview is read-only and does the real mapping work dry → errors surface first.
 - Abort guards: missing target note type, or zero in-scope notes → stop, no backup.
 - Idempotent: selection by *source* note type → re-running never re-touches Kinomoto.

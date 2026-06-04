@@ -1,0 +1,10 @@
+[project]
+name = "ankialign"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[dependency-groups]
+dev = ["pytest>=8", "anki>=24.11"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
