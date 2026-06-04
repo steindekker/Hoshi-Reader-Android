@@ -1,16 +1,25 @@
-"""AnkiAlign add-on entry point: Tools menu action."""
+"""AnkiAlign add-on entry point: Tools menu actions."""
 try:
     from aqt import mw
     from aqt.qt import QAction
-    from . import preview, enrich_preview
+    from . import preview, enrich_preview, audio_preview
 
     def _add_menu():
-        a1 = QAction("AnkiAlign: Unify note types…", mw)
-        a1.triggered.connect(preview.show)
-        mw.form.menuTools.addAction(a1)
-        a2 = QAction("AnkiAlign: Enrich definitions…", mw)
-        a2.triggered.connect(enrich_preview.show)
-        mw.form.menuTools.addAction(a2)
+        unify = QAction("AnkiAlign: Unify note types…", mw)
+        unify.triggered.connect(preview.show)
+        mw.form.menuTools.addAction(unify)
+
+        enrich = QAction("AnkiAlign: Enrich definitions…", mw)
+        enrich.triggered.connect(enrich_preview.show)
+        mw.form.menuTools.addAction(enrich)
+
+        backfill = QAction("AnkiAlign: Backfill word audio…", mw)
+        backfill.triggered.connect(audio_preview.show)
+        mw.form.menuTools.addAction(backfill)
+
+        repitch = QAction("AnkiAlign: Replace word audio (dictionary)…", mw)
+        repitch.triggered.connect(audio_preview.show_repitch)
+        mw.form.menuTools.addAction(repitch)
 
     _add_menu()
 except ModuleNotFoundError as e:
