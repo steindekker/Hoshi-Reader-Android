@@ -12,6 +12,18 @@ from ._utils import hira
 
 _CONTENT = {"名詞", "代名詞", "動詞", "形容詞", "副詞", "形状詞", "連体詞", "感動詞"}
 _YOUGEN = {"動詞", "形容詞"}
+# Light/auxiliary verbs Sudachi peels off fixed expressions (もしかしたら,
+# かもしれない) and て-form chains. Pitching their bound fragments (し, い, しれ)
+# looks wrong and never appears in the user's accepted gold. Multi-mora real
+# auxiliaries (しまう, くれる, full いる, できる, なる...) are unaffected.
+_LIGHT_LEMMAS = {"する", "しれる"}
+
+def _is_bound_aux(pos0: str, surface: str, lemma: str) -> bool:
+    # single-mora kana verb fragment (し, い, さ, き...) — always a conjugation
+    # artifact, never a standalone word worth a pitch graph
+    if pos0 == "動詞" and len(surface) == 1 and "぀" <= surface <= "ヿ":
+        return True
+    return lemma in _LIGHT_LEMMAS
 
 @lru_cache(maxsize=1)
 def _tok():
@@ -35,7 +47,7 @@ def _to_unit(m, acc: AccentIndex) -> Unit:
     reading = hira(m.reading_form() or surface)
     lemma = m.dictionary_form() or surface
     is_content = pos0 in _CONTENT
-    if not is_content:
+    if not is_content or _is_bound_aux(pos0, surface, lemma):
         return Unit(surface, lemma, reading, reading, False, False, ())
     lemread = _lemma_reading(lemma)
     positions = acc.lookup(lemma, lemread) or acc.lookup(lemma, reading)

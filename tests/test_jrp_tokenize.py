@@ -38,3 +38,20 @@ def test_split_cascade_recovers_overmerge():
     acc = AccentIndex.load(IDX)
     out = emit_sentence(units("前途多難だ", acc))
     assert markup.jrp_surface(out) == "前途多難だ"
+
+@pytest.mark.skipif(not _sudachi_available(), reason="sudachipy not installed")
+def test_bound_aux_fragments_not_pitched():
+    # する/しれる fragments and single-mora kana verb fragments (し, い, しれ)
+    # shredded out of fixed expressions / て-form chains must NOT get a pitch
+    # unit — the gold never pitches them. Real auxiliaries (しまう, etc.) do.
+    from ankialign.jrp_fill.accent import AccentIndex
+    from ankialign.jrp_fill.tokenize import units
+    from ankialign.jrp_fill.emit import emit_sentence
+    from ankialign import markup
+    acc = AccentIndex.load(IDX)
+    for s in ["もしかしたら", "かもしれない", "神童と呼ばれていた", "結婚してから"]:
+        out = emit_sentence(units(s, acc))
+        assert markup.jrp_surface(out) == s          # surface preserved
+        assert "{し;" not in out and "{しれ;" not in out and "{い;" not in out
+    # a real multi-mora auxiliary is still pitched
+    assert "{しまう" in emit_sentence(units("緊張してしまう", acc))
