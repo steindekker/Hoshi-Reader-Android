@@ -12,7 +12,7 @@ def _plan_text(plan: dict) -> str:
         lines.append(f"{name}: {info['count']} notes")
         for src, kino in info["samples"][:3]:
             lines.append(f"   • {kino.get('Term','')}  ←  "
-                         f"{src.get('Target Word', src.get('Term',''))}")
+                         f"{src.get('Target Word', src.get('Term', src.get('EntryFurigana','')))}")
     if plan["errors"]:
         lines.append(f"\n⚠ {len(plan['errors'])} mapping errors (will be skipped):")
         for nid, err in plan["errors"][:10]:
@@ -36,16 +36,20 @@ def show() -> None:
     def do_convert():
         dlg.accept()
         backup_dir = mw.pm.backupFolder()
+        # Back up synchronously, before the background op, and verify it landed.
+        convert.backup_collection(mw.col, backup_dir)
 
         def op(col):
-            res = convert.run_conversion(col, backup_dir=backup_dir)
+            res = convert.run_conversion(col, backup_dir=backup_dir, make_backup=False)
             template.apply(col)
             return res
 
         def done(res):
             c = res["converted"]
-            showInfo("Converted: " + ", ".join(f"{k} {v}" for k, v in c.items())
-                     + f"\n\nBackup: {backup_dir}\nUndo with Ctrl+Z if needed.")
+            showInfo(
+                "Converted: " + ", ".join(f"{k} {v}" for k, v in c.items())
+                + f"\n\nRollback: restore the backup at\n{backup_dir}\n"
+                + "(Ctrl+Z undoes only the last step, not the whole run.)")
 
         CollectionOp(parent=mw, op=op).success(done).run_in_background()
 

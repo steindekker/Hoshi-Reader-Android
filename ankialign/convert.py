@@ -1,6 +1,7 @@
 """Conversion engine. Uses the anki package; no aqt (GUI) imports so it can be
 tested headless."""
 import os
+import time
 from . import config, mapping
 
 
@@ -50,9 +51,34 @@ def build_plan(col) -> dict:
     return plan
 
 
-def run_conversion(col, backup_dir: str) -> dict:
+def backup_collection(col, backup_dir: str) -> None:
+    """Force a full backup and verify a FRESH .colpkg landed on disk.
+
+    create_backup(force=True) returns False and writes nothing when there are no
+    pending changes; backup_dir (the user's real backup folder) usually already
+    holds old backups, so an existence check isn't enough — require a file newer
+    than this call.
+    """
+    os.makedirs(backup_dir, exist_ok=True)
+    before = time.time()
+    col.create_backup(backup_folder=backup_dir, force=True, wait_for_completion=True)
+    fresh = [
+        f for f in os.listdir(backup_dir)
+        if f.endswith(".colpkg")
+        and os.path.getmtime(os.path.join(backup_dir, f)) >= before - 1
+    ]
+    if not fresh:
+        raise RuntimeError(
+            f"no fresh backup was created in {backup_dir}; aborting before mutation")
+
+
+def run_conversion(col, backup_dir: str, make_backup: bool = True) -> dict:
     """Backup, then convert all in-scope source notes to the target note type,
     preserving card history. Returns {'converted': {name: n}}.
+
+    Card review history is preserved. Note: col.models.change() resets Anki's
+    undo queue per call, so Ctrl+Z reverts only the LAST source's change —
+    the forced backup is the full rollback path.
 
     Each source notetype's change+repopulate is merged into one undo entry.
     col.models.change() always creates a new undo step (it calls mod_schema
@@ -67,12 +93,8 @@ def run_conversion(col, backup_dir: str) -> dict:
     if not any(selected.values()):
         raise RuntimeError("no in-scope notes to convert")
 
-    os.makedirs(backup_dir, exist_ok=True)
-    col.create_backup(backup_folder=backup_dir, force=True, wait_for_completion=True)
-    # create_backup(force=True) returns False + writes nothing when there are no
-    # pending changes; never mutate without a backup actually on disk.
-    if not any(f.endswith(".colpkg") for f in os.listdir(backup_dir)):
-        raise RuntimeError(f"no backup was created in {backup_dir}; aborting before mutation")
+    if make_backup:
+        backup_collection(col, backup_dir)
 
     converted = {}
     target_field_names = {f["name"] for f in target["flds"]}

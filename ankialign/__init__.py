@@ -10,5 +10,7 @@ try:
         mw.form.menuTools.addAction(action)
 
     _add_menu()
-except ModuleNotFoundError:
-    pass  # running outside Anki (tests, linters)
+except ModuleNotFoundError as e:
+    if not (e.name and e.name.split(".")[0] == "aqt"):
+        raise  # a real missing internal module — don't hide it
+    # else: running outside Anki (tests, linters)
