@@ -56,17 +56,26 @@ def show() -> None:
         # run the schema hook and expects a changes object we don't produce.
         mw.progress.start(label="AnkiAlign: converting notes…", immediate=True)
         try:
-            res = convert.run_conversion(mw.col, backup_dir=backup_dir, make_backup=False)
+            # convert any in-scope source notes still present (none on a re-run)
+            if any(convert.select_notes(mw.col).values()):
+                res = convert.run_conversion(mw.col, backup_dir=backup_dir, make_backup=False)
+            else:
+                res = {"converted": {}}
+            # repair bare audio/image on all Kinomoto notes (fixes Yuuna-origin
+            # cards from an earlier run) + (re)apply styling/front fix
+            fixed = convert.normalize_media(mw.col)
             template.apply(mw.col)
         finally:
             mw.progress.finish()
         mw.reset()  # refresh browser/reviewer to show the converted notes
 
         c = res["converted"]
+        converted_line = ", ".join(f"{k} {v}" for k, v in c.items()) or "none (nothing new)"
         showInfo(
-            "Converted: " + ", ".join(f"{k} {v}" for k, v in c.items())
-            + f"\n\nRollback: restore the backup at\n{backup_dir}\n"
-            + "(Ctrl+Z undoes only the last step, not the whole run.)")
+            f"Converted: {converted_line}\n"
+            f"Media fields normalized: {fixed}\n\n"
+            f"Rollback: restore the backup at\n{backup_dir}\n"
+            "(Ctrl+Z undoes only the last step, not the whole run.)")
 
     convert_btn.clicked.connect(do_convert)
     dlg.exec()

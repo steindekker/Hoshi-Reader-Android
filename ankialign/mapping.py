@@ -23,9 +23,9 @@ def map_mynote(s: dict) -> dict:
         "Sentence": s.get("Sentence", ""),
         "Meaning": s.get("Definitions", ""),
         "Pitch Accent": s.get("Pitch", ""),
-        "Image": _first_nonempty(s.get("Screenshot", ""), s.get("Images", "")),
-        "Term Audio": s.get("Word Audio", ""),
-        "Sentence Audio": s.get("Sentence Audio", ""),
+        "Image": markup.as_image(_first_nonempty(s.get("Screenshot", ""), s.get("Images", ""))),
+        "Term Audio": markup.as_sound(s.get("Word Audio", "")),
+        "Sentence Audio": markup.as_sound(s.get("Sentence Audio", "")),
         "Frequency": s.get("Frequency", ""),
     }
 
@@ -38,12 +38,12 @@ def map_yuuna(s: dict) -> dict:
         "Sentence": s.get("Sentence", ""),
         "Meaning": s.get("Meaning", ""),
         "Notes": s.get("Notes", ""),
-        "Image": s.get("Image", ""),
-        "Term Audio": s.get("Term Audio", ""),
+        "Image": markup.as_image(s.get("Image", "")),
+        "Term Audio": markup.as_sound(s.get("Term Audio", "")),
         "Pitch Accent": s.get("Pitch Accent", ""),
         "Expanded Meaning": s.get("Expanded Meaning", ""),
         "Collapsed Meaning": s.get("Collapsed Meaning", ""),
-        "Sentence Audio": s.get("Sentence Audio", ""),
+        "Sentence Audio": markup.as_sound(s.get("Sentence Audio", "")),
     }
 
 
@@ -54,7 +54,7 @@ def map_kanjistudy(s: dict) -> dict:
         "Reading": markup.entryfurigana_reading(ef),
         "Furigana": ef,
         "Meaning": s.get("Meaning", ""),
-        "Term Audio": s.get("Word Audio", ""),
+        "Term Audio": markup.as_sound(s.get("Word Audio", "")),
     }
 
 

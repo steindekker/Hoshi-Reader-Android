@@ -127,3 +127,22 @@ def test_run_conversion_aborts_without_target(tmp_path):
             convert.run_conversion(c, backup_dir=str(tmp_path / "bk"))
     finally:
         c.close()
+
+
+def test_normalize_media_wraps_bare_and_is_idempotent(col):
+    kino = col.models.by_name(config.TARGET_NOTETYPE)
+    col.models.set_current(kino)
+    n = col.new_note(kino)
+    n["Term"] = "テスト"
+    n["Term Audio"] = "abc.mp3"            # bare -> should wrap
+    n["Image"] = "pic.jpg"                 # bare -> should wrap
+    n["Sentence Audio"] = "[sound:s.mp3]"  # already wrapped -> untouched
+    col.add_note(n, col.decks.id("言葉文章"))
+
+    assert convert.normalize_media(col) == 1
+    n2 = col.get_note(n.id)
+    assert n2["Term Audio"] == "[sound:abc.mp3]"
+    assert n2["Image"] == '<img src="pic.jpg">'
+    assert n2["Sentence Audio"] == "[sound:s.mp3]"
+    # idempotent: a second pass changes nothing
+    assert convert.normalize_media(col) == 0

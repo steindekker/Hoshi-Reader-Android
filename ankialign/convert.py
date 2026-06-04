@@ -2,7 +2,7 @@
 tested headless."""
 import os
 import time
-from . import config, mapping
+from . import config, mapping, markup
 
 
 def _search(notetype_name: str) -> str:
@@ -124,3 +124,37 @@ def run_conversion(col, backup_dir: str, make_backup: bool = True) -> dict:
         converted[name] = len(nids)
 
     return {"converted": converted}
+
+
+_MEDIA_FIELDS = {
+    "Term Audio": markup.as_sound,
+    "Sentence Audio": markup.as_sound,
+    "Image": markup.as_image,
+}
+
+
+def normalize_media(col) -> int:
+    """Wrap bare audio/image filenames on ALL target (Kinomoto) notes so Anki
+    renders them. Idempotent — only notes that actually change are written
+    (so already-correct notes aren't touched / re-synced). Returns count fixed.
+
+    Fixes notes converted before media normalization existed (jidoujisho Yuuna
+    stored bare filenames)."""
+    target = col.models.by_name(config.TARGET_NOTETYPE)
+    if target is None:
+        return 0
+    field_names = {f["name"] for f in target["flds"]}
+    fixed = 0
+    for nid in col.find_notes(f'note:"{config.TARGET_NOTETYPE}"'):
+        note = col.get_note(nid)
+        changed = False
+        for fname, fn in _MEDIA_FIELDS.items():
+            if fname in field_names:
+                new = fn(note[fname])
+                if new != note[fname]:
+                    note[fname] = new
+                    changed = True
+        if changed:
+            col.update_note(note)
+            fixed += 1
+    return fixed
