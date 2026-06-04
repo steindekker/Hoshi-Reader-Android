@@ -1,7 +1,7 @@
 """Anki-facing definition enrichment: index lookup + note rewriting."""
 import os
 import sqlite3
-from . import config, convert, render_defs
+from . import config, convert, render_defs, template
 
 _COLS = ("term", "reading", "dict_id", "kind", "sense_ord", "html")
 
@@ -91,15 +91,20 @@ def build_plan(col, conn):
             "samples": samples, "errors": errors}
 
 
-def enrich_notes(col, conn):
+def enrich_notes(col, conn, styles_path=None):
     """Rewrite Meaning for in-scope Kinomoto notes. Returns counts. Idempotent.
 
     Caller is responsible for the backup + schema acknowledgement (the preview
-    dialog does this). ensure_fields/apply_dict_styles are called here so the
-    function is self-contained for headless use.
+    dialog does this). ensure_fields / template.apply / apply_dict_styles are
+    called here so the function is self-contained for headless use.
     """
     ensure_fields(col)
-    apply_dict_styles(col)
+    # CSS ordering matters: template.apply re-syncs kinomoto.css (the .aa-jj/.aa-je
+    # base + furigana + 広辞苑→三省堂 layers, from its _CSS_MARKER block on); then
+    # apply_dict_styles appends the scoped native dict styles after it. Running them
+    # in this order keeps both blocks (template.apply drops anything past _CSS_MARKER).
+    template.apply(col)
+    apply_dict_styles(col, styles_path)
     fld = {f["name"] for f in col.models.by_name(config.TARGET_NOTETYPE)["flds"]}
     written = 0
     nohit_nids = []

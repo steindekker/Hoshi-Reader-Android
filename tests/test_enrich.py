@@ -120,6 +120,20 @@ def test_enrich_notes_drops_few_nohit(kcol, tmp_path):
     conn.close()
 
 
+def test_enrich_notes_applies_both_css_layers(kcol, tmp_path):
+    db = str(tmp_path / "defs.sqlite"); _make_db(db)
+    styles = tmp_path / "dict_styles.css"
+    styles.write_text('.aa-jj[data-dict="daijisen"] x { color: red }', encoding="utf-8")
+    enrich.ensure_fields(kcol)
+    _add_kino(kcol, "迷惑", "めいわく")
+    conn = enrich.open_index(db)
+    enrich.enrich_notes(kcol, conn, styles_path=str(styles))
+    css = kcol.models.by_name(config.TARGET_NOTETYPE)["css"]
+    assert ".aa-jj" in css            # layer 2 (kinomoto.css via template.apply)
+    assert "color: red" in css        # layer 1 (scoped dict styles, appended after)
+    conn.close()
+
+
 def test_enrich_notes_tags_when_nohit_at_or_above_threshold(kcol, tmp_path, monkeypatch):
     db = str(tmp_path / "defs.sqlite"); _make_db(db)
     enrich.ensure_fields(kcol)
