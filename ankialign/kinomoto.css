@@ -57,3 +57,12 @@
   text-transform: uppercase; opacity: .55; list-style: none; }
 .aa-je > summary::-webkit-details-marker { display: none; }
 .aa-je[open] > summary { margin-bottom: 4px; }
+
+/* ---- 広辞苑 → 三省堂 resemblance (layer 3) ----
+   広辞苑 has no data-name hooks: it is plain-text headword + 【漢字】, small
+   font-size:60% annotation spans, and one <div> per ①②③ sense. Normalize its
+   body size/rhythm and tame the tiny annotations so it reads like 三省堂. */
+.aa-jj[data-dict="koujien7"] { font-size: 15px; line-height: 1.8; }
+.aa-jj[data-dict="koujien7"] div { margin: 0; }            /* tighten per-sense blocks */
+.aa-jj[data-dict="koujien7"] span[style*="font-size:60%"] {
+  font-size: .7em !important; opacity: .65; }              /* match 三省堂 annotation scale */
