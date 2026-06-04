@@ -11,7 +11,7 @@ from .unit import Unit
 from .accent import AccentIndex
 from ._utils import hira
 
-_CONTENT = {"名詞", "動詞", "形容詞", "副詞", "形状詞", "連体詞", "感動詞"}
+_CONTENT = {"名詞", "代名詞", "動詞", "形容詞", "副詞", "形状詞", "連体詞", "感動詞"}
 _YOUGEN = {"動詞", "形容詞"}
 
 @lru_cache(maxsize=1)
