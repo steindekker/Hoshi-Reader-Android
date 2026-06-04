@@ -29,3 +29,34 @@ def test_lookup_returns_jj_and_je(tmp_path):
     assert enrich.lookup(conn, "駐車場") == ([], [{"term": "駐車場", "reading": "ちゅうしゃじょう",
         "dict_id": "jmdict", "kind": "je", "sense_ord": 1, "html": "parking lot"}])
     conn.close()
+
+
+from tests.test_convert import _new_notetype, KINOMOTO_FIELDS
+
+
+@pytest.fixture
+def kcol(tmp_path):
+    c = Collection(str(tmp_path / "k.anki2"))
+    _new_notetype(c, config.TARGET_NOTETYPE, KINOMOTO_FIELDS)
+    yield c
+    c.close()
+
+
+def test_ensure_fields_adds_and_is_idempotent(kcol):
+    enrich.ensure_fields(kcol)
+    names = [f["name"] for f in kcol.models.by_name(config.TARGET_NOTETYPE)["flds"]]
+    assert config.ORIGINAL_MEANING_FIELD in names
+    assert config.DEFINITION_SOURCE_FIELD in names
+    n_before = len(names)
+    enrich.ensure_fields(kcol)  # second call: no duplicate fields
+    assert len(kcol.models.by_name(config.TARGET_NOTETYPE)["flds"]) == n_before
+
+
+def test_apply_dict_styles_injects_once(kcol, tmp_path):
+    css = tmp_path / "dict_styles.css"
+    css.write_text('.aa-jj[data-dict="daijisen"] x { color: red }', encoding="utf-8")
+    enrich.apply_dict_styles(kcol, str(css))
+    enrich.apply_dict_styles(kcol, str(css))
+    full = kcol.models.by_name(config.TARGET_NOTETYPE)["css"]
+    assert full.count("AnkiAlign dict styles") == 1   # injected exactly once
+    assert "color: red" in full
