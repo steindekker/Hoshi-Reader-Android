@@ -51,3 +51,52 @@ def split_moras(reading: str) -> list[str]:
             moras.append(reading[i])
             i += 1
     return moras
+
+
+def _is_high(i: int, accent: int, n: int) -> bool:
+    """Pitch height of point `i` (0..n; n = particle slot) for `n`-mora word."""
+    if accent == 0:          # heiban
+        return i != 0
+    if accent == 1:          # atamadaka
+        return i == 0
+    return 1 <= i < accent   # nakadaka/odaka: high on moras 1..accent-1
+
+
+def _f(x: float) -> str:
+    """Compact float -> str (61.2 not 61.199999…)."""
+    return f"{x:g}"
+
+
+def render_svg(reading: str, accent: int) -> str:
+    """Self-contained jidoujisho-style SVG pitch graph for `reading` + `accent`."""
+    moras = split_moras(reading)
+    n = len(moras)
+    if n == 0:
+        return ""
+    pts = [(16 + 35 * i, 5 if _is_high(i, accent, n) else 30) for i in range(n + 1)]
+    vb_w = 35 * n + 32
+    out = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{_f(vb_w * 0.6)}px" '
+        f'height="45px" viewBox="0 0 {vb_w} 75">'
+    ]
+    for i, m in enumerate(moras):
+        out.append(
+            f'<text x="{5 + 35 * i}" y="67.5" '
+            f'style="font-size:20px;font-family:sans-serif;fill:currentColor;">{m}</text>'
+        )
+    for i in range(n):
+        (x0, y0), (_, y1) = pts[i], pts[i + 1]
+        out.append(
+            f'<path d="m {x0},{y0} 35,{y1 - y0}" '
+            f'style="fill:none;stroke:currentColor;stroke-width:1.5;" />'
+        )
+    for i in range(n):
+        x, y = pts[i]
+        out.append(f'<circle r="5" cx="{x}" cy="{y}" style="opacity:1;fill:currentColor;"></circle>')
+    px, py = pts[n]
+    out.append(
+        f'<circle r="4" cx="{px}" cy="{py}" stroke="currentColor" '
+        f'style="opacity:1;fill:none;"></circle>'
+    )
+    out.append("</svg>")
+    return "".join(out)
