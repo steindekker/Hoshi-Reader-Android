@@ -28,7 +28,6 @@ def in_scope(deck_name: str) -> bool:
 JJ_CHAIN = ["sankoku8", "koujien7", "jitsuyo", "daijisen"]  # first hit wins
 JE_DICT = "jmdict"
 GLOSS_CAP = 4
-ENGLISH_COLLAPSED_DEFAULT = False  # English <details> rendered open (visible but collapsible)
 
 DICT_LABELS = {
     "sankoku8": "三省堂", "koujien7": "広辞苑", "jitsuyo": "実用",

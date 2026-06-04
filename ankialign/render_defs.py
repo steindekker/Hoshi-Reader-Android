@@ -89,18 +89,17 @@ def choose_jj(jj_rows, reading, chain):
     return None
 
 
-def assemble_meaning(jj, je_html, english_open=True) -> str:
+def assemble_meaning(jj, je_html) -> str:
     """jj = (dict_id, html) or None; je_html = numbered string or ''.
 
-    English is a collapsible <details> (tap-to-toggle on desktop + AnkiDroid).
-    english_open bakes the `open` attribute (default-visible vs default-collapsed).
+    English sits always-expanded below the J-J block, separated by the .aa-je
+    top-border divider.
     """
     parts = []
     if jj:
         parts.append(f'<div class="aa-jj" data-dict="{html.escape(jj[0], quote=True)}">{jj[1]}</div>')
     if je_html:
-        op = " open" if english_open else ""
-        parts.append(f'<details class="aa-je"{op}><summary>English</summary>{je_html}</details>')
+        parts.append(f'<div class="aa-je">{je_html}</div>')
     return "".join(parts)
 
 

@@ -43,4 +43,4 @@ def test_kinomoto_css_has_definition_styles():
     css = template._css()
     assert ".aa-jj" in css and ".aa-je" in css
     assert ".aa-jj ruby rt" in css            # furigana polish present
-    assert ".aa-je > summary" in css          # English toggle styling present
+    assert "border-top" in css                # the .aa-je divider between J-J and English

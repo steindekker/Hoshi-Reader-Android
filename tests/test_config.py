@@ -19,7 +19,6 @@ def test_enrichment_constants():
     assert config.JJ_CHAIN == ["sankoku8", "koujien7", "jitsuyo", "daijisen"]
     assert config.JE_DICT == "jmdict"
     assert config.GLOSS_CAP == 4
-    assert config.ENGLISH_COLLAPSED_DEFAULT is False
     assert config.DICT_LABELS["sankoku8"] == "三省堂"
     assert config.DICT_LABELS["jmdict"] == "JMdict"
     assert config.ORIGINAL_MEANING_FIELD == "Original Meaning"

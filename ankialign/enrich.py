@@ -57,7 +57,7 @@ def _compute(conn, term, reading):
     jj_rows, je_rows = lookup(conn, term)
     jj = render_defs.choose_jj(jj_rows, reading, config.JJ_CHAIN)
     je = render_defs.numbered_glosses(je_rows, reading, config.GLOSS_CAP)
-    meaning = render_defs.assemble_meaning(jj, je, english_open=not config.ENGLISH_COLLAPSED_DEFAULT)
+    meaning = render_defs.assemble_meaning(jj, je)
     source = render_defs.source_label(jj, bool(je), config.DICT_LABELS)
     kind = "enrich" if jj else ("english" if je else "nohit")
     return meaning, source, kind

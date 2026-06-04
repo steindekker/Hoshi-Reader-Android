@@ -87,14 +87,13 @@ def test_choose_jj_blank_reading_fallback_then_skip():
 
 
 def test_assemble_meaning_jj_and_je():
-    out = rd.assemble_meaning(("sankoku8", "<b>def</b>"), "1. a; b", english_open=True)
+    out = rd.assemble_meaning(("sankoku8", "<b>def</b>"), "1. a; b")
     assert out == ('<div class="aa-jj" data-dict="sankoku8"><b>def</b></div>'
-                   '<details class="aa-je" open><summary>English</summary>1. a; b</details>')
+                   '<div class="aa-je">1. a; b</div>')
 
 
-def test_assemble_meaning_collapsed_and_jj_only_and_empty():
-    assert rd.assemble_meaning(None, "1. a", english_open=False) == \
-        '<details class="aa-je"><summary>English</summary>1. a</details>'
+def test_assemble_meaning_english_only_jj_only_and_empty():
+    assert rd.assemble_meaning(None, "1. a") == '<div class="aa-je">1. a</div>'
     assert rd.assemble_meaning(("sankoku8", "x"), "") == '<div class="aa-jj" data-dict="sankoku8">x</div>'
     assert rd.assemble_meaning(None, "") == ""
 

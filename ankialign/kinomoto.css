@@ -53,10 +53,6 @@
 .aa-je { text-align: left; margin-top: 11px; padding-top: 8px;
   border-top: 1px solid rgba(0,0,0,.12); font-size: 13.5px; line-height: 1.6; color: #555; }
 .nightMode .aa-je { color: #bbb; border-top-color: rgba(255,255,255,.15); }
-.aa-je > summary { cursor: pointer; font-size: 11px; letter-spacing: .06em;
-  text-transform: uppercase; opacity: .55; list-style: none; }
-.aa-je > summary::-webkit-details-marker { display: none; }
-.aa-je[open] > summary { margin-bottom: 4px; }
 
 /* ---- 広辞苑 → 三省堂 resemblance (layer 3) ----
    広辞苑 has no data-name hooks: it is plain-text headword + 【漢字】, small
