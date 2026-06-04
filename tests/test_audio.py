@@ -210,3 +210,93 @@ def test_run_backfill_one_bad_card_does_not_strand_batch(col, laudio, monkeypatc
     # one card errored, the other still got filled (batch not stranded)
     assert len(res["errors"]) == 1
     assert sum(res["filled"].values()) == 1
+
+
+# --- re-pitch (replace mined audio with dictionary) -----------------------------
+
+def test_lookup_dict_only_returns_dictionaries(tmp_path):
+    con = _entries_db(str(tmp_path / "e.db"), [
+        ("橋", "はし", "shinmeikai8", None, "media/s.opus"),
+        ("筋トレ", None, "forvo", "strawberrybrown", "x.opus"),
+        ("難語", "なんご", "jpod", None, "media/j.opus"),
+    ])
+    assert audio.lookup_dict(con, "橋", "はし") == audio.Pick("shinmeikai8", "media/s.opus")
+    assert audio.lookup_dict(con, "筋トレ", "きんとれ") is None   # forvo not a dict
+    assert audio.lookup_dict(con, "難語", "なんご") is None       # jpod not a dict
+    assert audio.lookup_dict(con, "橋", "") is None              # needs a reading
+
+
+@pytest.fixture
+def repitch_col(tmp_path):
+    c = Collection(str(tmp_path / "rp.anki2"))
+    _new_notetype(c, config.TARGET_NOTETYPE, KINOMOTO_FIELDS)
+    kino = c.models.by_name(config.TARGET_NOTETYPE)
+    c.models.set_current(kino)
+    mined = c.decks.id("言葉文章")
+    core = c.decks.id("言葉Core2.3k")
+
+    def add(term, reading, audio_val, deck=mined):
+        n = c.new_note(kino)
+        n["Term"] = term; n["Reading"] = reading; n["Term Audio"] = audio_val
+        c.add_note(n, deck)
+        return n.id
+
+    ids = {
+        "mp3_dict": add("橋", "はし", "[sound:old1.mp3]"),     # replace -> nhk16
+        "ogg_dict": add("食べる", "たべる", "[sound:old2.ogg]"),  # replace -> shinmeikai8
+        "mp3_nodict": add("造語", "ぞうご", "[sound:old3.mp3]"),  # no dict -> keep
+        "opus_already": add("猫", "ねこ", "[sound:la_nhk16_x.opus]"),  # skip (opus)
+        "empty": add("空", "から", ""),                        # skip (no audio)
+        "excluded": add("端", "はし", "[sound:c.mp3]", core),   # skip (Core)
+    }
+    yield c, ids
+    c.close()
+
+
+@pytest.fixture
+def repitch_audio(tmp_path):
+    con = _entries_db(str(tmp_path / "re.db"), [
+        ("橋", "はし", "nhk16", None, "audio/h.opus"),
+        ("食べる", "たべる", "shinmeikai8", None, "media/t.opus"),
+        ("猫", "ねこ", "nhk16", None, "audio/c.opus"),  # exists, but opus card excluded anyway
+    ])
+    uf = tmp_path / "uf"
+    for src, rel in [("nhk16", "audio/h.opus"), ("shinmeikai8", "media/t.opus"),
+                     ("nhk16", "audio/c.opus")]:
+        f = uf / f"{src}_files" / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_bytes(b"OggS-fake")
+    return con, str(uf)
+
+
+def test_select_repitch_targets_nonopus_inscope(repitch_col, repitch_audio):
+    c, ids = repitch_col
+    t = set(audio.select_repitch_targets(c))
+    assert ids["mp3_dict"] in t and ids["ogg_dict"] in t and ids["mp3_nodict"] in t
+    assert ids["opus_already"] not in t   # already opus
+    assert ids["empty"] not in t          # no audio
+    assert ids["excluded"] not in t       # Core deck
+
+
+def test_plan_repitch_only_dict_hits(repitch_col, repitch_audio):
+    c, ids = repitch_col
+    con, uf = repitch_audio
+    plan = audio.plan_repitch(c, con, uf)
+    assert plan["by_source"] == {"nhk16": 1, "shinmeikai8": 1}
+    assert plan["replaceable"] == 2
+    assert plan["no_dict"] == 1           # 造語
+
+
+def test_run_repitch_replaces_and_keeps_old_media(repitch_col, repitch_audio):
+    c, ids = repitch_col
+    con, uf = repitch_audio
+    res = audio.run_repitch(c, con, uf)
+    assert res["replaced"] == {"nhk16": 1, "shinmeikai8": 1}
+    # replaced with opus
+    assert c.get_note(ids["mp3_dict"])["Term Audio"].endswith(".opus]")
+    assert c.get_note(ids["ogg_dict"])["Term Audio"].endswith(".opus]")
+    # no-dict and opus-already untouched
+    assert c.get_note(ids["mp3_nodict"])["Term Audio"] == "[sound:old3.mp3]"
+    assert c.get_note(ids["opus_already"])["Term Audio"] == "[sound:la_nhk16_x.opus]"
+    # re-run is a no-op (already the dictionary recording)
+    assert audio.run_repitch(c, con, uf)["replaced"] == {}

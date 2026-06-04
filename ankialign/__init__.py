@@ -13,6 +13,10 @@ try:
         backfill.triggered.connect(audio_preview.show)
         mw.form.menuTools.addAction(backfill)
 
+        repitch = QAction("AnkiAlign: Replace word audio (dictionary)…", mw)
+        repitch.triggered.connect(audio_preview.show_repitch)
+        mw.form.menuTools.addAction(repitch)
+
     _add_menu()
 except ModuleNotFoundError as e:
     if not (e.name and e.name.split(".")[0] == "aqt"):

@@ -45,35 +45,48 @@ class Pick:
     speaker: Optional[str] = None
 
 
-def lookup(conn, term: str, reading: str) -> Optional[Pick]:
-    """Run the decided chain against an entries.db connection. Returns the best
-    Pick or None. Pure read — does not touch the filesystem."""
+def lookup_dict(conn, term: str, reading: str) -> Optional[Pick]:
+    """Reading-keyed accent-dictionary lookup only (nhk16 → shinmeikai8). Never
+    returns forvo/jpod. This is the authoritative-pitch source used by the
+    replace/re-pitch pass. Pure read."""
     term = _clean(term)
     reading = _to_hira(_clean(reading))
-    if not term:
+    if not term or not reading:
         return None
+    for src in DICT_SOURCES:
+        row = conn.execute(
+            "SELECT file FROM entries WHERE expression=? AND reading=? AND source=? LIMIT 1",
+            (term, reading, src),
+        ).fetchone()
+        if row:
+            return Pick(src, row[0])
+    return None
 
-    if reading:
-        for src in DICT_SOURCES:
-            row = conn.execute(
-                "SELECT file FROM entries WHERE expression=? AND reading=? AND source=? LIMIT 1",
-                (term, reading, src),
-            ).fetchone()
-            if row:
-                return Pick(src, row[0])
+
+def lookup(conn, term: str, reading: str) -> Optional[Pick]:
+    """Run the full fill chain (nhk16 → shinmeikai8 → forvo[strawberrybrown] →
+    jpod) against an entries.db connection. Returns the best Pick or None."""
+    dict_pick = lookup_dict(conn, term, reading)
+    if dict_pick:
+        return dict_pick
+
+    t = _clean(term)
+    if not t:
+        return None
 
     rows = conn.execute(
         "SELECT file, speaker FROM entries WHERE expression=? AND source='forvo'",
-        (term,),
+        (t,),
     ).fetchall()
     if rows:
         rows.sort(key=lambda r: r[1] != FORVO_SPEAKER)  # strawberrybrown first
         return Pick("forvo", rows[0][0], rows[0][1])
 
-    if reading:
+    r = _to_hira(_clean(reading))
+    if r:
         row = conn.execute(
             "SELECT file FROM entries WHERE expression=? AND reading=? AND source='jpod' LIMIT 1",
-            (term, reading),
+            (t, r),
         ).fetchone()
         if row:
             return Pick("jpod", row[0])
@@ -167,3 +180,95 @@ def run_backfill(col, conn, user_files_dir: str) -> dict:
         except Exception as e:
             errors.append((nid, repr(e)))
     return {"filled": filled, "errors": errors}
+
+
+# --- re-pitch pass: replace mined audio with accent-dictionary audio ------------
+# Separate from the fill pass. Targets in-scope Kinomoto notes whose Term Audio is
+# a NON-.opus recording (the pre-existing jidoujisho-mined mp3/ogg — likely jpod,
+# with frequent wrong pitch) and replaces it ONLY when an accent dictionary
+# (nhk16/shinmeikai8) has a reading-correct hit. Never replaces with forvo/jpod.
+# Non-destructive: the old media file is left in the collection (only the field
+# reference changes); caller backs up first. See research/HANDOFF-audio-backfill.md.
+
+
+def _current_sound(field_val: str) -> Optional[str]:
+    m = _SOUND.search(field_val or "")
+    return m.group(0) if m else None  # full "[sound:...]" token
+
+
+def _current_sound_file(field_val: str) -> Optional[str]:
+    tok = _current_sound(field_val)
+    return tok[len("[sound:"):-1] if tok else None
+
+
+def select_repitch_targets(col) -> list:
+    """In-scope Kinomoto nids whose Term Audio is a non-.opus recording.
+
+    `.opus` files are only ever written by our own local-audio passes (already a
+    best-available source), so they're excluded; everything else is pre-existing
+    mined audio eligible for a dictionary upgrade."""
+    if col.models.by_name(config.TARGET_NOTETYPE) is None:
+        return []
+    excl = " ".join(f"-deck:*{sub}*" for sub in config.EXCLUDE_DECK_SUBSTRINGS)
+    search = f'note:"{config.TARGET_NOTETYPE}" -"Term Audio:" {excl}'.strip()
+    out = []
+    for nid in col.find_notes(search):
+        fn = _current_sound_file(col.get_note(nid)["Term Audio"])
+        if fn and not fn.lower().endswith(".opus"):
+            out.append(nid)
+    return out
+
+
+def plan_repitch(col, conn, user_files_dir: str) -> dict:
+    """Read-only. For every non-opus target, resolve a dictionary Pick.
+
+    Returns {'targets', 'replaceable', 'no_dict', 'by_source', 'samples', 'picks'}.
+    """
+    by_source = {}
+    no_dict = 0
+    samples = []
+    picks = {}
+    for nid in select_repitch_targets(col):
+        note = col.get_note(nid)
+        pick = lookup_dict(conn, note["Term"], note["Reading"])
+        if pick is None:
+            no_dict += 1
+            continue
+        if not os.path.isfile(source_file_path(user_files_dir, pick)):
+            continue
+        picks[nid] = pick
+        by_source[pick.source] = by_source.get(pick.source, 0) + 1
+        if len(samples) < config.SAMPLE_N * 3:
+            samples.append((_clean(note["Term"]), _clean(note["Reading"]),
+                            _current_sound_file(note["Term Audio"]), pick.source))
+    return {
+        "targets": len(picks) + no_dict,
+        "replaceable": len(picks),
+        "no_dict": no_dict,
+        "by_source": by_source,
+        "samples": samples,
+        "picks": picks,
+    }
+
+
+def run_repitch(col, conn, user_files_dir: str) -> dict:
+    """Replace each target's Term Audio with its dictionary recording. Caller backs
+    up first. Non-destructive (old media file kept). Per-card error isolation.
+    Returns {'replaced': {src: n}, 'errors': [(nid, repr)]}.
+    """
+    plan = plan_repitch(col, conn, user_files_dir)
+    replaced = {}
+    errors = []
+    for nid, pick in plan["picks"].items():
+        try:
+            note = col.get_note(nid)
+            fname = col.media.add_file(source_file_path(user_files_dir, pick))
+            newval = f"[sound:{fname}]"
+            if (note["Term Audio"] or "").strip() == newval:
+                continue  # already this exact recording
+            note["Term Audio"] = newval
+            col.update_note(note)
+            replaced[pick.source] = replaced.get(pick.source, 0) + 1
+        except Exception as e:
+            errors.append((nid, repr(e)))
+    return {"replaced": replaced, "errors": errors}
