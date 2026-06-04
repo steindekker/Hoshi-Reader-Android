@@ -42,3 +42,14 @@ def test_apply_writes_through_col(tmp_path):
     engine.apply_plan(col, plan)
     assert col.get_note(nid)["Sentence"] == "{異端である;0}"
     col.close()
+
+def test_guard_rejects_surface_changing_fill(tmp_path):
+    col, m = _make_col(tmp_path)
+    _add(col, m, "異端", "異端である")
+    # generate returns markup whose surface differs from the input -> must be rejected
+    plan = engine.build_plan(
+        col, "jidoujisho Kinomoto", "Sentence",
+        generate=lambda t: "{異なる;0}",
+    )
+    assert len(plan) == 0, "round-trip guard must block surface-changing fills"
+    col.close()

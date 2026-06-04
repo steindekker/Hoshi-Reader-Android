@@ -7,7 +7,7 @@ from ankialign import markup
 
 
 def _norm(s: str) -> str:
-    return s.replace("<br>", " ").replace("<br/>", " ").replace(" ", " ")
+    return s.replace("<br>", " ").replace("<br/>", " ").replace("　", " ")
 
 
 @dataclass(frozen=True)
@@ -26,6 +26,8 @@ def build_plan(col, note_type: str, field: str,
         return []
     model = col.models.get(mid)
     names = [f["name"] for f in model["flds"]]
+    if field not in names:
+        raise ValueError(f"field {field!r} not found in note type {note_type!r}")
     fi = names.index(field)
     plan: list[Fill] = []
     for nid in col.models.nids(model):
