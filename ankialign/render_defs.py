@@ -89,17 +89,26 @@ def choose_jj(jj_rows, reading, chain):
     return None
 
 
+# Essential layout baked inline so the look survives even if the shared Kinomoto
+# notetype CSS (which other passes/agents also rewrite) loses the .aa-jj/.aa-je
+# rules. Class hooks stay for the richer CSS polish (furigana, dict styles) when present.
+_JJ_STYLE = "text-align:left"
+_JE_STYLE = ("text-align:left;margin-top:11px;padding-top:9px;"
+             "border-top:1px solid rgba(125,125,125,.35)")
+
+
 def assemble_meaning(jj, je_html) -> str:
     """jj = (dict_id, html) or None; je_html = numbered string or ''.
 
-    English sits always-expanded below the J-J block, separated by the .aa-je
-    top-border divider.
+    English sits always-expanded below the J-J block, separated by a top-border
+    divider (inline style, so it can't be stripped by other CSS passes).
     """
     parts = []
     if jj:
-        parts.append(f'<div class="aa-jj" data-dict="{html.escape(jj[0], quote=True)}">{jj[1]}</div>')
+        parts.append(f'<div class="aa-jj" data-dict="{html.escape(jj[0], quote=True)}" '
+                     f'style="{_JJ_STYLE}">{jj[1]}</div>')
     if je_html:
-        parts.append(f'<div class="aa-je">{je_html}</div>')
+        parts.append(f'<div class="aa-je" style="{_JE_STYLE}">{je_html}</div>')
     return "".join(parts)
 
 
