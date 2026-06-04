@@ -100,14 +100,16 @@ def enrich_notes(col, conn):
     """
     ensure_fields(col)
     apply_dict_styles(col)
+    fld = {f["name"] for f in col.models.by_name(config.TARGET_NOTETYPE)["flds"]}
     written = 0
     nohit_nids = []
     for nid in _in_scope_nids(col):
         note = col.get_note(nid)
-        term = note["Term"].strip()
+        term = note["Term"].strip() if "Term" in fld else ""
         if not term:
             continue
-        meaning, source, kind = _compute(conn, term, note["Reading"].strip())
+        reading = note["Reading"].strip() if "Reading" in fld else ""
+        meaning, source, kind = _compute(conn, term, reading)
         if kind == "nohit":
             nohit_nids.append(nid)
             continue

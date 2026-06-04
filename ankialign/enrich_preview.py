@@ -31,7 +31,10 @@ def show() -> None:
                  "uv run --with anki python tools/build_def_index.py")
         return
     conn = enrich.open_index()
-    plan = enrich.build_plan(mw.col, conn)
+    try:
+        plan = enrich.build_plan(mw.col, conn)
+    finally:
+        conn.close()  # don't hold the index open across the dialog
 
     dlg = QDialog(mw)
     dlg.setWindowTitle("AnkiAlign — Enrich definitions (preview)")
@@ -51,12 +54,13 @@ def show() -> None:
         try:
             mw.col.mod_schema(check=True)   # main-thread schema ack (adds fields)
         except AbortSchemaModification:
-            conn.close(); showInfo("Cancelled — schema change not accepted."); return
+            showInfo("Cancelled — schema change not accepted."); return
+        conn2 = enrich.open_index()
         mw.progress.start(label="AnkiAlign: enriching definitions…", immediate=True)
         try:
-            res = enrich.enrich_notes(mw.col, conn)
+            res = enrich.enrich_notes(mw.col, conn2)
         finally:
-            mw.progress.finish(); conn.close()
+            mw.progress.finish(); conn2.close()
         mw.reset()
         showInfo(f"Enriched (written): {res['written']}\n"
                  f"Dropped (no def): {res['dropped']}\n"

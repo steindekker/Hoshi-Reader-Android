@@ -63,7 +63,9 @@ def _by_reading(rows, reading):
 
 def numbered_glosses(je_rows, reading, cap=4) -> str:
     rows = sorted(_by_reading(je_rows, reading), key=lambda r: r["sense_ord"])[:cap]
-    return "<br>".join(f"{i}. {r['html']}" for i, r in enumerate(rows, 1))
+    # glosses are stored as plain text; escape at render so any '&'/'<' in a
+    # JMdict gloss can't inject markup into the card.
+    return "<br>".join(f"{i}. {html.escape(r['html'])}" for i, r in enumerate(rows, 1))
 
 
 def choose_jj(jj_rows, reading, chain):
@@ -71,6 +73,11 @@ def choose_jj(jj_rows, reading, chain):
 
     Returns (dict_id, html) or None. Reading match prefers exact reading, then a
     reading-less entry, then any entry from that dict.
+
+    Note: the spec's katakana-homograph guard (e.g. ヤギ goat vs. typhoon) is
+    intentionally NOT implemented — in the cited cases the dict holds only the one
+    homograph entry, so the guard can't help; such rare cases are auditable via the
+    Definition Source field instead. See the plan's self-review.
     """
     for dict_id in chain:
         rows = [r for r in jj_rows if r["dict_id"] == dict_id]
@@ -90,7 +97,7 @@ def assemble_meaning(jj, je_html, english_open=True) -> str:
     """
     parts = []
     if jj:
-        parts.append(f'<div class="aa-jj" data-dict="{jj[0]}">{jj[1]}</div>')
+        parts.append(f'<div class="aa-jj" data-dict="{html.escape(jj[0], quote=True)}">{jj[1]}</div>')
     if je_html:
         op = " open" if english_open else ""
         parts.append(f'<details class="aa-je"{op}><summary>English</summary>{je_html}</details>')

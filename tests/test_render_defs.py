@@ -55,6 +55,11 @@ def test_numbered_glosses_empty():
     assert rd.numbered_glosses([], "あ", cap=4) == ""
 
 
+def test_numbered_glosses_escapes_html():
+    rows = [_je("jmdict", "あ", 1, "arts & crafts <thing>")]
+    assert rd.numbered_glosses(rows, "あ", cap=4) == "1. arts &amp; crafts &lt;thing&gt;"
+
+
 CHAIN = ["sankoku8", "koujien7", "jitsuyo", "daijisen"]
 
 

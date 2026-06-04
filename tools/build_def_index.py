@@ -93,7 +93,7 @@ def _scope_css(css, selector):
         sels = m.group(1)
         if sels.strip().startswith("@"):
             return m.group(0)
-        return ", ".join(f"{selector} {s.strip()}" for s in sels.split(",") if s.strip()) + "{"
+        return ", ".join(f"{selector} {s.strip()}" for s in sels.split(",") if s.strip()) + " {"
     return re.sub(r"([^{}]+)\{", repl, css)
 
 

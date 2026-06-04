@@ -118,3 +118,17 @@ def test_enrich_notes_drops_few_nohit(kcol, tmp_path):
     assert kcol.find_notes("nid:%d" % gone) == []
     assert kcol.find_notes("nid:%d" % keep) != []
     conn.close()
+
+
+def test_enrich_notes_tags_when_nohit_at_or_above_threshold(kcol, tmp_path, monkeypatch):
+    db = str(tmp_path / "defs.sqlite"); _make_db(db)
+    enrich.ensure_fields(kcol)
+    monkeypatch.setattr(config, "NO_HIT_DROP_THRESHOLD", 1)  # count(1) not < 1 -> tag, don't drop
+    nid = _add_kino(kcol, "謎語", "なぞご")
+    conn = enrich.open_index(db)
+    res = enrich.enrich_notes(kcol, conn)
+    assert res["dropped"] == 0 and res["nohit_tagged"] == 1
+    n = kcol.get_note(nid)
+    assert config.NO_DEF_TAG in n.tags
+    assert kcol.find_notes("nid:%d" % nid) != []   # preserved, not dropped
+    conn.close()
