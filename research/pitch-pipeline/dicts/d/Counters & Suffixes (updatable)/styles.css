@@ -1,0 +1,54 @@
+[style="background-color: var(--exceptions-color);"] {
+	background-color: var(--exceptions-color, #ffe8e8) !important;
+}
+
+[style="background-color: var(--common-alternatives-color);"] {
+	background-color: var(--common-alternatives-color, #f2e4ff) !important;
+}
+
+[style="background-color: var(--note-color);"] {
+	background-color: var(--note-color, #e1ecff) !important;
+}
+
+span[data-sc-name="drop"] {
+  background: linear-gradient(#dc3545 0 0) top /100% 1px, linear-gradient(#dc3545 0 0) 100% 0% / 1px 40%;
+  background-repeat: no-repeat;
+  padding-right: 0.2em;
+}
+
+span[data-sc-name="overline"] {
+  background: linear-gradient(#dc3545 0 0) top /100% 1px;
+  background-repeat: no-repeat;
+  white-space: break-spaces;
+}
+
+table {
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+
+td:last-child {
+  word-break: break-word;
+  padding: 10px;
+  text-align: left;
+}
+
+td {
+  word-break: keep-all;
+  border: calc(0.1em / var(--font-size-no-units)) solid var(--text-color-light2) !important;
+  text-align: center;
+  vertical-align: middle !important;
+}
+
+[data-sc-name="notes"] {
+  white-space: wrap !important;
+}
+
+/* Remove empty cells */
+[data-sc-name="pattern"]:not(:has(*)) {
+  display: none;
+}
+
+[data-sc-name="notes"]:not(:has([data-sc-name="extra"] > *)):not(:has([data-sc-name="references"] > *)) {
+  display: none;
+}

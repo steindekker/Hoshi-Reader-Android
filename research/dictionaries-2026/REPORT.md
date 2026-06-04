@@ -57,3 +57,28 @@ comprehensive fallback:
 **Bottom line:** match Shoui — standardise the J-J base on **Sankoku 8 (readable) + Daijisen
 (coverage)**, both as a fallback chain. Only Sankoku 8 needs to be obtained; everything else
 the user already has.
+
+---
+
+## FINAL DECISION (2026-06-04, after coverage + gap analysis)
+
+User acquired Sankoku 8, Daijirin 4, Koujien 7, SMK8, Jitsuyo, Daijisen (Yomitan).
+After building the side-by-side comparison harness (`research/dict-compare/`) and measuring
+real coverage over the 8,247 in-scope Kinomoto notes (post multi-word split), the locked set is:
+
+- **J-J base chain:** 三省堂国語辞典 8 → 広辞苑 7 → 実用日本語表現辞典 → 大辞泉
+  - 三省堂 = readable primary; 広辞苑 = fallback, **styled to resemble 三省堂**;
+    実用 = expressions; 大辞泉 = deep coverage fallback (recovers ~30 compounds).
+- **J-E:** JMdict — short **numbered** glosses (`1. a; b; c` / `2. …`), placed **below** the JP.
+- Coverage achieved: **J-J 99.0%**, **any-def 99.8%**; only ~7 true orphans (grammar/idiom/slang).
+- Dropped from consideration: 新明解 8 (adds only ~5 of 95 compound gaps — not worth it);
+  大辞林 4 (offered +27 but user chose 大辞泉-only to keep the chain shorter);
+  Jitendex (covers all J-E cases but JMdict chosen as the J-E source).
+
+See `research/dict-compare/GAP-FINDINGS.md` and `coverage.py`/`check_others.py` for the data.
+
+### Multi-word sentence cards — RESOLVED (live, 2026-06-04)
+86 cards had comma-joined multi-word Terms (`悲劇,最中`). Split into per-word cards
+(`split_multiword.py`), inheriting the original card's review schedule: **155 new cards,
+86 originals removed**, tagged `ankialign::split-from-multiword`. Backup
+`backup-2026-06-04-21.15.59.colpkg`. The gap fell 195 → 110.
