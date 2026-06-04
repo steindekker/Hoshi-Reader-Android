@@ -2,7 +2,7 @@
 import html
 import re
 
-_VOID = {"br", "hr", "img"}
+_VOID = {"br", "hr"}
 
 
 def _kebab(k: str) -> str:
@@ -32,6 +32,8 @@ def render_sc(node) -> str:
         tag = node.get("tag")
         if tag is None:
             return render_sc(node.get("content"))
+        if tag == "img":
+            return ""  # Yomitan inline images (gaiji / 三省堂 accent glyphs); no media shipped
         attrs = ""
         style = node.get("style")
         if isinstance(style, dict):

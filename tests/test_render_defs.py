@@ -23,6 +23,13 @@ def test_render_sc_ruby_and_void_and_image():
     assert rd.render_sc({"type": "structured-content", "content": "z"}) == "z"
 
 
+def test_render_sc_drops_img_tags():
+    # Yomitan inline images are {"tag":"img",...}, not {"type":"image"} — drop them
+    # cleanly (no stray <img> with missing src, which 三省堂 accent glyphs would cause).
+    assert rd.render_sc({"tag": "img", "path": "x.png"}) == ""
+    assert rd.render_sc({"tag": "span", "content": [{"tag": "img"}, "あ"]}) == "<span>あ</span>"
+
+
 def _je(dict_id, reading, sense_ord, html):
     return {"term": "x", "reading": reading, "dict_id": dict_id,
             "kind": "je", "sense_ord": sense_ord, "html": html}
