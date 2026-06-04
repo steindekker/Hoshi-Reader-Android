@@ -15,5 +15,6 @@ __pycache__/
 # Generated preview artifacts
 *.png
 research/template-preview/preview.html
+research/audio-compare/site/
 
 .venv/
