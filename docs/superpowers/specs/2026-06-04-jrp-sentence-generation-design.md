@@ -178,6 +178,11 @@ when dicts change.
   bare-but-correct kanji beats a wrong furigana. A bare-kanji regression test guards the rate (≤15/200).
 - **deinflect.py omitted (YAGNI).** Sudachi `dictionary_form()` + lemma-reading + the Mode C→A split
   cascade reached 98.9% strict coverage without a hand-rolled deinflector.
+- **marine dropped.** Built then removed: measured on the real dict-misses, marine returned heiban
+  `(0,)` for 9/10 (and None for 1) — zero useful predictions, because it's trained on full-sentence
+  sequences and gets fed isolated words. The misses are mostly function words / slang / loans that
+  don't need a pitch graph. Revisit only via *sentence-level* marine (feed the whole sentence, map
+  accent phrases back to units) if the last ~1% ever matters. Dict-misses now render furigana-only.
 - **`!` ambiguity mark deferred** — `emit` supports the syntax but nothing sets `Unit.ambiguous` yet.
 - **Idempotency caveat:** the first `--apply` is safe (surface round-trip guard + forced backup). A
   *second* run can re-tokenize a leftover bare-counter kanji in isolation and write a different

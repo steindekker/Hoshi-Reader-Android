@@ -6,7 +6,6 @@ requires-python = ">=3.11"
 [dependency-groups]
 dev = ["pytest>=8", "anki>=24.11"]
 jrp = ["sudachipy>=0.6.8", "sudachidict-full>=20240409"]
-marine = ["marine>=0.0.6"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

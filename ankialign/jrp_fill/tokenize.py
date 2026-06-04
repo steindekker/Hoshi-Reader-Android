@@ -1,12 +1,11 @@
 """SudachiPy Mode C tokenization -> Unit list, with lemma-reading accent
 lookup and a Mode C -> Mode A split-and-retry cascade.
 
-`marine` is an optional callable: marine(Unit) -> tuple[int, ...] | None,
-used only when dict lookup (and the split cascade) miss.
+Dict misses (~1%) are left with no accent (furigana only); they are mostly
+function words / slang / proper nouns that don't need a pitch graph.
 """
 from __future__ import annotations
 from functools import lru_cache
-from collections.abc import Callable
 from .unit import Unit
 from .accent import AccentIndex
 from ._utils import hira
@@ -43,8 +42,7 @@ def _to_unit(m, acc: AccentIndex) -> Unit:
     return Unit(surface, lemma, reading, lemread, True, pos0 in _YOUGEN,
                 tuple(positions) if positions else ())
 
-def units(text: str, acc: AccentIndex,
-          marine: Callable[[Unit], "tuple[int, ...] | None"] | None = None) -> list[Unit]:
+def units(text: str, acc: AccentIndex) -> list[Unit]:
     A, C = _modes()
     out: list[Unit] = []
     for m in _tok().tokenize(text, C):
@@ -56,10 +54,5 @@ def units(text: str, acc: AccentIndex,
                 if all((not su.is_content) or su.accents for su in sub_us):
                     out.extend(sub_us)
                     continue
-            if marine is not None:
-                got = marine(u)
-                if got:
-                    u = Unit(u.surface, u.lemma, u.reading, u.lemma_reading,
-                             u.is_content, u.is_yougen, tuple(got))
         out.append(u)
     return out

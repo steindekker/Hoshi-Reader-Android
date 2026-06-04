@@ -34,8 +34,10 @@ def apply(col) -> None:
     if m is None:
         raise RuntimeError("target notetype missing: " + config.TARGET_NOTETYPE)
     css = _css()
-    if _CSS_MARKER not in m["css"]:
-        m["css"] = m["css"].rstrip() + "\n\n" + css
+    # the custom block is always appended last; re-sync it from kinomoto.css by
+    # dropping any existing block (from the marker on) before re-appending.
+    base = m["css"].split(_CSS_MARKER, 1)[0]
+    m["css"] = base.rstrip() + "\n\n" + css
     tmpl = m["tmpls"][0]
     if _FRONT_MARKER not in tmpl["qfmt"]:
         tmpl["qfmt"] = tmpl["qfmt"].rstrip() + "\n" + _FRONT_SCRIPT

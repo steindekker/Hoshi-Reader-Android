@@ -1,0 +1,58 @@
+[
+    [
+        "counter",
+        "",
+        0,
+        "counter",
+        0
+    ],
+    [
+        "irregular",
+        "",
+        1,
+        "irregular counter",
+        0
+    ],
+    [
+        "suffix",
+        "",
+        0,
+        "suffix",
+        0
+    ],
+    [
+        "recessive",
+        "",
+        1,
+        "only applies if the base word is flat, otherwise will attach low",
+        0
+    ],
+    [
+        "adj-i",
+        "partOfSpeech",
+        1,
+        "pitch changes in the same way as other i-adjectives when conjugated",
+        0
+    ],
+    [
+        "pattern",
+        "",
+        2,
+        "general pattern",
+        0
+    ],
+    [
+        "conjugation",
+        "partOfSpeech",
+        2,
+        "",
+        0
+    ],
+    [
+        "の",
+        "",
+        2,
+        "ignores の rule",
+        0
+    ]
+]

@@ -41,3 +41,15 @@
 /* hide inline sentence furigana — the JRP unit pop-up already shows reading+pitch
    on hover/tap. pitch coloring + indicator bars stay; term reading at top stays. */
 #sentence rt { display: none; }
+
+/* two audio files (Term + Sentence Audio): Kinomoto anchors #audio-inner by its
+   right edge (right:-40px) with no width, so a 2nd play button grows leftward over
+   the kanji. Re-anchor to the left of the word and lay buttons out in a row. */
+#audio-inner {
+  right: auto;
+  left: 100%;
+  margin-left: 10px;
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+}
