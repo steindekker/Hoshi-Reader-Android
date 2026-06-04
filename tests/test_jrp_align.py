@@ -26,3 +26,15 @@ def test_mismatch_falls_back_to_whole_segment():
 
 def test_empty_reading_is_bare():
     assert fs("！", "") == [("！", None)]
+
+def test_kanji_with_empty_reading_falls_back():
+    # last-run kanji guard: ri=0 >= len("")=0 -> whole-segment fallback
+    assert fs("食", "") == [("食", "")]
+
+def test_kanji_kana_with_empty_reading_falls_back():
+    # next anchor not found in "" -> fallback
+    assert fs("食べる", "") == [("食べる", "")]
+
+def test_kanji_then_katakana_run():
+    # katakana run is non-kanji (bare); ー stays consistent on both sides
+    assert fs("東京タワー", "とうきょうたわー") == [("東京", "とうきょう"), ("タワー", None)]
