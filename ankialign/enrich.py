@@ -50,3 +50,42 @@ def apply_dict_styles(col, styles_path=None):
     base = m["css"].split(_STYLE_MARKER, 1)[0]
     m["css"] = base.rstrip() + f"\n\n{_STYLE_MARKER} (generated) ---- */\n" + css
     col.models.update_dict(m)
+
+
+def _compute(conn, term, reading):
+    """Return (new_meaning, source, kind) for one note. kind in enrich/english/nohit."""
+    jj_rows, je_rows = lookup(conn, term)
+    jj = render_defs.choose_jj(jj_rows, reading, config.JJ_CHAIN)
+    je = render_defs.numbered_glosses(je_rows, reading, config.GLOSS_CAP)
+    meaning = render_defs.assemble_meaning(jj, je, english_open=not config.ENGLISH_COLLAPSED_DEFAULT)
+    source = render_defs.source_label(jj, bool(je), config.DICT_LABELS)
+    kind = "enrich" if jj else ("english" if je else "nohit")
+    return meaning, source, kind
+
+
+def _in_scope_nids(col):
+    return col.find_notes(convert._search(config.TARGET_NOTETYPE))
+
+
+def build_plan(col, conn):
+    counts = {"enrich": 0, "english": 0, "nohit": 0}
+    nohit_nids, samples, errors = [], [], []
+    fld = {f["name"] for f in col.models.by_name(config.TARGET_NOTETYPE)["flds"]}
+    for nid in _in_scope_nids(col):
+        note = col.get_note(nid)
+        term = note["Term"].strip() if "Term" in fld else ""
+        if not term:
+            continue
+        reading = note["Reading"].strip() if "Reading" in fld else ""
+        try:
+            meaning, source, kind = _compute(conn, term, reading)
+        except Exception as e:
+            errors.append((nid, repr(e)))
+            continue
+        counts[kind] += 1
+        if kind == "nohit":
+            nohit_nids.append(nid)
+        elif len(samples) < config.SAMPLE_N:
+            samples.append((term, note["Meaning"], meaning, source))
+    return {"counts": counts, "nohit_nids": nohit_nids,
+            "samples": samples, "errors": errors}

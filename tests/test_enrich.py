@@ -60,3 +60,25 @@ def test_apply_dict_styles_injects_once(kcol, tmp_path):
     full = kcol.models.by_name(config.TARGET_NOTETYPE)["css"]
     assert full.count("AnkiAlign dict styles") == 1   # injected exactly once
     assert "color: red" in full
+
+
+def _add_kino(col, term, reading, meaning=""):
+    m = col.models.by_name(config.TARGET_NOTETYPE)
+    col.models.set_current(m)
+    n = col.new_note(m)
+    n["Term"] = term; n["Reading"] = reading; n["Meaning"] = meaning
+    col.add_note(n, col.decks.id("言葉文章"))
+    return n.id
+
+
+def test_build_plan_classifies(kcol, tmp_path):
+    db = str(tmp_path / "defs.sqlite"); _make_db(db)
+    _add_kino(kcol, "迷惑", "めいわく")        # has J-J
+    _add_kino(kcol, "駐車場", "ちゅうしゃじょう")  # english-only
+    _add_kino(kcol, "謎語", "なぞご")           # no hit
+    conn = enrich.open_index(db)
+    plan = enrich.build_plan(kcol, conn)
+    assert plan["counts"] == {"enrich": 1, "english": 1, "nohit": 1}
+    assert len(plan["nohit_nids"]) == 1
+    assert plan["samples"]                       # at least one before/after sample
+    conn.close()
