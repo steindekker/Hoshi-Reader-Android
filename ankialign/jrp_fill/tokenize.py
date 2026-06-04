@@ -54,10 +54,31 @@ def _to_unit(m, acc: AccentIndex) -> Unit:
     return Unit(surface, lemma, reading, lemread, True, pos0 in _YOUGEN,
                 tuple(positions) if positions else ())
 
+def _counter_merge(m, nxt, acc: AccentIndex) -> Unit | None:
+    """Sudachi splits some number/noun + 接尾辞 compounds (数日 -> 数+日). If the
+    joined (surface, reading) is in the accent dict, pitch it as one unit. This
+    self-validates: 数日->すうじつ hits (correct), 二日->ふたか misses (stays safe,
+    never producing a wrong reading)."""
+    if nxt.part_of_speech()[0] != "接尾辞":
+        return None
+    js = m.surface() + nxt.surface()
+    jr = hira((m.reading_form() or m.surface()) + (nxt.reading_form() or nxt.surface()))
+    pos = acc.lookup(js, jr)
+    return Unit(js, js, jr, jr, True, False, tuple(pos)) if pos else None
+
 def units(text: str, acc: AccentIndex) -> list[Unit]:
     A, C = _modes()
+    ms = list(_tok().tokenize(text, C))
     out: list[Unit] = []
-    for m in _tok().tokenize(text, C):
+    i = 0
+    while i < len(ms):
+        m = ms[i]
+        if i + 1 < len(ms):
+            merged = _counter_merge(m, ms[i + 1], acc)
+            if merged is not None:
+                out.append(merged)
+                i += 2
+                continue
         u = _to_unit(m, acc)
         if u.is_content and not u.accents:
             subs = list(m.split(A))
@@ -65,6 +86,8 @@ def units(text: str, acc: AccentIndex) -> list[Unit]:
                 sub_us = [_to_unit(x, acc) for x in subs]
                 if all((not su.is_content) or su.accents for su in sub_us):
                     out.extend(sub_us)
+                    i += 1
                     continue
         out.append(u)
+        i += 1
     return out

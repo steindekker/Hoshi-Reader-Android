@@ -55,3 +55,22 @@ def test_bound_aux_fragments_not_pitched():
         assert "{し;" not in out and "{しれ;" not in out and "{い;" not in out
     # a real multi-mora auxiliary is still pitched
     assert "{しまう" in emit_sentence(units("緊張してしまう", acc))
+
+@pytest.mark.skipif(not _sudachi_available(), reason="sudachipy not installed")
+def test_counter_compound_merge():
+    # number/noun + 接尾辞 that Sudachi splits is re-fused into one pitched unit
+    # ONLY when the joined (surface, reading) is in the accent dict (self-validating).
+    from ankialign.jrp_fill.accent import AccentIndex
+    from ankialign.jrp_fill.tokenize import units
+    from ankialign.jrp_fill.emit import emit_sentence
+    from ankialign import markup
+    acc = AccentIndex.load(IDX)
+    # 数日 -> すうじつ IS in the dict: merged, correct reading じつ (not the split にち/か)
+    out = emit_sentence(units("数日が経った", acc))
+    assert markup.jrp_surface(out) == "数日が経った"
+    assert "すうじつ" in out
+    # 五人 -> ごにん NOT in dict: not merged, but surface stays intact (no wrong reading)
+    out2 = emit_sentence(units("五人いた", acc))
+    assert markup.jrp_surface(out2) == "五人いた"
+    # 二人 stays one correctly-read unit (Sudachi keeps it whole)
+    assert "ふたり" in emit_sentence(units("二人で歩いた", acc))
