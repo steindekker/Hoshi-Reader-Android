@@ -26,3 +26,24 @@ def test_build_indexes_jj_entries(tmp_path):
     rows = sqlite3.connect(db).execute(
         "SELECT term, reading, dict_id, kind, sense_ord, html FROM defs").fetchall()
     assert rows == [("西瓜", "すいか", "sankoku8", "jj", 0, "うり")]
+
+
+def _gloss_entry(expr, reading, defTags, score, glosses):
+    sc = {"type": "structured-content", "content": {
+        "tag": "ul", "data": {"content": "glossary"},
+        "content": [{"tag": "li", "content": g} for g in glosses]}}
+    return [expr, reading, defTags, "", score, [sc], 1, ""]
+
+
+def test_build_indexes_jmdict_senses(tmp_path):
+    dicts = tmp_path / "dicts"
+    _write_dict(dicts, "jmdict", [
+        _gloss_entry("交渉", "こうしょう", "1 n vs", 1999800, ["negotiations", "bargaining"]),
+        _gloss_entry("交渉", "こうしょう", "2 n", 1999799, ["connection", "relations"]),
+    ])
+    db = tmp_path / "defs.sqlite"
+    b.build(str(dicts), str(db), str(tmp_path / "dict_styles.css"))
+    rows = sqlite3.connect(db).execute(
+        "SELECT reading, sense_ord, html FROM defs WHERE kind='je' ORDER BY sense_ord").fetchall()
+    assert rows == [("こうしょう", 1, "negotiations; bargaining"),
+                    ("こうしょう", 2, "connection; relations")]
