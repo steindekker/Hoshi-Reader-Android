@@ -2,12 +2,15 @@
 try:
     from aqt import mw
     from aqt.qt import QAction
-    from . import preview
+    from . import preview, enrich_preview
 
     def _add_menu():
-        action = QAction("AnkiAlign: Unify note types…", mw)
-        action.triggered.connect(preview.show)
-        mw.form.menuTools.addAction(action)
+        a1 = QAction("AnkiAlign: Unify note types…", mw)
+        a1.triggered.connect(preview.show)
+        mw.form.menuTools.addAction(a1)
+        a2 = QAction("AnkiAlign: Enrich definitions…", mw)
+        a2.triggered.connect(enrich_preview.show)
+        mw.form.menuTools.addAction(a2)
 
     _add_menu()
 except ModuleNotFoundError as e:
