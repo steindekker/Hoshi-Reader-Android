@@ -92,10 +92,8 @@ def test_enrich_notes_writes_stashes_and_is_idempotent(kcol, tmp_path):
 
     res = enrich.enrich_notes(kcol, conn)
     n = kcol.get_note(nid)
-    from ankialign import render_defs as rd
-    assert n["Meaning"] == (
-        f'<div class="aa-jj" data-dict="sankoku8" style="{rd._JJ_STYLE}"><b>めいわく</b></div>'
-        f'<div class="aa-je" style="{rd._JE_STYLE}">1. trouble; bother</div>')
+    assert n["Meaning"] == ('<div class="aa-jj" data-dict="sankoku8"><b>めいわく</b></div>'
+                            '<div class="aa-je">1. trouble; bother</div>')
     assert n[config.ORIGINAL_MEANING_FIELD] == "OLD CLUTTER"
     assert n[config.DEFINITION_SOURCE_FIELD] == "三省堂"
     assert config.ENRICHED_TAG in n.tags
