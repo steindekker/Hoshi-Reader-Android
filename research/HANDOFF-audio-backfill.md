@@ -92,35 +92,44 @@ source, speaker (if forvo), and the resolved reading — plus aggregate coverage
 In-scope Kinomoto cards only (reuse `config.in_scope` deck exclusions —
 Core2.3k / 文法 stay out), `Term Audio` empty.
 
-## Immediate next step — coverage spike first (BRIEF → REPORT)
+## Coverage spike — DONE (2026-06-04), verdict: GO
 
-Mirror the pitch-pipeline rhythm: measure before building. After relaunching Anki to
-build entries.db, run a read-only spike over the real `collection.anki2`:
+`research/audio-compare/coverage_spike.py` (read-only, immutable-mode; safe with
+Anki open) → `research/audio-compare/COVERAGE.md`. Headline numbers:
 
-1. Count in-scope Kinomoto cards with empty `Term Audio` (the target N).
-2. For each, run the lookup chain against entries.db. Report: % exact dict hit
-   (split nhk16 / shinmeikai8), % jpod-only, % forvo-tail (and how many of those
-   have a strawberrybrown clip vs. only other speakers), % nothing.
-3. Bucket the residual `nothing` set (rare/names? missing-reading cards?).
-4. Spot-check ~25 resolved picks by ear for accent sanity.
+- 8,240 in-scope Kinomoto notes; **only 583 (7.1%) lack `Term Audio`** = target N.
+- Decided chain fills **490 / 583 = 84.0%**: nhk16 280 (48%), shinmeikai8 98 (17%),
+  forvo 99 (17%), jpod 13 (2%); **65% land on a reading-correct accent dictionary**.
+- **93 misses (16%) are genuinely uncoverable**, not a tuning gap: 70 = multi-word
+  phrases / compound slang / numbers absent from any single-word source (見つめ直す,
+  リア充, １対１); 16 = empty reading; 7 = term-exists-but-reading-mismatch (the only
+  marginally recoverable bucket — diminishing returns).
 
-Deliverable: `research/audio-compare/COVERAGE.md` with the numbers + a go/no-go on
-whether the gap is worth the pass and whether the forvo tail pulls its weight. THEN
-write the implementation plan (writing-plans).
+Decisions the data settled:
+- **forvo > jpod is safe to keep:** only 9 cards where forvo beats an available jpod
+  reading-hit, almost all multi-word non-homographs → negligible risk.
+- **strawberrybrown is a minority of the forvo tail:** only 27/99 forvo wins have her
+  clip; 72 fall back to skent/poyotan/etc. (the tail is multi-word slang she didn't
+  record). Keep the fallback — strawberrybrown-only would cut coverage 84%→~72%.
+- **empty-Reading cards are minor (30 of 583).** Don't over-engineer; forvo term-only
+  catches some, the rest fall into the reported residual. No special handling needed.
+
+**Next: write the implementation plan (writing-plans skill).** Approach is validated;
+no further research needed. Optionally spot-check the 9 forvo-over-jpod cards by ear
+once built, but not a blocker.
 
 ## Mobile / AnkiDroid (from HANDOFF-mobile-review)
 Audio must be a `[sound:…]` field (native "Automatically play audio"), never
 JS-driven. Opus files are small — keep per-card media lean. No template changes
 needed for this goal; we only fill an existing field.
 
-## Open questions for the human
-- Spike-first (recommended) vs. straight to implementation plan? (User leaning: TBD —
-  default to spike-first.)
-- Missing-`Reading` cards: forvo-term-only fallback, or skip+report? (decide from spike)
+## Open questions for the human (remaining after spike)
 - Multiple candidate clips for the winning source: take the first / dictionary-canonical
   one (assumed), or surface a choice? (assumed: single best pick, no UI)
 - Re-run policy: only-empty cards (assumed), or also offer to upgrade existing
   lower-priority audio to a higher-priority source later?
+- strawberrybrown-only for forvo (27 fills, her voice only) vs. fallback to other curated
+  speakers (99 fills)? (recommended + assumed: keep fallback.)
 
 ## Reference artifacts
 - `research/audio-compare/RESEARCH.md` — source-quality verdict + citations.
