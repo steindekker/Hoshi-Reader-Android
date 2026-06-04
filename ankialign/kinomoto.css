@@ -1,0 +1,43 @@
+/* ---- AnkiAlign custom ------------------------------------------------
+   Lapis serif everywhere + Lapis "feel" (bg / text / elevated card),
+   toned down: softer cream, muted accent, lighter shadows.
+   Kinomoto font-sizes kept untouched. -------------------------------- */
+.card { font-family: {LAPIS_SERIF}; font-weight: 500; }
+
+.card:not(.nightMode) {
+  --bg: #fbf8f1;            /* Lapis cream #fffaf0, softened */
+  --fg: #383838;
+  --panel: rgba(0,0,0,.035);     /* Lapis --bg-elevated, lighter */
+  --panel-border: rgba(0,0,0,.10);
+  --accent: #5566b5;             /* Lapis bold #4660f1, muted */
+  --shadow: 0 1px 3px rgba(0,0,0,.12);
+}
+.card.nightMode {
+  --bg: #272727;            /* Lapis dark #2c2c2c, slightly deeper */
+  --fg: #e7e4dd;
+  --panel: rgba(255,255,255,.05);
+  --panel-border: rgba(255,255,255,.13);
+  --accent: #d7dc8a;             /* Lapis dark bold #fffd9e, muted */
+  --shadow: none;
+}
+
+.card:not(.nightMode) { background-color: var(--bg); }
+.card.nightMode      { background-color: var(--bg); }
+.card                { color: var(--fg); }
+
+/* definition becomes the Lapis-style elevated panel (left accent border) */
+.meaning, .nightMode .meaning {
+  background: var(--panel);
+  border-left: 3px solid var(--panel-border);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.image img { box-shadow: var(--shadow); }
+.cloze     { color: var(--accent); }
+/* drop Kinomoto's white emboss text-shadows (built for the old grey bg) */
+.details-summary, .furigana { text-shadow: none; }
+
+/* hide inline sentence furigana — the JRP unit pop-up already shows reading+pitch
+   on hover/tap. pitch coloring + indicator bars stay; term reading at top stays. */
+#sentence rt { display: none; }
