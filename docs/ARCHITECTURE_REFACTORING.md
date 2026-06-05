@@ -1,232 +1,408 @@
-# Hoshi Android Architecture Refactoring Directions
+# Hoshi Android Architecture Refactoring
 
-Date: 2026-05-04
+Date: 2026-06-05
 
-This document is the durable direction for the next wave of technical-debt refactoring. It replaces the previous implementation-history plan. Old slice records, completed migration notes, and per-commit progress belong in issues, PRs, commit messages, or the local `.codex/skills/hoshi-refactoring-workflow/references/refactoring-slices.md` queue, not in this tracked document.
+This document tracks future architecture direction only. It is not a current
+architecture overview, task log, handoff file, or completion ledger. Current
+architecture lives in `docs/ARCHITECTURE.md`. Active work belongs in the current
+issue, PR, commit message, or conversation.
 
-The goal is maintainability, testability, and alignment with current Android architecture guidance. This is not an iOS UI parity plan. Preserve iOS-aligned user-visible behavior where it already matters, but choose Android-native architecture boundaries.
+`AGENTS.md` should contain only rules that every agent must keep in context.
+This file owns longer-lived refactor targets, especially official Android best
+practices that the project has not fully adopted yet.
 
-## Current Baseline
+When a refactor target is completed and becomes the repository baseline, update
+`AGENTS.md` in the same change to lock that baseline into the always-loaded
+agent contract. Remove or rewrite the completed target here so this file keeps
+describing only future work.
 
-Already completed or mostly completed:
+## Official Android Guidance
 
-- Navigation3 is in place with typed route keys, `AppShell`, `NavDisplay`, reader routes, settings detail routes, and explicit back-stack helpers.
-- Bookshelf and dictionary management now have ViewModels and immutable UI state.
-- Reader, dictionary, audio, and Sasayaki settings use DataStore-backed repositories with legacy `SharedPreferences` migration.
-- Dictionary storage/import/query responsibilities are partially split.
-- Book storage is partially split into repository, file data source, import data source, and sidecar data source.
-- WebView security defaults are centralized.
-- Sasayaki playback has a high-level controller facade and several narrow coordinators.
+Use the current Android, Google, and Jetpack documentation as the implementation
+source for Android-specific behavior. The iOS app remains the source of truth
+for user-visible Hoshi behavior, not for Android implementation mechanics.
 
-Remaining architectural debt:
+Relevant official guidance reviewed for this direction:
 
-- `features/reader/ReaderWebView.kt` is still the largest risk. It owns reader UI, WebView lifecycle, JavaScript dispatch, lookup popup orchestration, Sasayaki integration, settings collection, system bars, screen-awake behavior, and bookmark-saving callbacks.
-- Data repositories are not consistently main-safe. Several repositories and data sources perform blocking file/native work synchronously while callers decide when to use `Dispatchers.IO`.
-- `epub/BookRepository.kt` still imports Sasayaki feature models for sidecar persistence, which blocks clean model/storage module boundaries.
-- Compose screens still collect some Flows with `collectAsState()` or manual `LaunchedEffect` collection instead of lifecycle-aware collection.
-- Source-string tests remain common. Some protect security or build wiring, but many make internal refactoring more expensive than necessary.
-- `app/build.gradle.kts` still owns normal app config, release signing validation, CMake/JNI dictionary wiring, Rust host build, UniFFI generation, `cargo-ndk`, generated source registration, generated JNI libs, and JNA test runtime wiring.
-- There is no dedicated baseline profile or macrobenchmark coverage for startup, reader, dictionary, or lookup flows.
+- [Guide to app architecture](https://developer.android.com/topic/architecture):
+  modern Android architecture emphasizes layered architecture, UDF, UI state
+  holders, coroutines/Flow, and dependency injection.
+- [Architecture recommendations](https://developer.android.com/topic/architecture/recommendations):
+  prefer lifecycle-aware Flow collection, dependency injection, constructor
+  injection, scoped containers, and Hilt for sufficiently complex apps.
+- [Dependency injection with Hilt](https://developer.android.com/training/dependency-injection/hilt-android):
+  Hilt standardizes Android DI containers and lifecycle-aware object creation.
+- [UI layer](https://developer.android.com/topic/architecture/ui-layer) and
+  [state hoisting](https://developer.android.com/develop/ui/compose/state-hoisting):
+  screen UI state belongs in ViewModels or state holders; UI logic stays close
+  to the UI; state flows down and events flow up.
+- [Compose state](https://developer.android.com/develop/ui/compose/state) and
+  [save UI state](https://developer.android.com/develop/ui/compose/state-saving):
+  Compose Flow collection should be lifecycle-aware, and transient UI state
+  should be saved with the correct UI-state API.
+- [Coroutine best practices](https://developer.android.com/kotlin/coroutines/coroutines-best-practices):
+  inject dispatchers, keep suspend functions main-safe, expose immutable state,
+  and let ViewModels create coroutines for business work.
+- [DataStore](https://developer.android.com/topic/libraries/architecture/datastore):
+  keep DataStore behind repositories and expose data through ViewModels instead
+  of reading or writing DataStore directly in composables.
+- [WorkManager persistent work](https://developer.android.com/develop/background-work/background-tasks/persistent):
+  use WorkManager for work that must continue reliably after the app leaves the
+  visible state, app process exits, or the device restarts.
+- [Android modularization](https://developer.android.com/topic/modularization):
+  modules should be loosely coupled, self-contained, and introduced when they
+  enforce real ownership boundaries.
+- [Baseline Profiles](https://developer.android.com/topic/performance/baselineprofiles/overview)
+  and [Compose performance](https://developer.android.com/develop/ui/compose/performance):
+  performance-sensitive apps should benchmark real journeys and ship profile
+  rules for startup and hot paths.
+- [WebView unsafe file inclusion](https://developer.android.com/privacy-and-security/risks/webview-unsafe-file-inclusion):
+  avoid broad file URL access; prefer safe local resource loading such as
+  `WebViewAssetLoader` where it fits.
 
-## Android Architecture Baseline
-
-Use these official Android recommendations as constraints:
-
-- [Guide to app architecture](https://developer.android.com/topic/architecture): separate UI and data layers, use single sources of truth, prefer unidirectional data flow, and use state holders for UI complexity.
-- [Compose state hoisting](https://developer.android.com/develop/ui/compose/state-hoisting): keep state at the lowest common owner, expose immutable state and events, and use ViewModels or plain state holders when logic outgrows composables.
-- [Compose state](https://developer.android.com/develop/ui/compose/state): use `collectAsStateWithLifecycle()` for Flow collection in Android Compose UI.
-- [Data layer](https://developer.android.com/topic/architecture/data-layer): repositories and data sources should be main-safe and should move blocking work to the right dispatcher internally.
-- [Domain layer](https://developer.android.com/topic/architecture/domain-layer): use cases are optional; introduce them only for complex or reused business logic.
-- [DataStore](https://developer.android.com/topic/libraries/architecture/datastore): settings and small persisted state should be Flow-based and transactionally updated.
-- [Navigation 3](https://developer.android.com/guide/navigation/navigation-3): model navigation as an explicit back stack and retain entry state while keys stay on the stack.
-- [Android modularization](https://developer.android.com/topic/modularization): modularization should enforce clear ownership and encapsulation, but overly fine-grained modules add build and boilerplate overhead.
-- [Baseline Profiles](https://developer.android.com/topic/performance/baselineprofiles/overview): cover startup and performance-sensitive user journeys so ART can precompile common paths.
-- [Media3 ExoPlayer](https://developer.android.com/media/media3/exoplayer): prefer Media3's `Player`/`ExoPlayer` abstraction for future playback evolution once behavior is protected.
-
-## Direction 1: Make Data APIs Main-Safe
-
-Priority: high
-
-Move dispatcher responsibility into repositories and data sources instead of requiring every ViewModel/composable caller to wrap calls in `withContext(Dispatchers.IO)`.
-
-Scope:
-
-- Convert blocking repository/data-source APIs to `suspend` where appropriate.
-- Inject `CoroutineDispatcher` into file/native-heavy data sources.
-- Keep pure, cheap in-memory helpers synchronous.
-- Start with EPUB/book storage because it is used by Bookshelf, Reader, Sasayaki, and future sync.
-- Preserve `Books/<safeTitle>` layout and sidecar JSON compatibility.
-
-Candidate first slice:
-
-1. Add behavior tests for `BookRepository` import, listing, metadata, bookmark, sidecar load/save, and unsafe path rejection.
-2. Make `BookRepository`, `BookFileDataSource`, `BookImportDataSource`, and `BookSidecarDataSource` main-safe.
-3. Remove redundant caller-side dispatcher wrapping where the repository now owns the thread boundary.
-
-Exit criteria:
-
-- `BookRepository` public methods that touch disk/native work are safe to call from main.
-- Existing book storage tests still pass.
-- Reader open, bookshelf reload, import, delete, bookmark save, and Sasayaki sidecar access remain behaviorally unchanged.
-
-## Direction 2: Split Book Sidecar And Model Contracts
+## Target 1: Move From Manual DI Toward Hilt
 
 Priority: high
 
-Unblock future module boundaries by removing feature package dependencies from EPUB/book storage.
-
-Scope:
-
-- Move sidecar data contracts that are persisted with books into a stable storage/model package.
-- Keep UI and playback behavior in feature packages.
-- Keep JSON names and serialized field compatibility unchanged.
-- Do not extract Gradle modules in this slice.
+Official guidance recommends DI generally and Hilt for apps with multiple
+screens, ViewModels, WorkManager, or navigation-scoped ViewModels. Hoshi already
+has those characteristics, so Hilt is a valid long-term target. Do not introduce
+Hilt annotations piecemeal until the migration slice is explicitly scoped.
 
 Target shape:
 
-- `epub` or `storage` owns book metadata, bookmark, bookinfo, and generic sidecar persistence.
-- Sasayaki feature owns playback behavior, but persisted Sasayaki sidecar data no longer forces `epub` to import `features.sasayaki`.
-- Future `:core:model` or `:core:storage` extraction becomes a mechanical move, not a semantic redesign.
+- Add Hilt with KSP and required Gradle/toolchain changes after confirming the
+  current official setup instructions.
+- Annotate the `Application` with `@HiltAndroidApp`.
+- Convert repositories, settings stores, platform adapters, dispatchers, and
+  app-wide scopes to constructor-injected bindings.
+- Convert ViewModels to `@HiltViewModel` with constructor injection.
+- Integrate WorkManager with Hilt workers only when worker dependencies are
+  ready to move out of manual construction.
+- Keep feature behavior unchanged during the DI migration.
 
 Exit criteria:
 
-- `BookRepository` no longer imports UI/playback feature packages.
-- Existing Sasayaki sidecar files still load and save in the same format.
-- Tests cover migration-free compatibility with existing sidecar JSON.
+- `HoshiAppContainer` is removed or reduced to temporary compatibility glue.
+- Production and test graphs can swap repositories, dispatchers, and platform
+  adapters without Composable-level factories.
+- `./gradlew test`, `./gradlew assembleDebug`, and `./gradlew lint` pass after
+  the migration.
 
-## Direction 3: Refactor Reader State And WebView Bridge
+## Target 2: Make Flow Collection Lifecycle-Aware
 
 Priority: high
 
-Reader is now the main composable-level orchestration hotspot. Refactor it in narrow behavior-protected slices.
+The dependency for lifecycle-aware Compose collection is already present, but
+usage is not consistent.
 
 Target shape:
 
-- `ReaderSessionStateHolder`: chapter position, lookup popup stack, reader menu/sheet state, and local reader UI mechanics.
-- `ReaderWebBridge`: typed JavaScript command dispatch, result parsing, selection bridge, restore bridge, and page progress callbacks.
-- `ReaderLookupCoordinator`: popup creation, child popup handling, dictionary/audio settings snapshot, and selection highlight count.
-- `ReaderSasayakiIntegration`: lookup auto-pause, cue highlight dispatch, auto-scroll callbacks, and screen-awake state.
-- `ReaderWebView`: renders UI and wires dependencies; it should not own business orchestration.
+- Replace screen-level `collectAsState()` on ViewModel or repository flows with
+  `collectAsStateWithLifecycle()` where the collection is lifecycle-bound UI.
+- Keep helper wrappers such as `collectAsLoadedSettings()` lifecycle-aware.
+- Avoid collecting business data directly in Composables when a ViewModel should
+  own the screen state.
+- Preserve purely local UI element state in Compose or plain state holders, not
+  in ViewModels unless business logic needs it.
+
+Exit criteria:
+
+- Screen-level flows pause/resume with lifecycle correctly.
+- Settings controls still update immediately.
+- Reader settings, dictionary settings, bookshelf, lookup, and update prompt
+  behavior are manually checked or covered by focused tests.
+
+## Target 3: Inject Dispatchers And Long-Lived Scopes
+
+Priority: high
+
+Repositories should be main-safe, and coroutine dispatchers should be injected
+so tests can use deterministic dispatchers. Current code is partially main-safe
+but often hardcodes dispatchers or creates scopes internally.
+
+Target shape:
+
+- Introduce a small dispatcher/scope abstraction only when a slice needs it.
+- Move blocking disk, native, network, archive, and hashing work behind
+  main-safe suspend APIs.
+- Inject IO/default dispatchers into repositories and data sources.
+- Inject app-wide external scopes for work that must outlive a screen but does
+  not require WorkManager persistence.
+- Let ViewModels create coroutines for business actions through `viewModelScope`.
+
+Exit criteria:
+
+- Tests can run repository/ViewModel coroutine work with test dispatchers.
+- Callers no longer need to guess whether a repository method needs
+  `withContext(Dispatchers.IO)`.
+- No new ad hoc `CoroutineScope(...)` is introduced outside a deliberate owner.
+
+## Target 4: Reduce Composable Business Orchestration
+
+Priority: high
+
+Compose UI should render state and emit events. Complex screen behavior should
+live in ViewModels or plain UI state holders depending on whether the logic is
+business logic or UI logic.
+
+Target shape:
+
+- Move screen data loading and mutation paths out of Composables into
+  ViewModels or narrow coordinators.
+- Keep UI-only state close to Compose with `rememberSaveable` or plain state
+  holders.
+- Use UDF: state flows down, user events flow up, owners mutate their own data.
+- Keep Android SDK types out of ViewModels except where a documented platform
+  boundary requires an adapter.
+
+Exit criteria:
+
+- Bookshelf, dictionary, reader, update, and settings screens expose clear
+  event functions and immutable UI state.
+- Composables can be read as rendering/wiring code, not business workflows.
+
+## Target 5: Split Reader WebView Responsibilities
+
+Priority: high
+
+Reader remains the biggest orchestration hotspot and the highest-risk user
+journey. Refactor it only in behavior-protected slices.
+
+Target shape:
+
+- `ReaderWebBridge`: typed JavaScript commands, results, selection, restore,
+  pagination, resource loading, and progress callbacks.
+- `ReaderLookupCoordinator`: lookup popup creation, child popups, dictionary
+  settings snapshots, audio settings, and selection highlight state.
+- `ReaderSessionStateHolder`: chapter position, chrome/menu/sheet state,
+  popup stack, and UI-only reader state.
+- `ReaderSasayakiIntegration`: cue highlight commands, auto-pause, auto-scroll,
+  screen-awake state, and playback callbacks.
+- `ReaderWebView`: Compose rendering, WebView attachment, and dependency wiring.
 
 Guidelines:
 
-- Keep WebView-based reading and lookup.
-- Do not change pagination, chapter boundary, bookmark restoration, or lookup popup behavior unless the slice explicitly fixes a known bug.
-- Move one command family at a time: selection, pagination, restore, resource loading, then Sasayaki cue commands.
-- Use typed command/result tests before deleting old source-shape tests.
+- Preserve WebView reading and single-tap lookup behavior.
+- Cold start opens Bookshelf; manual reader validation must tap a book cover
+  before asserting reader behavior unless the slice explicitly tests route
+  restore.
+- Local WebView resources should use `WebViewAssetLoader` or the repository's
+  existing safe loading path. Do not broaden file URL access.
+- Move one command family at a time and keep JS/CSS behavior aligned with the
+  iOS reader.
 
 Exit criteria:
 
-- Manual reader validation covers cover image page, multi-image illustration page, long text paging, forward chapter boundary, backward chapter boundary, reverse cross-chapter landing, lookup popup open, and bookmark restoration.
-- WebView lifecycle remains stable across route changes.
-- `ReaderWebView.kt` becomes mostly composition and wiring.
+- Reader validation covers cover image page, multi-image page, long text
+  paging, forward/backward chapter boundaries, reverse cross-chapter landing,
+  lookup popup open, bookmark restoration, and Sasayaki cue behavior.
+- `ReaderWebView.kt` no longer owns business orchestration.
 
-## Direction 4: Make Compose Flow Collection Lifecycle-Aware
+## Target 6: Extract Reader JS/CSS From Kotlin String Scripts
 
 Priority: medium-high
 
-Replace direct `collectAsState()` and manual `LaunchedEffect` settings collection where UI lifecycle-aware collection is the right owner.
+The reader currently stores substantial JavaScript inside Kotlin string
+templates. That should not remain the default authoring model for durable
+reader behavior.
 
-Scope:
+Target shape:
 
-- Add `androidx.lifecycle:lifecycle-runtime-compose`.
-- Use `collectAsStateWithLifecycle()` in Android UI for ViewModel and settings Flows.
-- Keep long-lived app/root settings collection centralized where it controls theme or app shell state.
-- Avoid pushing UI element state into ViewModels when it is purely local.
+- Move long-lived reader JavaScript and CSS into independent web assets or a
+  dedicated reader-web resource boundary.
+- Keep Kotlin responsible for typed commands, escaped parameters, asset loading,
+  and WebView bridge invocation.
+- Preserve behavior parity with the iOS reader scripts while improving Android
+  maintainability.
+- Add focused tests for command generation, escaping, asset availability, and
+  WebView bridge behavior instead of asserting large source strings.
+- Do not expand `*Scripts.kt` with new long inline scripts while this debt
+  remains.
 
 Exit criteria:
 
-- Screen-level Flows are collected lifecycle-aware.
-- Recomposition behavior and immediate settings updates remain unchanged.
-- Tests or focused manual checks cover Settings detail controls and Reader appearance/behavior controls.
+- `ReaderPaginationScripts.kt` and `ReaderSelectionScripts.kt` no longer carry
+  large embedded JavaScript bodies.
+- Reader JS/CSS can be read, formatted, and reviewed as web code.
+- Existing reader validation still covers pagination, lookup, highlights,
+  restore, images, and Sasayaki cue behavior.
 
-## Direction 5: Replace Brittle Source-String Tests
+## Target 7: Keep DataStore Behind Repositories
 
 Priority: medium-high
 
-Reduce tests that inspect production source strings. Keep source-shape tests only when they protect security, build integration, or Android framework wiring that cannot be exercised behaviorally.
+DataStore is already the right primitive for Hoshi settings. The remaining goal
+is consistency.
 
-Scope:
+Target shape:
 
-- Convert source-string tests in the touched area before large movement.
-- Prefer behavior tests with fakes for repositories, media controllers, clocks, WebView bridges, and resource handlers.
-- Keep explicit source guards for WebView file access restrictions, SAF-only import paths, and native/build task wiring if no better test seam exists.
+- DataStore access stays in repository/data-layer classes.
+- Composables observe ViewModel or repository state, not raw DataStore objects.
+- Keep legacy SharedPreferences migrations where they already protect user
+  settings.
+- Use Room only if a future dataset needs relational queries, partial updates,
+  or referential integrity. Do not replace sidecar JSON or dictionary native
+  storage just because Room exists.
 
 Exit criteria:
 
-- Refactoring can rename methods and move files without breaking unrelated tests.
-- Remaining source-string tests state why behavior coverage is insufficient.
+- Settings storage remains Flow-based and transactionally updated.
+- UI code does not directly read or write DataStore.
 
-## Direction 6: Stabilize Sasayaki Playback API Before Media3
+## Target 8: Harden WorkManager Usage
 
 Priority: medium
 
-Sasayaki is partially decomposed, but the controller still wires many collaborators and exposes Compose-observed state through a facade. Stabilize the high-level API before replacing the engine.
+WorkManager is already used for update checks. Future background work should use
+it only when reliability after app exit/restart matters.
 
-Scope:
+Target shape:
 
-- Introduce a clearer command/state surface for playback.
-- Prefer `StateFlow<SasayakiPlaybackUiState>` or another explicit observable state boundary over scattered mutable state reads.
-- Preserve the current framework `MediaPlayer` engine first.
-- Plan Media3 `ExoPlayer` as a separate behavior-protected slice.
+- Use unique work names for periodic or user-triggered work that must not be
+  duplicated.
+- Use constraints, backoff, expedited work, and foreground work only when the
+  official background-work guidance fits the user-visible requirement.
+- Keep in-process coroutines for work that may stop when the app process stops.
+- When Hilt lands, migrate worker dependencies through Hilt-compatible worker
+  injection instead of manual lookups.
 
 Exit criteria:
 
-- Cue matching, seek, next/previous cue, playback persistence, temporary popup playback, and media-session actions are covered by behavior tests or manual validation.
-- Media3 migration can be implemented as an engine adapter change rather than a full controller rewrite.
+- Update checks remain unique and non-duplicating.
+- Sync, backup, download, or import work uses WorkManager only when the
+  persistence requirement is explicit.
 
-## Direction 7: Build Logic And Performance Hardening
+## Target 9: Split Rust And Native Build Logic
+
+Priority: medium-high
+
+`app/build.gradle.kts` currently owns normal Android config plus release
+signing, CMake/JNI dictionary bridge configuration, Rust host builds, UniFFI
+generation, `cargo-ndk`, generated source registration, generated JNI libs, and
+JNA test wiring. This is too much responsibility for the app build file.
+
+Hard constraints:
+
+- `app/src/main/rust/hoshiepub/uniffi.toml` must keep
+  `[bindings.kotlin] android = true`.
+- Android packaging uses the JNA AAR; JVM unit tests use the JNA jar.
+- `cargo-ndk` should build library targets only and must not cross-compile
+  UniFFI bindgen or other host binaries.
+
+Target shape:
+
+- Move Rust EPUB parser build logic into focused Gradle convention build logic,
+  a dedicated included build, or a small custom Gradle plugin.
+- Keep CMake/hoshidicts JNI bridge wiring separate from Rust/UniFFI parser
+  wiring; they are independent native stacks.
+- Keep release signing, version metadata, app resources, Compose setup, and
+  native/Rust generation in separate build-logic responsibilities.
+- Model generated UniFFI Kotlin sources and generated Rust JNI libs as explicit
+  Gradle outputs consumed by Android/Kotlin tasks.
+- Preserve debug and release ABI behavior: debug builds arm64-v8a and x86_64;
+  release builds arm64-v8a.
+- Add verification for Rust host build, UniFFI generation, Android Rust builds,
+  CMake/JNI outputs, and JNA test runtime wiring before extracting logic.
+
+Exit criteria:
+
+- `app/build.gradle.kts` no longer directly contains the full Rust/UniFFI task
+  graph.
+- Rust/UniFFI, hoshidicts CMake/JNI, release signing, and regular Android app
+  configuration can be changed independently.
+- `./gradlew test`, `./gradlew assembleDebug`, and release-facing native outputs
+  remain stable.
+- Generated source and native library registration remains deterministic.
+
+## Target 10: Modularize After Boundaries Stabilize
 
 Priority: medium
 
-Do not modularize native/Rust wiring blindly. First characterize and isolate build behavior.
-
-Scope:
-
-- Add task inputs/outputs or explicit verification tests for Rust host build, UniFFI Kotlin generation, debug/release `cargo-ndk`, CMake/JNI dictionary bridge, and JNA test wiring.
-- Extract build logic only after behavior is characterized.
-- Add Macrobenchmark/Baseline Profile coverage for cold start, EPUB import/open reader, reader page turn, dictionary search, and lookup popup open.
-
-Exit criteria:
-
-- `./gradlew test`, `./gradlew assembleDebug`, and release-facing native build tasks remain stable after each build-logic change.
-- Performance-sensitive flows have repeatable benchmark/profile entry points.
-
-## Direction 8: Modularize Only After Boundaries Stabilize
-
-Priority: medium-low
-
-Module extraction should follow stable APIs, not create them.
+Modularization should enforce ownership that already exists; it should not be
+used to invent boundaries while feature packages still depend on each other
+freely.
 
 Prerequisites:
 
-- Book sidecar/model contracts no longer depend on feature packages.
-- Repository APIs are main-safe.
-- Reader bridge/state responsibilities have clear package boundaries.
-- Build/Rust/UniFFI behavior is characterized.
+- DI graph and dispatcher injection are stable.
+- Book sidecar/model contracts no longer depend on feature UI packages.
+- Reader bridge/state responsibilities are split.
+- Native/Rust/UniFFI build behavior is characterized or extracted.
 
-Likely first modules after prerequisites:
+Likely first modules:
 
-- `:core:model` for pure serializable app models.
+- `:core:model` for pure serializable models.
 - `:core:storage` for sidecar JSON and safe file abstractions.
 - `:core:epub` for parser API and reader-facing EPUB models.
 - `:core:dictionary-api` for dictionary model/import/query interfaces.
-- `:core:settings` after settings call sites no longer depend on feature UI packages.
+- `:core:settings` after settings dependencies are no longer feature-UI-shaped.
 
 Avoid:
 
-- Extracting many feature modules while the app still has cross-feature model dependencies.
-- Moving native/Rust packaging into another module before task behavior is well understood.
+- Extracting many feature modules before dependencies point inward.
+- Moving native or Rust packaging into another module before task behavior is
+  protected.
 
-## Recommended Next Sequence
+## Target 11: Add Baseline Profiles And Macrobenchmarks
 
-1. Main-safe book repository/data sources.
-2. Book sidecar/model contract split.
-3. Reader state and WebView bridge extraction, one command family at a time.
-4. Lifecycle-aware Flow collection cleanup.
-5. Source-string test replacement in touched areas.
-6. Sasayaki playback state API stabilization.
-7. Build-logic characterization and baseline profiles.
-8. Gradual module extraction.
+Priority: medium
 
-Each slice should be small enough for one focused commit, should preserve existing user-visible behavior unless explicitly scoped otherwise, and should include targeted tests or manual validation before handoff.
+Hoshi has several performance-sensitive journeys: startup, bookshelf, opening a
+reader, page turning, lookup popup creation, dictionary search, import, and
+Sasayaki playback startup.
+
+Target shape:
+
+- Add a Macrobenchmark/Baseline Profile module when emulator validation is safe
+  and repeatable.
+- Cover cold start and the most common reader/lookup paths first.
+- Keep benchmark test data explicit and stable.
+- Do not run destructive connected tasks on a non-disposable device; follow
+  `docs/VALIDATION.md`.
+
+Exit criteria:
+
+- Release builds ship generated Baseline Profile rules for startup and hot
+  paths.
+- Macrobenchmarks can compare before/after reader and lookup changes.
+
+## Target 12: Replace Brittle Source-String Tests
+
+Priority: medium
+
+Source-string tests make refactors expensive and often fail for non-behavioral
+changes. Keep them only where behavior coverage is not practical.
+
+Target shape:
+
+- Prefer behavior, API, state-flow, repository, parser, and fake-backed tests.
+- For manifest, resources, Gradle, permissions, providers, and native build
+  declarations, parse structured configuration before asserting.
+- Keep explicit source guards only for security/build seams that cannot be
+  exercised more directly.
+
+Exit criteria:
+
+- Refactoring can move methods/classes without breaking unrelated tests.
+- Remaining source-shape tests document why behavior coverage is insufficient.
+
+## Recommended Sequence
+
+1. Finish lifecycle-aware Flow collection in touched UI.
+2. Introduce dispatcher/scope injection in the next repository or ViewModel
+   slice that already needs coroutine cleanup.
+3. Split reader WebView command families with behavior tests or manual
+   validation after each slice.
+4. Prepare Hilt migration with a small graph inventory and Java/toolchain check.
+5. Migrate to Hilt in one deliberate slice.
+6. Stabilize sidecar/model contracts.
+7. Extract long reader JavaScript/CSS out of Kotlin string script files.
+8. Characterize and split Rust/native build logic.
+9. Add baseline profile and macrobenchmark entry points.
+10. Modularize only after DI, model, reader, and build boundaries are stable.
+
+Every slice must preserve iOS-aligned user-visible behavior unless it explicitly
+fixes a known Android behavior bug. When a slice completes a target or changes
+the accepted baseline, update `AGENTS.md` before handoff so the new rule is
+enforced in future work.

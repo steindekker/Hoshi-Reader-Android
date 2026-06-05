@@ -1,151 +1,77 @@
-# Hoshi Reader Android Agent Instructions
+# Hoshi Reader Android Agent 指南
 
-本仓库是 Hoshi Reader 的 Android/Kotlin/Jetpack Compose 原生复刻项目。目标是按垂直切片复刻 iOS 用户可见行为。
+Hoshi Reader Android 是 Hoshi Reader 的 Android/Kotlin/Jetpack Compose 原生复刻项目。目标是按聚焦的垂直切片复刻 iOS 用户可见行为。
 
-## 核心规则
+## 工作原则
 
-- iOS 用户可见行为和 UI 是唯一真源；不要让 Android 默认行为、第三方示例或 POC 覆盖 iOS 用户可见行为。
-- 开始功能切片前，先查看 `reference/Hoshi-Reader-iOS` 对应实现并总结用户交互、状态流和边界行为。
-- 修复问题时不要做补丁式修复（补丁后发现没修好再继续叠新补丁）；应先把 iOS 版作为真源，直接参考 iOS 现有实现和状态流来修。只有在尽可能照齐 iOS 逻辑后，仍因 Android/iOS 系统层差异导致行为不一致时，才做最小偏差的 Android 侧适配，且不可进一步扩大实现偏差。
-- 不要把 Swift 源码复制到 `app/src/main` 或任何 Android package。
-- iOS 架构只作行为参考；Android 使用 repository、ViewModel、不可变 UI state。
-- 涉及 Android 系统能力、平台限制、权限、Intent、DocumentsUI、WebView、Media3、WorkManager、Google/Jetpack API、打包安装或后台任务时，优先查询 Android/Google/Jetpack 官方文档确认当前推荐实现和限制；iOS 只作为用户交互和行为逻辑参考，具体实现方式以 Android 官方文档和本仓库 Android 架构为准。
-- 推进顺序：model/storage -> bookshelf import -> reader -> dictionary popup -> Anki -> sync -> settings。
-- 主路径：bookshelf -> import EPUB -> open reader -> select text -> lookup。
-- 所有用户可见 UI 字符串必须使用 Android 本地化资源，禁止在 Compose/ViewModel/Repository 中新增硬编码显示文案；Compose 使用 `stringResource()` / `pluralStringResource()`，非 UI 层发出的可见消息使用 `UiText` 或等价资源引用，避免持有 `Context`。
-- 新增或修改任何用户可见文案时，必须同时更新默认英文 `app/src/main/res/values/strings.xml` 和简体中文 `app/src/main/res/values-zh-rCN/strings.xml`；保留格式占位符、plural quantity、CDATA/转义和 `translatable="false"` 语义一致。
-- 完成需求时先更新 `docs/TODO.md`，再把代码和 TODO 放进同一个 commit；用户明确要求不 commit 时不要提交。
-- `docs/TODO.md` 只记录当前状态、下一步、阻塞项和长期有效的验证入口；不要把它当流水账。不要粘贴长 emulator/adb 验证记录、截图观察、发布历史或每次提交的详细复现过程。
-- 用户可见变更写入 `docs/CHANGELOG.md`；架构重构方向保留在 `docs/ARCHITECTURE_REFACTORING.md`，具体执行流程和切片状态不要写入 tracked 文档，优先使用仓库本地 `.codex/skills/hoshi-refactoring-workflow`；详细调查和验证证据优先放在 issue、PR、commit message 或专门文档中。
-- 完成新功能或修复问题时，同步更新 `docs/CHANGELOG.md` 的 `[Unreleased]` section；CHANGELOG 面向普通用户，只记录用户可感知的 App 功能、体验和问题修复，不记录 CI、agent workflow、私有 skill、构建脚本、依赖管理或仅开发者可见的内部改动。
-- `[Unreleased]` 里的未发布功能不要再追加修补说明：如果一个功能还没发布，后续对它的 UI、行为、稳定性或内部实现调整应合并进该功能原本的 Added/Changed 条目，或直接不写；只有已发布版本中用户可遇到的问题被修复时，才写入 Fixed。
-- 如果 commit 修复或实现了某个 GitHub Issue，`docs/CHANGELOG.md` 对应用户可见条目末尾加上 `#123` 形式的 issue 引用，便于 GitHub Release 页面自动生成可跳转链接。
-- 修复问题时，如果用户要求建立 GitHub Issue，先调查问题现象和复现方式，再创建关联 issue；之后再进行实际修复，并在修复完成后的 commit message 中使用 closing keyword（如 `Closes #123`）关联该 issue，便于后续追踪 bug 记录。
-- Commit message 使用 Conventional Commits。
-- 修复 GitHub Issue 时，在 commit message 中使用 closing keyword（如 `Closes #123`）。
-- 小型 GitHub Issue 修复（如文案、链接、配置等低风险单点修改）直接在 `main` 分支完成并提交；较大功能、跨模块重构或高风险改动再开 `codex/` 前缀分支。
-- 禁止新增读取 `src/main` 源文件后用 `contains`、`substringAfter`、`indexOf` 等字符串方式断言实现细节的源码文本测试；这类断言浪费 token 和上下文，不能替代行为测试。需要回归覆盖时，优先写行为/API/状态流测试；只有 Manifest、资源 XML、Gradle 依赖、权限/Provider 声明等结构化配置，才可用解析结构后的断言。
-- 禁止对已连接设备或模拟器运行会清除、重装或卸载 app 数据的测试命令，例如 `connectedDebugAndroidTest`、`connectedAndroidTest`、`installDebugAndroidTest` 或其他 Android instrumentation Gradle 任务；除非用户明确指定一次性设备并允许清数据。需要此类覆盖时，先使用专用空模拟器或让用户确认。
-- 禁止使用手绘、自造或临时拼接的图标；新增或替换图标时使用 Material 3 / Material Icons 已有图标（Compose `Icons.*` 或官方 Material vector asset），只有明确的品牌资产需求才例外。
+- iOS 用户可见行为和 UI 是唯一真源。开始功能切片或行为修复前，先查看 `reference/Hoshi-Reader-iOS` 中的对应实现，并总结交互、状态流和边界行为。
+- 修复问题时不要叠补丁。先对齐 iOS 行为和状态流；只有平台差异确实需要时，才加入最小 Android 侧适配。
+- 涉及 Android 平台能力、权限、SAF、WebView、Media3、WorkManager、Google/Jetpack API、打包、安装或后台行为时，优先查 Android/Google/Jetpack 官方文档确认当前推荐做法。
 
-## 参考源码
+## 架构基线
 
-- iOS：`reference/Hoshi-Reader-iOS`，上游分支 `develop`
-- 常用查询：
+### Android 官方推荐
 
-```bash
-rg "ReaderViewModel" reference/Hoshi-Reader-iOS
-rg "LookupEngine" reference/Hoshi-Reader-iOS
-```
+- UI：Jetpack Compose 和 Material 3。
+- Navigation：使用当前 Navigation3 typed route/back-stack 模式，接入 `AppShell`、`NavDisplay` 和 route key。
+- State：ViewModel 暴露不可变 UI state，并通过 `StateFlow` 推送；屏幕 UI 按 state down / events up 组织。
+- Data：repository 负责文件、数据库、辞典、EPUB、网络，以及阻塞工作的 dispatcher 边界；异步使用 Kotlin coroutines，避免阻塞主线程。
+- DI：新增依赖优先通过构造函数注入，不要在 Composable 中扩散对象图创建逻辑；Hilt 迁移目标见 `docs/ARCHITECTURE_REFACTORING.md`。
+- Platform：Android API 按平台语义和官方文档选择，不机械映射 iOS API。
+- Settings：小型设置和偏好使用 DataStore-backed repository，不在 Composable 中直接读写 DataStore。
+- Background work：需要跨进程、重启或离开可见状态后仍可靠执行的任务使用 WorkManager。
+- EPUB import：通过 Android Storage Access Framework 导入到 app-specific storage。
 
-## Android 技术栈
+### Hoshi 项目约束
 
-- UI：Jetpack Compose、Material 3。
-- 语言/构建：Kotlin、Kotlin DSL。
-- 导航：使用当前 Navigation3/typed route back stack 架构；新增路由按现有 `AppShell` / `NavDisplay` / route key 模式接入。
-- 状态：ViewModel + immutable UI state + `StateFlow`。
-- 数据：repository 负责文件、数据库、辞典、EPUB、网络。
-- 异步：Kotlin coroutines，禁止阻塞主线程。
 - JSON：Kotlin Serialization 或 Moshi。
-- 持久化：保留 iOS sidecar JSON。
-- 文件导入：Android Storage Access Framework + app-specific storage。
-- Android API 按平台语义选择，不机械映射 iOS API。
+- Storage：已有 iOS 兼容 sidecar JSON 必须保持兼容。
+- Reader：保留 WebView 阅读和查词；本地 WebView 资源优先使用 `WebViewAssetLoader` 或仓库已有安全加载路径；不要启用宽泛 file URL 访问，例如 `allowUniversalAccessFromFileURLs`。
+- Reader JS/CSS：不要新增大段 Kotlin 字符串脚本。长期 JS/CSS 应放入独立 web asset 或专门资源边界；Kotlin 侧只保留小型 typed command、参数转义和桥接调用。
 
-## 辞典引擎
+## 真源文档
 
-- 使用 `third_party/hoshidicts-kotlin-bridge` 做辞典导入和查询。
-- JNI 绑定：`app/src/main/java/de/manhhao/hoshi/HoshiDicts.kt`
-- Native 参考：`third_party/hoshidicts-kotlin-bridge/app/src/main/cpp`
-- bridge 是辞典数据类和 native 入口的事实来源。
-- 除非 bridge 缺少必要行为且已记录差距，否则不要重新实现 Yomitan 导入、变形还原、查词、媒体读取或样式提取。
+- `docs/VALIDATION.md`：必跑构建/测试命令、模拟器数据安全规则、测试数据和长期有效的手工验证矩阵。
+- `docs/CHANGELOG.md`：只记录用户可见 App 变化。用户可见变更需要更新 `[Unreleased]`。
+- `docs/ARCHITECTURE.md`：当前 Android 架构事实。
+- `docs/ARCHITECTURE_REFACTORING.md`：未来架构债务和重构方向。
+- `docs/IOS_UPSTREAM_SYNC_QUEUE.md`：当前 iOS upstream 对齐队列。
 
-```bash
-rg "external fun" third_party/hoshidicts-kotlin-bridge
-rg "importDictionary" third_party/hoshidicts-kotlin-bridge
-git submodule status --recursive
-git submodule update --init --recursive
-```
+只有任务改变了对应文档的真源内容时，才更新该文档。
 
-## EPUB 与阅读器
+## 经验沉淀
 
-- Parser 能力收敛到 iOS 已用模型：manifest、spine、toc、章节内容、资源读取、封面路径等；不要新增搜索、全文索引或额外导航 API。
-- UniFFI：`uniffi.toml` 的 `[bindings.kotlin]` 需要 `android = true`；Android 打包侧用 JNA AAR，JVM 单测侧用 jar。
-- `cargo-ndk` 只构建库目标，避免交叉编译 UniFFI bindgen 等 host binary。
-- EPUB 导入必须走 SAF，把 zip 解压到 app-specific storage 后交给 Rust parser；不要依赖外部存储 file URI。
-- 阅读器必须保留 WebView；查词依赖 WebView 和 JS 侧选择、坐标、DOM 逻辑。
-- WebView 用 Compose `AndroidView` 嵌入；本地章节内容优先 `WebViewAssetLoader` 或 `loadDataWithBaseURL()`。
-- 不要启用宽泛 file URL 访问，如 `allowUniversalAccessFromFileURLs`。
-- 竖排分页注意 Android WebView/WKWebView 差异；图片页需稳定 CSS 尺寸约束，必要时取整 CSS 页面变量，避免 fractional column overflow 产生空白页。
+- 如果 agent 犯错后定位到已验证的正确做法，并且该问题可能在未来新会话中复发，应把最小可执行规则沉淀到对应真源文档。
+- 需要所有会话常驻的仓库级规则才写入 `AGENTS.md`；验证步骤写入 `docs/VALIDATION.md`；当前架构事实写入 `docs/ARCHITECTURE.md`；未来重构方向写入 `docs/ARCHITECTURE_REFACTORING.md`。
+- 沉淀内容必须具体、可执行、低歧义；不要写一次性调查过程、长日志、任务状态、临时 workaround 或只对当前问题成立的细节。
+- 沉淀前先确认现有文档是否已有等价规则；若已有，更新原规则而不是新增重复条目。
 
-## 阅读器调试
+## 用户可见文案
 
-- 修复前先看 `reference/Hoshi-Reader-iOS/Features/Reader/ReaderWebView/ReaderWebView.swift` 和对应 JS/CSS。
-- 优先消除 Android 与 iOS 差异，不要先堆单点兼容逻辑。
-- “滑动直接换章节”：检查 `scrollTop`、`scrollHeight`、`clientHeight`；若还能页内滚动却切章节，说明 native 手势和 JS 边界判断不一致。
-- “章节末尾空白页”：检查 `scrollHeight` 是否比整页高度多出极小尾差；重点看图片、封面、spacer、column gap。
-- 图片异常要检查竖排列宽下的 `max-width`、`max-height`、`object-fit`、physical size。
-- 调试分页用 Chrome DevTools Protocol 或 WebView inspection 读取 DOM；记录章节 id、`scrollTop`、`scrollHeight`、`clientHeight`。
+- 所有用户可见 UI 字符串必须使用 Android 本地化资源。
+- Compose 使用 `stringResource()` / `pluralStringResource()`。
+- 非 UI 层发出的可见消息应使用 `UiText` 或等价资源引用，不应持有 `Context`。
+- 新增或修改可见文案时，同时更新 `app/src/main/res/values/strings.xml` 和 `app/src/main/res/values-zh-rCN/strings.xml`。保持占位符、plural quantity、CDATA/转义和 `translatable="false"` 语义一致。
+- 新增或替换图标时使用 Material Icons、Material vector asset 或明确的品牌资产；不要手绘、自造或临时拼接图标。
 
-阅读器手工验证至少覆盖：封面图片页、多图图版页、长文本页内翻页、章节末尾后翻、章节开头前翻、反向跨章节落点。
+## 领域边界
 
-## 测试数据与模拟器
+- 辞典导入、查询、媒体和样式行为来自 `third_party/hoshidicts-kotlin-bridge`。除非先记录 bridge 缺口，否则不要重新实现 Yomitan import、deinflection、lookup、media 或 style extraction。
+- Frequency 和 pitch 辞典是类型特定辞典。不要把 metadata dictionary 当 term fallback dictionary。
+- Parser 能力应收敛到 iOS 已使用模型：manifest、spine、TOC、章节内容、资源读取和封面路径。不要新增无关搜索、全文索引或额外导航 API。
+- Reader 修复先从 iOS `ReaderWebView` 和对应 JS/CSS 行为出发；Android WebView 差异必须保持窄且在变更中说明。
+- Reader 脚本改动应优先收敛现有 Kotlin string JS 债务，不要继续扩大 `*Scripts.kt` 里的内联脚本。
+- Anki 工作必须留在 Anki backend 边界后面。实现用户可见变化前，先调查 AnkiDroid、intent/API 或 AnkiConnect 行为。
+- Google Drive 工作使用 Android/Google 官方 OAuth、Drive API 和本仓库 sync 边界；不要复用 iOS token/keychain 思路。
+- Audio/Sasayaki 使用 Media3/ExoPlayer 和现有 controller/repository 边界，保持 iOS 侧可见播放、cue、导出行为一致。
 
-- EPUB：`testdata/test.epub`、`testdata/test2.epub`
-- 辞典：`testdata/JMdict_english.zip`、`testdata/MK3.zip`、`testdata/freq.zip`、`testdata/pitch.zip`
-- 字体：`testdata/KleeOne-SemiBold.ttf`
-- Sasayaki：`testdata/test.srt`、`testdata/test.m4b`
-- EPUB reader 手工验证样本：`testdata/test.epub`
-- 导入必须通过 DocumentsUI 选择测试文件，或使用等价的已授权 `content://` URI；不要用 `file:///sdcard/...` 或 shell 拼出的未授权 `content://...`。
-- 命令行辅助时，可先把样本推送到模拟器 Downloads，再通过 DocumentsUI 选择。
-- 默认保留模拟器 app 数据；除非目标要求首启、空库、重复导入、迁移或损坏数据恢复，否则不要清数据。
-- Frequency/Pitch 辞典按 iOS `DictionaryView` 类型逻辑分别导入；不要把 meta dictionaries 当 Term 兜底。
-- 完成功能切片后需 Android 模拟器验证再 commit；无法验证或暂时阻塞时，在 `docs/TODO.md` 标 `blocked`。
+## 测试与提交
 
-## 查词测试
-
-- 不要简单断言“adb 不能输入日文”；先检查输入法和 subtype：
-
-```bash
-$ANDROID_HOME/platform-tools/adb -s emulator-5554 shell ime list -s
-$ANDROID_HOME/platform-tools/adb -s emulator-5554 shell dumpsys input_method | rg -n "mCurrentSubtype|Subtype|RotationList" -C 2
-```
-
-- Gboard 日文 QWERTY 可用罗马字输入：
-
-```bash
-$ANDROID_HOME/platform-tools/adb -s emulator-5554 shell input tap <search_x> <search_y>
-$ANDROID_HOME/platform-tools/adb -s emulator-5554 shell input text taberu
-$ANDROID_HOME/platform-tools/adb -s emulator-5554 shell input keyevent 66
-```
-
-- 日语优先测 `食べる` / `たべる`。
-- 自动输入受影响时，允许用户手动输入；之后基于当前模拟器状态继续验证，不要清数据或重导入。
-- 查词 WebView 用 DevTools/CDP 检查 DOM、按钮状态、JS 变量和 console log。
-
-## 集成
-
-- Anki：先调查 AnkiDroid API、intent 或 Android 可用 AnkiConnect 路径。
-- Google Drive：使用 Android Google Sign-In/OAuth/Drive API，不复用 iOS token/keychain 思路。
-- Audio/Sasayaki：使用 AndroidX Media3/ExoPlayer 和现有 Sasayaki controller/repository 边界推进，保持 iOS 侧可见播放、cue、导出行为一致。
-
-## 验证
-
-声明实现完成前运行：
-
-```bash
-./gradlew test
-./gradlew assembleDebug
-```
-
-需要跑单个 JVM 单测或测试类时，不要使用 `./gradlew test --tests ...`；本仓库的 `:app:test` 是 Android Gradle 聚合任务，不支持 `--tests` 过滤。应使用：
-
-```bash
-./gradlew :app:testDebugUnitTest --tests fully.qualified.TestClassName
-./gradlew :app:testDebugUnitTest --tests fully.qualified.TestClassName.testMethodName
-```
-
-修改资源、manifest、UI 或打包时还要运行：
-
-```bash
-./gradlew lint
-```
+- 声明实现完成前，按 `docs/VALIDATION.md` 验证。
+- 除非用户明确允许一次性设备，否则不要运行会清除、重装或卸载 app 数据的 connected Android instrumentation task。
+- 优先写行为、API、state-flow 测试，不写生产源码字符串实现细节测试。只有 manifest、resources、Gradle、权限或 provider 声明等结构化配置，才允许在解析结构后断言。
+- Commit message 使用 Conventional Commits。
+- Changelog 只记录普通用户可感知的 App 变化；不要记录 CI、agent workflow、构建脚本、依赖管理或内部重构。
+- `[Unreleased]` 中未发布功能的后续调整应合并到原 Added/Changed 条目，只有已发布版本中用户可遇到的问题才写 Fixed。
+- 如果实现或修复 GitHub issue，用户可见时在 changelog 条目中引用 issue，并在 commit message 中使用 closing keyword。
+- 小型低风险 issue 修复可直接在 `main` 完成；较大功能、跨模块重构或高风险变更使用 `codex/` 分支。

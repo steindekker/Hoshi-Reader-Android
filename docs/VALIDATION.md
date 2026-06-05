@@ -1,0 +1,198 @@
+# Validation Guide
+
+This file contains durable validation policy for Hoshi Reader Android. Update it
+only when validation requirements, test data, or stable manual QA flows change.
+
+## Required Commands
+
+Before claiming implementation complete, run:
+
+```bash
+./gradlew test
+./gradlew assembleDebug
+```
+
+Run lint when changing resources, manifest, UI, packaging, or release-facing
+build behavior:
+
+```bash
+./gradlew lint
+```
+
+For a single JVM unit test, do not use `./gradlew test --tests ...`; the
+`:app:test` aggregate task does not support filtering. Use:
+
+```bash
+./gradlew :app:testDebugUnitTest --tests fully.qualified.TestClassName
+./gradlew :app:testDebugUnitTest --tests fully.qualified.TestClassName.testMethodName
+```
+
+For localization changes, run:
+
+```bash
+./gradlew :app:testDebugUnitTest --tests moe.antimony.hoshi.LocalizationResourceTest
+```
+
+## Device And Emulator Safety
+
+- Preserve app data by default.
+- Do not run `connectedDebugAndroidTest`, `connectedAndroidTest`,
+  `installDebugAndroidTest`, or any connected instrumentation task that clears,
+  reinstalls, or uninstalls app data unless the user explicitly permits a
+  disposable device.
+- EPUB import must use DocumentsUI or an equivalent authorized `content://` URI.
+  Do not use `file:///sdcard/...` or shell-created unauthorized content URIs.
+- Command-line setup may push samples to emulator Downloads before selecting
+  them through DocumentsUI.
+- Use a clean disposable emulator only when the target explicitly requires first
+  launch, empty-library, duplicate-import, migration, or corrupted-data coverage.
+
+## Test Data
+
+- EPUB: `testdata/test.epub`, `testdata/test2.epub`.
+- Stored ZIP data descriptor regression: `testdata/test5.epub`.
+- Dictionaries: `testdata/JMdict_english.zip`, `testdata/MK3.zip`,
+  `testdata/freq.zip`, `testdata/pitch.zip`.
+- Font: `testdata/KleeOne-SemiBold.ttf`.
+- Sasayaki: `testdata/test.srt`, `testdata/test.m4b`.
+
+## Reader And Lookup
+
+Reader work should compare against
+`reference/Hoshi-Reader-iOS/Features/Reader/ReaderWebView/ReaderWebView.swift`
+and the matching JS/CSS before adding Android-specific behavior.
+
+When manually validating reader and lookup flows, do not assume app launch opens
+the reader. Cold start lands on Bookshelf; tap a book cover to enter Reader
+unless the test explicitly restores an existing Reader route. Do not long-press
+reader text for lookup. Hoshi lookup opens from a single tap on reader text; long
+press is for native selection/highlight-style flows when those are under test.
+
+Manual reader validation should cover:
+
+- cover image pages and multi-image illustration pages.
+- paginated and continuous modes in vertical and horizontal writing.
+- long text page turns, chapter-list jumps into mid-book chapters, and bookmark
+  restore.
+- forward and backward chapter boundaries, including reverse landing at the
+  previous chapter end.
+- page progress monotonicity, per-page progress updates, and restore landing
+  inside large text nodes.
+- lookup popup open/dismiss, recursive lookup, parent-scroll child dismissal,
+  duplicate state, redirect history, audio/autoplay errors, Anki actions,
+  Sasayaki controls, dictionary media images, outside tap/stylus dismissal, and
+  absence of invisible touch blockers after dismissal.
+- E-ink selection marks, horizontal and vertical lookup underlines, reduced
+  motion popup scrolling, and slow-device first-visible-content behavior.
+- reader chrome behavior: focus mode, transient system bars, Android Back
+  revealing chrome before closing, bottom progress band, title/back-button
+  settings, compact bottom buttons, and progress indicators hidden from the text
+  area when configured.
+
+For reader pagination bugs, inspect WebView metrics such as `scrollTop`,
+`scrollHeight`, and `clientHeight`. If a page can still scroll but native
+navigation changes chapter, compare native gesture boundaries with JS boundary
+checks. For blank trailing pages, check small fractional overflow from images,
+spacers, column gap, or CSS sizing.
+
+## Bookshelf, Import, And Backup
+
+Validate relevant bookshelf/import changes with:
+
+- top-level Books, Dictionary, and Settings tab switching, confirming Navigation3
+  back-stack behavior and selected tab state remain stable.
+- Settings detail open/return behavior, confirming returning from a detail route
+  lands back on Settings without changing top-level tab state.
+- multi-EPUB DocumentsUI import and recursive EPUB folder import.
+- external EPUB open/import requests, confirming the request is consumed once
+  and routes to Reader after import succeeds.
+- shelf-name entry, including user shelves named Reading alongside the virtual
+  Reading Shelf.
+- E-ink multi-select markers, confirming unselected books show empty circles and
+  selected books show check marks.
+- dark and E-ink editable text fields, confirming visible cursors and horizontal
+  scrolling for long values.
+- Android-created `Books` and `Dictionaries` `.hoshi` archives restored by iOS
+  when backup compatibility changes.
+- bookshelf-to-reader open latency and loading frames when reader route or EPUB
+  parsing behavior changes.
+- Reader open/close behavior from bookshelf, confirming close returns to the
+  previous bookshelf state and Android Back exits through the same close path as
+  the Reader chrome back action.
+- bookmark restoration and bookshelf progress refresh after returning from
+  Reader.
+
+## Dictionary, Audio, And Anki
+
+Validate relevant dictionary/audio changes with:
+
+- recommended dictionary downloads for JMdict, JMnedict, Jiten, and Jitendex.
+- manual multi-dictionary import with one invalid archive, confirming later
+  archives still import and failures are reported.
+- Low Memory Usage Mode with a large Yomitan archive.
+- dictionary row long-press deletion, keeping the left reorder handle dedicated
+  to dragging.
+- local audio database source ordering with imported MP3 and Opus `android.db`
+  files, lookup playback, and Anki audio export.
+- deinflection explanations for conjugated lookups such as `食べた`.
+- popup theme contrast for deinflection explanations and JMdict forms tables.
+- Dictionary tab and Process Text popup cold paths after reader popup changes.
+- Android AnkiConnect and AnkiDroid flows when Anki behavior changes, including
+  duplicate checks, media references, add-note, and sync behavior.
+
+When adb text input for Japanese is unreliable, inspect input methods before
+assuming Japanese cannot be entered:
+
+```bash
+$ANDROID_HOME/platform-tools/adb -s emulator-5554 shell ime list -s
+$ANDROID_HOME/platform-tools/adb -s emulator-5554 shell dumpsys input_method | rg -n "mCurrentSubtype|Subtype|RotationList" -C 2
+```
+
+With Japanese Gboard QWERTY, romaji input can test `食べる` / `たべる`:
+
+```bash
+$ANDROID_HOME/platform-tools/adb -s emulator-5554 shell input tap <search_x> <search_y>
+$ANDROID_HOME/platform-tools/adb -s emulator-5554 shell input text taberu
+$ANDROID_HOME/platform-tools/adb -s emulator-5554 shell input keyevent 66
+```
+
+If automation is blocked, allow manual input and continue from the current
+emulator state without clearing data or reimporting.
+
+## Settings, Themes, And Localization
+
+Validate relevant settings/theme changes with:
+
+- settings controls update immediately and route changes avoid fade transitions
+  on E-ink displays.
+- dark-theme cold start does not show a light `No Books` frame before bookshelf
+  loads.
+- build variant labels keep release as `Hoshi Reader` and debug as
+  `Hoshi Debug` on English and Simplified Chinese devices.
+- reader/dictionary theme combinations in Light, Sepia Light, Dark, Sepia Dark,
+  Custom, System, and E-ink modes, including status/navigation icon contrast,
+  lookup taps, popup display, reader color updates without unnecessary WebView
+  reload, and cursor visibility.
+- App Language on Android 13+: the Advanced settings Language card appears,
+  Follow system clears the app locale, and Android 12 or lower follows the
+  system language without showing the card.
+- `docs/TRANSLATING.md` remains aligned with supported locale resource
+  directories.
+
+## Sync, Updates, And Sasayaki
+
+Validate relevant sync/update/Sasayaki changes with:
+
+- Google Drive Device Code connect/sign-out, transient network behavior,
+  manual import/export result dialogs, reader-open import-only behavior,
+  auto-export timing, close/background flush, statistics merge/replace, and
+  Sasayaki last-position sync.
+- GitHub update prompts, skip-version, manual checks, completed-download
+  prompts, user-triggered install, same-version APK cleanup, and split APK
+  updates on arm64-v8a and armeabi-v7a targets.
+- Sasayaki defaults, reader toggle visibility, auto-scroll, auto-pause on
+  lookup, subtitle cue matching, skip controls across reader/sheet/system media
+  controls, volume-key seek, safe-area playback controls, and e-ink cue/lookup
+  overlays when those areas change.
+- Sasayaki media-session notification return behavior, confirming it restores
+  the existing app task instead of creating a duplicate task.
