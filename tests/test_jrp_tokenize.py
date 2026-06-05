@@ -150,3 +150,18 @@ def test_conditional_and_masu_negative_conj():
     assert "{[読|よ]めば;Y1}" in g("読めばわかる")                        # 読む atamadaka stays 1
     # それ/これ are unpitched demonstratives now
     assert "{それ" not in emit_sentence(units("それを見た", acc))
+
+@pytest.mark.skipif(not _sudachi_available(), reason="sudachipy not installed")
+def test_modals_not_absorbed_and_mashita():
+    from ankialign.jrp_fill.accent import AccentIndex
+    from ankialign.jrp_fill.tokenize import units
+    from ankialign.jrp_fill.emit import emit_sentence
+    acc = AccentIndex.load(IDX)
+    g = lambda s: emit_sentence(units(s, acc))
+    # modal らしい/でしょう/だろう stay out of the verb unit (verb computes, modal plain)
+    assert g("できないらしいね。") == "{できない;Y2}らしいね。"
+    assert "{[難|むずか]しい;Y0,4}でしょう" in g("難しいでしょう。")
+    assert "{[行|い]く;Y0}だろう" in g("行くだろう。")
+    # ました polite past -> downstep on ま (chain-safe)
+    assert "{[食|た]べました;Y3}" in g("食べました。")
+    assert "{[教|おし]えてくれました;Y7}" in g("教えてくれました。")

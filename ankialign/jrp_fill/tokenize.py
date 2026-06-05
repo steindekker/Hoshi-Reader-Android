@@ -101,12 +101,15 @@ def _is_aux_tail(m) -> bool:
     form (生きてきた, 祀っている) becomes one unit."""
     pos = m.part_of_speech()
     if pos[0] == "助動詞":
-        return True
+        return (m.dictionary_form() or "") not in _NO_ABSORB
     if pos[0] == "助詞" and pos[1] == "接続助詞" and m.surface() in ("て", "で", "ば"):
         return True
     return pos[0] in _YOUGEN and pos[1] == "非自立可能"
 
 _DERIV = {"れる", "られる", "せる", "させる"}  # passive/potential/causative
+# modal auxiliaries that carry their OWN accent — don't fuse them into the verb
+# (できないらしい, 難しいでしょう); the verb computes on its own, the modal stays plain
+_NO_ABSORB = {"らしい", "です", "だ"}
 
 def _conj_downstep(head, tail, heiban: bool, dict_acc: int,
                    lemread: str, conj_reading: str) -> int | None:
@@ -123,6 +126,8 @@ def _conj_downstep(head, tail, heiban: bool, dict_acc: int,
     # before, so they're safe even after て+補助動詞 (教えていただけませ\ん, ありませ\ん)
     if last == "ます" or (last == "ぬ" and "ます" in lemmas):
         return m - 1
+    if last == "た" and prev == "ます":      # ました polite past -> downstep on ま
+        return max(1, m - 2)
     # negative conditional 〜なければ: downstep on the な (before ければ)
     if last == "ば" and prev == "ない":
         return max(1, m - 3)
