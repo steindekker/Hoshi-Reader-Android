@@ -42,6 +42,8 @@ def main(argv: list[str] | None = None) -> int:
                          "existing: cards that ALREADY have pitch (old=accepted gold, "
                          "new=our regeneration); conj: computed conjugated pitch (new) vs "
                          "dict-form graph (old), only cards where they differ")
+    ap.add_argument("--theme", choices=("light", "dark"), default="light",
+                    help="render with the card's light or dark pitch palette")
     ap.add_argument("--out", default=os.path.join(ROOT, "research/jrp-pipeline/work/preview.html"))
     args = ap.parse_args(argv)
 
@@ -124,28 +126,36 @@ def main(argv: list[str] | None = None) -> int:
         mode_css = (".jrp-unit { margin:0 .12em 0 .12em !important; }\n"
                     ".jrp-indicator-container { display:none !important; }")
 
+    # pull the card's own palette/theme (kinomoto.css overrides the JRP managed
+    # :root) so the preview shows the real pitch colors for the chosen theme
+    with open(os.path.join(ROOT, "ankialign", "kinomoto.css"), encoding="utf-8") as fh:
+        kinomoto_css = fh.read()
+    body_class = "card nightMode" if args.theme == "dark" else "card"
+    divider = "rgba(255,255,255,.12)" if args.theme == "dark" else "#e5e2dc"
+
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     doc = f"""<!doctype html>
 <html lang="ja"><head><meta charset="utf-8">
 <title>JRP preview — {heading} ({len(pairs)} of {total})</title>
 <style>
 {jrp_css}
+{kinomoto_css}
 /* preview overrides */
-body {{ background:#faf9f7; color:#222; font-family:system-ui,sans-serif;
-       max-width:54rem; margin:2rem auto; padding:0 1.5rem; line-height:1.5; }}
-h1 {{ font-size:1rem; font-weight:600; color:#666; margin-bottom:1.5rem; }}
-.row {{ border-bottom:1px solid #e5e2dc; padding:1.1rem 0; }}
+body {{ background:var(--bg); color:var(--fg); font-family:system-ui,sans-serif;
+       max-width:54rem; margin:0 auto; padding:2rem 1.5rem; line-height:1.5; }}
+h1 {{ font-size:1rem; font-weight:600; opacity:.6; margin-bottom:1.5rem; }}
+.row {{ border-bottom:1px solid {divider}; padding:1.1rem 0; }}
 .ja  {{ font-size:1.7rem; line-height:1.9; }}
 /* OLD line: identical rendering, same left edge as ours so characters line up
    vertically; marked only by the label above (no horizontal offset) */
-.old {{ margin-top:.5rem; padding-top:.4rem; border-top:1px dashed #e0ddd5; }}
+.old {{ margin-top:.5rem; padding-top:.4rem; border-top:1px dashed {divider}; }}
 .old::before {{ content:"{old_label}"; display:block; font-size:.6rem; letter-spacing:.08em;
-                text-transform:uppercase; color:#bbb; font-family:system-ui,sans-serif; }}
+                text-transform:uppercase; opacity:.45; font-family:system-ui,sans-serif; }}
 {mode_css}
-rt {{ font-size:60%; color:#888; }}
+.ja rt {{ font-size:60%; opacity:.6; }}
 </style></head>
-<body>
-<h1>JRP preview — {heading} — {len(pairs)} of {total} (evenly sampled)</h1>
+<body class="{body_class}">
+<h1>JRP preview — {heading} — {len(pairs)} of {total} ({args.theme})</h1>
 {''.join(rows)}
 {renderer}
 </body></html>"""

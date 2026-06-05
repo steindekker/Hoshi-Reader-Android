@@ -11,6 +11,15 @@
   --panel-border: rgba(0,0,0,.10);
   --accent: #5566b5;             /* Lapis bold #4660f1, muted */
   --shadow: 0 1px 3px rgba(0,0,0,.12);
+  /* pitch palette (Migaku-style; overrides the JRP managed :root). Saturated
+     for contrast on the cream bg. heiban=blue atamadaka=red nakadaka=orange
+     odaka=green kifuku=pink unknown=text. */
+  --jrp-heiban: #2563c4;
+  --jrp-atamadaka: #cf2f2f;
+  --jrp-nakadaka: #c8780a;
+  --jrp-odaka: #1f9d57;
+  --jrp-kifuku: #c43d8f;
+  --jrp-unknown: var(--fg);
 }
 .card.nightMode {
   --bg: #272727;            /* Lapis dark #2c2c2c, slightly deeper */
@@ -19,6 +28,13 @@
   --panel-border: rgba(255,255,255,.13);
   --accent: #d7dc8a;             /* Lapis dark bold #fffd9e, muted */
   --shadow: none;
+  /* pastel variants, readable on the dark bg */
+  --jrp-heiban: #6fb3ff;
+  --jrp-atamadaka: #ff7b7b;
+  --jrp-nakadaka: #ffb24d;
+  --jrp-odaka: #54cf86;
+  --jrp-kifuku: #ff8ccf;
+  --jrp-unknown: var(--fg);
 }
 
 .card:not(.nightMode) { background-color: var(--bg); }
