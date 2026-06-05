@@ -134,3 +134,17 @@ def test_kosoado_iu_and_no_pitch_stoplist():
     assert "{こと" not in out             # こと unpitched
     assert "いった;" not in out and "{いう" not in out  # 言う/いう unpitched
     assert "{どういう;1}" in emit_sentence(units("どういうこと", acc))
+
+@pytest.mark.skipif(not _sudachi_available(), reason="sudachipy not installed")
+def test_conditional_and_masu_negative_conj():
+    # ば conditional, negative-conditional なければ, and ます/ません computed pitch
+    from ankialign.jrp_fill.accent import AccentIndex
+    from ankialign.jrp_fill.tokenize import units
+    from ankialign.jrp_fill.emit import emit_sentence
+    acc = AccentIndex.load(IDX)
+    g = lambda s: emit_sentence(units(s, acc, conj_accent=True))
+    assert "{[差|さ]し[支|つか]えなければ;Y6}" in g("差し支えなければ教えてください")  # さしつかえな\ければ
+    assert "{[教|おし]えていただけません;Y10}" in g("教えていただけませんか")  # 〜ませ\ん
+    assert "{[読|よ]めば;Y1}" in g("読めばわかる")                        # 読む atamadaka stays 1
+    # それ/これ are unpitched demonstratives now
+    assert "{それ" not in emit_sentence(units("それを見た", acc))

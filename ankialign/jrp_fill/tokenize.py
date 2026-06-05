@@ -22,7 +22,8 @@ _LIGHT_LEMMAS = {"する", "しれる"}
 # only adds clutter and hurts readability (user call). Keyed by lemma.
 # both kana and kanji lemma variants, since Sudachi uses either (言う/いう, 物/もの)
 _NO_PITCH_LEMMAS = {"こと", "事", "言う", "いう", "物", "もの", "ある", "有る",
-                    "いる", "居る", "なる", "成る", "よう", "様"}
+                    "いる", "居る", "なる", "成る", "よう", "様",
+                    "これ", "それ", "あれ", "どれ"}  # basic demonstratives
 
 # こそあど + いう form lexicalized 連体詞 (そういう, こういう...) Sudachi splits as
 # 副詞/連体詞 + 動詞; fuse them into one block (dict has them as headwords).
@@ -98,7 +99,7 @@ def _is_aux_tail(m) -> bool:
     pos = m.part_of_speech()
     if pos[0] == "助動詞":
         return True
-    if pos[0] == "助詞" and pos[1] == "接続助詞" and m.surface() in ("て", "で"):
+    if pos[0] == "助詞" and pos[1] == "接続助詞" and m.surface() in ("て", "で", "ば"):
         return True
     return pos[0] in _YOUGEN and pos[1] == "非自立可能"
 
@@ -112,32 +113,38 @@ def _conj_downstep(head, tail, heiban: bool, dict_acc: int,
     (たい, ました, ません, です, て/ば not absorbed...) -> None."""
     from . import conjugate as C
     lemmas = [t.dictionary_form() or t.surface() for t in tail]
-    # only fire on inflectional auxiliaries with validated rules; anything else
-    # (べき, よう, そう, らしい, みたい, ず, ん/ぬ, です...) -> fall back to dict-form
-    _OK = {"た", "だ", "ない", "ます", "れる", "られる", "せる", "させる"}
-    if any(l not in _OK for l in lemmas):
-        return None
-    if "ます" in lemmas and lemmas[-1] != "ます":  # ました / ません
-        return None
+    m = C.count_moras(conj_reading)
     last = lemmas[-1]
     prev = lemmas[-2] if len(lemmas) >= 2 else None
-    if last in ("た", "だ"):
+    # ます / ません place the downstep on their own penult regardless of what comes
+    # before, so they're safe even after て+補助動詞 (教えていただけませ\ん, ありませ\ん)
+    if last == "ます" or (last == "ぬ" and "ます" in lemmas):
+        return m - 1
+    # negative conditional 〜なければ: downstep on the な (before ければ)
+    if last == "ば" and prev == "ない":
+        return max(1, m - 3)
+    # other endings: only clean inflectional chains; reject て/補助動詞/modals so we
+    # don't mis-accent (べき, よう, ましょう, ている-as-past...) -> dict-form fallback
+    _OK = {"た", "だ", "ない", "ば", "れる", "られる", "せる", "させる"}
+    if any(l not in _OK for l in lemmas):
+        return None
+    if last == "ば":
+        form = "ba"
+    elif last in ("た", "だ"):
         form = "nakatta" if prev == "ない" else "ta"
     elif last == "ない":
         form = "nai"
-    elif last == "ます":
-        form = "masu"
     elif last in _DERIV:
         form = "dict"            # derived verb in plain present (断られる)
     else:
         return None
+    derived = any(l in _DERIV for l in lemmas)
     if head.part_of_speech()[0] == "形容詞":
-        if any(l in _DERIV for l in lemmas):
+        if derived:
             return None
         return C.adj_downstep(heiban, form, C.count_moras(lemread) - 1)
-    derived = any(l in _DERIV for l in lemmas)
     atamadaka = dict_acc == 1 and not derived
-    return C.verb_downstep(heiban, atamadaka, form, C.count_moras(conj_reading))
+    return C.verb_downstep(heiban, atamadaka, form, m)
 
 def _merge_yougen(ms, i: int, acc: AccentIndex,
                   conj_accent: bool = False) -> tuple[Unit, int] | None:

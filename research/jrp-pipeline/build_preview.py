@@ -63,9 +63,10 @@ def main(argv: list[str] | None = None) -> int:
         gen = lambda text: emit_sentence(units(text, acc))
         from ankialign.jrp_fill._utils import KANJI_RE
         if args.mode == "fill":
-            # (old, new) = (before, our fill) for cards lacking pitch
+            # (old, new) = (before, our fill w/ computed conjugated pitch)
+            gen_fill = lambda t: emit_sentence(units(t, acc, conj_accent=True))
             pairs = [(f.old_value, f.new_value)
-                     for f in engine.build_plan(col, args.note_type, args.field, gen)]
+                     for f in engine.build_plan(col, args.note_type, args.field, gen_fill)]
         elif args.mode == "lowconf":
             # sentences containing something uncertain; caption says what & why
             fields = [fl["name"] for fl in m["flds"]]
