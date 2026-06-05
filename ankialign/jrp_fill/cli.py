@@ -2,7 +2,7 @@
 from __future__ import annotations
 import argparse, os, shutil, sys, time
 
-def _generate_factory(conj_accent: bool = True):
+def _generate_factory(conj_accent: bool = False):
     from .accent import AccentIndex
     from .tokenize import units
     from .emit import emit_sentence
@@ -17,9 +17,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--field", default="Sentence")
     ap.add_argument("--apply", action="store_true", help="write (default: dry-run)")
     ap.add_argument("--limit", type=int, default=0, help="cap notes for spot-checking")
-    ap.add_argument("--no-conj-accent", dest="conj_accent", action="store_false",
-                    help="show dict-form pitch instead of the computed conjugated "
-                         "downstep (断られた -> ことわら\\れた is the default)")
+    ap.add_argument("--conj-accent", dest="conj_accent", action="store_true",
+                    help="compute the conjugated downstep (断られた -> ことわら\\れた) "
+                         "instead of the default dict-form pitch (verbs shown by "
+                         "their lemma accent; the graph/hover shows the dict form)")
     ap.add_argument("--regenerate", action="store_true",
                     help="rebuild EVERY field from its plain surface, replacing "
                          "existing accepted markup (default: splice into gaps only)")

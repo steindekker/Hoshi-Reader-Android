@@ -13,8 +13,10 @@
   --shadow: 0 1px 3px rgba(0,0,0,.12);
   /* pitch palette (Migaku-style; overrides the JRP managed :root). Saturated
      for contrast on the cream bg. heiban=blue atamadaka=red nakadaka=orange
-     odaka=green kifuku=pink unknown=text. */
+     odaka=green kifuku=pink unknown=text. heiban-yougen (flat verb) = teal, so a
+     flat 用言 reads differently from a flat noun. */
   --jrp-heiban: #2563c4;
+  --jrp-heiban-yougen: #0e8f8a;
   --jrp-atamadaka: #cf2f2f;
   --jrp-nakadaka: #c8780a;
   --jrp-odaka: #1f9d57;
@@ -30,12 +32,16 @@
   --shadow: none;
   /* pastel variants, readable on the dark bg */
   --jrp-heiban: #6fb3ff;
+  --jrp-heiban-yougen: #4fd6d2;
   --jrp-atamadaka: #ff7b7b;
   --jrp-nakadaka: #ffb24d;
   --jrp-odaka: #54cf86;
   --jrp-kifuku: #ff8ccf;
   --jrp-unknown: var(--fg);
 }
+
+/* new class added by the renderer patch (template.py) — base JRP CSS lacks it */
+.jrp-heiban-yougen { color: var(--jrp-heiban-yougen); }
 
 .card:not(.nightMode) { background-color: var(--bg); }
 .card.nightMode      { background-color: var(--bg); }

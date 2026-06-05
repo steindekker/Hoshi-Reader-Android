@@ -157,14 +157,15 @@ def test_modals_not_absorbed_and_mashita():
     from ankialign.jrp_fill.tokenize import units
     from ankialign.jrp_fill.emit import emit_sentence
     acc = AccentIndex.load(IDX)
-    g = lambda s: emit_sentence(units(s, acc))
-    # modal らしい/でしょう/だろう stay out of the verb unit (verb computes, modal plain)
-    assert g("できないらしいね。") == "{できない;Y2}らしいね。"
+    g = lambda s: emit_sentence(units(s, acc))   # default = dict-form pitch
+    # modal らしい/でしょう/だろう stay out of the verb unit (verb shown by its
+    # dict-form accent + |base; modal plain)
+    assert g("できないらしいね。") == "{できない;Y2|できる}らしいね。"
     assert "{[難|むずか]しい;Y0,4}でしょう" in g("難しいでしょう。")
     assert "{[行|い]く;Y0}だろう" in g("行くだろう。")
-    # ました polite past -> downstep on ま (chain-safe)
-    assert "{[食|た]べました;Y3}" in g("食べました。")
-    assert "{[教|おし]えてくれました;Y7}" in g("教えてくれました。")
+    # conjugated 用言 carry the dict-form accent and the |base lemma reading
+    assert "{[食|た]べました;Y2|たべる}" in g("食べました。")
+    assert "{[教|おし]えてくれました;Y0|おしえる}" in g("教えてくれました。")
     # べき (べし) is a modal -> own unit, not fused into the verb
     assert g("立てるべきだった。") == "{[立|た]てる;Y2}べきだった。"
 

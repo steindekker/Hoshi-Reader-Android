@@ -48,6 +48,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--seed", type=int, default=None,
                     help="random-sample the examples with this seed (default: "
                          "deterministic even spacing across the whole set)")
+    ap.add_argument("--regenerate", action="store_true",
+                    help="fill mode: preview a full regenerate (rebuild every card "
+                         "from surface, replacing gold) instead of splice-into-gaps")
     ap.add_argument("--out", default=os.path.join(ROOT, "research/jrp-pipeline/work/preview.html"))
     args = ap.parse_args(argv)
 
@@ -62,13 +65,19 @@ def main(argv: list[str] | None = None) -> int:
     try:
         m = col.models.by_name(args.note_type)
         jrp_css, renderer = _extract_renderer(m["css"], m["tmpls"][0]["afmt"])
+        # preview the heiban-用言 renderer patch in-memory (template.apply lands it
+        # for real), so the teal heiban-verb color shows without touching the deck
+        from ankialign.template import _RENDER_OLD, _RENDER_NEW
+        renderer = renderer.replace(_RENDER_OLD, _RENDER_NEW)
         acc = AccentIndex.load()
         gen = lambda text: emit_sentence(units(text, acc))
         from ankialign.jrp_fill._utils import KANJI_RE
         if args.mode == "fill":
-            # (old, new) = (before, our fill); gen has computed conjugated pitch by default
+            # (old, new) = (before, our fill); gen has computed conjugated pitch by default.
+            # --regenerate previews a full rebuild-from-surface (replaces gold).
             pairs = [(f.old_value, f.new_value)
-                     for f in engine.build_plan(col, args.note_type, args.field, gen)]
+                     for f in engine.build_plan(col, args.note_type, args.field, gen,
+                                                regenerate=args.regenerate)]
         elif args.mode == "lowconf":
             # sentences containing something uncertain; caption says what & why
             fields = [fl["name"] for fl in m["flds"]]

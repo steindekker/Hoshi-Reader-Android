@@ -29,6 +29,14 @@ def _css() -> str:
         return fh.read()
 
 
+# Renderer patch: the JRP renderer colors acc===0 as "jrp-heiban" BEFORE checking
+# is_yougen, so a flat verb looks identical to a flat noun. Give heiban 用言 their
+# own class so the verb class is visible (paired with the dict-form pitch model).
+_RENDER_OLD = 'if (acc === 0) { return "jrp-heiban"; }'
+_RENDER_NEW = ('if (acc === 0) { return is_yougen ? "jrp-heiban-yougen"'
+               ' : "jrp-heiban"; }')
+
+
 def apply(col) -> None:
     m = col.models.by_name(config.TARGET_NOTETYPE)
     if m is None:
@@ -42,4 +50,7 @@ def apply(col) -> None:
     tmpl = m["tmpls"][0]
     if _FRONT_MARKER not in tmpl["qfmt"]:
         tmpl["qfmt"] = tmpl["qfmt"].rstrip() + "\n" + _FRONT_SCRIPT
+    # distinct color for heiban 用言 (idempotent: only patches the original form)
+    if _RENDER_OLD in tmpl["afmt"]:
+        tmpl["afmt"] = tmpl["afmt"].replace(_RENDER_OLD, _RENDER_NEW)
     col.models.update_dict(m)

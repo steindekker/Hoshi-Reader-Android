@@ -306,7 +306,7 @@ def _nominal_merge(ms, i: int, acc: AccentIndex) -> tuple[Unit, int] | None:
         j -= 1
     return None
 
-def units(text: str, acc: AccentIndex, conj_accent: bool = True) -> list[Unit]:
+def units(text: str, acc: AccentIndex, conj_accent: bool = False) -> list[Unit]:
     A, C = _modes()
     ms = list(_tok().tokenize(text, C))
     out: list[Unit] = []
