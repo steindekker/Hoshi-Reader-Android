@@ -36,6 +36,11 @@ _NO_PITCH_LEMMAS = {
     # 内=うち/ない, 訳=わけ/やく) are handled reading-aware in _NO_PITCH_FORMS instead.
     "ところ", "所", "とき", "ため", "為", "ほう", "はず",
     "わけ", "うち", "まま", "そのまま",
+    # interrogatives — same pure deixis as the demonstratives above
+    "何", "何時", "いつ", "誰", "なぜ",
+    # giving/receiving auxiliaries: structural, not content (in 〜て form they're
+    # absorbed into the main verb, which keeps its pitch — only standalone hits)
+    "くれる", "くださる",
 }
 # conjugated negatives (分からない, 高くない) absorb ない into the head verb/adjective,
 # whose lemma is 分かる/高い -> still pitched.
@@ -241,6 +246,32 @@ def _kosoado_iu_merge(m, nxt, acc: AccentIndex) -> Unit | None:
     pos = acc.lookup(js, jr)
     return Unit(js, js, jr, jr, True, False, tuple(pos) if pos else ())
 
+_PREFIX = {"お", "ご", "御"}  # 美化語/honorific prefixes Sudachi peels off
+
+def _prefix_merge(ms, i: int, acc: AccentIndex,
+                  conj_accent: bool) -> tuple[Unit, int] | None:
+    """お/ご + content that Sudachi split (お話, お出まし, ご相談) -> ONE unit, but
+    only when the joined (surface, reading) is a dict headword (self-validating,
+    so the dict's whole-word accent wins: おはなし[0], not the split はなし[3]). The result
+    is a plain noun (no 用言 marking) even if it wraps a verb stem (お出まし)."""
+    m = ms[i]
+    if m.part_of_speech()[0] != "接頭辞" or m.surface() not in _PREFIX or i + 1 >= len(ms):
+        return None
+    pre_s = m.surface()
+    pre_r = hira(m.reading_form() or pre_s)
+    yg = _merge_yougen(ms, i + 1, acc, conj_accent)
+    if yg is not None:
+        follow, n = yg
+        fs, fr = follow.surface, follow.reading
+    else:
+        follow = _to_unit(ms[i + 1], acc)
+        fs, fr, n = follow.surface, follow.reading, 1
+    js, jr = pre_s + fs, pre_r + fr
+    pos = acc.lookup(js, jr)
+    if pos:
+        return Unit(js, js, jr, jr, True, False, tuple(pos)), 1 + n
+    return None
+
 def units(text: str, acc: AccentIndex, conj_accent: bool = True) -> list[Unit]:
     A, C = _modes()
     ms = list(_tok().tokenize(text, C))
@@ -255,6 +286,12 @@ def units(text: str, acc: AccentIndex, conj_accent: bool = True) -> list[Unit]:
                 out.append(merged)
                 i += 2
                 continue
+        pre = _prefix_merge(ms, i, acc, conj_accent)
+        if pre is not None:
+            unit, consumed = pre
+            out.append(unit)
+            i += consumed
+            continue
         yg = _merge_yougen(ms, i, acc, conj_accent)
         if yg is not None:
             unit, consumed = yg

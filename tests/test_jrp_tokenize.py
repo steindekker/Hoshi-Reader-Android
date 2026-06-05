@@ -198,3 +198,27 @@ def test_demonstratives_and_formal_nouns_dropped():
     # reading-aware: 時=とき -> furigana only; the 三時(じ) counter stays pitched
     assert "[時|とき]" in g("行く時。") and "{[時" not in g("行く時。")
     assert "{" in g("三時に会う。")
+
+def test_interrogatives_and_giving_verbs_dropped():
+    from ankialign.jrp_fill.accent import AccentIndex
+    from ankialign.jrp_fill.tokenize import units
+    from ankialign.jrp_fill.emit import emit_sentence
+    acc = AccentIndex.load(IDX)
+    g = lambda s: emit_sentence(units(s, acc))
+    assert "{[何" not in g("何がある") and "[何|なん]" in g("何がある")
+    assert "{[誰" not in g("誰がいる")
+    assert "いつ;" not in g("いつ来る") and "なぜ;" not in g("なぜだ")
+    # standalone giving verbs unpitched; in 〜て form the MAIN verb keeps its pitch
+    assert g("くれた") == "くれた" and g("ください。") == "ください。"
+    assert "{[教|おし]えてください;Y0|おしえる}" in g("教えてください")
+    assert "{[買|か]ってくれた" in g("買ってくれた")
+
+def test_honorific_prefix_merge():
+    from ankialign.jrp_fill.accent import AccentIndex
+    from ankialign.jrp_fill.tokenize import units
+    from ankialign.jrp_fill.emit import emit_sentence
+    acc = AccentIndex.load(IDX)
+    g = lambda s: emit_sentence(units(s, acc))
+    # お/ご split off by Sudachi but a dict headword -> ONE unit with whole-word accent
+    assert "{お[話|はなし];0}" in g("お話をする")          # not the split はなし[3]
+    assert "{お[出|で]まし;0}" in g("お出ましか")          # noun, no 用言 marking
