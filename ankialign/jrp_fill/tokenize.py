@@ -8,7 +8,7 @@ from __future__ import annotations
 from functools import lru_cache
 from .unit import Unit
 from .accent import AccentIndex
-from ._utils import hira
+from ._utils import hira, KANJI_RE
 
 _CONTENT = {"名詞", "代名詞", "動詞", "形容詞", "副詞", "形状詞", "連体詞", "感動詞"}
 _YOUGEN = {"動詞", "形容詞"}
@@ -41,6 +41,8 @@ _NO_PITCH_LEMMAS = {
     # giving/receiving auxiliaries: structural, not content (in 〜て form they're
     # absorbed into the main verb, which keeps its pitch — only standalone hits)
     "くれる", "くださる",
+    # polite copula/existential, same class as です/ます (ありがとうございます)
+    "ござる",
 }
 # conjugated negatives (分からない, 高くない) absorb ない into the head verb/adjective,
 # whose lemma is 分かる/高い -> still pitched.
@@ -300,6 +302,19 @@ def units(text: str, acc: AccentIndex, conj_accent: bool = True) -> list[Unit]:
             continue
         u = _to_unit(m, acc)
         if u.is_content and not u.accents:
+            # Sudachi kept this as ONE word but the dict misses its surface; if the
+            # exact reading is an unambiguous dict entry (a same-shape homophone,
+            # 開放感/解放感 -> かいほうかん[3]), trust Mode C and keep it whole rather
+            # than splitting into base+suffix pieces.
+            if (not u.is_yougen and KANJI_RE.search(u.surface)
+                    and u.lemma not in _NO_PITCH_LEMMAS
+                    and (u.lemma, u.reading) not in _NO_PITCH_FORMS):
+                rb = acc.by_reading(u.reading)
+                if rb is not None:
+                    out.append(Unit(u.surface, u.lemma, u.reading, u.reading,
+                                    True, False, tuple(rb)))
+                    i += 1
+                    continue
             subs = list(m.split(A))
             if len(subs) > 1:
                 sub_us = [_to_unit(x, acc) for x in subs]

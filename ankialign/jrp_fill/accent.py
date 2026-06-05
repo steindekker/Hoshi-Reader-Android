@@ -8,6 +8,7 @@ class AccentIndex:
     def __init__(self, table: dict[str, list[int]]):
         self._t = table
         self._rev: dict[str, dict[str, list[int]]] | None = None
+        self._rread: dict[str, list[int]] | None = None
 
     @classmethod
     def load(cls, path: str | None = None) -> "AccentIndex":
@@ -29,3 +30,19 @@ class AccentIndex:
                 rev.setdefault(lem, {})[rd] = positions
             self._rev = rev
         return self._rev.get(lemma, {})
+
+    def by_reading(self, reading_hira: str) -> list[int] | None:
+        """Accent for an exact reading, ignoring surface — used only to keep a
+        Sudachi-confident single word whole when the dict misses its surface but
+        knows a same-shape homophone (開放感/解放感 -> かいほうかん[3]). Returns None
+        unless every dict entry with this reading agrees on the accent, so
+        ambiguous homophones (橋[2]/箸[1]) never produce a wrong guess."""
+        if self._rread is None:
+            seen: dict[str, set] = {}
+            first: dict[str, list[int]] = {}
+            for key, positions in self._t.items():
+                rd = key.partition("\t")[2]
+                seen.setdefault(rd, set()).add(tuple(positions))
+                first.setdefault(rd, positions)
+            self._rread = {rd: first[rd] for rd, ts in seen.items() if len(ts) == 1}
+        return self._rread.get(reading_hira)

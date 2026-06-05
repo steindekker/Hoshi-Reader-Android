@@ -222,3 +222,17 @@ def test_honorific_prefix_merge():
     # お/ご split off by Sudachi but a dict headword -> ONE unit with whole-word accent
     assert "{お[話|はなし];0}" in g("お話をする")          # not the split はなし[3]
     assert "{お[出|で]まし;0}" in g("お出ましか")          # noun, no 用言 marking
+
+def test_dict_miss_word_kept_whole_via_reading_and_gozaimasu():
+    from ankialign.jrp_fill.accent import AccentIndex
+    from ankialign.jrp_fill.tokenize import units
+    from ankialign.jrp_fill.emit import emit_sentence
+    acc = AccentIndex.load(IDX)
+    g = lambda s: emit_sentence(units(s, acc))
+    # 開放感 isn't in the dict, but the same-reading 解放感[3] is -> keep it ONE
+    # unit with that accent rather than splitting into 開放[0]+感[1]
+    assert "{[開放感|かいほうかん];3}" in g("開放感だった")
+    # the split cascade still recovers a genuine Mode-C over-merge (no dict reading)
+    assert "{[前途|ぜんと];1}" in g("前途多難だ") and "{[多難" in g("前途多難だ")
+    # ございます is polite copula (ござる+ます) -> plain, not a second pitch block
+    assert g("ありがとうございます") == "{ありがとう;2}ございます"
