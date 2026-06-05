@@ -12,3 +12,5 @@ class Unit:
     is_yougen: bool     # 動詞/形容詞 -> emit ;Y
     accents: tuple[int, ...] = field(default=())  # () -> furigana only, no pitch block
     ambiguous: bool = False
+    conj_computed: bool = False  # accents are the computed conjugated downstep on
+                                 # `reading` itself -> emit ;Y<acc> with NO base

@@ -87,7 +87,42 @@ def _is_aux_tail(m) -> bool:
         return True
     return pos[0] in _YOUGEN and pos[1] == "非自立可能"
 
-def _merge_yougen(ms, i: int, acc: AccentIndex) -> tuple[Unit, int] | None:
+_DERIV = {"れる", "られる", "せる", "させる"}  # passive/potential/causative
+
+def _conj_downstep(head, tail, heiban: bool, dict_acc: int,
+                   lemread: str, conj_reading: str) -> int | None:
+    """Classify the conjugation (outer form + derivation) from the morpheme chain
+    and compute the real downstep, or None to fall back to the dict-form base.
+    Conservative: only clean, common patterns; anything stacked/unsupported
+    (たい, ました, ません, です, て/ば not absorbed...) -> None."""
+    from . import conjugate as C
+    lemmas = [t.dictionary_form() or t.surface() for t in tail]
+    if any(l == "たい" for l in lemmas):
+        return None
+    if "ます" in lemmas and lemmas[-1] != "ます":  # ました / ません
+        return None
+    last = lemmas[-1]
+    prev = lemmas[-2] if len(lemmas) >= 2 else None
+    if last in ("た", "だ"):
+        form = "nakatta" if prev == "ない" else "ta"
+    elif last == "ない":
+        form = "nai"
+    elif last == "ます":
+        form = "masu"
+    elif last in _DERIV:
+        form = "dict"            # derived verb in plain present (断られる)
+    else:
+        return None
+    if head.part_of_speech()[0] == "形容詞":
+        if any(l in _DERIV for l in lemmas):
+            return None
+        return C.adj_downstep(heiban, form, C.count_moras(lemread) - 1)
+    derived = any(l in _DERIV for l in lemmas)
+    atamadaka = dict_acc == 1 and not derived
+    return C.verb_downstep(heiban, atamadaka, form, C.count_moras(conj_reading))
+
+def _merge_yougen(ms, i: int, acc: AccentIndex,
+                  conj_accent: bool = False) -> tuple[Unit, int] | None:
     """Fuse a 動詞/形容詞 head with its trailing inflection chain into ONE yougen
     unit (分から+なかっ+た -> 分からなかった). The accent stays the dictionary-form
     downstep; emit.py renders the dict reading as the JRP base (`|わかる`) so the
@@ -118,6 +153,13 @@ def _merge_yougen(ms, i: int, acc: AccentIndex) -> tuple[Unit, int] | None:
         acc.lookup(lemma, hira(head.reading_form() or surface))
     if not positions:
         return None
+    if conj_accent:
+        ds = _conj_downstep(head, ms[i + 1:j], positions[0] == 0, positions[0],
+                            lemread, read)
+        if ds is not None:
+            # computed downstep sits on the conjugated reading itself -> no base
+            return Unit(surf, lemma, read, read, True, True, (ds,),
+                        conj_computed=True), j - i
     return Unit(surf, lemma, read, lemread, True, True, tuple(positions)), j - i
 
 def _counter_merge(m, nxt, acc: AccentIndex) -> Unit | None:
@@ -132,7 +174,7 @@ def _counter_merge(m, nxt, acc: AccentIndex) -> Unit | None:
     pos = acc.lookup(js, jr)
     return Unit(js, js, jr, jr, True, False, tuple(pos)) if pos else None
 
-def units(text: str, acc: AccentIndex) -> list[Unit]:
+def units(text: str, acc: AccentIndex, conj_accent: bool = False) -> list[Unit]:
     A, C = _modes()
     ms = list(_tok().tokenize(text, C))
     out: list[Unit] = []
@@ -145,7 +187,7 @@ def units(text: str, acc: AccentIndex) -> list[Unit]:
                 out.append(merged)
                 i += 2
                 continue
-        yg = _merge_yougen(ms, i, acc)
+        yg = _merge_yougen(ms, i, acc, conj_accent)
         if yg is not None:
             unit, consumed = yg
             out.append(unit)

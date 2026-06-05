@@ -2,12 +2,12 @@
 from __future__ import annotations
 import argparse, os, shutil, sys, time
 
-def _generate_factory():
+def _generate_factory(conj_accent: bool = False):
     from .accent import AccentIndex
     from .tokenize import units
     from .emit import emit_sentence
     acc = AccentIndex.load()
-    return lambda text: emit_sentence(units(text, acc))
+    return lambda text: emit_sentence(units(text, acc, conj_accent=conj_accent))
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="ankialign.jrp_fill")
@@ -17,6 +17,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--field", default="Sentence")
     ap.add_argument("--apply", action="store_true", help="write (default: dry-run)")
     ap.add_argument("--limit", type=int, default=0, help="cap notes for spot-checking")
+    ap.add_argument("--conj-accent", action="store_true",
+                    help="compute the conjugated downstep (断られた -> ことわら\\れた) "
+                         "instead of the dict-form graph")
     args = ap.parse_args(argv)
 
     if not os.path.exists(args.collection):
@@ -32,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
 
     col = Collection(args.collection)
     try:
-        gen = _generate_factory()
+        gen = _generate_factory(conj_accent=args.conj_accent)
         plan = engine.build_plan(col, args.note_type, args.field, gen)
         if args.limit:
             plan = plan[:args.limit]
