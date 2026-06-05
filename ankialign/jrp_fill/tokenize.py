@@ -213,7 +213,7 @@ def _kosoado_iu_merge(m, nxt, acc: AccentIndex) -> Unit | None:
     pos = acc.lookup(js, jr)
     return Unit(js, js, jr, jr, True, False, tuple(pos) if pos else ())
 
-def units(text: str, acc: AccentIndex, conj_accent: bool = False) -> list[Unit]:
+def units(text: str, acc: AccentIndex, conj_accent: bool = True) -> list[Unit]:
     A, C = _modes()
     ms = list(_tok().tokenize(text, C))
     out: list[Unit] = []

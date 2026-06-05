@@ -2,7 +2,7 @@
 from __future__ import annotations
 import argparse, os, shutil, sys, time
 
-def _generate_factory(conj_accent: bool = False):
+def _generate_factory(conj_accent: bool = True):
     from .accent import AccentIndex
     from .tokenize import units
     from .emit import emit_sentence
@@ -17,9 +17,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--field", default="Sentence")
     ap.add_argument("--apply", action="store_true", help="write (default: dry-run)")
     ap.add_argument("--limit", type=int, default=0, help="cap notes for spot-checking")
-    ap.add_argument("--conj-accent", action="store_true",
-                    help="compute the conjugated downstep (断られた -> ことわら\\れた) "
-                         "instead of the dict-form graph")
+    ap.add_argument("--no-conj-accent", dest="conj_accent", action="store_false",
+                    help="show dict-form pitch instead of the computed conjugated "
+                         "downstep (断られた -> ことわら\\れた is the default)")
     args = ap.parse_args(argv)
 
     if not os.path.exists(args.collection):

@@ -84,11 +84,12 @@ def test_conjugation_merged_into_one_yougen():
     from ankialign.jrp_fill.emit import emit_sentence
     from ankialign import markup
     acc = AccentIndex.load(IDX)
-    out = emit_sentence(units("分からなかった", acc))
+    # conj_accent=False -> the dict-form-base path (--no-conj-accent)
+    out = emit_sentence(units("分からなかった", acc, conj_accent=False))
     assert out == "{[分|わ]からなかった;Y2|わかる}"
     assert markup.jrp_surface(out) == "分からなかった"
     # full aux chain folds into the head verb's single unit
-    out2 = emit_sentence(units("食べさせられたくなかった", acc))
+    out2 = emit_sentence(units("食べさせられたくなかった", acc, conj_accent=False))
     assert markup.jrp_surface(out2) == "食べさせられたくなかった"
     assert out2.count("{") == 1 and "|たべる" in out2
 
@@ -119,7 +120,8 @@ def test_lexicalized_form_beats_conjugation_merge():
     assert "{[思|おも]わず;2}" in out
     assert "おもう" not in out and "Y2|" not in out.split("わず")[0]
     # a genuinely-conjugated verb the dict does NOT list whole still merges as 用言
-    assert "{[断|ことわ]られた;Y3|ことわる}" in emit_sentence(units("断られた", acc))
+    # (dict-form base path; computed-pitch path is covered elsewhere)
+    assert "{[断|ことわ]られた;Y3|ことわる}" in emit_sentence(units("断られた", acc, conj_accent=False))
 
 @pytest.mark.skipif(not _sudachi_available(), reason="sudachipy not installed")
 def test_kosoado_iu_and_no_pitch_stoplist():
