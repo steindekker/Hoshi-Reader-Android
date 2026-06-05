@@ -42,7 +42,9 @@ class AccentIndex:
             first: dict[str, list[int]] = {}
             for key, positions in self._t.items():
                 rd = key.partition("\t")[2]
-                seen.setdefault(rd, set()).add(tuple(positions))
+                # agreement is a set question, not an order one: the index is
+                # preference-ordered, so [0,3] and [3,0] are the same accent info.
+                seen.setdefault(rd, set()).add(frozenset(positions))
                 first.setdefault(rd, positions)
             self._rread = {rd: first[rd] for rd, ts in seen.items() if len(ts) == 1}
         return self._rread.get(reading_hira)

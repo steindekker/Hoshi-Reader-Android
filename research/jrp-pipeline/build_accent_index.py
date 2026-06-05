@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Build ankialign/data/accent_index.marshal.gz.
 
-Key:   "lemma\treading_hira"  Value: sorted list[int] of downstep positions.
+Key:   "lemma\treading_hira"  Value: preference-ordered list[int] of downstep
+       positions (pitches[0]/markup-first = primary; NOT sorted).
 Source priority (later overwrites): NHK2016 -> アクセント辞典v2 -> user gold.
 Run:   uv run python research/jrp-pipeline/build_accent_index.py
 Reuses research/pitch-pipeline/work/validate.py.
