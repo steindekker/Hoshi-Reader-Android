@@ -28,16 +28,16 @@ internal data class LookupPopupAssets(
             }
 
         private fun read(context: Context): LookupPopupAssets = LookupPopupAssets(
-            popupJs = context.assets.open("hoshi-popup/popup.js")
+            popupJs = context.assets.open("hoshi-web/popup/popup.js")
                 .bufferedReader()
                 .use { it.readText() },
-            popupCss = context.assets.open("hoshi-popup/popup.css")
+            popupCss = context.assets.open("hoshi-web/popup/popup.css")
                 .bufferedReader()
                 .use { it.readText() },
-            selectionJs = context.assets.open("hoshi-popup/selection.js")
+            selectionJs = context.assets.open("hoshi-web/shared/selection.js")
                 .bufferedReader()
                 .use { it.readText() },
-            readerPopupHostJs = context.assets.open("hoshi-popup/reader-popup-host.js")
+            readerPopupHostJs = context.assets.open("hoshi-web/popup/reader-popup-host.js")
                 .bufferedReader()
                 .use { it.readText() },
         )

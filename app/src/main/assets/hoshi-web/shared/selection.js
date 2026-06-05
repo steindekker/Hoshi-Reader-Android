@@ -58,12 +58,160 @@ const JAPANESE_RANGES = [
     ...FULLWIDTH_CHARACTER_RANGES,
 ];
 
+window.hoshiRubyGeometry = window.hoshiRubyGeometry || {
+    isVertical() {
+        return window.getComputedStyle(document.body).writingMode === "vertical-rl";
+    },
+
+    rectObject(rect) {
+        const x = rect.x !== undefined ? rect.x : rect.left;
+        const y = rect.y !== undefined ? rect.y : rect.top;
+        const width = rect.width !== undefined ? rect.width : rect.right - rect.left;
+        const height = rect.height !== undefined ? rect.height : rect.bottom - rect.top;
+        return { x, y, width, height };
+    },
+
+    rectWithBounds(rect) {
+        const object = this.rectObject(rect);
+        return {
+            x: object.x,
+            y: object.y,
+            width: object.width,
+            height: object.height,
+            left: rect.left !== undefined ? rect.left : object.x,
+            top: rect.top !== undefined ? rect.top : object.y,
+            right: rect.right !== undefined ? rect.right : object.x + object.width,
+            bottom: rect.bottom !== undefined ? rect.bottom : object.y + object.height,
+        };
+    },
+
+    unionRect(a, b) {
+        const left = Math.min(a.left, b.left);
+        const top = Math.min(a.top, b.top);
+        const right = Math.max(a.right, b.right);
+        const bottom = Math.max(a.bottom, b.bottom);
+        return { x: left, y: top, width: right - left, height: bottom - top, left, top, right, bottom };
+    },
+
+    rangesOverlap(aStart, aEnd, bStart, bEnd, tolerance) {
+        return bStart <= aEnd + tolerance && bEnd >= aStart - tolerance;
+    },
+
+    rubyForNode(node) {
+        const el = node?.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+        return el?.closest ? el.closest('ruby') : null;
+    },
+
+    rubyTextRects(node) {
+        const ruby = this.rubyForNode(node);
+        if (!ruby) return [];
+        const rects = [];
+        ruby.querySelectorAll('rt').forEach((rt) => {
+            Array.from(rt.getClientRects()).forEach((rect) => rects.push(rect));
+        });
+        return rects;
+    },
+
+    rubyRectMatchesBase(baseRect, rubyRect) {
+        const ruby = this.rectWithBounds(rubyRect);
+        const tolerance = 1;
+        if (this.isVertical()) {
+            return this.rangesOverlap(baseRect.top, baseRect.bottom, ruby.top, ruby.bottom, tolerance);
+        }
+        return this.rangesOverlap(baseRect.left, baseRect.right, ruby.left, ruby.right, tolerance);
+    },
+
+    rubyAwareRect(rect, node) {
+        const rubyRects = this.rubyTextRects(node);
+        if (!rubyRects.length) return this.rectObject(rect);
+        let result = this.rectWithBounds(rect);
+        rubyRects.forEach((rubyRect) => {
+            if (this.rubyRectMatchesBase(result, rubyRect)) {
+                result = this.unionRect(result, this.rectWithBounds(rubyRect));
+            }
+        });
+        return this.rectObject(result);
+    },
+
+    rectsForRange(range) {
+        let rects = Array.from(range.getClientRects());
+        if (!rects.length) {
+            const fallback = range.getBoundingClientRect();
+            if (fallback?.width > 0 && fallback?.height > 0) rects = [fallback];
+        }
+        return rects
+            .map((rect) => this.rubyAwareRect(rect, range.startContainer))
+            .filter((rect) => rect.width > 0 && rect.height > 0);
+    },
+
+    inlineRectsTouch(a, b) {
+        const tolerance = 0.5;
+        if (this.isVertical()) {
+            return this.rangesOverlap(a.x, a.x + a.width, b.x, b.x + b.width, tolerance) &&
+                b.y <= a.y + a.height + tolerance &&
+                b.y + b.height >= a.y - tolerance;
+        }
+        return this.rangesOverlap(a.y, a.y + a.height, b.y, b.y + b.height, tolerance) &&
+            b.x <= a.x + a.width + tolerance &&
+            b.x + b.width >= a.x - tolerance;
+    },
+
+    mergeInlineRects(rects) {
+        const merged = [];
+        rects.forEach((rect) => {
+            const current = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+            const previous = merged[merged.length - 1];
+            if (previous && this.inlineRectsTouch(previous, current)) {
+                const left = Math.min(previous.x, current.x);
+                const top = Math.min(previous.y, current.y);
+                const right = Math.max(previous.x + previous.width, current.x + current.width);
+                const bottom = Math.max(previous.y + previous.height, current.y + current.height);
+                previous.x = left;
+                previous.y = top;
+                previous.width = right - left;
+                previous.height = bottom - top;
+            } else {
+                merged.push(current);
+            }
+        });
+        return merged;
+    },
+};
+
 window.hoshiSelection = {
     selection: null,
+    options: {
+        bridge: 'webkit',
+        linkTapResult: null,
+        imageTapResult: null,
+        rubyAwareRects: false,
+        scaleRects: true,
+    },
     scanDelimiters: '。、！？…‥「」『』（）()【】〈〉《》〔〕｛｝{}［］[]・：；:;，,.─\n\r',
     sentenceDelimiters: '。！？.!?\n\r',
     trailingSentenceChars: '。、！？…‥」』）)】〉》〕｝}］]',
     brackets: {'「':'」', '『': '』', '（':'）', '(':')', '【':'】', '〈':'〉', '《':'》', '〔':'〕', '｛':'｝', '{':'}', '［':'］', '[':']'},
+
+    configure(options = {}) {
+        this.options = { ...this.options, ...options };
+    },
+
+    postTextSelected(selection) {
+        if (this.options.bridge === 'android-reader') {
+            const bridge = window.HoshiTextSelection || globalThis.HoshiTextSelection;
+            bridge?.postMessage?.(JSON.stringify(selection));
+            return;
+        }
+        window.webkit?.messageHandlers?.textSelected?.postMessage(selection);
+    },
+
+    linkTapResult() {
+        return this.options.linkTapResult;
+    },
+
+    imageTapResult() {
+        return this.options.imageTapResult;
+    },
 
     isVertical() {
         return window.getComputedStyle(document.body).writingMode === "vertical-rl";
@@ -304,8 +452,12 @@ window.hoshiSelection = {
     },
 
     selectText(x, y, maxLength, rectX = x, rectY = y) {
-        if (document.elementFromPoint(x, y)?.closest('a')) {
-            return null;
+        const hitElement = document.elementFromPoint(x, y);
+        if (hitElement?.closest('a')) {
+            return this.linkTapResult();
+        }
+        if (hitElement?.closest('img, image, .blur-wrapper')) {
+            return this.imageTapResult();
         }
         const hit = this.getCharacterAtPoint(x, y, rectX, rectY);
 
@@ -370,7 +522,7 @@ window.hoshiSelection = {
 
         const sentenceContext = this.getSentenceContext(hit.node, hit.offset);
         const normalizedOffset = window.hoshiReader ? this.getNormalizedOffset(hit.node, hit.offset) : null;
-        webkit.messageHandlers.textSelected.postMessage({
+        this.postTextSelected({
             text,
             sentence: sentenceContext.sentence,
             rect: this.getSelectionRect(rectX, rectY),
@@ -391,17 +543,11 @@ window.hoshiSelection = {
         range.setStart(first.node, first.start);
         range.setEnd(first.node, first.start + 1);
 
-        const rects = Array.from(range.getClientRects());
-        const rect = rects.find(rect => x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) ?? range.getBoundingClientRect();
-        const scale = window.getButtonRectScale?.() ?? 1;
-        const scrollX = window.scrollX;
-        const scrollY = window.scrollY;
-        return {
-            x: (rect.x + scrollX) * scale - scrollX,
-            y: (rect.y + scrollY) * scale - scrollY,
-            width: rect.width * scale,
-            height: rect.height * scale
-        };
+        const rects = this.rectsForRange(range);
+        const rect = rects.find(rect => x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height) ??
+            rects[0] ??
+            window.hoshiRubyGeometry.rectObject(range.getBoundingClientRect());
+        return this.selectionRectForBridge(rect);
     },
 
     selectionRects(charCount) {
@@ -411,12 +557,40 @@ window.hoshiSelection = {
 
         const rects = [];
         for (const range of this.selectionCharacterRanges(charCount)) {
-            Array.from(range.getClientRects()).forEach(rect => {
-                rects.push({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
-            });
+            this.rectsForRange(range).forEach((rect) => rects.push(rect));
         }
 
-        return this.mergeSelectionRects(rects);
+        const merged = this.mergeSelectionRects(rects);
+        return this.options.rubyAwareRects ? this.unifyVerticalColumnRects(merged) : merged;
+    },
+
+    rectsForRange(range) {
+        if (this.options.rubyAwareRects) {
+            return window.hoshiRubyGeometry.rectsForRange(range);
+        }
+        const rects = Array.from(range.getClientRects());
+        if (!rects.length) {
+            const fallback = range.getBoundingClientRect();
+            if (fallback?.width > 0 && fallback?.height > 0) rects.push(fallback);
+        }
+        return rects
+            .map((rect) => window.hoshiRubyGeometry.rectObject(rect))
+            .filter((rect) => rect.width > 0 && rect.height > 0);
+    },
+
+    selectionRectForBridge(rect) {
+        if (!this.options.scaleRects) {
+            return rect;
+        }
+        const scale = window.getButtonRectScale?.() ?? 1;
+        const scrollX = window.scrollX || 0;
+        const scrollY = window.scrollY || 0;
+        return {
+            x: (rect.x + scrollX) * scale - scrollX,
+            y: (rect.y + scrollY) * scale - scrollY,
+            width: rect.width * scale,
+            height: rect.height * scale
+        };
     },
 
     highlightSelection(charCount) {
@@ -483,6 +657,9 @@ window.hoshiSelection = {
     },
 
     selectionRectsTouch(a, b) {
+        if (this.options.rubyAwareRects) {
+            return window.hoshiRubyGeometry.inlineRectsTouch(a, b);
+        }
         const tolerance = 0.5;
         if (this.isVertical()) {
             return Math.abs(a.x - b.x) <= tolerance &&
@@ -494,6 +671,35 @@ window.hoshiSelection = {
             Math.abs(a.height - b.height) <= tolerance &&
             b.x <= a.x + a.width + tolerance &&
             b.x + b.width >= a.x - tolerance;
+    },
+
+    unifyVerticalColumnRects(rects) {
+        if (!this.isVertical() || !rects.length) return rects;
+        const groups = [];
+        const groupForIndex = new Array(rects.length);
+        rects.forEach((rect, index) => {
+            const left = rect.x;
+            const right = rect.x + rect.width;
+            let group = null;
+            for (const candidate of groups) {
+                if (left < candidate.right && right > candidate.left) {
+                    group = candidate;
+                    break;
+                }
+            }
+            if (group) {
+                group.left = Math.min(group.left, left);
+                group.right = Math.max(group.right, right);
+            } else {
+                group = { left, right };
+                groups.push(group);
+            }
+            groupForIndex[index] = group;
+        });
+        return rects.map((rect, index) => {
+            const group = groupForIndex[index];
+            return { x: group.left, y: rect.y, width: group.right - group.left, height: rect.height };
+        });
     },
 
     getNormalizedOffset(targetNode, offset) {

@@ -33,6 +33,12 @@ For localization changes, run:
 ./gradlew :app:testDebugUnitTest --tests moe.antimony.hoshi.LocalizationResourceTest
 ```
 
+For reader web asset changes, run the focused JavaScript tests:
+
+```bash
+node --test app/src/test/js/*.test.mjs
+```
+
 ## Device And Emulator Safety
 
 - Preserve app data by default.

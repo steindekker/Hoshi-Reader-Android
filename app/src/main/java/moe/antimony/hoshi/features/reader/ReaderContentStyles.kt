@@ -1,5 +1,6 @@
 package moe.antimony.hoshi.features.reader
 
+import java.io.File
 import moe.antimony.hoshi.epub.HighlightColor
 
 internal object ReaderLayoutDefaults {
@@ -69,7 +70,8 @@ internal object ReaderContentStyles {
         systemDark: Boolean = false,
         sasayakiTextColor: Long = 0xFF000000,
         sasayakiBackgroundColor: Long = 0x6687CEEB,
-    ): String = "<style>\n${css(settings, fontFaceUrl, systemDark)}\n</style>"
+        readerCssTemplate: String? = null,
+    ): String = "<style>\n${css(settings, fontFaceUrl, systemDark, sasayakiTextColor, sasayakiBackgroundColor, readerCssTemplate)}\n</style>"
 
     fun css(
         settings: ReaderSettings = ReaderSettings(),
@@ -77,6 +79,7 @@ internal object ReaderContentStyles {
         systemDark: Boolean = false,
         sasayakiTextColor: Long = 0xFF000000,
         sasayakiBackgroundColor: Long = 0x6687CEEB,
+        readerCssTemplate: String? = null,
     ): String {
         val textColor = settings.textColorCss(systemDark)
         val backgroundColor = settings.backgroundColorCss(systemDark)
@@ -100,20 +103,6 @@ internal object ReaderContentStyles {
             ""
         }
         val eInkLineColor = if (settings.usesDarkInterface(systemDark)) "#fff" else "#000"
-        val selectionHighlightCss = """
-        html:not([data-hoshi-reader-eink-mode="true"]) ::highlight(hoshi-selection) {
-            background-color: rgba(160, 160, 160, 0.4) !important;
-            color: inherit;
-        }
-        html[data-hoshi-reader-eink-mode="true"] ::highlight(hoshi-selection) {
-            background-color: transparent !important;
-            color: inherit;
-            text-decoration-line: underline;
-            text-decoration-color: var(--hoshi-eink-line-color);
-            text-decoration-thickness: 1.5px;
-            text-underline-offset: 2px;
-        }
-        """.trimIndent()
         val gridCss = if (!settings.justifyText) {
             """
             text-align: start !important;
@@ -152,32 +141,6 @@ internal object ReaderContentStyles {
         } else {
             ""
         }
-        val sasayakiHighlightCss = """
-        html[data-hoshi-reader-eink-mode="true"] ::highlight(hoshi-sasayaki) {
-            color: inherit !important;
-            background-color: transparent !important;
-        }
-        html[data-hoshi-reader-eink-mode="true"] ruby.hoshi-sasayaki-ruby-active {
-            color: inherit !important;
-            background-color: transparent !important;
-        }
-        html[data-hoshi-reader-eink-mode="true"] .hoshi-sasayaki-cue.hoshi-sasayaki-active {
-            color: inherit !important;
-            background-color: transparent !important;
-        }
-        html:not([data-hoshi-reader-eink-mode="true"]) ::highlight(hoshi-sasayaki) {
-            color: var(--hoshi-sasayaki-text-color) !important;
-            background-color: var(--hoshi-sasayaki-background-color) !important;
-        }
-        html:not([data-hoshi-reader-eink-mode="true"]) ruby.hoshi-sasayaki-ruby-active {
-            color: var(--hoshi-sasayaki-text-color) !important;
-            background-color: var(--hoshi-sasayaki-background-color) !important;
-        }
-        html:not([data-hoshi-reader-eink-mode="true"]) .hoshi-sasayaki-cue.hoshi-sasayaki-active {
-            color: var(--hoshi-sasayaki-text-color) !important;
-            background-color: var(--hoshi-sasayaki-background-color) !important;
-        }
-        """.trimIndent()
         val furiganaCss = if (settings.hideFurigana) {
             """
             rt {
@@ -259,69 +222,41 @@ internal object ReaderContentStyles {
             }
             """.trimIndent()
         }
-        return """
-        $fontFaceCss
-        $pageBreakCss
-        $paragraphSpacingCss
-        @media (prefers-color-scheme: light) { :root { --hoshi-system-text-color: #000; } }
-        @media (prefers-color-scheme: dark) { :root { --hoshi-system-text-color: #fff; } }
-        :root {
-            --hoshi-background-color: $backgroundColor;
-            --hoshi-text-color: $textColor;
-            --hoshi-eink-line-color: $eInkLineColor;
-            --hoshi-reader-eink-mode: ${if (settings.eInkMode) "1" else "0"};
-            --hoshi-reader-vertical-writing: ${if (settings.verticalWriting) "1" else "0"};
-            --hoshi-sasayaki-text-color: ${sasayakiTextColor.toReaderCssColor()};
-            --hoshi-sasayaki-background-color: ${sasayakiBackgroundColor.toReaderCssColor(includeAlpha = true)};
-        }
-        html {
-            -webkit-line-box-contain: block glyphs replaced;
-        }
-        $layoutCss
-        img.block-img {
-            max-width: var(--hoshi-image-max-width, ${settings.imageMaxWidthFallbackCss}) !important;
-            max-height: var(--hoshi-image-max-height, ${settings.imageMaxHeightFallbackCss}) !important;
-            width: auto !important;
-            height: auto !important;
-            display: block !important;
-            margin: auto !important;
-            break-inside: avoid !important;
-            -webkit-column-break-inside: avoid !important;
-            object-fit: contain !important;
-        }
-        img.block-img.blurred,
-        svg.blurred {
-            filter: blur(24px) !important;
-            clip-path: inset(0);
-        }
-        .blur-wrapper {
-            display: table;
-            margin: auto;
-            line-height: 0;
-            overflow: hidden;
-        }
-        svg {
-            max-width: var(--hoshi-image-max-width, ${settings.imageMaxWidthFallbackCss}) !important;
-            max-height: var(--hoshi-image-max-height, ${settings.imageMaxHeightFallbackCss}) !important;
-            width: 100% !important;
-            height: 100% !important;
-            display: block !important;
-            margin: auto !important;
-            break-inside: avoid !important;
-            -webkit-column-break-inside: avoid !important;
-        }
-        $furiganaCss
-        ruby > rt, ruby > rp {
-            -webkit-user-select: none;
-            user-select: none;
-        }
-        $selectionHighlightCss
-        $sasayakiHighlightCss
-        ${HighlightColor.entries.joinToString("\n") { ".hoshi-highlight-${it.rawValue} { background-color: ${it.cssBackground} !important; }" }}
-        a {
-            color: rgba(66, 108, 245, 1) !important;
-        }
-        """.trimIndent()
+        return (readerCssTemplate ?: ReaderCssTemplateSource.value)
+            .replace("__HOSHI_FONT_FACE_CSS__", fontFaceCss)
+            .replace("__HOSHI_PAGE_BREAK_CSS__", pageBreakCss)
+            .replace("__HOSHI_PARAGRAPH_SPACING_CSS__", paragraphSpacingCss)
+            .replace("__HOSHI_BACKGROUND_COLOR__", backgroundColor)
+            .replace("__HOSHI_TEXT_COLOR__", textColor)
+            .replace("__HOSHI_EINK_LINE_COLOR__", eInkLineColor)
+            .replace("__HOSHI_READER_EINK_MODE__", if (settings.eInkMode) "1" else "0")
+            .replace("__HOSHI_READER_VERTICAL_WRITING__", if (settings.verticalWriting) "1" else "0")
+            .replace("__HOSHI_SASAYAKI_TEXT_COLOR__", sasayakiTextColor.toReaderCssColor())
+            .replace(
+                "__HOSHI_SASAYAKI_BACKGROUND_COLOR__",
+                sasayakiBackgroundColor.toReaderCssColor(includeAlpha = true),
+            )
+            .replace("__HOSHI_LAYOUT_CSS__", layoutCss)
+            .replace("__HOSHI_IMAGE_MAX_WIDTH_FALLBACK__", settings.imageMaxWidthFallbackCss)
+            .replace("__HOSHI_IMAGE_MAX_HEIGHT_FALLBACK__", settings.imageMaxHeightFallbackCss)
+            .replace("__HOSHI_FURIGANA_CSS__", furiganaCss)
+            .replace(
+                "__HOSHI_HIGHLIGHT_COLOR_CSS__",
+                HighlightColor.entries.joinToString("\n") {
+                    ".hoshi-highlight-${it.rawValue} { background-color: ${it.cssBackground} !important; }"
+                },
+            )
+    }
+}
+
+private object ReaderCssTemplateSource {
+    val value: String by lazy {
+        val candidates = listOf(
+            File("app/src/main/assets/hoshi-web/reader/reader.css"),
+            File("src/main/assets/hoshi-web/reader/reader.css"),
+        )
+        candidates.firstOrNull(File::isFile)?.readText()
+            ?: error("Reader CSS asset not found in source tree.")
     }
 }
 

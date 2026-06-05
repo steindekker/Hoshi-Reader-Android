@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.viewinterop.AndroidView
 import java.io.File
@@ -107,6 +108,8 @@ internal fun ChapterWebView(
     val currentWebViewRestoreEpoch = rememberUpdatedState(webViewRestoreEpoch)
     val currentOnRestoreStarted = rememberUpdatedState(onRestoreStarted)
     val currentOnRestoreCompleted = rememberUpdatedState(onRestoreCompleted)
+    val context = LocalContext.current
+    val readerWebAssets = remember(context) { ReaderWebAssets.load(context) }
     var lastContinuousProgressUpdate by remember { mutableStateOf(0L) }
     var continuousScrollSaveRequestId by remember { mutableStateOf(0L) }
     val chapter = book.chapters[chapterPosition.index]
@@ -160,6 +163,7 @@ internal fun ChapterWebView(
         chapterSasayakiCuesJson,
         chapterHighlightsJson,
         loadKey,
+        readerWebAssets,
     ) {
         readerSetupScript(
             initialProgress = chapterPosition.progress,
@@ -173,6 +177,7 @@ internal fun ChapterWebView(
             sasayakiCuesJson = chapterSasayakiCuesJson,
             highlightsJson = chapterHighlightsJson,
             restoreToken = loadKey,
+            assets = readerWebAssets,
         )
     }
     val currentOnFragmentRestored = rememberUpdatedState<(WebView, String) -> Boolean> { restoredWebView, restoreToken ->
@@ -716,6 +721,7 @@ private fun readerSetupScript(
     sasayakiCuesJson: String?,
     highlightsJson: String?,
     restoreToken: String,
+    assets: ReaderWebAssets,
 ): String {
     val eInkMode = readerJavaScriptStringLiteral(if (settings.eInkMode) "true" else "false")
     val css = ReaderContentStyles.css(
@@ -724,8 +730,9 @@ private fun readerSetupScript(
         systemDark = systemDark,
         sasayakiTextColor = sasayakiTextColor,
         sasayakiBackgroundColor = sasayakiBackgroundColor,
+        readerCssTemplate = assets.readerCss,
     ).let(::readerJavaScriptStringLiteral)
-    val selectionScript = ReaderSelectionScripts.source()
+    val selectionScript = assets.selectionJs
     val paginationScript = ReaderPaginationScripts.shellScriptWithRestoreToken(
         initialProgress = initialProgress,
         initialFragment = initialFragment,
@@ -733,6 +740,7 @@ private fun readerSetupScript(
         sasayakiCuesJson = sasayakiCuesJson,
         highlightsJson = highlightsJson,
         restoreToken = restoreToken,
+        assets = assets,
     ).scriptTagBody()
     return """
         (function() {
@@ -742,6 +750,13 @@ private fun readerSetupScript(
           document.head.appendChild(style);
           window.scanNonJapaneseText = $scanNonJapaneseText;
           $selectionScript
+          window.hoshiSelection.configure({
+            bridge: 'android-reader',
+            linkTapResult: 'link',
+            imageTapResult: 'image',
+            rubyAwareRects: true,
+            scaleRects: false
+          });
           if (!document.getElementById('hoshi-reader-popup-host-script')) {
             var popupHostScript = document.createElement('script');
             popupHostScript.id = 'hoshi-reader-popup-host-script';

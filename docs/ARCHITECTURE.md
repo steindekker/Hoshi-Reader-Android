@@ -40,9 +40,10 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   before adding Android-specific behavior.
 - Reader resource loading must stay on the repository's safe loading path and
   must not broaden file URL access.
-- Reader JavaScript and CSS are currently partly embedded in Kotlin string
-  script files, mainly `ReaderPaginationScripts.kt` and
-  `ReaderSelectionScripts.kt`.
+- Durable reader JavaScript and CSS live under
+  `app/src/main/assets/hoshi-web`; Kotlin owns typed commands, escaped
+  parameters, asset loading, dynamic configuration fill-in, and WebView bridge
+  invocation.
 - Lookup opens from a single tap on reader text. Long press is reserved for
   native selection/highlight flows.
 

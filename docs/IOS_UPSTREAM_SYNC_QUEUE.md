@@ -31,7 +31,7 @@ iOS behavior to mirror:
 
 Android current gap:
 
-- `LookupPopupHtml`, `LookupPopupAndroidOverlay`, Dictionary tab popup rendering, and `hoshi-popup` assets still use `html { zoom: ... }`, `getButtonRectScale()`, and separate rect coordinates.
+- `LookupPopupHtml`, `LookupPopupAndroidOverlay`, Dictionary tab popup rendering, and `hoshi-web/popup` assets still use `html { zoom: ... }`, `getButtonRectScale()`, and separate rect coordinates.
 - Android has prior zoom-coordinate work from the earlier `79fef08` slice, but this upstream commit supersedes that implementation model.
 - Android popup alignment needs a focused re-check in paginated and continuous vertical writing after removing zoom-based coordinate compensation.
 
@@ -73,7 +73,6 @@ iOS behavior to mirror:
 Android current gap:
 
 - Android already exposes an Always Show Progress setting, persists `readerAlwaysShowProgress`, suppresses the normal top/bottom progress bubbles, and renders progress in the bottom safe-area band.
-- Android `ReaderSelectionScripts` still treats `svg` containers as image taps; upstream now treats only `img`, SVG inner `image`, and `.blur-wrapper` as image taps.
 - Android bottom safe-area tap behavior and popup/selection dismissal order need a focused comparison against `a7a8380`.
 - Android reader image sizing and selection highlight range generation need comparison against the one-pixel blurred-image width fix and per-character highlight fix.
 

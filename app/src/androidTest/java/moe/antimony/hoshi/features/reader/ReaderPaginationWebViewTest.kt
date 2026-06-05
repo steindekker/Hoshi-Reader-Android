@@ -19,6 +19,7 @@ class ReaderPaginationWebViewTest {
     fun progressIncludesTextAtCurrentPageStart() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
+        val readerWebAssets = ReaderWebAssets.load(context)
         val pageLoaded = CountDownLatch(1)
         val scriptFinished = CountDownLatch(1)
         var progress = Double.NaN
@@ -37,7 +38,7 @@ class ReaderPaginationWebViewTest {
                 """
                 <!doctype html>
                 <html lang="ja">
-                    <head>${ReaderPaginationScripts.shellScript(initialProgress = 0.0)}</head>
+                    <head>${ReaderPaginationScripts.shellScript(initialProgress = 0.0, assets = readerWebAssets)}</head>
                     <body>一二三四五六七八九十</body>
                 </html>
                 """.trimIndent(),
@@ -64,6 +65,7 @@ class ReaderPaginationWebViewTest {
     fun nativeSelectionLocksPagedScrollPosition() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
+        val readerWebAssets = ReaderWebAssets.load(context)
         val pageLoaded = CountDownLatch(1)
         val scriptFinished = CountDownLatch(1)
         var result = JSONObject()
@@ -82,7 +84,7 @@ class ReaderPaginationWebViewTest {
                 """
                 <!doctype html>
                 <html lang="ja">
-                    <head>${ReaderPaginationScripts.shellScript(initialProgress = 0.0)}</head>
+                    <head>${ReaderPaginationScripts.shellScript(initialProgress = 0.0, assets = readerWebAssets)}</head>
                     <body>一二三四五六七八九十</body>
                 </html>
                 """.trimIndent(),

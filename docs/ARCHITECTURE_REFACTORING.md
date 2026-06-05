@@ -199,35 +199,6 @@ Exit criteria:
   lookup popup open, bookmark restoration, and Sasayaki cue behavior.
 - `ReaderWebView.kt` no longer owns business orchestration.
 
-## Target 6: Extract Reader JS/CSS From Kotlin String Scripts
-
-Priority: medium-high
-
-The reader currently stores substantial JavaScript inside Kotlin string
-templates. That should not remain the default authoring model for durable
-reader behavior.
-
-Target shape:
-
-- Move long-lived reader JavaScript and CSS into independent web assets or a
-  dedicated reader-web resource boundary.
-- Keep Kotlin responsible for typed commands, escaped parameters, asset loading,
-  and WebView bridge invocation.
-- Preserve behavior parity with the iOS reader scripts while improving Android
-  maintainability.
-- Add focused tests for command generation, escaping, asset availability, and
-  WebView bridge behavior instead of asserting large source strings.
-- Do not expand `*Scripts.kt` with new long inline scripts while this debt
-  remains.
-
-Exit criteria:
-
-- `ReaderPaginationScripts.kt` and `ReaderSelectionScripts.kt` no longer carry
-  large embedded JavaScript bodies.
-- Reader JS/CSS can be read, formatted, and reviewed as web code.
-- Existing reader validation still covers pagination, lookup, highlights,
-  restore, images, and Sasayaki cue behavior.
-
 ## Target 7: Keep DataStore Behind Repositories
 
 Priority: medium-high

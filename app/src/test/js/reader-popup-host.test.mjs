@@ -101,7 +101,7 @@ function popupHost() {
         },
     };
     const script = fs.readFileSync(
-        new URL('../../main/assets/hoshi-popup/reader-popup-host.js', import.meta.url),
+        new URL('../../main/assets/hoshi-web/popup/reader-popup-host.js', import.meta.url),
         'utf8',
     );
     vm.runInNewContext(script, { console, document, Map, Set, WeakMap, window });

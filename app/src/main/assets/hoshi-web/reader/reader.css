@@ -1,0 +1,95 @@
+__HOSHI_FONT_FACE_CSS__
+__HOSHI_PAGE_BREAK_CSS__
+__HOSHI_PARAGRAPH_SPACING_CSS__
+@media (prefers-color-scheme: light) { :root { --hoshi-system-text-color: #000; } }
+@media (prefers-color-scheme: dark) { :root { --hoshi-system-text-color: #fff; } }
+:root {
+    --hoshi-background-color: __HOSHI_BACKGROUND_COLOR__;
+    --hoshi-text-color: __HOSHI_TEXT_COLOR__;
+    --hoshi-eink-line-color: __HOSHI_EINK_LINE_COLOR__;
+    --hoshi-reader-eink-mode: __HOSHI_READER_EINK_MODE__;
+    --hoshi-reader-vertical-writing: __HOSHI_READER_VERTICAL_WRITING__;
+    --hoshi-sasayaki-text-color: __HOSHI_SASAYAKI_TEXT_COLOR__;
+    --hoshi-sasayaki-background-color: __HOSHI_SASAYAKI_BACKGROUND_COLOR__;
+}
+html {
+    -webkit-line-box-contain: block glyphs replaced;
+}
+__HOSHI_LAYOUT_CSS__
+img.block-img {
+    max-width: var(--hoshi-image-max-width, __HOSHI_IMAGE_MAX_WIDTH_FALLBACK__) !important;
+    max-height: var(--hoshi-image-max-height, __HOSHI_IMAGE_MAX_HEIGHT_FALLBACK__) !important;
+    width: auto !important;
+    height: auto !important;
+    display: block !important;
+    margin: auto !important;
+    break-inside: avoid !important;
+    -webkit-column-break-inside: avoid !important;
+    object-fit: contain !important;
+}
+img.block-img.blurred,
+svg.blurred {
+    filter: blur(24px) !important;
+    clip-path: inset(0);
+}
+.blur-wrapper {
+    display: table;
+    margin: auto;
+    line-height: 0;
+    overflow: hidden;
+}
+svg {
+    max-width: var(--hoshi-image-max-width, __HOSHI_IMAGE_MAX_WIDTH_FALLBACK__) !important;
+    max-height: var(--hoshi-image-max-height, __HOSHI_IMAGE_MAX_HEIGHT_FALLBACK__) !important;
+    width: 100% !important;
+    height: 100% !important;
+    display: block !important;
+    margin: auto !important;
+    break-inside: avoid !important;
+    -webkit-column-break-inside: avoid !important;
+}
+__HOSHI_FURIGANA_CSS__
+ruby > rt, ruby > rp {
+    -webkit-user-select: none;
+    user-select: none;
+}
+html:not([data-hoshi-reader-eink-mode="true"]) ::highlight(hoshi-selection) {
+    background-color: rgba(160, 160, 160, 0.4) !important;
+    color: inherit;
+}
+html[data-hoshi-reader-eink-mode="true"] ::highlight(hoshi-selection) {
+    background-color: transparent !important;
+    color: inherit;
+    text-decoration-line: underline;
+    text-decoration-color: var(--hoshi-eink-line-color);
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 2px;
+}
+html[data-hoshi-reader-eink-mode="true"] ::highlight(hoshi-sasayaki) {
+    color: inherit !important;
+    background-color: transparent !important;
+}
+html[data-hoshi-reader-eink-mode="true"] ruby.hoshi-sasayaki-ruby-active {
+    color: inherit !important;
+    background-color: transparent !important;
+}
+html[data-hoshi-reader-eink-mode="true"] .hoshi-sasayaki-cue.hoshi-sasayaki-active {
+    color: inherit !important;
+    background-color: transparent !important;
+}
+html:not([data-hoshi-reader-eink-mode="true"]) ::highlight(hoshi-sasayaki) {
+    color: var(--hoshi-sasayaki-text-color) !important;
+    background-color: var(--hoshi-sasayaki-background-color) !important;
+}
+html:not([data-hoshi-reader-eink-mode="true"]) ruby.hoshi-sasayaki-ruby-active {
+    color: var(--hoshi-sasayaki-text-color) !important;
+    background-color: var(--hoshi-sasayaki-background-color) !important;
+}
+html:not([data-hoshi-reader-eink-mode="true"]) .hoshi-sasayaki-cue.hoshi-sasayaki-active {
+    color: var(--hoshi-sasayaki-text-color) !important;
+    background-color: var(--hoshi-sasayaki-background-color) !important;
+}
+__HOSHI_HIGHLIGHT_COLOR_CSS__
+a {
+    color: rgba(66, 108, 245, 1) !important;
+}

@@ -444,7 +444,7 @@ internal class ReaderLookupPopupResourceHandler(
                 WebResourceResponse(
                     "image/svg+xml",
                     "UTF-8",
-                    context.assets.open("hoshi-popup/icons/$name"),
+                    context.assets.open("hoshi-web/popup/icons/$name"),
                 )
             }.getOrNull()
         }
