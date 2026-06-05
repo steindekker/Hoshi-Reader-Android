@@ -64,3 +64,13 @@ def test_render_svg_heiban_dimensions():
 
 def test_render_svg_empty_reading():
     assert pitch_svg.render_svg("", 0) == ""
+
+
+def test_render_multi_stacks_one_graph_per_accent():
+    multi = pitch_svg.render_multi("ゆうふく", [0, 1])
+    assert multi.count("<svg") == 2
+    assert "</svg><br><svg" in multi
+    assert multi == (pitch_svg.render_svg("ゆうふく", 0) + "<br>"
+                     + pitch_svg.render_svg("ゆうふく", 1))
+    # single accent -> no separator
+    assert pitch_svg.render_multi("かみ", [1]) == pitch_svg.render_svg("かみ", 1)

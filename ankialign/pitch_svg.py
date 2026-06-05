@@ -100,3 +100,9 @@ def render_svg(reading: str, accent: int) -> str:
     )
     out.append("</svg>")
     return "".join(out)
+
+
+def render_multi(reading: str, accents: list[int]) -> str:
+    """Stack one graph per accepted accent, `<br>`-separated — matching how
+    jidoujisho lays out multi-accent words."""
+    return "<br>".join(render_svg(reading, a) for a in accents)

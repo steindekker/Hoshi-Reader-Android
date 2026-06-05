@@ -34,17 +34,19 @@ def col(tmp_path, monkeypatch):
         n["Term"] = term; n["Reading"] = reading; n["Pitch Accent"] = pa
         c.add_note(n, deck); return n.id
 
-    add("異変", "いへん")               # fillable
-    add("加味", "かみ")                 # fillable
+    add("異変", "いへん")               # fillable (single accent)
+    add("加味", "かみ")                 # fillable (single accent)
+    add("裕福", "ゆうふく")             # fillable, multi-accent -> stacked graphs
     add("既存", "きそん", pa="<svg>existing</svg>")  # already has a graph -> skip
     add("謎語", "なぞご")               # not in index -> not_found
     add("無読", "")                     # no reading -> skipped
 
     # tiny AccentIndex file + point the engine at it (values are preference-ordered
-    # lists; primary_accent takes [0])
+    # lists; multi-accent words render one stacked graph per accent)
     idxfile = tmp_path / "accent_index.marshal.gz"
     with gzip.open(idxfile, "wb") as f:
-        f.write(marshal.dumps({"異変\tいへん": [0], "加味\tかみ": [1]}))
+        f.write(marshal.dumps({"異変\tいへん": [0], "加味\tかみ": [1],
+                               "裕福\tゆうふく": [0, 1]}))
     monkeypatch.setattr(pitch, "_INDEX_PATH", str(idxfile))
     yield c
     c.close()
@@ -52,16 +54,18 @@ def col(tmp_path, monkeypatch):
 
 def test_build_pitch_plan_counts(col):
     plan = pitch.build_pitch_plan(col)
-    assert plan["counts"] == {"filled": 2, "not_found": 1, "skipped": 1}
+    assert plan["counts"] == {"filled": 3, "not_found": 1, "skipped": 1}
     assert plan["counts"]["filled"] == len(plan["samples"]) or len(plan["samples"]) <= config.SAMPLE_N
 
 
 def test_backfill_fills_only_empty(col):
     res = pitch.backfill_pitch(col)
-    assert res == {"filled": 2, "not_found": 1, "skipped": 1}
+    assert res == {"filled": 3, "not_found": 1, "skipped": 1}
     nids = list(col.find_notes(f'note:"{config.TARGET_NOTETYPE}"'))
     pas = {col.get_note(i)["Term"]: col.get_note(i)["Pitch Accent"] for i in nids}
     assert "<svg" in pas["異変"] and "<svg" in pas["加味"]
+    # multi-accent word stacks one graph per accent, <br>-separated
+    assert pas["裕福"].count("<svg") == 2 and "<br>" in pas["裕福"]
     assert pas["既存"] == "<svg>existing</svg>"   # untouched
     assert pas["謎語"] == "" and pas["無読"] == ""
 

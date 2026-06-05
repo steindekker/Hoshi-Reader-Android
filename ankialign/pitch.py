@@ -14,19 +14,25 @@ _INDEX_PATH = os.path.join(os.path.dirname(__file__), "data", "accent_index.mars
 _FIELD = "Pitch Accent"
 
 
-def primary_accent(idx: AccentIndex, term: str, reading: str):
-    """Preferred downstep position for (term, reading), or None.
+def accents_for(idx: AccentIndex, term: str, reading: str):
+    """All accepted downstep positions for (term, reading), or None.
 
-    AccentIndex is keyed `lemma\\treading_hira` -> preference-ordered list[int];
-    we take [0]. Falls back to the kana headword (lemma == reading) for kanji
-    surfaces whose dictionary entry is keyed by the reading itself."""
+    AccentIndex is keyed `lemma\\treading_hira` -> preference-ordered list[int].
+    Falls back to the kana headword (lemma == reading) for kanji surfaces whose
+    dictionary entry is keyed by the reading itself."""
     r = hira(reading.strip())
     t = term.strip()
     for lemma, rd in ((t, r), (reading.strip(), r), (r, r)):
         positions = idx.lookup(lemma, rd)
         if positions:
-            return positions[0]
+            return positions
     return None
+
+
+def primary_accent(idx: AccentIndex, term: str, reading: str):
+    """Preferred (first) downstep position for (term, reading), or None."""
+    positions = accents_for(idx, term, reading)
+    return positions[0] if positions else None
 
 
 def _iter_targets(col, idx):
@@ -42,11 +48,11 @@ def _iter_targets(col, idx):
         if not reading:
             yield note, "skipped", None
             continue
-        pos = primary_accent(idx, note["Term"], reading)
-        if pos is None:
+        accents = accents_for(idx, note["Term"], reading)
+        if not accents:
             yield note, "not_found", None
             continue
-        yield note, "filled", pitch_svg.render_svg(reading, pos)
+        yield note, "filled", pitch_svg.render_multi(reading, accents)
 
 
 def build_pitch_plan(col) -> dict:
