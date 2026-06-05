@@ -23,7 +23,10 @@ _LIGHT_LEMMAS = {"する", "しれる"}
 # both kana and kanji lemma variants, since Sudachi uses either (言う/いう, 物/もの)
 _NO_PITCH_LEMMAS = {"こと", "事", "言う", "いう", "物", "もの", "ある", "有る",
                     "いる", "居る", "なる", "成る", "よう", "様",
-                    "これ", "それ", "あれ", "どれ"}  # basic demonstratives
+                    "これ", "それ", "あれ", "どれ",   # basic demonstratives
+                    "ない", "無い"}                  # standalone/なさ negative only;
+# conjugated negatives (分からない, 高くない) absorb ない into the head verb/adjective,
+# whose lemma is 分かる/高い -> still pitched.
 
 # こそあど + いう form lexicalized 連体詞 (そういう, こういう...) Sudachi splits as
 # 副詞/連体詞 + 動詞; fuse them into one block (dict has them as headwords).
