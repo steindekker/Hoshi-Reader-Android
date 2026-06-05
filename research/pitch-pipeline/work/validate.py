@@ -78,8 +78,9 @@ def parse_unit(val,start):
     if special_base is not None: reading=special_base
     return pos+1, expr, reading, is_yougen, uncertain, accent_str
 
-def parse_jrp(value):
-    """Yield (expr, reading, is_yougen, accents:set[int]) for each {..} unit."""
+def parse_jrp_ordered(value):
+    """Yield (expr, reading, is_yougen, accents:list[int]) per {..} unit, accents
+    in markup order (deduped) — i.e. the source dictionary's preference order."""
     value=value.replace(" "," ")
     units=[]
     idx=0
@@ -93,14 +94,15 @@ def parse_jrp(value):
                 nxt=value.find("}",idx)
                 if nxt<0: break
                 idx=nxt+1; continue
-            accs=set()
+            accs=[]
             ok=True
             for a in acc.split(","):
                 a=a.strip()
                 if a=="": ok=False; break
                 a=a.split("@")[0]  # take downstep, drop secondary calc
-                try: accs.add(int(a))
+                try: v=int(a)
                 except: ok=False; break
+                if v not in accs: accs.append(v)   # preserve order, dedup
             if ok and accs and expr:
                 units.append((expr,reading,yg,accs))
         elif c=="[":
@@ -110,6 +112,12 @@ def parse_jrp(value):
         else:
             break
     return units
+
+
+def parse_jrp(value):
+    """Back-compat wrapper: like parse_jrp_ordered but accents as set[int]."""
+    return [(e, r, y, set(a)) for e, r, y, a in parse_jrp_ordered(value)]
+
 
 # ---------------------------------------------------------------- gold extraction
 def extract_gold():
@@ -133,6 +141,24 @@ def extract_gold():
     db.close()
     return gold, token, n_units
 
+def extract_gold_ordered():
+    """(expr,reading) -> ordered list[int] of accepted accents.
+
+    Order is preference-preserving: the first note's markup order for a key sets
+    the order (its primary stays at [0]); accents that only appear in later notes
+    are appended. Used to bake the user's preferred primary into the index."""
+    db=sqlite3.connect(COL)
+    out={}
+    for (flds,) in db.execute("select flds from notes"):
+        for f in flds.split(SEP):
+            if "{" in f and ";" in f:
+                for expr,reading,_yg,accs in parse_jrp_ordered(f):
+                    cur=out.setdefault((expr,reading),[])
+                    for a in accs:
+                        if a not in cur: cur.append(a)
+    db.close()
+    return out
+
 # ---------------------------------------------------------------- dict loading
 def load_dict(path):
     """Return map (expr,reading)->set[int] and reading-only map reading->set[int]."""
@@ -147,6 +173,23 @@ def load_dict(path):
                 pos=p.get("position")
                 if isinstance(pos,int):
                     m[(term,reading)].add(pos)
+    return m
+
+def load_dict_ordered(path):
+    """(expr,reading) -> ordered list[int], preserving term_meta pitches[] order
+    (the dictionary's preference: pitches[0] is the primary accent)."""
+    m={}
+    for bank in glob.glob(os.path.join(path,"term_meta_bank_*.json")):
+        with open(bank) as fh: data=json.load(fh)
+        for e in data:
+            if len(e)<3 or e[1]!="pitch": continue
+            term=e[0]; info=e[2]
+            reading=info.get("reading",term)
+            cur=m.setdefault((term,reading),[])
+            for p in info.get("pitches",[]):
+                pos=p.get("position")
+                if isinstance(pos,int) and pos not in cur:
+                    cur.append(pos)
     return m
 
 # ---------------------------------------------------------------- main
