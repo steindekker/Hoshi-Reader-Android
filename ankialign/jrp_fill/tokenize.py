@@ -18,6 +18,11 @@ _YOUGEN = {"動詞", "形容詞"}
 # auxiliaries (しまう, くれる, full いる, できる, なる...) are unaffected.
 _LIGHT_LEMMAS = {"する", "しれる"}
 
+# Sudachi-default readings for a few high-frequency single morphemes that are
+# the wrong/uncommon choice in plain prose. Keyed on the exact whole surface so
+# they never fire inside a compound (私立=しりつ, 綾取り keep their own readings).
+_READING_OVERRIDE = {"私": "わたし", "綾": "あや"}
+
 def _is_bound_aux(pos0: str, surface: str, lemma: str) -> bool:
     # single-mora kana verb fragment (し, い, さ, き...) — always a conjugation
     # artifact, never a standalone word worth a pitch graph
@@ -44,15 +49,49 @@ def _lemma_reading(lemma: str) -> str:
 def _to_unit(m, acc: AccentIndex) -> Unit:
     pos0 = m.part_of_speech()[0]
     surface = m.surface()
-    reading = hira(m.reading_form() or surface)
+    reading = _READING_OVERRIDE.get(surface) or hira(m.reading_form() or surface)
     lemma = m.dictionary_form() or surface
     is_content = pos0 in _CONTENT
     if not is_content or _is_bound_aux(pos0, surface, lemma):
         return Unit(surface, lemma, reading, reading, False, False, ())
-    lemread = _lemma_reading(lemma)
+    lemread = _READING_OVERRIDE.get(surface) or _lemma_reading(lemma)
     positions = acc.lookup(lemma, lemread) or acc.lookup(lemma, reading)
     return Unit(surface, lemma, reading, lemread, True, pos0 in _YOUGEN,
                 tuple(positions) if positions else ())
+
+def _is_aux_tail(m) -> bool:
+    """A morpheme that continues a conjugation: auxiliaries (た, ない, ます, れる,
+    させ, たい...) and bound 形容詞/動詞 (the negative ない). て-form 助詞 and 補助動詞
+    (て+いる) are deliberately left out -> kept conservative."""
+    pos = m.part_of_speech()
+    if pos[0] == "助動詞":
+        return True
+    return pos[0] in _YOUGEN and pos[1] == "非自立可能"
+
+def _merge_yougen(ms, i: int, acc: AccentIndex) -> tuple[Unit, int] | None:
+    """Fuse a 動詞/形容詞 head with its trailing inflection chain into ONE yougen
+    unit (分から+なかっ+た -> 分からなかった). The accent stays the dictionary-form
+    downstep; emit.py renders the dict reading as the JRP base (`|わかる`) so the
+    pitch graph is correct while the conjugated surface shows kifuku coloring.
+    Returns None (caller uses the per-morpheme path) unless the head is a real
+    content yougen whose lemma has a known accent -> never loses coverage."""
+    head = ms[i]
+    pos0 = head.part_of_speech()[0]
+    surface = head.surface()
+    lemma = head.dictionary_form() or surface
+    if pos0 not in _YOUGEN or _is_bound_aux(pos0, surface, lemma):
+        return None
+    lemread = _READING_OVERRIDE.get(surface) or _lemma_reading(lemma)
+    positions = acc.lookup(lemma, lemread) or \
+        acc.lookup(lemma, hira(head.reading_form() or surface))
+    if not positions:
+        return None
+    j = i + 1
+    while j < len(ms) and _is_aux_tail(ms[j]):
+        j += 1
+    surf = "".join(x.surface() for x in ms[i:j])
+    read = "".join(hira(x.reading_form() or x.surface()) for x in ms[i:j])
+    return Unit(surf, lemma, read, lemread, True, True, tuple(positions)), j - i
 
 def _counter_merge(m, nxt, acc: AccentIndex) -> Unit | None:
     """Sudachi splits some number/noun + 接尾辞 compounds (数日 -> 数+日). If the
@@ -79,6 +118,12 @@ def units(text: str, acc: AccentIndex) -> list[Unit]:
                 out.append(merged)
                 i += 2
                 continue
+        yg = _merge_yougen(ms, i, acc)
+        if yg is not None:
+            unit, consumed = yg
+            out.append(unit)
+            i += consumed
+            continue
         u = _to_unit(m, acc)
         if u.is_content and not u.accents:
             subs = list(m.split(A))

@@ -20,9 +20,17 @@ def test_kanji_with_accent_is_wrapped():
     assert emit_unit(u) == "{[異変|いへん];0}"
 
 def test_yougen_flag_and_okurigana():
+    # conjugated yougen -> dict-form base reading after the accent so the graph
+    # places the downstep on the lemma, not the inflected reading
     u = U(surface="気付いた", reading="きづいた", lemma="気付く",
           lemma_reading="きづく", is_yougen=True, accents=(2,))
-    assert emit_unit(u) == "{[気付|きづ]いた;Y2}"
+    assert emit_unit(u) == "{[気付|きづ]いた;Y2|きづく}"
+
+def test_yougen_dictionary_form_no_base():
+    # reading == lemma_reading (dict form) -> no redundant base
+    u = U(surface="届く", reading="とどく", lemma="届く",
+          lemma_reading="とどく", is_yougen=True, accents=(2,))
+    assert emit_unit(u) == "{[届|とど]く;Y2}"
 
 def test_multiple_accents():
     u = U(surface="世界", reading="せかい", lemma="世界",
@@ -41,5 +49,5 @@ def test_emit_sentence_roundtrips_surface():
           lemma_reading="きづく", is_yougen=True, accents=(2,)),
     ]
     out = emit_sentence(units)
-    assert out == "{[異変|いへん];0}に{[気付|きづ]いた;Y2}"
+    assert out == "{[異変|いへん];0}に{[気付|きづ]いた;Y2|きづく}"
     assert markup.jrp_surface(out) == "異変に気付いた"
