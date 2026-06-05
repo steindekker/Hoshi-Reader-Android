@@ -40,10 +40,11 @@ def col(tmp_path, monkeypatch):
     add("謎語", "なぞご")               # not in index -> not_found
     add("無読", "")                     # no reading -> skipped
 
-    # tiny index file + point the engine at it
-    idxfile = tmp_path / "pitch_index.marshal.gz"
+    # tiny AccentIndex file + point the engine at it (values are preference-ordered
+    # lists; primary_accent takes [0])
+    idxfile = tmp_path / "accent_index.marshal.gz"
     with gzip.open(idxfile, "wb") as f:
-        f.write(marshal.dumps({"異変\tいへん": 0, "加味\tかみ": 1}))
+        f.write(marshal.dumps({"異変\tいへん": [0], "加味\tかみ": [1]}))
     monkeypatch.setattr(pitch, "_INDEX_PATH", str(idxfile))
     yield c
     c.close()

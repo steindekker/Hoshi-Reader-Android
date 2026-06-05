@@ -1,12 +1,32 @@
 """Pitch-graph backfill engine. Uses the anki `col` API; no aqt (GUI) imports
 so it can be tested headless. Mirrors convert.normalize_media: idempotent,
-writes only changed notes."""
+writes only changed notes.
+
+Reuses the shared, preference-ordered AccentIndex built for the JRP sentence
+fill (NHK2016 -> アクセント辞典v2 -> user gold), rather than shipping a second
+pitch-only index. positions[0] is the preferred ("primary") accent."""
 import os
 from . import config, pitch_svg
-from .pitch_index import PitchIndex
+from .jrp_fill.accent import AccentIndex
+from .jrp_fill._utils import hira
 
-_INDEX_PATH = os.path.join(os.path.dirname(__file__), "data", "pitch_index.marshal.gz")
+_INDEX_PATH = os.path.join(os.path.dirname(__file__), "data", "accent_index.marshal.gz")
 _FIELD = "Pitch Accent"
+
+
+def primary_accent(idx: AccentIndex, term: str, reading: str):
+    """Preferred downstep position for (term, reading), or None.
+
+    AccentIndex is keyed `lemma\\treading_hira` -> preference-ordered list[int];
+    we take [0]. Falls back to the kana headword (lemma == reading) for kanji
+    surfaces whose dictionary entry is keyed by the reading itself."""
+    r = hira(reading.strip())
+    t = term.strip()
+    for lemma, rd in ((t, r), (reading.strip(), r), (r, r)):
+        positions = idx.lookup(lemma, rd)
+        if positions:
+            return positions[0]
+    return None
 
 
 def _iter_targets(col, idx):
@@ -22,7 +42,7 @@ def _iter_targets(col, idx):
         if not reading:
             yield note, "skipped", None
             continue
-        pos = idx.lookup(note["Term"].strip(), reading)
+        pos = primary_accent(idx, note["Term"], reading)
         if pos is None:
             yield note, "not_found", None
             continue
@@ -31,7 +51,7 @@ def _iter_targets(col, idx):
 
 def build_pitch_plan(col) -> dict:
     """Read-only: counts + a few (term, reading, svg) samples. No mutation."""
-    idx = PitchIndex.load(_INDEX_PATH)
+    idx = AccentIndex.load(_INDEX_PATH)
     counts = {"filled": 0, "not_found": 0, "skipped": 0}
     samples = []
     for note, action, svg in _iter_targets(col, idx):
@@ -43,7 +63,7 @@ def build_pitch_plan(col) -> dict:
 
 def backfill_pitch(col) -> dict:
     """Write SVG graphs into empty Pitch Accent fields. Returns action counts."""
-    idx = PitchIndex.load(_INDEX_PATH)
+    idx = AccentIndex.load(_INDEX_PATH)
     res = {"filled": 0, "not_found": 0, "skipped": 0}
     for note, action, svg in _iter_targets(col, idx):
         res[action] += 1

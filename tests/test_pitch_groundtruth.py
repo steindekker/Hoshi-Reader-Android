@@ -9,11 +9,12 @@ import os
 import re
 import sqlite3
 import pytest
-from ankialign.pitch_index import PitchIndex
+from ankialign.jrp_fill.accent import AccentIndex
+from ankialign.pitch import primary_accent
 
 DB = os.path.join(os.path.dirname(__file__), "..", "collection.anki2")
 IDX = os.path.join(os.path.dirname(__file__), "..", "ankialign", "data",
-                   "pitch_index.marshal.gz")
+                   "accent_index.marshal.gz")
 FS = "\x1f"
 pytestmark = pytest.mark.skipif(
     not (os.path.exists(DB) and os.path.exists(IDX)),
@@ -62,7 +63,7 @@ def test_dict_agrees_with_existing_svgs():
     names = [r[0] for r in con.execute(
         "SELECT name FROM fields WHERE ntid=? ORDER BY ord", (mid,))]
     ix = {n: i for i, n in enumerate(names)}
-    idx = PitchIndex.load(IDX)
+    idx = AccentIndex.load(IDX)
 
     total = found = agree = 0
     mism = []
@@ -75,7 +76,7 @@ def test_dict_agrees_with_existing_svgs():
         if gold is None:
             continue
         total += 1
-        pos = idx.lookup(term, reading)
+        pos = primary_accent(idx, term, reading)
         if pos is None:
             continue
         found += 1
