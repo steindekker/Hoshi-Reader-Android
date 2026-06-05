@@ -18,10 +18,12 @@ _YOUGEN = {"動詞", "形容詞"}
 # auxiliaries (しまう, くれる, full いる, できる, なる...) are unaffected.
 _LIGHT_LEMMAS = {"する", "しれる"}
 
-# Sudachi-default readings for a few high-frequency single morphemes that are
-# the wrong/uncommon choice in plain prose. Keyed on the exact whole surface so
-# they never fire inside a compound (私立=しりつ, 綾取り keep their own readings).
-_READING_OVERRIDE = {"私": "わたし", "綾": "あや"}
+# Common-reading preference for words the dict lists under MULTIPLE readings, so
+# the dict oracle can't disambiguate and Sudachi picks the rarer one. Keyed on
+# the exact whole surface (never fires inside a compound: 私立=しりつ untouched).
+# Reserve this only for genuine frequency calls; wrong single readings the dict
+# *can* settle (綾->あや) are handled by the oracle below, not here.
+_READING_OVERRIDE = {"私": "わたし"}
 
 def _is_bound_aux(pos0: str, surface: str, lemma: str) -> bool:
     # single-mora kana verb fragment (し, い, さ, き...) — always a conjugation
@@ -46,6 +48,16 @@ def _lemma_reading(lemma: str) -> str:
     ms = _tok().tokenize(lemma, C)
     return hira("".join(m.reading_form() or m.surface() for m in ms))
 
+def _dict_reading(lemma: str, acc: AccentIndex) -> tuple[str, list[int]] | None:
+    """If the dict knows exactly one reading for this word, return it. Lets the
+    dict correct a reading Sudachi got wrong (綾: Sudachi りょう, dict only あや)
+    without per-word hardcoding. Ambiguous words (私: わたし & わたくし) -> None."""
+    known = acc.readings_for(lemma)
+    if len(known) == 1:
+        reading, positions = next(iter(known.items()))
+        return reading, positions
+    return None
+
 def _to_unit(m, acc: AccentIndex) -> Unit:
     pos0 = m.part_of_speech()[0]
     surface = m.surface()
@@ -56,6 +68,13 @@ def _to_unit(m, acc: AccentIndex) -> Unit:
         return Unit(surface, lemma, reading, reading, False, False, ())
     lemread = _READING_OVERRIDE.get(surface) or _lemma_reading(lemma)
     positions = acc.lookup(lemma, lemread) or acc.lookup(lemma, reading)
+    # dict oracle: non-inflecting word whose Sudachi reading the dict doesn't
+    # know -> adopt the dict's reading if it's unambiguous (fixes 綾->あや).
+    if not positions and pos0 not in _YOUGEN and surface not in _READING_OVERRIDE:
+        oracle = _dict_reading(lemma, acc)
+        if oracle is not None:
+            reading = lemread = oracle[0]
+            positions = oracle[1]
     return Unit(surface, lemma, reading, lemread, True, pos0 in _YOUGEN,
                 tuple(positions) if positions else ())
 

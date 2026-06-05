@@ -74,3 +74,34 @@ def test_counter_compound_merge():
     assert markup.jrp_surface(out2) == "五人いた"
     # 二人 stays one correctly-read unit (Sudachi keeps it whole)
     assert "ふたり" in emit_sentence(units("二人で歩いた", acc))
+
+@pytest.mark.skipif(not _sudachi_available(), reason="sudachipy not installed")
+def test_conjugation_merged_into_one_yougen():
+    # a conjugated verb absorbs its 助動詞/非自立可能 tail into ONE unit with the
+    # dict-form base reading, instead of pitching only the stem
+    from ankialign.jrp_fill.accent import AccentIndex
+    from ankialign.jrp_fill.tokenize import units
+    from ankialign.jrp_fill.emit import emit_sentence
+    from ankialign import markup
+    acc = AccentIndex.load(IDX)
+    out = emit_sentence(units("分からなかった", acc))
+    assert out == "{[分|わ]からなかった;Y2|わかる}"
+    assert markup.jrp_surface(out) == "分からなかった"
+    # full aux chain folds into the head verb's single unit
+    out2 = emit_sentence(units("食べさせられたくなかった", acc))
+    assert markup.jrp_surface(out2) == "食べさせられたくなかった"
+    assert out2.count("{") == 1 and "|たべる" in out2
+
+@pytest.mark.skipif(not _sudachi_available(), reason="sudachipy not installed")
+def test_dict_oracle_and_reading_override():
+    # 綾: Sudachi reads りょう (not in dict); the dict knows only あや -> oracle adopts it
+    from ankialign.jrp_fill.accent import AccentIndex
+    from ankialign.jrp_fill.tokenize import units
+    from ankialign.jrp_fill.emit import emit_sentence
+    acc = AccentIndex.load(IDX)
+    assert "[綾|あや]" in emit_sentence(units("言葉の綾", acc))
+    # the oracle must not leak into compounds where Sudachi is already right
+    assert "あやと" in emit_sentence(units("綾取り", acc))
+    # 私 is ambiguous in the dict (わたし & わたくし) -> explicit common-reading override
+    assert "[私|わたし]" in emit_sentence(units("私はそう思う", acc))
+    assert "しりつ" in emit_sentence(units("私立大学", acc))  # override stays whole-surface
