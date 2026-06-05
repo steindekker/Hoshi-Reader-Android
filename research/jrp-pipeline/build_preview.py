@@ -49,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
     from ankialign.jrp_fill import engine
     from ankialign.jrp_fill.accent import AccentIndex
     from ankialign.jrp_fill.tokenize import units
-    from ankialign.jrp_fill.emit import emit_sentence
+    from ankialign.jrp_fill.emit import emit_sentence, emit_unit
     from ankialign import markup
 
     col = Collection(args.collection)
@@ -58,7 +58,6 @@ def main(argv: list[str] | None = None) -> int:
         jrp_css, renderer = _extract_renderer(m["css"], m["tmpls"][0]["afmt"])
         acc = AccentIndex.load()
         gen = lambda text: emit_sentence(units(text, acc))
-        gen_conj = lambda text: emit_sentence(units(text, acc, conj_accent=True))
         if args.mode == "fill":
             # (old, new) = (before, our fill) for cards lacking pitch
             pairs = [(f.old_value, f.new_value)
@@ -68,16 +67,25 @@ def main(argv: list[str] | None = None) -> int:
             fields = [fl["name"] for fl in m["flds"]]
             si = fields.index(args.field)
             pairs = []
+            seen: set = set()
             for nid in col.find_notes(f'note:"{args.note_type}"'):
                 v = col.get_note(nid).fields[si]
                 if args.mode == "existing":
                     if "{" in v and ";" in v:             # already has pitch data
                         pairs.append((v, gen(markup.jrp_surface(v))))
-                else:  # conj: show only sentences whose conjugated pitch differs
+                else:  # conj: a deduplicated catalog of the CHANGED words
                     plain = markup.jrp_surface(v) if ("{" in v or "[" in v) else v
-                    old, new = gen(plain), gen_conj(plain)
-                    if old != new:
-                        pairs.append((old, new))
+                    a = units(plain, acc, conj_accent=True)   # computed
+                    b = units(plain, acc, conj_accent=False)  # dict-form
+                    if len(a) != len(b):
+                        continue
+                    for ua, ub in zip(a, b):
+                        if not ua.conj_computed:
+                            continue
+                        new, old = emit_unit(ua), emit_unit(ub)
+                        if new != old and (key := (ua.surface, ua.reading)) not in seen:
+                            seen.add(key)
+                            pairs.append((old, new))
     finally:
         col.close()
 
@@ -103,13 +111,15 @@ def main(argv: list[str] | None = None) -> int:
     old_label = {"fill": "was", "existing": "gold (jidoujisho)",
                  "conj": "dict-form (current)"}[args.mode]
     heading = {"fill": "our fill vs before", "existing": "ours vs accepted gold",
-               "conj": "computed conjugated pitch (top) vs dict-form graph"}[args.mode]
+               "conj": "computed conjugated pitch (top) vs dict-form (bottom) — distinct changed words"}[args.mode]
 
-    # conj mode: SHOW the indicator bars (the pitch contour) so the difference is
-    # visible without hovering; other modes hide them for a clean read.
+    # conj mode: a catalog of single changed words -> show the full pitch GRAPH
+    # (the line contour) always, so the difference is unmistakable.
     if args.mode == "conj":
-        mode_css = (".ja { line-height: 3.1; }\n"
-                    ".jrp-unit { margin-top: 1.6em !important; }")
+        mode_css = (".ja { line-height: 4.2; }\n"
+                    ".jrp-unit { margin-top: 2.2em !important; }\n"
+                    ".jrp-graph { visibility: visible !important; position: static !important;"
+                    " display: inline-block; margin-left: .6em; vertical-align: middle; }")
     else:
         mode_css = (".jrp-unit { margin:0 .12em 0 .12em !important; }\n"
                     ".jrp-indicator-container { display:none !important; }")

@@ -97,7 +97,10 @@ def _conj_downstep(head, tail, heiban: bool, dict_acc: int,
     (たい, ました, ません, です, て/ば not absorbed...) -> None."""
     from . import conjugate as C
     lemmas = [t.dictionary_form() or t.surface() for t in tail]
-    if any(l == "たい" for l in lemmas):
+    # only fire on inflectional auxiliaries with validated rules; anything else
+    # (べき, よう, そう, らしい, みたい, ず, ん/ぬ, です...) -> fall back to dict-form
+    _OK = {"た", "だ", "ない", "ます", "れる", "られる", "せる", "させる"}
+    if any(l not in _OK for l in lemmas):
         return None
     if "ます" in lemmas and lemmas[-1] != "ます":  # ました / ません
         return None
