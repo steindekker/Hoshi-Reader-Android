@@ -62,6 +62,10 @@ _KOSOADO = {"こう", "そう", "ああ", "どう"}
 # *can* settle (綾->あや) are handled by the oracle below, not here.
 _READING_OVERRIDE = {"私": "わたし"}
 
+# stoplisted words rendered WITHOUT furigana too — 何's reading (なに/なん) is
+# ambiguous & low-value, user prefers the bare kanji
+_NO_FURIGANA = {"何"}
+
 def _is_bound_aux(pos0: str, surface: str, lemma: str) -> bool:
     # single-mora kana verb fragment (し, い, さ, き...) — always a conjugation
     # artifact, never a standalone word worth a pitch graph
@@ -108,6 +112,8 @@ def _to_unit(m, acc: AccentIndex) -> Unit:
     # grammatical -> no pitch; reading-aware drops for polysemous kanji formal nouns
     if (lemma in _NO_PITCH_LEMMAS or pos[1] == "助動詞語幹"
             or (lemma, reading) in _NO_PITCH_FORMS):  # keep furigana, drop pitch
+        if lemma in _NO_FURIGANA:                     # ...and drop the reading too
+            reading = surface
         return Unit(surface, lemma, reading, reading, True, False, ())
     lemread = _READING_OVERRIDE.get(surface) or _lemma_reading(lemma)
     positions = acc.lookup(lemma, lemread) or acc.lookup(lemma, reading)
@@ -274,6 +280,32 @@ def _prefix_merge(ms, i: int, acc: AccentIndex,
         return Unit(js, js, jr, jr, True, False, tuple(pos)), 1 + n
     return None
 
+_NOMINAL = {"名詞", "代名詞", "連体詞", "形状詞"}
+_AFFIX = {"接頭辞", "接尾辞"}
+
+def _nominal_merge(ms, i: int, acc: AccentIndex) -> tuple[Unit, int] | None:
+    """Fuse adjacent nominal morphemes Sudachi over-split. Two triggers, longest
+    window first: (a) the joined surface+reading is a dict headword -> pitched with
+    its accent (我が国 -> わがくに[1]); (b) the run carries an honorific 接頭辞 (お/ご)
+    -> kept whole even on a dict miss, furigana-only (おばあちゃん). Verb stems stop
+    the window, so お出まし stays for _prefix_merge."""
+    n = len(ms)
+    if ms[i].part_of_speech()[0] not in (_NOMINAL | {"接頭辞"}):
+        return None
+    j = i
+    while j < n and ms[j].part_of_speech()[0] in (_NOMINAL | _AFFIX):
+        j += 1
+    while j - i >= 2:
+        surf = "".join(x.surface() for x in ms[i:j])
+        read = hira("".join(x.reading_form() or x.surface() for x in ms[i:j]))
+        pos = acc.lookup(surf, read) or acc.by_reading(read)
+        if pos:
+            return Unit(surf, surf, read, read, True, False, tuple(pos)), j - i
+        if any(ms[k].part_of_speech()[0] == "接頭辞" for k in range(i, j)):
+            return Unit(surf, surf, read, read, True, False, ()), j - i
+        j -= 1
+    return None
+
 def units(text: str, acc: AccentIndex, conj_accent: bool = True) -> list[Unit]:
     A, C = _modes()
     ms = list(_tok().tokenize(text, C))
@@ -288,6 +320,12 @@ def units(text: str, acc: AccentIndex, conj_accent: bool = True) -> list[Unit]:
                 out.append(merged)
                 i += 2
                 continue
+        nm = _nominal_merge(ms, i, acc)
+        if nm is not None:
+            unit, consumed = nm
+            out.append(unit)
+            i += consumed
+            continue
         pre = _prefix_merge(ms, i, acc, conj_accent)
         if pre is not None:
             unit, consumed = pre

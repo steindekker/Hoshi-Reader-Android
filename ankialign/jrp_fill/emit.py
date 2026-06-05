@@ -10,7 +10,8 @@ def _furi(surface: str, reading: str) -> str:
 def emit_unit(u: Unit) -> str:
     if not u.is_content:
         return u.surface
-    body = _furi(u.surface, u.reading)
+    # reading == surface -> nothing to annotate (e.g. 何 rendered bare, no furigana)
+    body = u.surface if u.reading == u.surface else _furi(u.surface, u.reading)
     if u.accents:
         flag = ("!" if u.ambiguous else "") + ("Y" if u.is_yougen else "")
         acc = ",".join(str(a) for a in u.accents)

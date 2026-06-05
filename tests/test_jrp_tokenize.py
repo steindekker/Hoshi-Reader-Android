@@ -207,7 +207,8 @@ def test_interrogatives_and_giving_verbs_dropped():
     from ankialign.jrp_fill.emit import emit_sentence
     acc = AccentIndex.load(IDX)
     g = lambda s: emit_sentence(units(s, acc))
-    assert "{[何" not in g("何がある") and "[何|なん]" in g("何がある")
+    # 何 is dropped AND rendered bare (no furigana reading)
+    assert g("何がある") == "何がある"
     assert "{[誰" not in g("誰がいる")
     assert "いつ;" not in g("いつ来る") and "なぜ;" not in g("なぜだ")
     # standalone giving verbs unpitched; in 〜て form the MAIN verb keeps its pitch
@@ -224,6 +225,20 @@ def test_honorific_prefix_merge():
     # お/ご split off by Sudachi but a dict headword -> ONE unit with whole-word accent
     assert "{お[話|はなし];0}" in g("お話をする")          # not the split はなし[3]
     assert "{お[出|で]まし;0}" in g("お出ましか")          # noun, no 用言 marking
+
+def test_nominal_compound_merge():
+    from ankialign.jrp_fill.accent import AccentIndex
+    from ankialign.jrp_fill.tokenize import units
+    from ankialign.jrp_fill.emit import emit_sentence
+    acc = AccentIndex.load(IDX)
+    g = lambda s: emit_sentence(units(s, acc))
+    # adjacent nominals whose joined form is a dict headword -> ONE pitched unit
+    assert "{わが[国|くに];1}" in g("わが国の未来")          # was わが[1] + 国[0]
+    assert "{[我|わ]が[国|くに];1}" in g("我が国の未来")
+    # honorific 接頭辞 run kept whole even on a dict miss (furigana-only, no pitch)
+    assert "おばあちゃん" in g("おばあちゃんがいる") and "{おばあ;" not in g("おばあちゃんがいる")
+    # no over-merge without a 接頭辞 or dict hit: 学生 keeps its pitch, さん separate
+    assert "{[学生|がくせい];0}さん" in g("学生さんが来た")
 
 def test_dict_miss_word_kept_whole_via_reading_and_gozaimasu():
     from ankialign.jrp_fill.accent import AccentIndex
