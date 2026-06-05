@@ -120,3 +120,17 @@ def test_lexicalized_form_beats_conjugation_merge():
     assert "おもう" not in out and "Y2|" not in out.split("わず")[0]
     # a genuinely-conjugated verb the dict does NOT list whole still merges as 用言
     assert "{[断|ことわ]られた;Y3|ことわる}" in emit_sentence(units("断られた", acc))
+
+@pytest.mark.skipif(not _sudachi_available(), reason="sudachipy not installed")
+def test_kosoado_iu_and_no_pitch_stoplist():
+    from ankialign.jrp_fill.accent import AccentIndex
+    from ankialign.jrp_fill.tokenize import units
+    from ankialign.jrp_fill.emit import emit_sentence
+    from ankialign import markup
+    acc = AccentIndex.load(IDX)
+    out = emit_sentence(units("そういうことか、と合点がいった。", acc))
+    assert markup.jrp_surface(out) == "そういうことか、と合点がいった。"
+    assert "{そういう;0}" in out          # one block, not そう + いう
+    assert "{こと" not in out             # こと unpitched
+    assert "いった;" not in out and "{いう" not in out  # 言う/いう unpitched
+    assert "{どういう;1}" in emit_sentence(units("どういうこと", acc))

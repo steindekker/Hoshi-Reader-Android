@@ -19,7 +19,7 @@ pytestmark = pytest.mark.skipif(
 def test_strict_accent_coverage_at_least_98pct():
     import sqlite3
     from ankialign.jrp_fill.accent import AccentIndex
-    from ankialign.jrp_fill.tokenize import units
+    from ankialign.jrp_fill.tokenize import units, _NO_PITCH_LEMMAS
     acc = AccentIndex.load(IDX)
     con = sqlite3.connect(f"file:{DB}?immutable=1", uri=True)
     con.create_collation("unicase",
@@ -39,7 +39,8 @@ def test_strict_accent_coverage_at_least_98pct():
     total = hit = 0
     for s in sample:
         for u in units(s, acc):
-            if u.is_content:
+            # exclude intentionally-unpitched common words from the denominator
+            if u.is_content and u.lemma not in _NO_PITCH_LEMMAS:
                 total += 1
                 if u.accents:
                     hit += 1

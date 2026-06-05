@@ -18,6 +18,14 @@ _YOUGEN = {"動詞", "形容詞"}
 # auxiliaries (しまう, くれる, full いる, できる, なる...) are unaffected.
 _LIGHT_LEMMAS = {"する", "しれる"}
 
+# Very common, low-information words: keep furigana but DROP the pitch color, it
+# only adds clutter and hurts readability (user call). Keyed by lemma.
+_NO_PITCH_LEMMAS = {"こと", "言う", "いう"}  # Sudachi lemmatises 言う as 言う or いう
+
+# こそあど + いう form lexicalized 連体詞 (そういう, こういう...) Sudachi splits as
+# 副詞/連体詞 + 動詞; fuse them into one block (dict has them as headwords).
+_KOSOADO = {"こう", "そう", "ああ", "どう"}
+
 # Common-reading preference for words the dict lists under MULTIPLE readings, so
 # the dict oracle can't disambiguate and Sudachi picks the rarer one. Keyed on
 # the exact whole surface (never fires inside a compound: 私立=しりつ untouched).
@@ -66,6 +74,8 @@ def _to_unit(m, acc: AccentIndex) -> Unit:
     is_content = pos0 in _CONTENT
     if not is_content or _is_bound_aux(pos0, surface, lemma):
         return Unit(surface, lemma, reading, reading, False, False, ())
+    if lemma in _NO_PITCH_LEMMAS:  # keep furigana, drop pitch
+        return Unit(surface, lemma, reading, reading, True, False, ())
     lemread = _READING_OVERRIDE.get(surface) or _lemma_reading(lemma)
     positions = acc.lookup(lemma, lemread) or acc.lookup(lemma, reading)
     # dict oracle: non-inflecting word whose Sudachi reading the dict doesn't
@@ -148,6 +158,8 @@ def _merge_yougen(ms, i: int, acc: AccentIndex,
         return None  # bare verb, no tail -> let the per-morpheme path handle it
     surf = "".join(x.surface() for x in ms[i:j])
     read = "".join(hira(x.reading_form() or x.surface()) for x in ms[i:j])
+    if lemma in _NO_PITCH_LEMMAS:  # 言った etc. -> furigana, no pitch
+        return Unit(surf, lemma, read, read, True, False, ()), j - i
     # lexicalized whole form (思わず, 我ながら...): the inflected span is itself a
     # dict headword, so use its OWN accent as a plain unit, not the verb's. The
     # dict already knows it -> no hardcoding, and it isn't a 用言 (no Y).
@@ -180,6 +192,18 @@ def _counter_merge(m, nxt, acc: AccentIndex) -> Unit | None:
     pos = acc.lookup(js, jr)
     return Unit(js, js, jr, jr, True, False, tuple(pos)) if pos else None
 
+def _kosoado_iu_merge(m, nxt, acc: AccentIndex) -> Unit | None:
+    """こう/そう/ああ/どう + いう -> one 連体詞 block (そういう, こういう...). One block
+    even if the dict lacks it; pitched when present (そういう[0], どういう[1])."""
+    if m.surface() not in _KOSOADO or nxt.part_of_speech()[0] != "動詞":
+        return None
+    if (nxt.dictionary_form() or "") not in ("いう", "言う"):
+        return None
+    js = m.surface() + nxt.surface()
+    jr = hira((m.reading_form() or m.surface()) + (nxt.reading_form() or nxt.surface()))
+    pos = acc.lookup(js, jr)
+    return Unit(js, js, jr, jr, True, False, tuple(pos) if pos else ())
+
 def units(text: str, acc: AccentIndex, conj_accent: bool = False) -> list[Unit]:
     A, C = _modes()
     ms = list(_tok().tokenize(text, C))
@@ -188,7 +212,8 @@ def units(text: str, acc: AccentIndex, conj_accent: bool = False) -> list[Unit]:
     while i < len(ms):
         m = ms[i]
         if i + 1 < len(ms):
-            merged = _counter_merge(m, ms[i + 1], acc)
+            merged = _counter_merge(m, ms[i + 1], acc) or \
+                _kosoado_iu_merge(m, ms[i + 1], acc)
             if merged is not None:
                 out.append(merged)
                 i += 2
