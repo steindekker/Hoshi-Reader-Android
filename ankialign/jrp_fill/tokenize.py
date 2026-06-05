@@ -79,11 +79,14 @@ def _to_unit(m, acc: AccentIndex) -> Unit:
                 tuple(positions) if positions else ())
 
 def _is_aux_tail(m) -> bool:
-    """A morpheme that continues a conjugation: auxiliaries (た, ない, ます, れる,
-    させ, たい...) and bound 形容詞/動詞 (the negative ない). て-form 助詞 and 補助動詞
-    (て+いる) are deliberately left out -> kept conservative."""
+    """A morpheme that continues the 用言: auxiliaries (た, ない, ます, れる, させ...),
+    bound 形容詞/動詞 — the negative ない and 補助動詞 いる/くる/おく/しまう... — and the
+    て/で connector that links them (生きて+きた, 祀って+いる). So the whole conjugated
+    form (生きてきた, 祀っている) becomes one unit."""
     pos = m.part_of_speech()
     if pos[0] == "助動詞":
+        return True
+    if pos[0] == "助詞" and pos[1] == "接続助詞" and m.surface() in ("て", "で"):
         return True
     return pos[0] in _YOUGEN and pos[1] == "非自立可能"
 
