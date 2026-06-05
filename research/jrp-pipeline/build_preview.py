@@ -37,11 +37,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--field", default="Sentence")
     ap.add_argument("--limit", type=int, default=100,
                     help="number of evenly-sampled cards to show (0 = all)")
-    ap.add_argument("--mode", choices=("fill", "existing", "conj"), default="fill",
+    ap.add_argument("--mode", choices=("fill", "existing", "conj", "lowconf"), default="fill",
                     help="fill: plain/partial cards we'd change (old=before, new=our fill); "
                          "existing: cards that ALREADY have pitch (old=accepted gold, "
-                         "new=our regeneration); conj: computed conjugated pitch (new) vs "
-                         "dict-form graph (old), only cards where they differ")
+                         "new=our regeneration); conj: computed conjugated pitch vs dict-form; "
+                         "lowconf: only sentences with something the engine is unsure about, "
+                         "with a note on why")
     ap.add_argument("--theme", choices=("light", "dark"), default="light",
                     help="render with the card's light or dark pitch palette")
     ap.add_argument("--out", default=os.path.join(ROOT, "research/jrp-pipeline/work/preview.html"))
@@ -60,10 +61,30 @@ def main(argv: list[str] | None = None) -> int:
         jrp_css, renderer = _extract_renderer(m["css"], m["tmpls"][0]["afmt"])
         acc = AccentIndex.load()
         gen = lambda text: emit_sentence(units(text, acc))
+        from ankialign.jrp_fill._utils import KANJI_RE
         if args.mode == "fill":
             # (old, new) = (before, our fill) for cards lacking pitch
             pairs = [(f.old_value, f.new_value)
                      for f in engine.build_plan(col, args.note_type, args.field, gen)]
+        elif args.mode == "lowconf":
+            # sentences containing something uncertain; caption says what & why
+            fields = [fl["name"] for fl in m["flds"]]
+            si = fields.index(args.field)
+            pairs = []
+            for nid in col.find_notes(f'note:"{args.note_type}"'):
+                v = col.get_note(nid).fields[si]
+                plain = markup.jrp_surface(v) if ("{" in v or "[" in v) else v
+                us = units(plain, acc, conj_accent=True)
+                reasons = []
+                for u in us:
+                    if u.is_content and not u.accents and KANJI_RE.search(u.surface):
+                        reasons.append(f"{u.surface} — no accent in dict (reading guess only)")
+                    elif u.is_yougen and u.reading != u.lemma_reading and not u.conj_computed:
+                        reasons.append(f"{u.surface} — conjugated pitch not computed (dict-form shown)")
+                    elif len(u.accents) > 1:
+                        reasons.append(f"{u.surface} — multiple attested accents {u.accents}")
+                if reasons:
+                    pairs.append(("　·　".join(reasons[:4]), emit_sentence(us)))
         else:
             # (old, new) = (accepted gold, our regen) | (dict-form, computed conj)
             fields = [fl["name"] for fl in m["flds"]]
@@ -98,11 +119,20 @@ def main(argv: list[str] | None = None) -> int:
         step = total / args.limit
         pairs = [pairs[int(i * step)] for i in range(args.limit)]
 
+    import html as _html
     rows = []
     for old, new in pairs:
-        # both lines go through the card's JRP renderer (unescaped, as Anki injects
-        # the field) for a like-for-like visual comparison.
-        rows.append(f"""
+        if args.mode == "lowconf":
+            # top = rendered sentence; bottom = a plain-text note on what's uncertain
+            rows.append(f"""
+    <div class="row">
+      <div class="ja" data-jrp-generate>{new}</div>
+      <div class="note">⚠ {_html.escape(old)}</div>
+    </div>""")
+        else:
+            # both lines go through the card's JRP renderer (unescaped, as Anki
+            # injects the field) for a like-for-like visual comparison.
+            rows.append(f"""
     <div class="row">
       <div class="ja" data-jrp-generate>{new}</div>
       <div class="ja old" data-jrp-generate>{old}</div>
@@ -111,9 +141,10 @@ def main(argv: list[str] | None = None) -> int:
     # top line is always OUR output; the "old" line is the before (fill) or the
     # accepted jidoujisho gold (existing)
     old_label = {"fill": "was", "existing": "gold (jidoujisho)",
-                 "conj": "dict-form (current)"}[args.mode]
+                 "conj": "dict-form (current)", "lowconf": ""}[args.mode]
     heading = {"fill": "our fill vs before", "existing": "ours vs accepted gold",
-               "conj": "computed conjugated pitch (top) vs dict-form (bottom) — distinct changed words"}[args.mode]
+               "conj": "computed conjugated pitch (top) vs dict-form (bottom) — distinct changed words",
+               "lowconf": "low-confidence cards — what the engine is unsure about"}[args.mode]
 
     # conj mode: a catalog of single changed words -> show the full pitch GRAPH
     # (the line contour) always, so the difference is unmistakable.
@@ -152,6 +183,9 @@ h1 {{ font-size:1rem; font-weight:600; opacity:.6; margin-bottom:1.5rem; }}
 .old::before {{ content:"{old_label}"; display:block; font-size:.6rem; letter-spacing:.08em;
                 text-transform:uppercase; opacity:.45; font-family:system-ui,sans-serif; }}
 {mode_css}
+.note {{ margin-top:.5rem; font-size:.85rem; color:#c0392b; opacity:.85;
+        font-family:system-ui,sans-serif; }}
+.nightMode .note {{ color:#ff9b8a; }}
 .ja rt {{ font-size:60%; opacity:.6; }}
 </style></head>
 <body class="{body_class}">
