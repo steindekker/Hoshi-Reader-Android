@@ -21,12 +21,28 @@ _LIGHT_LEMMAS = {"する", "しれる"}
 # Very common, low-information words: keep furigana but DROP the pitch color, it
 # only adds clutter and hurts readability (user call). Keyed by lemma.
 # both kana and kanji lemma variants, since Sudachi uses either (言う/いう, 物/もの)
-_NO_PITCH_LEMMAS = {"こと", "事", "言う", "いう", "物", "もの", "ある", "有る",
-                    "いる", "居る", "なる", "成る", "よう", "様",
-                    "これ", "それ", "あれ", "どれ",   # basic demonstratives
-                    "ない", "無い"}                  # standalone/なさ negative only;
+_NO_PITCH_LEMMAS = {
+    "こと", "事", "言う", "いう", "物", "もの", "ある", "有る",
+    "いる", "居る", "なる", "成る", "よう", "様",
+    "ない", "無い",                  # standalone/なさ negative only;
+    # demonstratives (こそあど) — pure deixis, pitch adds nothing to reading
+    "これ", "それ", "あれ", "どれ",                  # 代名詞 (things)
+    "ここ", "そこ", "あそこ", "どこ",                # 代名詞 (places)
+    "この", "その", "あの", "どの",                  # 連体詞
+    "こんな", "そんな", "あんな", "どんな",          # 連体詞/形状詞
+    "こう", "そう", "ああ", "どう",                  # 副詞 (manner) — incl. standalone そう
+    # formal / dependent nouns: grammaticalized, carry structure not meaning.
+    # kanji that share a lemma with a real content word (時=とき/じ, 方=ほう/かた,
+    # 内=うち/ない, 訳=わけ/やく) are handled reading-aware in _NO_PITCH_FORMS instead.
+    "ところ", "所", "とき", "ため", "為", "ほう", "はず",
+    "わけ", "うち", "まま", "そのまま",
+}
 # conjugated negatives (分からない, 高くない) absorb ない into the head verb/adjective,
 # whose lemma is 分かる/高い -> still pitched.
+
+# (lemma, reading) pairs to de-pitch ONLY for that reading, so polysemous kanji
+# don't lose pitch on their content sense (三時 じ / 話し方 かた / 以内 / 翻訳 やく).
+_NO_PITCH_FORMS = {("時", "とき"), ("方", "ほう"), ("内", "うち"), ("訳", "わけ")}
 
 # こそあど + いう form lexicalized 連体詞 (そういう, こういう...) Sudachi splits as
 # 副詞/連体詞 + 動詞; fuse them into one block (dict has them as headwords).
@@ -81,9 +97,10 @@ def _to_unit(m, acc: AccentIndex) -> Unit:
     is_content = pos0 in _CONTENT
     if not is_content or _is_bound_aux(pos0, surface, lemma):
         return Unit(surface, lemma, reading, reading, False, False, ())
-    # modal stems (evidential/likeness そう, よう, みたい = 形状詞/助動詞語幹) are
-    # grammatical -> no pitch; the adverb そう (副詞) is unaffected
-    if lemma in _NO_PITCH_LEMMAS or pos[1] == "助動詞語幹":  # keep furigana, drop pitch
+    # modal stems (evidential/likeness よう, みたい = 形状詞/助動詞語幹) are
+    # grammatical -> no pitch; reading-aware drops for polysemous kanji formal nouns
+    if (lemma in _NO_PITCH_LEMMAS or pos[1] == "助動詞語幹"
+            or (lemma, reading) in _NO_PITCH_FORMS):  # keep furigana, drop pitch
         return Unit(surface, lemma, reading, reading, True, False, ())
     lemread = _READING_OVERRIDE.get(surface) or _lemma_reading(lemma)
     positions = acc.lookup(lemma, lemread) or acc.lookup(lemma, reading)

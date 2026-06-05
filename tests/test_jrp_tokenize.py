@@ -167,7 +167,7 @@ def test_modals_not_absorbed_and_mashita():
     assert "{[教|おし]えてくれました;Y7}" in g("教えてくれました。")
 
 @pytest.mark.skipif(not _sudachi_available(), reason="sudachipy not installed")
-def test_modal_stem_sou_dropped_adverb_sou_kept():
+def test_sou_dropped_everywhere_but_kosoado_iu_kept():
     from ankialign.jrp_fill.accent import AccentIndex
     from ankialign.jrp_fill.tokenize import units
     from ankialign.jrp_fill.emit import emit_sentence
@@ -175,4 +175,26 @@ def test_modal_stem_sou_dropped_adverb_sou_kept():
     g = lambda s: emit_sentence(units(s, acc))
     assert "そう;" not in g("もう帰ったそうです。")   # 形状詞/助動詞語幹 evidential -> plain
     assert "そう;" not in g("雨が降りそうだ。")
-    assert "{そう;0,1}" in g("そう思う。")            # 副詞 adverb -> kept
+    assert "そう;" not in g("そう思う。")             # 副詞 adverb -> now dropped too
+    assert "{そういう;0}" in g("そういうこと。")      # but こそあど+いう block still pitched
+
+def test_demonstratives_and_formal_nouns_dropped():
+    from ankialign.jrp_fill.accent import AccentIndex
+    from ankialign.jrp_fill.tokenize import units
+    from ankialign.jrp_fill.emit import emit_sentence
+    from ankialign import markup
+    acc = AccentIndex.load(IDX)
+    g = lambda s: emit_sentence(units(s, acc))
+    # (sentence, the token that must be emitted UNPITCHED). Other content words
+    # in the sentence (verbs etc.) stay pitched as normal.
+    cases = [("ここで待つ", "ここ"), ("そこにある", "そこ"), ("この本", "この"),
+             ("その方がいい", "[方|ほう]"), ("あんな人", "あんな"), ("こう思う", "こう"),
+             ("どこへ行く", "どこ"), ("食べるとき", "とき"), ("読むため", "ため"),
+             ("はずがない", "はず"), ("うちに帰る", "うち"), ("そのまま置く", "そのまま")]
+    for s, tok in cases:
+        out = g(s)
+        assert markup.jrp_surface(out) == s   # surface preserved (furigana kept)
+        assert tok in out and "{" + tok not in out   # present but never inside a pitch unit
+    # reading-aware: 時=とき -> furigana only; the 三時(じ) counter stays pitched
+    assert "[時|とき]" in g("行く時。") and "{[時" not in g("行く時。")
+    assert "{" in g("三時に会う。")
