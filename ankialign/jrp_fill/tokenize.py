@@ -20,7 +20,9 @@ _LIGHT_LEMMAS = {"する", "しれる"}
 
 # Very common, low-information words: keep furigana but DROP the pitch color, it
 # only adds clutter and hurts readability (user call). Keyed by lemma.
-_NO_PITCH_LEMMAS = {"こと", "言う", "いう"}  # Sudachi lemmatises 言う as 言う or いう
+# both kana and kanji lemma variants, since Sudachi uses either (言う/いう, 物/もの)
+_NO_PITCH_LEMMAS = {"こと", "事", "言う", "いう", "物", "もの", "ある", "有る",
+                    "いる", "居る", "なる", "成る", "よう", "様"}
 
 # こそあど + いう form lexicalized 連体詞 (そういう, こういう...) Sudachi splits as
 # 副詞/連体詞 + 動詞; fuse them into one block (dict has them as headwords).
