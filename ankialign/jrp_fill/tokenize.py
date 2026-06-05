@@ -73,14 +73,17 @@ def _dict_reading(lemma: str, acc: AccentIndex) -> tuple[str, list[int]] | None:
     return None
 
 def _to_unit(m, acc: AccentIndex) -> Unit:
-    pos0 = m.part_of_speech()[0]
+    pos = m.part_of_speech()
+    pos0 = pos[0]
     surface = m.surface()
     reading = _READING_OVERRIDE.get(surface) or hira(m.reading_form() or surface)
     lemma = m.dictionary_form() or surface
     is_content = pos0 in _CONTENT
     if not is_content or _is_bound_aux(pos0, surface, lemma):
         return Unit(surface, lemma, reading, reading, False, False, ())
-    if lemma in _NO_PITCH_LEMMAS:  # keep furigana, drop pitch
+    # modal stems (evidential/likeness そう, よう, みたい = 形状詞/助動詞語幹) are
+    # grammatical -> no pitch; the adverb そう (副詞) is unaffected
+    if lemma in _NO_PITCH_LEMMAS or pos[1] == "助動詞語幹":  # keep furigana, drop pitch
         return Unit(surface, lemma, reading, reading, True, False, ())
     lemread = _READING_OVERRIDE.get(surface) or _lemma_reading(lemma)
     positions = acc.lookup(lemma, lemread) or acc.lookup(lemma, reading)

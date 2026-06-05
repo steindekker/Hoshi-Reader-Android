@@ -165,3 +165,14 @@ def test_modals_not_absorbed_and_mashita():
     # ました polite past -> downstep on ま (chain-safe)
     assert "{[食|た]べました;Y3}" in g("食べました。")
     assert "{[教|おし]えてくれました;Y7}" in g("教えてくれました。")
+
+@pytest.mark.skipif(not _sudachi_available(), reason="sudachipy not installed")
+def test_modal_stem_sou_dropped_adverb_sou_kept():
+    from ankialign.jrp_fill.accent import AccentIndex
+    from ankialign.jrp_fill.tokenize import units
+    from ankialign.jrp_fill.emit import emit_sentence
+    acc = AccentIndex.load(IDX)
+    g = lambda s: emit_sentence(units(s, acc))
+    assert "そう;" not in g("もう帰ったそうです。")   # 形状詞/助動詞語幹 evidential -> plain
+    assert "そう;" not in g("雨が降りそうだ。")
+    assert "{そう;0,1}" in g("そう思う。")            # 副詞 adverb -> kept
