@@ -109,3 +109,23 @@ build lives at an **absolute path in the main repo** (gitignored, not in the wor
 - Sentence inline pitch — explicitly deferred to the third-party JRP add-on.
 - Re-running after the unify conversion (Kanji Study → Kinomoto adds pitch-less notes): the
   standalone pass covers them; the unify tail-call is a convenience, not required.
+
+## As-built amendment (2026-06-05, after rebase onto main)
+
+`main` meanwhile merged the JRP sentence-fill, which ships a shared, layered
+`jrp_fill.accent.AccentIndex` (NHK2016 → アクセント辞典v2 → user gold) keyed
+`lemma\treading_hira`. This feature was refactored to **reuse it** instead of shipping its
+own v2-only `pitch_index`:
+
+- **Deleted** `pitch_index.py`, `data/pitch_index.marshal.gz`, `research/pitch-pipeline/build_index.py`,
+  `tests/test_pitch_index.py` (removed ~3 MB of duplicate shipped data).
+- `pitch.py` now calls `jrp_fill.accent.AccentIndex` + `jrp_fill._utils.hira` via a
+  `primary_accent()` helper (takes `positions[0]`, keeps the kana-headword fallback).
+- The shared index build was made **preference-preserving** (was `sorted()` → numeric min
+  as "primary"): `validate.py` gained `*_ordered` loaders; `build_accent_index.py` drops
+  `sorted()`. Key set + per-key position-sets are unchanged (16,933 multi-accent entries
+  reorder), so the sentence-fill side is unaffected — it just leads with the preferred accent.
+
+Result on the real collection: term-graph fills **157 → 168** (gold/NHK recover idioms v2
+lacked); ground-truth audit 2164/2164 found, 2163 agree. `pitch_svg.py` (SVG generator),
+the engine, and the GUI are unchanged — `jrp_fill` has no term-graph renderer.
