@@ -142,17 +142,27 @@ def extract_gold():
     return gold, token, n_units
 
 def extract_gold_ordered():
-    """(expr,reading) -> ordered list[int] of accepted accents.
+    """(expr,reading) -> ordered list[int] of accepted accents (NON-yougen only).
 
     Order is preference-preserving: the first note's markup order for a key sets
     the order (its primary stays at [0]); accents that only appear in later notes
-    are appended. Used to bake the user's preferred primary into the index."""
+    are appended.
+
+    Yougen (`;Y`) units are SKIPPED: their gold key is the *conjugated surface*
+    (気付いた, not 気付く), which is mis-keyed for a (lemma,reading) index. Keeping
+    them pollutes the index and, worse, makes tokenize.py's lexicalized-whole-form
+    check fire on ordinary conjugations (matching 気付いた->[2]), which drops the
+    用言 classification so verbs render as a frozen nakadaka instead of heiban/kifuku.
+    The dictionaries already cover verbs via their lemma, and genuine lexicalized
+    inflected forms (思わず) are real dict headwords, so nothing is lost."""
     db=sqlite3.connect(COL)
     out={}
     for (flds,) in db.execute("select flds from notes"):
         for f in flds.split(SEP):
             if "{" in f and ";" in f:
-                for expr,reading,_yg,accs in parse_jrp_ordered(f):
+                for expr,reading,yg,accs in parse_jrp_ordered(f):
+                    if yg:                 # skip conjugated 用言 surfaces (see docstring)
+                        continue
                     cur=out.setdefault((expr,reading),[])
                     for a in accs:
                         if a not in cur: cur.append(a)
