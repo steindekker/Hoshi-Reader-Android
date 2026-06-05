@@ -100,16 +100,24 @@ def _merge_yougen(ms, i: int, acc: AccentIndex) -> tuple[Unit, int] | None:
     lemma = head.dictionary_form() or surface
     if pos0 not in _YOUGEN or _is_bound_aux(pos0, surface, lemma):
         return None
+    j = i + 1
+    while j < len(ms) and _is_aux_tail(ms[j]):
+        j += 1
+    if j == i + 1:
+        return None  # bare verb, no tail -> let the per-morpheme path handle it
+    surf = "".join(x.surface() for x in ms[i:j])
+    read = "".join(hira(x.reading_form() or x.surface()) for x in ms[i:j])
+    # lexicalized whole form (思わず, 我ながら...): the inflected span is itself a
+    # dict headword, so use its OWN accent as a plain unit, not the verb's. The
+    # dict already knows it -> no hardcoding, and it isn't a 用言 (no Y).
+    whole = acc.lookup(surf, read)
+    if whole is not None:
+        return Unit(surf, surf, read, read, True, False, tuple(whole)), j - i
     lemread = _READING_OVERRIDE.get(surface) or _lemma_reading(lemma)
     positions = acc.lookup(lemma, lemread) or \
         acc.lookup(lemma, hira(head.reading_form() or surface))
     if not positions:
         return None
-    j = i + 1
-    while j < len(ms) and _is_aux_tail(ms[j]):
-        j += 1
-    surf = "".join(x.surface() for x in ms[i:j])
-    read = "".join(hira(x.reading_form() or x.surface()) for x in ms[i:j])
     return Unit(surf, lemma, read, lemread, True, True, tuple(positions)), j - i
 
 def _counter_merge(m, nxt, acc: AccentIndex) -> Unit | None:

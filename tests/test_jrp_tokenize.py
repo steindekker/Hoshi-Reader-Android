@@ -105,3 +105,18 @@ def test_dict_oracle_and_reading_override():
     # 私 is ambiguous in the dict (わたし & わたくし) -> explicit common-reading override
     assert "[私|わたし]" in emit_sentence(units("私はそう思う", acc))
     assert "しりつ" in emit_sentence(units("私立大学", acc))  # override stays whole-surface
+
+@pytest.mark.skipif(not _sudachi_available(), reason="sudachipy not installed")
+def test_lexicalized_form_beats_conjugation_merge():
+    # 思わず is a dict adverb (おもわず); Sudachi splits it as 思わ(思う)+ず. The whole
+    # form must win over the verb-conjugation merge, so it keeps its OWN accent and
+    # is NOT marked 用言 (no Y, no 思う base reading).
+    from ankialign.jrp_fill.accent import AccentIndex
+    from ankialign.jrp_fill.tokenize import units
+    from ankialign.jrp_fill.emit import emit_sentence
+    acc = AccentIndex.load(IDX)
+    out = emit_sentence(units("思わず顔をしかめた", acc))
+    assert "{[思|おも]わず;2}" in out
+    assert "おもう" not in out and "Y2|" not in out.split("わず")[0]
+    # a genuinely-conjugated verb the dict does NOT list whole still merges as 用言
+    assert "{[断|ことわ]られた;Y3|ことわる}" in emit_sentence(units("断られた", acc))
