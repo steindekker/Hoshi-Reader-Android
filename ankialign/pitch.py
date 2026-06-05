@@ -2,17 +2,15 @@
 so it can be tested headless. Mirrors convert.normalize_media: idempotent,
 writes only changed notes.
 
-Uses a DICT-AUTHORITATIVE accent index (research/pitch-pipeline/build_pitch_index.py:
-gold -> NHK2016 -> アクセント辞典v2, so the dictionaries own the accent/order for words
-they cover and unverified gold only fills the words they lack). This is deliberately
-NOT the shared JRP index (which lets gold win) — a term graph wants the dictionary's
-canonical accents for a word in isolation. positions[0] is the primary accent."""
+Uses the shared, dict-authoritative AccentIndex (gold -> NHK2016 -> アクセント辞典v2,
+so the dictionaries own the accent/order for words they cover and unverified gold only
+fills the words they lack). positions[0] is the primary accent."""
 import os
 from . import config, pitch_svg
 from .jrp_fill.accent import AccentIndex
 from .jrp_fill._utils import hira
 
-_INDEX_PATH = os.path.join(os.path.dirname(__file__), "data", "pitch_accent_index.marshal.gz")
+_INDEX_PATH = os.path.join(os.path.dirname(__file__), "data", "accent_index.marshal.gz")
 _FIELD = "Pitch Accent"
 
 

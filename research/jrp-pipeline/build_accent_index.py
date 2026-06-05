@@ -2,8 +2,12 @@
 """Build ankialign/data/accent_index.marshal.gz.
 
 Key:   "lemma\treading_hira"  Value: preference-ordered list[int] of downstep
-       positions (pitches[0]/markup-first = primary; NOT sorted).
-Source priority (later overwrites): NHK2016 -> アクセント辞典v2 -> user gold.
+       positions (pitches[0] = the dictionary's primary accent; NOT sorted).
+Source priority (later overwrites): user gold -> NHK2016 -> アクセント辞典v2.
+  => the DICTIONARIES are authoritative for words they cover (canonical accents +
+     order); unverified user gold only fills the words the dicts lack. (Earlier this
+     was gold-wins; switched to dict-first so neither the pitch graphs nor the JRP
+     sentence markup inherit jidoujisho's non-canonical auto-accents.)
 Run:   uv run python research/jrp-pipeline/build_accent_index.py
 Reuses research/pitch-pipeline/work/validate.py.
 """
@@ -22,18 +26,18 @@ def key(lemma, reading): return lemma + "\t" + hira(reading)
 
 def main():
     index: dict[str, list[int]] = {}
-    # NHK2016 then v2 (dict term_meta): (expr,reading)->preference-ordered positions
-    # (pitches[0] = the dictionary's primary accent; order is preserved, not sorted).
+    # gold first (lowest priority: survives only where both dicts miss the word)
+    gold = V.extract_gold_ordered()
+    for (expr, reading), accs in gold.items():
+        index[key(expr, reading)] = accs
+    print(f"after gold (coverage filler): {len(index)} keys", file=sys.stderr)
+    # dictionaries overwrite gold; v2 last so it wins over NHK. preference order
+    # preserved (pitches[0] = primary), not sorted.
     for name in ("NHK 2016 (Recommended)", "アクセント辞典v2"):
         m = V.load_dict_ordered(os.path.join(V.DICTD, name))
         for (expr, reading), positions in m.items():
             index[key(expr, reading)] = positions
         print(f"after {name}: {len(index)} keys", file=sys.stderr)
-    # gold wins — keep the user's own markup order (their preferred accent first)
-    gold = V.extract_gold_ordered()
-    for (expr, reading), accs in gold.items():
-        index[key(expr, reading)] = accs
-    print(f"after gold: {len(index)} keys", file=sys.stderr)
 
     out = os.path.join(ROOT, "ankialign/data/accent_index.marshal.gz")
     os.makedirs(os.path.dirname(out), exist_ok=True)

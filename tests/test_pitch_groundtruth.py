@@ -14,7 +14,7 @@ from ankialign.pitch import primary_accent
 
 DB = os.path.join(os.path.dirname(__file__), "..", "collection.anki2")
 IDX = os.path.join(os.path.dirname(__file__), "..", "ankialign", "data",
-                   "pitch_accent_index.marshal.gz")
+                   "accent_index.marshal.gz")
 FS = "\x1f"
 pytestmark = pytest.mark.skipif(
     not (os.path.exists(DB) and os.path.exists(IDX)),
