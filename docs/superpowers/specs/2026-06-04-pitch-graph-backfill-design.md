@@ -139,11 +139,13 @@ Two changes after seeing real cards:
    (`<svg><br><svg>`). `pitch_svg.render_multi` + `pitch.accents_for` now emit every accepted
    accent. 26–28 of the 173 fills are multi-accent. (Reverses the earlier "primary only"
    call.)
-2. **Dict-authoritative index, separate from the shared JRP one.** The shared index lets
+2. **Dict-authoritative index — for BOTH features (single index).** The index originally let
    unverified auto-gold *win*, which overrode the dictionaries for ~488 words (reordered the
-   primary, or dropped a valid accent the user's one sentence didn't use). A term graph wants
-   the dictionary's canonical accents, so the pitch feature now loads its **own**
-   `data/pitch_accent_index.marshal.gz` (built by `research/pitch-pipeline/build_pitch_index.py`,
-   priority **gold → NHK2016 → v2**: v2 wins, gold only fills the 1,176 words the dicts lack).
-   The shared `accent_index.marshal.gz` (gold-wins) is untouched, so the JRP sentence-fill is
-   unaffected. Cost: a second ~3.4 MB shipped index (a deliberate trade for correctness).
+   primary, or dropped a valid accent the user's one sentence happened not to use — 裕福 ゆうふく
+   `[1,0]`→`[0,1]`, 明日 あした `[0,3]`→`[0]`). Decision: **the dictionaries should always be #1**.
+   `build_accent_index.py` priority is now **gold → NHK2016 → v2** (dicts win; gold only fills the
+   1,176 words the dicts lack). This single shared `accent_index.marshal.gz` is canonical for both
+   the pitch graphs *and* the JRP sentence markup — neither inherits jidoujisho's non-canonical
+   auto-accents. The key set is unchanged (315,227), so JRP coverage is unaffected; only those
+   ~488 words' accent/order changes (now canonical). A short-lived separate pitch index was tried
+   and removed once we decided dict-first everywhere.
