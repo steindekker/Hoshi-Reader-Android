@@ -126,6 +126,24 @@ own v2-only `pitch_index`:
   `sorted()`. Key set + per-key position-sets are unchanged (16,933 multi-accent entries
   reorder), so the sentence-fill side is unaffected — it just leads with the preferred accent.
 
-Result on the real collection: term-graph fills **157 → 168** (gold/NHK recover idioms v2
-lacked); ground-truth audit 2164/2164 found, 2163 agree. `pitch_svg.py` (SVG generator),
-the engine, and the GUI are unchanged — `jrp_fill` has no term-graph renderer.
+Result on the real collection: term-graph fills **157 → 173** (gold/NHK recover idioms v2
+lacked); ground-truth audit 2164/2164 found, 2163 agree. `pitch_svg.py` (SVG generator) and
+the GUI are unchanged — `jrp_fill` has no term-graph renderer.
+
+## As-built amendment 2 (2026-06-05, test-run findings)
+
+Two changes after seeing real cards:
+
+1. **Render ALL accepted accents, stacked** (not just the primary). Multi-accent words
+   (裕福 ゆうふく, etc.) carry several valid pitches; jidoujisho stacks one SVG per accent
+   (`<svg><br><svg>`). `pitch_svg.render_multi` + `pitch.accents_for` now emit every accepted
+   accent. 26–28 of the 173 fills are multi-accent. (Reverses the earlier "primary only"
+   call.)
+2. **Dict-authoritative index, separate from the shared JRP one.** The shared index lets
+   unverified auto-gold *win*, which overrode the dictionaries for ~488 words (reordered the
+   primary, or dropped a valid accent the user's one sentence didn't use). A term graph wants
+   the dictionary's canonical accents, so the pitch feature now loads its **own**
+   `data/pitch_accent_index.marshal.gz` (built by `research/pitch-pipeline/build_pitch_index.py`,
+   priority **gold → NHK2016 → v2**: v2 wins, gold only fills the 1,176 words the dicts lack).
+   The shared `accent_index.marshal.gz` (gold-wins) is untouched, so the JRP sentence-fill is
+   unaffected. Cost: a second ~3.4 MB shipped index (a deliberate trade for correctness).
