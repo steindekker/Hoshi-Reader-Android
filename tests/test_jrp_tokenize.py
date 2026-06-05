@@ -165,6 +165,8 @@ def test_modals_not_absorbed_and_mashita():
     # ました polite past -> downstep on ま (chain-safe)
     assert "{[食|た]べました;Y3}" in g("食べました。")
     assert "{[教|おし]えてくれました;Y7}" in g("教えてくれました。")
+    # べき (べし) is a modal -> own unit, not fused into the verb
+    assert g("立てるべきだった。") == "{[立|た]てる;Y2}べきだった。"
 
 @pytest.mark.skipif(not _sudachi_available(), reason="sudachipy not installed")
 def test_sou_dropped_everywhere_but_kosoado_iu_kept():

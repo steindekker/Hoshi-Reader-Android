@@ -18,9 +18,15 @@ class Fill:
 
 
 def build_plan(col, note_type: str, field: str,
-               generate: Callable[[str], str]) -> list[Fill]:
+               generate: Callable[[str], str], regenerate: bool = False) -> list[Fill]:
     """Generate the diff. `generate(plain_text) -> markup` is injected so this
-    function stays testable without Sudachi."""
+    function stays testable without Sudachi.
+
+    Default (splice) preserves any existing `{..}`/`[..]` markup and only fills
+    plain runs. `regenerate=True` instead strips each field back to its plain
+    surface and rebuilds it wholesale — replacing previously-accepted gold so the
+    whole deck uses the current generator consistently. The round-trip guard
+    below still protects the visible text in both modes."""
     mid = col.models.id_for_name(note_type)
     if mid is None:
         return []
@@ -35,7 +41,11 @@ def build_plan(col, note_type: str, field: str,
         old = note.fields[fi]
         if not old.strip():
             continue
-        new = splice(old, generate)
+        if regenerate:
+            surface = markup.jrp_surface(old) if ("{" in old or "[" in old) else old
+            new = generate(surface)
+        else:
+            new = splice(old, generate)
         if new == old:
             continue
         # round-trip guard: visible surface must be unchanged

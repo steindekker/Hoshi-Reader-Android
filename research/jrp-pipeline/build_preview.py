@@ -45,6 +45,9 @@ def main(argv: list[str] | None = None) -> int:
                          "with a note on why")
     ap.add_argument("--theme", choices=("light", "dark"), default="light",
                     help="render with the card's light or dark pitch palette")
+    ap.add_argument("--seed", type=int, default=None,
+                    help="random-sample the examples with this seed (default: "
+                         "deterministic even spacing across the whole set)")
     ap.add_argument("--out", default=os.path.join(ROOT, "research/jrp-pipeline/work/preview.html"))
     args = ap.parse_args(argv)
 
@@ -95,7 +98,9 @@ def main(argv: list[str] | None = None) -> int:
                 v = col.get_note(nid).fields[si]
                 if args.mode == "existing":
                     if "{" in v and ";" in v:             # already has pitch data
-                        pairs.append((v, gen(markup.jrp_surface(v))))
+                        new = gen(markup.jrp_surface(v))
+                        if new != v:                       # only the ones we'd change
+                            pairs.append((v, new))
                 else:  # conj: a deduplicated catalog of the CHANGED words
                     plain = markup.jrp_surface(v) if ("{" in v or "[" in v) else v
                     a = units(plain, acc, conj_accent=True)   # computed
@@ -113,11 +118,16 @@ def main(argv: list[str] | None = None) -> int:
         col.close()
 
     total = len(pairs)
-    # sample evenly across the whole set so the examples are varied, not just the
-    # first N (which cluster by note order)
     if args.limit and args.limit < total:
-        step = total / args.limit
-        pairs = [pairs[int(i * step)] for i in range(args.limit)]
+        if args.seed is not None:
+            # fresh random subset (for a "different set" review pass)
+            import random
+            pairs = random.Random(args.seed).sample(pairs, args.limit)
+        else:
+            # sample evenly across the whole set so the examples are varied, not
+            # just the first N (which cluster by note order)
+            step = total / args.limit
+            pairs = [pairs[int(i * step)] for i in range(args.limit)]
 
     import html as _html
     rows = []

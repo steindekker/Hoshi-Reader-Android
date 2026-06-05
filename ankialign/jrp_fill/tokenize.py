@@ -136,7 +136,7 @@ def _is_aux_tail(m) -> bool:
 _DERIV = {"れる", "られる", "せる", "させる"}  # passive/potential/causative
 # modal auxiliaries that carry their OWN accent — don't fuse them into the verb
 # (できないらしい, 難しいでしょう); the verb computes on its own, the modal stays plain
-_NO_ABSORB = {"らしい", "です", "だ"}
+_NO_ABSORB = {"らしい", "です", "だ", "べし"}  # べし=べき: modal "should", own unit
 
 def _conj_downstep(head, tail, heiban: bool, dict_acc: int,
                    lemread: str, conj_reading: str) -> int | None:

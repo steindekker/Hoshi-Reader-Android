@@ -20,6 +20,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-conj-accent", dest="conj_accent", action="store_false",
                     help="show dict-form pitch instead of the computed conjugated "
                          "downstep (断られた -> ことわら\\れた is the default)")
+    ap.add_argument("--regenerate", action="store_true",
+                    help="rebuild EVERY field from its plain surface, replacing "
+                         "existing accepted markup (default: splice into gaps only)")
     args = ap.parse_args(argv)
 
     if not os.path.exists(args.collection):
@@ -36,7 +39,8 @@ def main(argv: list[str] | None = None) -> int:
     col = Collection(args.collection)
     try:
         gen = _generate_factory(conj_accent=args.conj_accent)
-        plan = engine.build_plan(col, args.note_type, args.field, gen)
+        plan = engine.build_plan(col, args.note_type, args.field, gen,
+                                 regenerate=args.regenerate)
         if args.limit:
             plan = plan[:args.limit]
         print(f"{len(plan)} notes would change")
