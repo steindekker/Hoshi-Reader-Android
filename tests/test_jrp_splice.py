@@ -22,3 +22,11 @@ def test_bracket_segment_is_preserved():
 def test_fully_marked_is_noop():
     s = "{[異変|いへん];0}に{[気付|きづ]いた;Y2}"
     assert splice(s, gen) == s
+
+def test_stoplist_word_in_existing_gold_is_depitched():
+    # pre-existing jidoujisho pitch on a stoplist word is demoted to furigana-only
+    assert splice("{それ;1}から", gen) == "それから"
+    assert splice("{[時|とき];0}が来る", gen) == "[時|とき]<<が来る>>"  # 時=とき dropped
+    # but a non-stoplist unit is preserved, and the 三時(じ) counter stays pitched
+    assert splice("{[異変|いへん];0}", gen) == "{[異変|いへん];0}"
+    assert splice("{[時|じ];1}", gen) == "{[時|じ];1}"
