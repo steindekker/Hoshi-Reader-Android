@@ -109,3 +109,43 @@ build lives at an **absolute path in the main repo** (gitignored, not in the wor
 - Sentence inline pitch — explicitly deferred to the third-party JRP add-on.
 - Re-running after the unify conversion (Kanji Study → Kinomoto adds pitch-less notes): the
   standalone pass covers them; the unify tail-call is a convenience, not required.
+
+## As-built amendment (2026-06-05, after rebase onto main)
+
+`main` meanwhile merged the JRP sentence-fill, which ships a shared, layered
+`jrp_fill.accent.AccentIndex` (NHK2016 → アクセント辞典v2 → user gold) keyed
+`lemma\treading_hira`. This feature was refactored to **reuse it** instead of shipping its
+own v2-only `pitch_index`:
+
+- **Deleted** `pitch_index.py`, `data/pitch_index.marshal.gz`, `research/pitch-pipeline/build_index.py`,
+  `tests/test_pitch_index.py` (removed ~3 MB of duplicate shipped data).
+- `pitch.py` now calls `jrp_fill.accent.AccentIndex` + `jrp_fill._utils.hira` via a
+  `primary_accent()` helper (takes `positions[0]`, keeps the kana-headword fallback).
+- The shared index build was made **preference-preserving** (was `sorted()` → numeric min
+  as "primary"): `validate.py` gained `*_ordered` loaders; `build_accent_index.py` drops
+  `sorted()`. Key set + per-key position-sets are unchanged (16,933 multi-accent entries
+  reorder), so the sentence-fill side is unaffected — it just leads with the preferred accent.
+
+Result on the real collection: term-graph fills **157 → 173** (gold/NHK recover idioms v2
+lacked); ground-truth audit 2164/2164 found, 2163 agree. `pitch_svg.py` (SVG generator) and
+the GUI are unchanged — `jrp_fill` has no term-graph renderer.
+
+## As-built amendment 2 (2026-06-05, test-run findings)
+
+Two changes after seeing real cards:
+
+1. **Render ALL accepted accents, stacked** (not just the primary). Multi-accent words
+   (裕福 ゆうふく, etc.) carry several valid pitches; jidoujisho stacks one SVG per accent
+   (`<svg><br><svg>`). `pitch_svg.render_multi` + `pitch.accents_for` now emit every accepted
+   accent. 26–28 of the 173 fills are multi-accent. (Reverses the earlier "primary only"
+   call.)
+2. **Dict-authoritative index — for BOTH features (single index).** The index originally let
+   unverified auto-gold *win*, which overrode the dictionaries for ~488 words (reordered the
+   primary, or dropped a valid accent the user's one sentence happened not to use — 裕福 ゆうふく
+   `[1,0]`→`[0,1]`, 明日 あした `[0,3]`→`[0]`). Decision: **the dictionaries should always be #1**.
+   `build_accent_index.py` priority is now **gold → NHK2016 → v2** (dicts win; gold only fills the
+   1,176 words the dicts lack). This single shared `accent_index.marshal.gz` is canonical for both
+   the pitch graphs *and* the JRP sentence markup — neither inherits jidoujisho's non-canonical
+   auto-accents. The key set is unchanged (315,227), so JRP coverage is unaffected; only those
+   ~488 words' accent/order changes (now canonical). A short-lived separate pitch index was tried
+   and removed once we decided dict-first everywhere.

@@ -19,3 +19,12 @@ def test_unknown_returns_none():
 def test_default_path_loads():
     acc = AccentIndex.load()
     assert acc.lookup("世界", "せかい") is not None
+
+def test_by_reading_agreement_is_order_insensitive():
+    # The index is preference-ordered, so two homophone surfaces with the same
+    # accent SET but different order ([0,3] vs [3,0]) must still count as agreeing.
+    acc = AccentIndex(table={"甲\tこう": [0, 3], "乙\tこう": [3, 0]})
+    assert acc.by_reading("こう") is not None        # agree -> confident
+    # genuinely different accents stay ambiguous (no wrong guess)
+    acc2 = AccentIndex(table={"橋\tはし": [2], "箸\tはし": [1]})
+    assert acc2.by_reading("はし") is None

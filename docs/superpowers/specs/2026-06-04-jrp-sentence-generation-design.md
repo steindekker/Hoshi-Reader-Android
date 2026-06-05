@@ -133,7 +133,10 @@ Unit = {
 Reuses `validate.load_dict` (Yomitan `term_meta_bank` pitch reader) + `validate.extract_gold` (the
 JRP gold parser). Output keyed `(lemma, hiragana-reading) -> {positions, is_yougen}` with source
 priority **gold > アクセント辞典v2 > NHK2016** (gold wins so cards stay consistent with the user's
-accepted accents). Shipped compact (marshal+gz, mirroring `pitch_index.marshal.gz`). Rebuilt only
+accepted accents). **[Superseded 2026-06-05 — see `2026-06-04-pitch-graph-backfill-design.md`:
+priority flipped to dict-first (gold → NHK2016 → v2) so the dictionaries are authoritative and
+unverified jidoujisho auto-gold no longer overrides them; gold now only fills dict-miss words.
+Key set unchanged, so JRP coverage is unaffected.]** Shipped compact (marshal+gz). Rebuilt only
 when dicts change.
 
 ## Scope, selection, edge cases
