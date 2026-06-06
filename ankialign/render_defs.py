@@ -44,8 +44,15 @@ def render_sc(node) -> str:
         if isinstance(data, dict):
             for k, v in data.items():
                 attrs += f' data-{_kebab(k)}="{html.escape(str(v), quote=True)}"'
-        if tag == "a" and node.get("href"):
-            attrs += f' href="{html.escape(node["href"], quote=True)}"'
+        if tag == "a":
+            href = node.get("href", "")
+            # Yomitan cross-reference links are relative (?query=…); they resolve to
+            # a dead 127.0.0.1 in any Anki webview. Drop the wrapper, keep the inner
+            # text (selectable -> jidoujisho PROCESS_TEXT lookup on Android). Real
+            # absolute links (e.g. 大辞泉 geo-references) stay clickable.
+            if "://" not in href:
+                return render_sc(node.get("content"))
+            attrs += f' href="{html.escape(href, quote=True)}"'
         if tag in _VOID:
             return f"<{tag}{attrs}>"
         return f"<{tag}{attrs}>{render_sc(node.get('content'))}</{tag}>"

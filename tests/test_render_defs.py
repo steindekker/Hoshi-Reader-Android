@@ -30,6 +30,24 @@ def test_render_sc_drops_img_tags():
     assert rd.render_sc({"tag": "span", "content": [{"tag": "img"}, "あ"]}) == "<span>あ</span>"
 
 
+def test_render_sc_drops_relative_query_anchors():
+    # Yomitan cross-reference links are relative (?query=…&wildcards=off); they
+    # resolve to a dead 127.0.0.1 in any Anki webview. Drop the <a> wrapper, keep
+    # the inner content (plain selectable text -> jidoujisho PROCESS_TEXT lookup).
+    a = {"tag": "a", "href": "?query=愛する&wildcards=off", "content": "愛する"}
+    assert rd.render_sc(a) == "愛する"
+    # nested markup inside the anchor is preserved, only the <a> is unwrapped
+    nested = {"tag": "a", "href": "?query=正々&wildcards=off",
+              "content": [{"tag": "span", "data": {"name": "ア"}, "content": "せい"}, "せい"]}
+    assert rd.render_sc(nested) == '<span data-name="ア">せい</span>せい'
+
+
+def test_render_sc_keeps_absolute_anchors():
+    # Real external links (e.g. 大辞泉 geo-references) stay clickable.
+    a = {"tag": "a", "href": "https://maps.apple.com/?ll=1,2", "content": "イカ"}
+    assert rd.render_sc(a) == '<a href="https://maps.apple.com/?ll=1,2">イカ</a>'
+
+
 def _je(dict_id, reading, sense_ord, html):
     return {"term": "x", "reading": reading, "dict_id": dict_id,
             "kind": "je", "sense_ord": sense_ord, "html": html}
