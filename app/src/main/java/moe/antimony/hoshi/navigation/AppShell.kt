@@ -17,16 +17,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavEntry
+import androidx.navigation3.runtime.NavEntryDecorator
 import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.runtime.rememberDecoratedNavEntries
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.scene.Scene
 import androidx.navigation3.ui.NavDisplay
-import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.LocalHoshiUiDependencies
 import moe.antimony.hoshi.features.anki.AnkiView
 import moe.antimony.hoshi.features.bookshelf.BookshelfView
 import moe.antimony.hoshi.features.bookshelf.HoshiMainShell
@@ -68,19 +72,22 @@ fun AppShell(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val appContainer = LocalHoshiAppContainer.current
+    val appContainer = LocalHoshiUiDependencies.current
     val dictionarySettingsRepository = appContainer.dictionarySettingsRepository
     val launchRouteStateHolder = remember { AppLaunchRouteStateHolder() }
     val pendingImportRouteCoordinator = remember { PendingImportRouteCoordinator() }
     val sasayakiMatchRequestStore = remember { SasayakiMatchRequestStore() }
-    val initialRoute = AppRoute.BooksRoute
-    val backStack = rememberNavBackStack(initialRoute)
+    var selectedTab by rememberSaveable { mutableStateOf(MainTab.Books) }
+    val booksBackStack = rememberNavBackStack(AppRoute.BooksRoute)
+    val dictionaryBackStack = rememberNavBackStack(AppRoute.DictionaryRoute)
+    val settingsBackStack = rememberNavBackStack(AppRoute.SettingsRoute)
     val bookRepository = appContainer.bookRepository
-    val readerRouteStateHolder = remember(appContainer) { appContainer.readerRouteStateHolder() }
+    val readerRouteStateHolder = remember(bookRepository) { ReaderRouteStateHolder(bookRepository) }
     val readerFontManager = appContainer.readerFontManager
     val sasayakiSettingsRepository = appContainer.sasayakiSettingsRepository
     val scope = rememberCoroutineScope()
     val currentReaderSettings by rememberUpdatedState(readerSettings)
+    val currentOnPendingImportConsumed by rememberUpdatedState(onPendingImportConsumed)
     val currentOnReaderSettingsChange by rememberUpdatedState(onReaderSettingsChange)
     val currentOnReaderKeyEventHandlerChange by rememberUpdatedState(onReaderKeyEventHandlerChange)
     val currentPendingImportUri by rememberUpdatedState(pendingImportUri)
@@ -101,162 +108,203 @@ fun AppShell(
         }
     }
 
+    fun selectedBackStack(): MutableList<NavKey> = when (selectedTab) {
+        MainTab.Books -> booksBackStack
+        MainTab.Dictionary -> dictionaryBackStack
+        MainTab.Settings -> settingsBackStack
+    }
+
+    fun selectTopLevelRoute(route: AppRoute) {
+        selectedTab = route.toMainTab()
+    }
+
     LaunchedEffect(dictionarySettingsRepository) {
         dictionarySettingsRepository.settings.collect { settings ->
             launchRouteStateHolder.defaultRouteAfterSettingsLoad(
                 settings = settings,
                 hasPendingImport = currentPendingImportUri != null,
-                backStack = backStack,
-            )?.let(backStack::selectTopLevelRoute)
+                isBooksTabSelected = selectedTab == MainTab.Books,
+                backStack = booksBackStack,
+            )?.let(::selectTopLevelRoute)
         }
     }
 
     fun popRoute() {
-        backStack.popAppRoute()
+        selectedBackStack().popAppRoute()
     }
 
     fun closeReaderRoute() {
         if (readerBookmarkRefreshState.consumeDirty()) {
             bookshelfRefreshKey += 1
         }
-        popRoute()
-    }
-
-    fun selectTopLevelRoute(route: AppRoute) {
-        backStack.selectTopLevelRoute(route)
+        booksBackStack.popAppRoute()
     }
 
     fun openSettingsDetail(section: SettingsDetailSection) {
-        backStack.add(AppRoute.SettingsDetailRoute(section))
+        selectedTab = MainTab.Settings
+        settingsBackStack.add(AppRoute.SettingsDetailRoute(section))
     }
 
     fun openReader(bookId: String) {
-        backStack.openReaderRoute(bookId)
+        selectedTab = MainTab.Books
+        booksBackStack.openReaderRoute(bookId)
     }
 
     fun openSasayakiMatch(request: SasayakiMatchRequest) {
         sasayakiMatchRequestStore.put(request)
-        backStack.openSasayakiMatchRoute(request.bookId)
+        selectedTab = MainTab.Books
+        booksBackStack.openSasayakiMatchRoute(request.bookId)
     }
 
     LaunchedEffect(pendingImportUri) {
+        val hasPendingImport = pendingImportUri != null
         pendingImportRouteCoordinator.routePendingImport(
-            hasPendingImport = pendingImportUri != null,
-            backStack = backStack,
+            hasPendingImport = hasPendingImport,
+            backStack = booksBackStack,
         )
+        if (hasPendingImport) {
+            selectedTab = MainTab.Books
+        }
+    }
+
+    val entryProvider: (NavKey) -> NavEntry<NavKey> = { key ->
+        val route = key as AppRoute
+        NavEntry(route) {
+            when (route) {
+                AppRoute.BooksRoute -> TopLevelRouteContent(
+                    selectedTab = MainTab.Books,
+                    pendingImportUri = currentPendingImportUri,
+                    onPendingImportConsumed = currentOnPendingImportConsumed,
+                    readerSettings = currentReaderSettings,
+                    onReaderSettingsChange = currentOnReaderSettingsChange,
+                    onOpenReader = ::openReader,
+                    onOpenSasayakiMatch = ::openSasayakiMatch,
+                    bookshelfRefreshKey = bookshelfRefreshKey,
+                    onSelectedTabChange = { selectTopLevelRoute(it.toRoute()) },
+                )
+                AppRoute.DictionaryRoute -> TopLevelRouteContent(
+                    selectedTab = MainTab.Dictionary,
+                    pendingImportUri = currentPendingImportUri,
+                    onPendingImportConsumed = currentOnPendingImportConsumed,
+                    readerSettings = currentReaderSettings,
+                    onReaderSettingsChange = currentOnReaderSettingsChange,
+                    onOpenReader = ::openReader,
+                    onOpenSasayakiMatch = ::openSasayakiMatch,
+                    bookshelfRefreshKey = bookshelfRefreshKey,
+                    onSelectedTabChange = { selectTopLevelRoute(it.toRoute()) },
+                )
+                AppRoute.SettingsRoute -> TopLevelRouteContent(
+                    selectedTab = MainTab.Settings,
+                    pendingImportUri = currentPendingImportUri,
+                    onPendingImportConsumed = currentOnPendingImportConsumed,
+                    readerSettings = currentReaderSettings,
+                    onReaderSettingsChange = currentOnReaderSettingsChange,
+                    onOpenReader = ::openReader,
+                    onOpenSasayakiMatch = ::openSasayakiMatch,
+                    bookshelfRefreshKey = bookshelfRefreshKey,
+                    onSelectedTabChange = { selectTopLevelRoute(it.toRoute()) },
+                    onSettingsDestination = { destination ->
+                        when (destination) {
+                            SettingsDestination.Anki -> openSettingsDetail(destination.toSection())
+                            SettingsDestination.ReportIssue -> context.startActivity(
+                                Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse(ReportIssueUrl),
+                                ),
+                            )
+                            else -> openSettingsDetail(destination.toSection())
+                        }
+                    },
+                )
+                is AppRoute.SettingsDetailRoute -> SettingsDetailDestination(
+                    route = route,
+                    readerSettings = currentReaderSettings,
+                    onReaderSettingsChange = currentOnReaderSettingsChange,
+                    sasayakiSettings = sasayakiSettings,
+                    onSasayakiSettingsChange = ::updateSasayakiSettings,
+                    readerFontManager = readerFontManager,
+                    onClose = ::popRoute,
+                    onBooksRestored = { bookshelfRefreshKey += 1 },
+                    onSelectedTabChange = { selectTopLevelRoute(it.toRoute()) },
+                )
+                is AppRoute.ReaderRoute -> {
+                    ReaderRouteDestination(
+                        bookId = route.bookId,
+                        stateHolder = readerRouteStateHolder,
+                        readerSettings = currentReaderSettings,
+                        onReaderSettingsChange = currentOnReaderSettingsChange,
+                        onReaderKeyEventHandlerChange = currentOnReaderKeyEventHandlerChange,
+                        onBookmarkSaved = readerBookmarkRefreshState::markDirty,
+                        onClose = ::closeReaderRoute,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                is AppRoute.SasayakiMatchRoute -> {
+                    val request = sasayakiMatchRequestStore.get(route.bookId)
+                    if (request != null) {
+                        SasayakiMatchView(
+                            bookEntry = request.bookEntry,
+                            bookRepository = bookRepository,
+                            onClose = ::popRoute,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        MissingRouteRedirect {
+                            booksBackStack.routeExternalBookImport()
+                            selectedTab = MainTab.Books
+                        }
+                    }
+                }
+                AppRoute.MainRoute -> TopLevelRouteContent(
+                    selectedTab = MainTab.Books,
+                    pendingImportUri = currentPendingImportUri,
+                    onPendingImportConsumed = currentOnPendingImportConsumed,
+                    readerSettings = currentReaderSettings,
+                    onReaderSettingsChange = currentOnReaderSettingsChange,
+                    onOpenReader = ::openReader,
+                    onOpenSasayakiMatch = ::openSasayakiMatch,
+                    bookshelfRefreshKey = bookshelfRefreshKey,
+                    onSelectedTabChange = { selectTopLevelRoute(it.toRoute()) },
+                )
+            }
+        }
+    }
+    val booksEntries = rememberDecoratedNavEntries(
+        backStack = booksBackStack,
+        entryDecorators = rememberAppNavEntryDecorators(),
+        entryProvider = entryProvider,
+    )
+    val dictionaryEntries = rememberDecoratedNavEntries(
+        backStack = dictionaryBackStack,
+        entryDecorators = rememberAppNavEntryDecorators(),
+        entryProvider = entryProvider,
+    )
+    val settingsEntries = rememberDecoratedNavEntries(
+        backStack = settingsBackStack,
+        entryDecorators = rememberAppNavEntryDecorators(),
+        entryProvider = entryProvider,
+    )
+    val currentEntries = when (selectedTab) {
+        MainTab.Books -> booksEntries
+        MainTab.Dictionary -> dictionaryEntries
+        MainTab.Settings -> settingsEntries
     }
 
     NavDisplay(
-        backStack = backStack,
+        entries = currentEntries,
         modifier = modifier,
         onBack = ::popRoute,
-        entryDecorators = listOf(rememberSaveableStateHolderNavEntryDecorator()),
         transitionSpec = NoNavContentTransition,
         popTransitionSpec = NoNavContentTransition,
         predictivePopTransitionSpec = NoPredictiveNavContentTransition,
-        entryProvider = { key ->
-            val route = key as AppRoute
-            NavEntry(route) {
-                when (route) {
-                    AppRoute.BooksRoute -> TopLevelRouteContent(
-                        selectedTab = MainTab.Books,
-                        pendingImportUri = pendingImportUri,
-                        onPendingImportConsumed = onPendingImportConsumed,
-                        readerSettings = currentReaderSettings,
-                        onReaderSettingsChange = currentOnReaderSettingsChange,
-                        onOpenReader = ::openReader,
-                        onOpenSasayakiMatch = ::openSasayakiMatch,
-                        bookshelfRefreshKey = bookshelfRefreshKey,
-                        onSelectedTabChange = { selectTopLevelRoute(it.toRoute()) },
-                    )
-                    AppRoute.DictionaryRoute -> TopLevelRouteContent(
-                        selectedTab = MainTab.Dictionary,
-                        pendingImportUri = pendingImportUri,
-                        onPendingImportConsumed = onPendingImportConsumed,
-                        readerSettings = currentReaderSettings,
-                        onReaderSettingsChange = currentOnReaderSettingsChange,
-                        onOpenReader = ::openReader,
-                        onOpenSasayakiMatch = ::openSasayakiMatch,
-                        bookshelfRefreshKey = bookshelfRefreshKey,
-                        onSelectedTabChange = { selectTopLevelRoute(it.toRoute()) },
-                    )
-                    AppRoute.SettingsRoute -> TopLevelRouteContent(
-                        selectedTab = MainTab.Settings,
-                        pendingImportUri = pendingImportUri,
-                        onPendingImportConsumed = onPendingImportConsumed,
-                        readerSettings = currentReaderSettings,
-                        onReaderSettingsChange = currentOnReaderSettingsChange,
-                        onOpenReader = ::openReader,
-                        onOpenSasayakiMatch = ::openSasayakiMatch,
-                        bookshelfRefreshKey = bookshelfRefreshKey,
-                        onSelectedTabChange = { selectTopLevelRoute(it.toRoute()) },
-                        onSettingsDestination = { destination ->
-                            when (destination) {
-                                SettingsDestination.Anki -> openSettingsDetail(destination.toSection())
-                                SettingsDestination.ReportIssue -> context.startActivity(
-                                    Intent(
-                                        Intent.ACTION_VIEW,
-                                        Uri.parse(ReportIssueUrl),
-                                    ),
-                                )
-                                else -> openSettingsDetail(destination.toSection())
-                            }
-                        },
-                    )
-                    is AppRoute.SettingsDetailRoute -> SettingsDetailDestination(
-                        route = route,
-                        readerSettings = currentReaderSettings,
-                        onReaderSettingsChange = currentOnReaderSettingsChange,
-                        sasayakiSettings = sasayakiSettings,
-                        onSasayakiSettingsChange = ::updateSasayakiSettings,
-                        readerFontManager = readerFontManager,
-                        onClose = ::popRoute,
-                        onBooksRestored = { bookshelfRefreshKey += 1 },
-                        onSelectedTabChange = { selectTopLevelRoute(it.toRoute()) },
-                    )
-                    is AppRoute.ReaderRoute -> {
-                        ReaderRouteDestination(
-                            bookId = route.bookId,
-                            stateHolder = readerRouteStateHolder,
-                            readerSettings = currentReaderSettings,
-                            onReaderSettingsChange = currentOnReaderSettingsChange,
-                            onReaderKeyEventHandlerChange = currentOnReaderKeyEventHandlerChange,
-                            onBookmarkSaved = readerBookmarkRefreshState::markDirty,
-                            onClose = ::closeReaderRoute,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
-                    is AppRoute.SasayakiMatchRoute -> {
-                        val request = sasayakiMatchRequestStore.get(route.bookId)
-                        if (request != null) {
-                            SasayakiMatchView(
-                                bookEntry = request.bookEntry,
-                                bookRepository = bookRepository,
-                                onClose = ::popRoute,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        } else {
-                            MissingRouteRedirect {
-                                selectTopLevelRoute(AppRoute.BooksRoute)
-                            }
-                        }
-                    }
-                    AppRoute.MainRoute -> TopLevelRouteContent(
-                        selectedTab = MainTab.Books,
-                        pendingImportUri = pendingImportUri,
-                        onPendingImportConsumed = onPendingImportConsumed,
-                        readerSettings = currentReaderSettings,
-                        onReaderSettingsChange = currentOnReaderSettingsChange,
-                        onOpenReader = ::openReader,
-                        onOpenSasayakiMatch = ::openSasayakiMatch,
-                        bookshelfRefreshKey = bookshelfRefreshKey,
-                        onSelectedTabChange = { selectTopLevelRoute(it.toRoute()) },
-                    )
-                }
-            }
-        },
     )
 }
+
+@Composable
+private fun rememberAppNavEntryDecorators(): List<NavEntryDecorator<NavKey>> = listOf(
+    rememberSaveableStateHolderNavEntryDecorator(),
+    rememberViewModelStoreNavEntryDecorator(),
+)
 
 internal class ReaderBookmarkRefreshState {
     private var dirty = false
@@ -377,6 +425,14 @@ private fun MainTab.toRoute(): AppRoute = when (this) {
     MainTab.Books -> AppRoute.BooksRoute
     MainTab.Dictionary -> AppRoute.DictionaryRoute
     MainTab.Settings -> AppRoute.SettingsRoute
+}
+
+private fun AppRoute.toMainTab(): MainTab = when (this) {
+    AppRoute.MainRoute, AppRoute.BooksRoute -> MainTab.Books
+    AppRoute.DictionaryRoute -> MainTab.Dictionary
+    AppRoute.SettingsRoute -> MainTab.Settings
+    is AppRoute.ReaderRoute, is AppRoute.SasayakiMatchRoute -> MainTab.Books
+    is AppRoute.SettingsDetailRoute -> MainTab.Settings
 }
 
 private fun SettingsDestination.toSection(): SettingsDetailSection = when (this) {

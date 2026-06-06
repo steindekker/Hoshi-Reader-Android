@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,23 +23,38 @@ import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.core.view.WindowCompat
 import de.manhhao.hoshi.LookupResult
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import moe.antimony.hoshi.HoshiAppContainer
-import moe.antimony.hoshi.LocalHoshiAppContainer
 import moe.antimony.hoshi.ProcessTextLookupRequest
+import moe.antimony.hoshi.dictionary.DictionaryRepository
 import moe.antimony.hoshi.dictionary.LookupEngine
 import moe.antimony.hoshi.features.audio.AudioSettings
+import moe.antimony.hoshi.features.audio.AudioSettingsRepository
+import moe.antimony.hoshi.features.reader.ReaderFontManager
 import moe.antimony.hoshi.features.reader.ReaderSelectionData
 import moe.antimony.hoshi.features.reader.ReaderSelectionRect
 import moe.antimony.hoshi.features.reader.ReaderSettings
+import moe.antimony.hoshi.features.reader.ReaderSettingsRepository
 import moe.antimony.hoshi.features.reader.usesDarkInterface
 import moe.antimony.hoshi.features.reader.usesDarkSystemBarIcons
 import moe.antimony.hoshi.ui.theme.HoshiReaderTheme
 import kotlin.math.min
 
+internal class ProcessTextLookupDependencies @Inject constructor(
+    val readerSettingsRepository: ReaderSettingsRepository,
+    val dictionaryRepository: DictionaryRepository,
+    val dictionarySettingsRepository: DictionarySettingsRepository,
+    val audioSettingsRepository: AudioSettingsRepository,
+    val readerFontManager: ReaderFontManager,
+)
+
+@AndroidEntryPoint
 class ProcessTextLookupActivity : ComponentActivity() {
+    @Inject internal lateinit var dependencies: ProcessTextLookupDependencies
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val request = ProcessTextLookupRequest.fromIntent(intent) ?: run {
@@ -53,28 +67,25 @@ class ProcessTextLookupActivity : ComponentActivity() {
         setFinishOnTouchOutside(true)
 
         setContent {
-            val appContainer = remember { HoshiAppContainer(applicationContext) }
             var readerSettings by remember { mutableStateOf<ReaderSettings?>(null) }
-            LaunchedEffect(appContainer) {
-                appContainer.readerSettingsRepository.settings.collect { settings ->
+            LaunchedEffect(dependencies) {
+                dependencies.readerSettingsRepository.settings.collect { settings ->
                     readerSettings = settings
                 }
             }
             val loadedReaderSettings = readerSettings ?: return@setContent
             val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
-            CompositionLocalProvider(LocalHoshiAppContainer provides appContainer) {
-                HoshiReaderTheme(
-                    darkTheme = loadedReaderSettings.usesDarkInterface(systemDark),
-                    eInkMode = loadedReaderSettings.eInkMode,
-                    useDarkSystemBarIcons = loadedReaderSettings.usesDarkSystemBarIcons(systemDark),
-                ) {
-                    ProcessTextLookupOverlay(
-                        query = request.query,
-                        readerSettings = loadedReaderSettings,
-                        appContainer = appContainer,
-                        onClose = ::finish,
-                    )
-                }
+            HoshiReaderTheme(
+                darkTheme = loadedReaderSettings.usesDarkInterface(systemDark),
+                eInkMode = loadedReaderSettings.eInkMode,
+                useDarkSystemBarIcons = loadedReaderSettings.usesDarkSystemBarIcons(systemDark),
+            ) {
+                ProcessTextLookupOverlay(
+                    query = request.query,
+                    readerSettings = loadedReaderSettings,
+                    dependencies = dependencies,
+                    onClose = ::finish,
+                )
             }
         }
     }
@@ -84,7 +95,7 @@ class ProcessTextLookupActivity : ComponentActivity() {
 private fun ProcessTextLookupOverlay(
     query: String,
     readerSettings: ReaderSettings,
-    appContainer: HoshiAppContainer,
+    dependencies: ProcessTextLookupDependencies,
     onClose: () -> Unit,
 ) {
     var popups by remember(query) { mutableStateOf<List<LookupPopupItem>>(emptyList()) }
@@ -98,9 +109,9 @@ private fun ProcessTextLookupOverlay(
     LaunchedEffect(query, readerSettings) {
         runCatching {
             withContext(Dispatchers.IO) {
-                appContainer.dictionaryRepository.rebuildLookupQuery()
-                val dictionarySettings = appContainer.dictionarySettingsRepository.settings.first().normalized()
-                val audioSettings = appContainer.audioSettingsRepository.settings.first()
+                dependencies.dictionaryRepository.rebuildLookupQuery()
+                val dictionarySettings = dependencies.dictionarySettingsRepository.settings.first().normalized()
+                val audioSettings = dependencies.audioSettingsRepository.settings.first()
                 val styles = currentDictionaryStyles()
                 val selection = ReaderSelectionData(
                     text = query,
@@ -203,6 +214,7 @@ private fun ProcessTextLookupOverlay(
                     onClose()
                     true
                 },
+                fontManager = dependencies.readerFontManager,
                 modifier = Modifier.fillMaxSize(),
             )
         }

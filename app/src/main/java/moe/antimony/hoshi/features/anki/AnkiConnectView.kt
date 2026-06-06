@@ -22,7 +22,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,10 +29,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
-import moe.antimony.hoshi.LocalHoshiAppContainer
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.settings.SettingsDetailScaffold
 import moe.antimony.hoshi.ui.asString
@@ -46,17 +43,8 @@ fun AnkiConnectView(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val appContainer = LocalHoshiAppContainer.current
-    val viewModel: AnkiViewModel = viewModel(
-        factory = remember(appContainer) {
-            object : ViewModelProvider.Factory {
-                @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    AnkiViewModel(appContainer.ankiRepository) as T
-            }
-        },
-    )
-    val uiState by viewModel.uiState.collectAsState()
+    val viewModel: AnkiViewModel = hiltViewModel()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val enabled = uiState.settings.backendKind == AnkiBackendKind.AnkiConnect
     var editingAddress by remember { mutableStateOf(false) }
     var addressInput by remember { mutableStateOf("") }

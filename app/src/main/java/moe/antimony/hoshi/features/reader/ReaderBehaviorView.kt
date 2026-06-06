@@ -18,15 +18,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.LocalHoshiUiDependencies
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.settings.SettingsDetailScaffold
 import moe.antimony.hoshi.features.settings.collectAsLoadedSettings
-import moe.antimony.hoshi.features.update.UpdateScheduler
 
 @Composable
 fun ReaderBehaviorScreen(
@@ -35,8 +33,7 @@ fun ReaderBehaviorScreen(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    val appContainer = LocalHoshiAppContainer.current
+    val appContainer = LocalHoshiUiDependencies.current
     val updateSettings = appContainer.updateSettingsRepository.settings.collectAsLoadedSettings()
     val scope = rememberCoroutineScope()
     SettingsDetailScaffold(
@@ -96,10 +93,10 @@ fun ReaderBehaviorScreen(
                                     it.copy(autoCheckUpdates = enabled)
                                 }
                                 if (enabled) {
-                                    UpdateScheduler.schedule(context)
-                                    UpdateScheduler.scheduleImmediateCheck(context)
+                                    appContainer.updateScheduler.schedule()
+                                    appContainer.updateScheduler.scheduleImmediateCheck()
                                 } else {
-                                    UpdateScheduler.cancel(context)
+                                    appContainer.updateScheduler.cancel()
                                 }
                             }
                         },

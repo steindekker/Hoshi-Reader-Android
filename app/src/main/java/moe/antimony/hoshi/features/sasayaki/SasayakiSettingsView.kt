@@ -40,7 +40,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.LocalHoshiUiDependencies
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.settings.collectAsLoadedSettings
 
@@ -50,7 +50,7 @@ fun SasayakiSettingsView(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val appContainer = LocalHoshiAppContainer.current
+    val appContainer = LocalHoshiUiDependencies.current
     val scope = rememberCoroutineScope()
     val repository = appContainer.sasayakiSettingsRepository
     val syncSettings = appContainer.syncSettingsRepository.settings.collectAsLoadedSettings()

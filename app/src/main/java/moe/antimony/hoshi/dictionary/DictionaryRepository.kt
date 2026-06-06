@@ -5,14 +5,38 @@ import android.net.Uri
 import de.manhhao.hoshi.LookupResult
 import java.io.File
 import java.io.InputStream
+import javax.inject.Inject
+import javax.inject.Singleton
+import moe.antimony.hoshi.di.FilesDir
 
-internal class DictionaryRepository(
-    filesDir: File,
-    private val storage: DictionaryStorageDataSource = DictionaryStorageDataSource(filesDir),
-    private val importDataSource: DictionaryImportDataSource = DictionaryImportDataSource(),
-    private val lookupQueryService: DictionaryLookupQueryService = DictionaryLookupQueryService(),
-    private val remoteDataSource: DictionaryRemoteDataSource = UrlDictionaryRemoteDataSource(),
+@Singleton
+internal class DictionaryRepository private constructor(
+    private val storage: DictionaryStorageDataSource,
+    private val importDataSource: DictionaryImportDataSource,
+    private val lookupQueryService: DictionaryLookupQueryService,
+    private val remoteDataSource: DictionaryRemoteDataSource,
 ) {
+    @Inject
+    constructor(@FilesDir filesDir: File) : this(
+        storage = DictionaryStorageDataSource(filesDir),
+        importDataSource = DictionaryImportDataSource(),
+        lookupQueryService = DictionaryLookupQueryService(),
+        remoteDataSource = UrlDictionaryRemoteDataSource(),
+    )
+
+    internal constructor(
+        filesDir: File,
+        storage: DictionaryStorageDataSource,
+        importDataSource: DictionaryImportDataSource,
+        lookupQueryService: DictionaryLookupQueryService,
+        remoteDataSource: DictionaryRemoteDataSource = UrlDictionaryRemoteDataSource(),
+    ) : this(
+        storage = storage,
+        importDataSource = importDataSource,
+        lookupQueryService = lookupQueryService,
+        remoteDataSource = remoteDataSource,
+    )
+
     private val lookupQueryLock = Any()
 
     @Volatile

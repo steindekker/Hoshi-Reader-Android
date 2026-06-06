@@ -110,6 +110,23 @@ class UpdateDownloadRecordTest {
     }
 
     @Test
+    fun availableUpdatesAndPersistedRecordsSharePromptKeys() {
+        val record = UpdateDownloadRecord(
+            versionName = "0.3.5",
+            releaseUrl = "https://example.com/releases/tag/v0.3.5",
+            assetName = "Hoshi-Reader-v0.3.5.apk",
+            fileName = AndroidUpdateDownloadManager.UpdateFileName,
+            downloadId = null,
+            sha256 = "7977f9e95adec03fce35ef0640fdd2fe662c6521d625dc12242df5b66fb2254b",
+            downloadUrl = "https://example.com/Hoshi-Reader-v0.3.5.apk",
+            fallbackDownloadUrls = emptyList(),
+            status = UpdateDownloadRecordStatus.Available,
+        )
+
+        assertEquals(update.promptKey(), record.promptKey())
+    }
+
+    @Test
     fun onlyDownloadedRecordsNewerThanCurrentVersionShouldPromptForInstall() {
         val record = UpdateDownloadRecord(
             versionName = "0.3.5",

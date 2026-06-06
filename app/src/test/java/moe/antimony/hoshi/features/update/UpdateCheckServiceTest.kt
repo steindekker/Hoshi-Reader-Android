@@ -7,6 +7,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -28,13 +29,36 @@ class UpdateCheckServiceTest {
     fun checkRecordsAvailableUpdateWithoutStartingDownload() = runBlocking {
         updateStore().use { store ->
             val downloads = FakeUpdateDownloadController()
-            val service = service(downloadController = downloads, updateStore = store.store)
+            val promptEvents = UpdatePromptEvents()
+            val service = service(
+                downloadController = downloads,
+                updateStore = store.store,
+                updatePromptEvents = promptEvents,
+            )
 
             val outcome = service.check()
 
             assertTrue(outcome is UpdateCheckOutcome.Available)
             assertEquals(0, downloads.startedDownloads)
             assertEquals(UpdateDownloadRecordStatus.Available, store.store.load()?.status)
+            assertNull(promptEvents.availablePromptKey.value)
+        }
+    }
+
+    @Test
+    fun automaticCheckSignalsPromptForNewAvailableUpdate() = runBlocking {
+        updateStore().use { store ->
+            val promptEvents = UpdatePromptEvents()
+            val service = service(
+                downloadController = FakeUpdateDownloadController(),
+                updateStore = store.store,
+                updatePromptEvents = promptEvents,
+            )
+
+            val outcome = service.check(notifyAvailable = true)
+
+            assertTrue(outcome is UpdateCheckOutcome.Available)
+            assertEquals(update.promptKey(), promptEvents.availablePromptKey.value)
         }
     }
 
@@ -42,26 +66,34 @@ class UpdateCheckServiceTest {
     fun skippedUpdateDoesNotSurfaceAutomaticallyButManualChecksCanShowIt() = runBlocking {
         updateStore().use { store ->
             store.store.skip(update)
-            val service = service(downloadController = FakeUpdateDownloadController(), updateStore = store.store)
+            val promptEvents = UpdatePromptEvents()
+            val service = service(
+                downloadController = FakeUpdateDownloadController(),
+                updateStore = store.store,
+                updatePromptEvents = promptEvents,
+            )
 
-            val automatic = service.check()
+            val automatic = service.check(notifyAvailable = true)
             val manual = service.check(ignoreSkipped = true)
 
             assertTrue(automatic is UpdateCheckOutcome.Skipped)
             assertTrue(manual is UpdateCheckOutcome.Available)
             assertEquals(UpdateDownloadRecordStatus.Skipped, store.store.load()?.status)
+            assertNull(promptEvents.availablePromptKey.value)
         }
     }
 
     private fun service(
         downloadController: UpdateDownloadController,
         updateStore: UpdateDownloadStore,
+        updatePromptEvents: UpdatePromptEvents = UpdatePromptEvents(),
     ): UpdateCheckService =
         UpdateCheckService(
             currentVersionName = "0.3.4",
             releaseRepository = FakeReleaseRepository(update),
             downloadController = downloadController,
             updateStore = updateStore,
+            updatePromptEvents = updatePromptEvents,
         )
 
     private fun updateStore(): StoreHandle {

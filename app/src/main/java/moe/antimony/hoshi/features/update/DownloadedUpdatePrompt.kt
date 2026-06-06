@@ -8,7 +8,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
@@ -17,11 +16,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import moe.antimony.hoshi.BuildConfig
-import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.LocalHoshiUiDependencies
 import moe.antimony.hoshi.R
 
 @Composable
@@ -30,9 +30,12 @@ internal fun DownloadedUpdatePrompt(
     initialRecord: UpdateDownloadRecord? = UpdateStartupSnapshot.initialRecord,
 ) {
     val context = LocalContext.current
-    val appContainer = LocalHoshiAppContainer.current
+    val appContainer = LocalHoshiUiDependencies.current
     val scope = rememberCoroutineScope()
-    val record by appContainer.updateDownloadStore.record.collectAsState(initial = null)
+    val record by appContainer.updateDownloadStore.record.collectAsStateWithLifecycle(initialValue = null)
+    val liveAvailableKey by appContainer.updatePromptEvents.availablePromptKey.collectAsStateWithLifecycle(
+        initialValue = null,
+    )
     var dismissedAvailableKey by rememberSaveable { mutableStateOf<String?>(null) }
     var dismissedDownloadedKey by rememberSaveable { mutableStateOf<String?>(null) }
     var promptMessage by rememberSaveable { mutableStateOf<String?>(null) }
@@ -40,9 +43,10 @@ internal fun DownloadedUpdatePrompt(
     val initialAvailableKey = initialRecord
         ?.takeIf { it.shouldPromptForAvailable(currentVersionName) }
         ?.promptKey()
+    val availablePromptKeys = setOfNotNull(initialAvailableKey, liveAvailableKey)
     val availableRecord = record
         ?.takeIf { it.shouldPromptForAvailable(currentVersionName) }
-        ?.takeIf { it.promptKey() == initialAvailableKey }
+        ?.takeIf { it.promptKey() in availablePromptKeys }
         ?.takeIf { it.promptKey() != dismissedAvailableKey }
     val downloadedRecord = record
         ?.takeIf { it.shouldPromptForInstall(currentVersionName) }
@@ -55,7 +59,9 @@ internal fun DownloadedUpdatePrompt(
                 versionName = availableRecord.versionName,
                 message = promptMessage,
                 onLater = {
-                    dismissedAvailableKey = availableRecord.promptKey()
+                    val promptKey = availableRecord.promptKey()
+                    dismissedAvailableKey = promptKey
+                    appContainer.updatePromptEvents.consumeAvailablePrompt(promptKey)
                     promptMessage = null
                 },
                 onSkip = {
@@ -64,7 +70,9 @@ internal fun DownloadedUpdatePrompt(
                         withContext(Dispatchers.IO) {
                             appContainer.updateDownloadStore.skip(update)
                         }
-                        dismissedAvailableKey = availableRecord.promptKey()
+                        val promptKey = availableRecord.promptKey()
+                        dismissedAvailableKey = promptKey
+                        appContainer.updatePromptEvents.consumeAvailablePrompt(promptKey)
                         promptMessage = null
                     }
                 },
@@ -77,7 +85,9 @@ internal fun DownloadedUpdatePrompt(
                             }
                         }.exceptionOrNull()?.localizedMessage
                         if (message == null) {
-                            dismissedAvailableKey = availableRecord.promptKey()
+                            val promptKey = availableRecord.promptKey()
+                            dismissedAvailableKey = promptKey
+                            appContainer.updatePromptEvents.consumeAvailablePrompt(promptKey)
                             promptMessage = null
                         } else {
                             promptMessage = message
@@ -185,6 +195,9 @@ internal fun UpdateDownloadRecord.shouldSurfaceInAbout(currentVersionName: Strin
 }
 
 internal fun UpdateDownloadRecord.promptKey(): String =
+    listOf(versionName, assetName, sha256.orEmpty()).joinToString(separator = "|")
+
+internal fun AvailableUpdate.promptKey(): String =
     listOf(versionName, assetName, sha256.orEmpty()).joinToString(separator = "|")
 
 internal object UpdateStartupSnapshot {

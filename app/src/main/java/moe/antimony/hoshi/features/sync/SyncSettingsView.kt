@@ -67,7 +67,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.LocalHoshiUiDependencies
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.settings.collectAsLoadedSettings
 import moe.antimony.hoshi.ui.hoshiOutlinedTextFieldColors
@@ -82,7 +82,7 @@ fun SyncSettingsView(
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
-    val appContainer = LocalHoshiAppContainer.current
+    val appContainer = LocalHoshiUiDependencies.current
     val repository = appContainer.syncSettingsRepository
     val authorizer = appContainer.deviceCodeDriveAuthorizer
     val scope = rememberCoroutineScope()

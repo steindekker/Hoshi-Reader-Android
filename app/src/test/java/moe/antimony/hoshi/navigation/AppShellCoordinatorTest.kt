@@ -22,6 +22,7 @@ class AppShellCoordinatorTest {
             stateHolder.defaultRouteAfterSettingsLoad(
                 settings = DictionarySettings(dictionaryTabDefault = true),
                 hasPendingImport = false,
+                isBooksTabSelected = true,
                 backStack = backStack,
             ),
         )
@@ -29,6 +30,7 @@ class AppShellCoordinatorTest {
             stateHolder.defaultRouteAfterSettingsLoad(
                 settings = DictionarySettings(dictionaryTabDefault = true),
                 hasPendingImport = false,
+                isBooksTabSelected = true,
                 backStack = backStack,
             ),
         )
@@ -43,6 +45,7 @@ class AppShellCoordinatorTest {
             pendingImportStateHolder.defaultRouteAfterSettingsLoad(
                 settings = DictionarySettings(dictionaryTabDefault = true),
                 hasPendingImport = true,
+                isBooksTabSelected = true,
                 backStack = mutableListOf(AppRoute.BooksRoute),
             ),
         )
@@ -50,7 +53,22 @@ class AppShellCoordinatorTest {
             nestedRouteStateHolder.defaultRouteAfterSettingsLoad(
                 settings = DictionarySettings(dictionaryTabDefault = true),
                 hasPendingImport = false,
+                isBooksTabSelected = true,
                 backStack = mutableListOf(AppRoute.BooksRoute, AppRoute.ReaderRoute("book-a")),
+            ),
+        )
+    }
+
+    @Test
+    fun dictionaryDefaultRouteDoesNotOverrideRestoredNonBooksTab() {
+        val stateHolder = AppLaunchRouteStateHolder()
+
+        assertNull(
+            stateHolder.defaultRouteAfterSettingsLoad(
+                settings = DictionarySettings(dictionaryTabDefault = true),
+                hasPendingImport = false,
+                isBooksTabSelected = false,
+                backStack = mutableListOf(AppRoute.BooksRoute),
             ),
         )
     }

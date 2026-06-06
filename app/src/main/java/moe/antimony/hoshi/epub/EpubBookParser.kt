@@ -4,6 +4,7 @@ import uniffi.hoshiepub.EpubBook as NativeEpubBook
 import uniffi.hoshiepub.TocNode as NativeTocNode
 import uniffi.hoshiepub.parseExtractedEpub
 import java.io.File
+import javax.inject.Inject
 import javax.xml.parsers.DocumentBuilderFactory
 
 data class EpubBook(
@@ -65,7 +66,7 @@ data class EpubResource(
     }
 }
 
-class EpubBookParser {
+class EpubBookParser @Inject constructor() {
     fun parse(root: File, fallbackTitle: String? = null, cachedBookInfo: BookInfo? = null): EpubBook {
         require(root.isDirectory) { "Extracted EPUB directory does not exist: ${root.absolutePath}" }
 

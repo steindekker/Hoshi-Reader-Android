@@ -29,7 +29,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,11 +55,10 @@ import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.text.intl.LocaleList
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.manhhao.hoshi.LookupResult
-import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.LocalHoshiUiDependencies
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.audio.AudioRequestHandler
 import moe.antimony.hoshi.features.audio.AudioSettings
@@ -118,28 +116,12 @@ fun DictionarySearchView(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val appContainer = LocalHoshiAppContainer.current
+    val appContainer = LocalHoshiUiDependencies.current
     val assets = remember(context) { LookupPopupAssets.load(context) }
-    val searchViewModel: DictionarySearchViewModel = viewModel(
-        factory = remember(appContainer) {
-            object : ViewModelProvider.Factory {
-                @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    DictionarySearchViewModel(appContainer.dictionarySearchRepository()) as T
-            }
-        },
-    )
-    val ankiViewModel: AnkiViewModel = viewModel(
-        factory = remember(appContainer) {
-            object : ViewModelProvider.Factory {
-                @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    AnkiViewModel(appContainer.ankiRepository) as T
-            }
-        },
-    )
-    val uiState by searchViewModel.uiState.collectAsState()
-    val ankiUiState by ankiViewModel.uiState.collectAsState()
+    val searchViewModel: DictionarySearchViewModel = hiltViewModel()
+    val ankiViewModel: AnkiViewModel = hiltViewModel()
+    val uiState by searchViewModel.uiState.collectAsStateWithLifecycle()
+    val ankiUiState by ankiViewModel.uiState.collectAsStateWithLifecycle()
     var rootHighlightRects by remember { mutableStateOf<List<ReaderSelectionRect>>(emptyList()) }
     val localAudioRepository = appContainer.localAudioRepository
     val fontManager = appContainer.readerFontManager

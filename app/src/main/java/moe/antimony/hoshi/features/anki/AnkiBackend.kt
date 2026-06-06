@@ -1,6 +1,7 @@
 package moe.antimony.hoshi.features.anki
 
 import androidx.annotation.StringRes
+import javax.inject.Inject
 import moe.antimony.hoshi.R
 
 interface AnkiBackend {
@@ -81,7 +82,7 @@ interface AnkiContentApi {
     fun isAvailable(): Boolean = true
 }
 
-class AnkiDroidBackendAdapter(
+class AnkiDroidBackendAdapter @Inject constructor(
     private val api: AnkiContentApi,
 ) : AnkiBackend {
     override fun isAvailable(): Boolean = api.isAvailable()

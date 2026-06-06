@@ -46,7 +46,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import moe.antimony.hoshi.BuildConfig
-import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.LocalHoshiUiDependencies
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.settings.SettingsDetailScaffold
 import moe.antimony.hoshi.features.settings.SettingsLoadState
@@ -65,7 +65,7 @@ fun AboutScreen(
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
-    val appContainer = LocalHoshiAppContainer.current
+    val appContainer = LocalHoshiUiDependencies.current
     val scope = rememberCoroutineScope()
     val recordLoadState = appContainer.updateDownloadStore.record.collectAsSettingsLoadState()
     val record = (recordLoadState as? SettingsLoadState.Loaded)?.value

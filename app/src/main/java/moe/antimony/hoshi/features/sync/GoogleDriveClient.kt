@@ -8,6 +8,8 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.UUID
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -19,12 +21,15 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import dagger.hilt.android.qualifiers.ApplicationContext
 import moe.antimony.hoshi.epub.ReadingStatistics
+import moe.antimony.hoshi.di.IoDispatcher
 
-class GoogleDriveClient(
-    context: Context,
+@Singleton
+class GoogleDriveClient @Inject constructor(
+    @param:ApplicationContext context: Context,
     private val tokenProvider: DriveAccessTokenProvider,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : DriveSyncDataSource {
     private val cachePreferences = context.applicationContext.getSharedPreferences(CacheName, Context.MODE_PRIVATE)
     private var rootFolderId: String? = cachePreferences.getString(RootFolderIdKey, null)

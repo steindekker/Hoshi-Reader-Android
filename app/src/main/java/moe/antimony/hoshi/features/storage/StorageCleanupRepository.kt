@@ -3,6 +3,10 @@ package moe.antimony.hoshi.features.storage
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
+import javax.inject.Inject
+import javax.inject.Singleton
+import moe.antimony.hoshi.di.CacheDir
+import moe.antimony.hoshi.di.FilesDir
 
 enum class StorageCleanupCategoryId {
     AnkiMediaCache,
@@ -30,11 +34,13 @@ data class StorageCleanupCategory(
     internal val targets: List<File>,
 )
 
-class StorageCleanupRepository(
-    private val filesDir: File,
-    private val cacheDir: File,
-    private val json: Json = Json { ignoreUnknownKeys = true },
+@Singleton
+class StorageCleanupRepository @Inject constructor(
+    @param:FilesDir private val filesDir: File,
+    @param:CacheDir private val cacheDir: File,
 ) {
+    private val json: Json = Json { ignoreUnknownKeys = true }
+
     fun scan(): StorageCleanupReport {
         val categories = listOfNotNull(
             category(

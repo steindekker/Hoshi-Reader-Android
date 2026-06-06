@@ -2,10 +2,10 @@ package moe.antimony.hoshi.features.bookshelf
 
 import android.net.Uri
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -29,17 +29,44 @@ internal data class PendingBookImport(
     val importOperation: suspend () -> String,
 )
 
-internal class BookshelfViewModel(
-    private val repository: BookshelfRepository,
-    coroutineScope: CoroutineScope? = null,
-    private val importGate: PendingImportGate<String> = PendingImportGate(),
-) : ViewModel() {
-    private val ownedScope = if (coroutineScope == null) {
-        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    } else {
-        null
+@HiltViewModel
+internal class BookshelfViewModel : ViewModel {
+    private val repository: BookshelfRepository
+    private val importGate: PendingImportGate<String>
+    private val injectedScope: CoroutineScope?
+    private val workScope: CoroutineScope
+        get() = injectedScope ?: viewModelScope
+
+    @Inject
+    constructor(repository: BookshelfRepository) : this(
+        repository = repository,
+        coroutineScope = null,
+        importGate = PendingImportGate(),
+        marker = Unit,
+    )
+
+    internal constructor(
+        repository: BookshelfRepository,
+        coroutineScope: CoroutineScope,
+        importGate: PendingImportGate<String> = PendingImportGate(),
+    ) : this(
+        repository = repository,
+        coroutineScope = coroutineScope,
+        importGate = importGate,
+        marker = Unit,
+    )
+
+    private constructor(
+        repository: BookshelfRepository,
+        coroutineScope: CoroutineScope?,
+        importGate: PendingImportGate<String>,
+        @Suppress("UNUSED_PARAMETER") marker: Unit,
+    ) : super() {
+        this.repository = repository
+        this.importGate = importGate
+        injectedScope = coroutineScope
     }
-    private val workScope = coroutineScope ?: ownedScope!!
+
     private val _uiState = MutableStateFlow(BookshelfUiState())
     val uiState: StateFlow<BookshelfUiState> = _uiState
     private var openBookInFlight = false
@@ -472,9 +499,6 @@ internal class BookshelfViewModel(
         }
     }
 
-    override fun onCleared() {
-        ownedScope?.cancel()
-    }
 }
 
 private fun PendingBookImport.failureDisplayName(): String =

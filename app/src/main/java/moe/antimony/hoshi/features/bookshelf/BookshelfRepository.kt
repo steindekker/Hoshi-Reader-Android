@@ -3,9 +3,12 @@ package moe.antimony.hoshi.features.bookshelf
 import android.content.ContentResolver
 import android.content.Intent
 import android.net.Uri
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import moe.antimony.hoshi.di.IoDispatcher
 import moe.antimony.hoshi.dictionary.DictionaryRepository
 import moe.antimony.hoshi.epub.BookEntry
 import moe.antimony.hoshi.epub.BookMetadata
@@ -48,14 +51,15 @@ internal interface BookshelfRepository {
     ): SyncResult
 }
 
-internal class AndroidBookshelfRepository(
+@Singleton
+internal class AndroidBookshelfRepository @Inject constructor(
     private val contentResolver: ContentResolver,
     private val bookRepository: BookRepository,
     private val dictionaryRepository: DictionaryRepository,
     private val settingsRepository: BookshelfSettingsRepository,
     private val syncManager: SyncManager,
-    private val bookParser: EpubBookParser = EpubBookParser(),
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val bookParser: EpubBookParser,
+    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : BookshelfRepository {
     override suspend fun loadBooks(sortOption: BookSortOption): BookshelfLoadResult = withContext(ioDispatcher) {
         val entries = bookRepository.loadBookEntries(sortOption)

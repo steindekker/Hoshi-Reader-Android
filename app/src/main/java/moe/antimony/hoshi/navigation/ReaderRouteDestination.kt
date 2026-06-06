@@ -22,7 +22,7 @@ import moe.antimony.hoshi.features.reader.ReaderSettings
 import moe.antimony.hoshi.features.reader.ReaderWebView
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
-import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.LocalHoshiUiDependencies
 import moe.antimony.hoshi.epub.BookEntry
 import moe.antimony.hoshi.features.settings.collectAsLoadedSettings
 import moe.antimony.hoshi.features.sync.SyncDirection
@@ -39,7 +39,7 @@ internal fun ReaderRouteDestination(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val appContainer = LocalHoshiAppContainer.current
+    val appContainer = LocalHoshiUiDependencies.current
     val syncSettings = appContainer.syncSettingsRepository.settings.collectAsLoadedSettings()
     val sasayakiSettings = appContainer.sasayakiSettingsRepository.settings.collectAsLoadedSettings()
     val autoSyncState = ReaderRouteAutoSyncState(

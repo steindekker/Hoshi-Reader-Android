@@ -6,6 +6,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.net.HttpURLConnection
 import java.net.URL
+import javax.inject.Inject
 
 internal data class AppVersion(
     private val major: Int,
@@ -126,12 +127,36 @@ internal interface GitHubHttpClient {
     fun get(url: String, headers: Map<String, String>): String
 }
 
-internal class GitHubReleaseUpdateRepository(
-    private val latestReleaseUrl: String = LatestReleaseUrl,
-    private val apiMirrorPrefixes: List<String> = DefaultApiMirrorPrefixes,
-    private val downloadMirrorPrefixes: List<String> = DefaultDownloadMirrorPrefixes,
-    private val httpClient: GitHubHttpClient = UrlConnectionGitHubHttpClient,
+internal class GitHubReleaseUpdateRepository private constructor(
+    private val latestReleaseUrl: String,
+    private val apiMirrorPrefixes: List<String>,
+    private val downloadMirrorPrefixes: List<String>,
+    private val httpClient: GitHubHttpClient,
+    @Suppress("UNUSED_PARAMETER")
+    marker: Unit,
 ) : ReleaseUpdateRepository {
+    @Inject
+    constructor() : this(
+        latestReleaseUrl = LatestReleaseUrl,
+        apiMirrorPrefixes = DefaultApiMirrorPrefixes,
+        downloadMirrorPrefixes = DefaultDownloadMirrorPrefixes,
+        httpClient = UrlConnectionGitHubHttpClient,
+        marker = Unit,
+    )
+
+    internal constructor(
+        latestReleaseUrl: String = LatestReleaseUrl,
+        apiMirrorPrefixes: List<String> = DefaultApiMirrorPrefixes,
+        downloadMirrorPrefixes: List<String> = DefaultDownloadMirrorPrefixes,
+        httpClient: GitHubHttpClient,
+    ) : this(
+        latestReleaseUrl = latestReleaseUrl,
+        apiMirrorPrefixes = apiMirrorPrefixes,
+        downloadMirrorPrefixes = downloadMirrorPrefixes,
+        httpClient = httpClient,
+        marker = Unit,
+    )
+
     override suspend fun latestRelease(): GitHubRelease {
         val headers = mapOf(
             "Accept" to "application/vnd.github+json",

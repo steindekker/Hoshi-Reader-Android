@@ -1,12 +1,13 @@
 package moe.antimony.hoshi.features.dictionary
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
 import de.manhhao.hoshi.LookupResult
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +21,7 @@ import moe.antimony.hoshi.features.audio.AudioSettingsRepository
 import moe.antimony.hoshi.features.anki.AnkiPopupSettings
 import moe.antimony.hoshi.features.reader.ReaderSelectionData
 import moe.antimony.hoshi.R
+import moe.antimony.hoshi.di.IoDispatcher
 import moe.antimony.hoshi.ui.UiText
 
 internal interface DictionarySearchRepository {
@@ -30,7 +32,8 @@ internal interface DictionarySearchRepository {
     fun dictionaryStyles(): Map<String, String>
 }
 
-internal class AndroidDictionarySearchRepository(
+@Singleton
+internal class AndroidDictionarySearchRepository @Inject constructor(
     private val dictionaryRepository: DictionaryRepository,
     dictionarySettingsRepository: DictionarySettingsRepository,
     audioSettingsRepository: AudioSettingsRepository,
@@ -49,22 +52,53 @@ internal class AndroidDictionarySearchRepository(
         dictionaryRepository.dictionaryStyles()
 }
 
-internal class DictionarySearchViewModel(
-    private val repository: DictionarySearchRepository,
-    coroutineScope: CoroutineScope? = null,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-) : ViewModel() {
-    private val ownedScope = if (coroutineScope == null) {
-        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    } else {
-        null
+@HiltViewModel
+internal class DictionarySearchViewModel : ViewModel {
+    private val repository: DictionarySearchRepository
+    private val ioDispatcher: CoroutineDispatcher
+    private val injectedScope: CoroutineScope?
+    private val scope: CoroutineScope
+        get() = injectedScope ?: viewModelScope
+
+    @Inject
+    constructor(
+        repository: DictionarySearchRepository,
+        @IoDispatcher ioDispatcher: CoroutineDispatcher,
+    ) : this(
+        repository = repository,
+        coroutineScope = null,
+        ioDispatcher = ioDispatcher,
+        marker = Unit,
+    )
+
+    internal constructor(
+        repository: DictionarySearchRepository,
+        coroutineScope: CoroutineScope,
+        ioDispatcher: CoroutineDispatcher,
+    ) : this(
+        repository = repository,
+        coroutineScope = coroutineScope,
+        ioDispatcher = ioDispatcher,
+        marker = Unit,
+    )
+
+    private constructor(
+        repository: DictionarySearchRepository,
+        coroutineScope: CoroutineScope?,
+        ioDispatcher: CoroutineDispatcher,
+        @Suppress("UNUSED_PARAMETER") marker: Unit,
+    ) : super() {
+        this.repository = repository
+        this.ioDispatcher = ioDispatcher
+        injectedScope = coroutineScope
+        collectInitialState()
     }
-    private val scope = coroutineScope ?: ownedScope!!
+
     private val _uiState = MutableStateFlow(DictionarySearchUiState())
 
     val uiState: StateFlow<DictionarySearchUiState> = _uiState.asStateFlow()
 
-    init {
+    private fun collectInitialState() {
         scope.launch {
             withContext(ioDispatcher) {
                 runCatching { repository.rebuildLookupQuery() }
@@ -257,8 +291,4 @@ internal class DictionarySearchViewModel(
         }
     }
 
-    override fun onCleared() {
-        ownedScope?.cancel()
-        super.onCleared()
-    }
 }

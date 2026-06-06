@@ -8,7 +8,7 @@ internal fun MutableList<NavKey>.popAppRoute() {
     }
 }
 
-internal fun MutableList<NavKey>.selectTopLevelRoute(route: AppRoute) {
+internal fun MutableList<NavKey>.replaceWithTopLevelRoute(route: AppRoute) {
     if (size == 1 && lastOrNull() == route) {
         return
     }
@@ -17,17 +17,17 @@ internal fun MutableList<NavKey>.selectTopLevelRoute(route: AppRoute) {
 }
 
 internal fun MutableList<NavKey>.openReaderRoute(bookId: String) {
-    selectTopLevelRoute(AppRoute.BooksRoute)
+    replaceWithTopLevelRoute(AppRoute.BooksRoute)
     add(AppRoute.ReaderRoute(bookId))
 }
 
 internal fun MutableList<NavKey>.openSasayakiMatchRoute(bookId: String) {
-    selectTopLevelRoute(AppRoute.BooksRoute)
+    replaceWithTopLevelRoute(AppRoute.BooksRoute)
     add(AppRoute.SasayakiMatchRoute(bookId))
 }
 
 internal fun MutableList<NavKey>.routeExternalBookImport() {
-    selectTopLevelRoute(AppRoute.BooksRoute)
+    replaceWithTopLevelRoute(AppRoute.BooksRoute)
 }
 
 internal fun MutableList<NavKey>.returnFromMediaSession() = Unit

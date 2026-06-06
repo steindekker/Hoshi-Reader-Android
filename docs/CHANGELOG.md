@@ -8,6 +8,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 ### Fixed
 
 - Keep the Advanced Audio Local source switch synchronized with the Local Audio setting, preventing duplicate Local sources when turning it off from the source list.
+- Show the update prompt during the same app session when the startup update check finds a new APK, instead of waiting until the next launch.
 - Import EPUB archives that use stored ZIP entries with data descriptors, matching iOS for books that previously failed during import.
 - Prevent vertical reader text in paginated and continuous modes from prematurely wrapping after furigana, and keep ruby-aware lookup highlights from expanding into adjacent kanji.
 - Trim unmatched quotation brackets from reader lookup sentences before Anki mining, matching iOS for quoted multi-sentence passages. #98

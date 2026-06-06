@@ -6,6 +6,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -14,10 +16,13 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import dagger.hilt.android.qualifiers.ApplicationContext
+import moe.antimony.hoshi.di.IoDispatcher
 
-class DeviceCodeDriveAuthorizer(
-    context: Context,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+@Singleton
+class DeviceCodeDriveAuthorizer @Inject constructor(
+    @param:ApplicationContext context: Context,
+    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : DriveAuthorizer {
     private val preferences = context.applicationContext.getSharedPreferences(PreferencesName, Context.MODE_PRIVATE)
 

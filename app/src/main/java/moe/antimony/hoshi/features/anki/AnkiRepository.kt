@@ -3,7 +3,10 @@ package moe.antimony.hoshi.features.anki
 import android.content.Context
 import android.util.Log
 import androidx.core.content.FileProvider
+import dagger.hilt.android.qualifiers.ApplicationContext
 import de.manhhao.hoshi.HoshiDicts
+import javax.inject.Inject
+import javax.inject.Singleton
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.audio.LocalAudioFile
 import moe.antimony.hoshi.features.audio.LocalAudioRepository
@@ -16,13 +19,28 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
+@Singleton
 class AnkiRepository(
     private val context: Context,
     private val backend: AnkiBackend,
     private val settingsRepository: AnkiSettingsRepository,
-    private val localAudioRepository: LocalAudioRepository = LocalAudioRepository.fromContext(context),
-    private val ankiConnectBackendFactory: (String) -> AnkiBackend = { endpoint -> AnkiConnectBackend(endpoint) },
+    private val localAudioRepository: LocalAudioRepository,
+    private val ankiConnectBackendFactory: (String) -> AnkiBackend,
 ) {
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        backend: AnkiBackend,
+        settingsRepository: AnkiSettingsRepository,
+        localAudioRepository: LocalAudioRepository,
+    ) : this(
+        context = context,
+        backend = backend,
+        settingsRepository = settingsRepository,
+        localAudioRepository = localAudioRepository,
+        ankiConnectBackendFactory = { endpoint: String -> AnkiConnectBackend(endpoint) },
+    )
+
     val settings: Flow<AnkiSettings> = settingsRepository.settings
 
     suspend fun updateSettings(transform: (AnkiSettings) -> AnkiSettings) {

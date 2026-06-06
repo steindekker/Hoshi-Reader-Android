@@ -3,18 +3,55 @@ package moe.antimony.hoshi.features.sync
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
+import javax.inject.Singleton
+import moe.antimony.hoshi.di.IoDispatcher
 import moe.antimony.hoshi.epub.BookEntry
 import moe.antimony.hoshi.epub.BookRepository
 import moe.antimony.hoshi.epub.Bookmark
 import moe.antimony.hoshi.epub.ReadingStatistics
 import moe.antimony.hoshi.epub.SasayakiPlaybackData
 
-class SyncManager(
+@Singleton
+class SyncManager private constructor(
     private val bookRepository: BookRepository,
     private val drive: DriveSyncDataSource,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val nowUnixMillis: () -> Long = { System.currentTimeMillis() },
+    private val ioDispatcher: CoroutineDispatcher,
+    private val nowUnixMillis: () -> Long,
 ) {
+    @Inject
+    constructor(
+        bookRepository: BookRepository,
+        drive: DriveSyncDataSource,
+        @IoDispatcher ioDispatcher: CoroutineDispatcher,
+    ) : this(
+        bookRepository = bookRepository,
+        drive = drive,
+        ioDispatcher = ioDispatcher,
+        nowUnixMillis = { System.currentTimeMillis() },
+    )
+
+    constructor(
+        bookRepository: BookRepository,
+        drive: DriveSyncDataSource,
+    ) : this(
+        bookRepository = bookRepository,
+        drive = drive,
+        ioDispatcher = Dispatchers.IO,
+        nowUnixMillis = { System.currentTimeMillis() },
+    )
+
+    constructor(
+        bookRepository: BookRepository,
+        drive: DriveSyncDataSource,
+        nowUnixMillis: () -> Long,
+    ) : this(
+        bookRepository = bookRepository,
+        drive = drive,
+        ioDispatcher = Dispatchers.IO,
+        nowUnixMillis = nowUnixMillis,
+    )
+
     suspend fun syncBook(
         entry: BookEntry,
         direction: SyncDirection?,

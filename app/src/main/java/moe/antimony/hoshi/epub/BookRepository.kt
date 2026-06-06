@@ -1,8 +1,13 @@
 package moe.antimony.hoshi.epub
 
-
 import android.content.ContentResolver
 import android.net.Uri
+import java.io.File
+import java.time.Instant
+import java.util.UUID
+import java.util.zip.ZipFile
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -10,20 +15,33 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import moe.antimony.hoshi.di.FilesDir
+import moe.antimony.hoshi.di.IoDispatcher
 import moe.antimony.hoshi.importing.ImportFileType
 import moe.antimony.hoshi.importing.validateImportFile
-import java.io.File
-import java.time.Instant
-import java.util.UUID
-import java.util.zip.ZipFile
 
-class BookRepository(
+@Singleton
+class BookRepository private constructor(
     filesDir: File,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val fileDataSource: BookFileDataSource = BookFileDataSource(filesDir, ioDispatcher),
-    private val sidecarDataSource: BookSidecarDataSource = BookSidecarDataSource(ioDispatcher),
-    private val clock: BookClock = SystemBookClock,
+    private val ioDispatcher: CoroutineDispatcher,
+    private val fileDataSource: BookFileDataSource,
+    private val sidecarDataSource: BookSidecarDataSource,
+    private val clock: BookClock,
 ) : ReaderRouteBookRepository, SasayakiSidecarRepository {
+    @Inject
+    constructor(
+        @FilesDir filesDir: File,
+        @IoDispatcher ioDispatcher: CoroutineDispatcher,
+    ) : this(
+        filesDir = filesDir,
+        ioDispatcher = ioDispatcher,
+        fileDataSource = BookFileDataSource(filesDir, ioDispatcher),
+        sidecarDataSource = BookSidecarDataSource(ioDispatcher),
+        clock = SystemBookClock,
+    )
+
+    constructor(filesDir: File) : this(filesDir, Dispatchers.IO)
+
     private val importDataSource = BookImportDataSource(filesDir, fileDataSource, ioDispatcher = ioDispatcher)
 
     val currentBookFile: File get() = fileDataSource.currentBookFile

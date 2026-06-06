@@ -1,6 +1,9 @@
 package moe.antimony.hoshi.features.update
 
 import java.io.File
+import javax.inject.Inject
+import javax.inject.Singleton
+import moe.antimony.hoshi.di.CurrentVersionName
 
 internal sealed interface UpdateDownloadStatus {
     data object None : UpdateDownloadStatus
@@ -23,13 +26,19 @@ internal sealed interface UpdateCheckOutcome {
     data class DownloadAlreadyFinished(val update: AvailableUpdate, val file: File) : UpdateCheckOutcome
 }
 
-internal class UpdateCheckService(
+@Singleton
+internal class UpdateCheckService @Inject constructor(
+    @param:CurrentVersionName
     private val currentVersionName: String,
     private val releaseRepository: ReleaseUpdateRepository,
     private val downloadController: UpdateDownloadController,
     private val updateStore: UpdateDownloadStore,
+    private val updatePromptEvents: UpdatePromptEvents = UpdatePromptEvents(),
 ) {
-    suspend fun check(ignoreSkipped: Boolean = false): UpdateCheckOutcome {
+    suspend fun check(
+        ignoreSkipped: Boolean = false,
+        notifyAvailable: Boolean = false,
+    ): UpdateCheckOutcome {
         val release = releaseRepository.latestRelease()
         val releaseVersion = AppVersion.parse(release.tagName) ?: return UpdateCheckOutcome.NoInstallableAsset
         val currentVersion = AppVersion.parse(currentVersionName) ?: return UpdateCheckOutcome.UpToDate
@@ -47,6 +56,9 @@ internal class UpdateCheckService(
                     record?.status != UpdateDownloadRecordStatus.Failed
                 ) {
                     updateStore.saveAvailable(update)
+                    if (notifyAvailable) {
+                        updatePromptEvents.notifyAvailable(update)
+                    }
                 }
                 UpdateCheckOutcome.Available(update)
             }

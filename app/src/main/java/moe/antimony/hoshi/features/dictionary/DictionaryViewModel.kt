@@ -3,12 +3,13 @@ package moe.antimony.hoshi.features.dictionary
 import android.content.ContentResolver
 import android.net.Uri
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +28,7 @@ import moe.antimony.hoshi.dictionary.DictionaryUpdateProgress
 import moe.antimony.hoshi.dictionary.DictionaryUpdateStage
 import moe.antimony.hoshi.dictionary.DictionaryUpdateSummary
 import moe.antimony.hoshi.dictionary.RecommendedDictionary
+import moe.antimony.hoshi.di.IoDispatcher
 import moe.antimony.hoshi.features.anki.AnkiSettings
 import moe.antimony.hoshi.features.anki.AnkiSettingsRepository
 import moe.antimony.hoshi.ui.UiText
@@ -62,7 +64,8 @@ internal data class DictionaryImportBatchResult(
     val failed: List<DictionaryImportItem>,
 )
 
-internal class AndroidDictionaryViewModelRepository(
+@Singleton
+internal class AndroidDictionaryViewModelRepository @Inject constructor(
     private val contentResolver: ContentResolver,
     private val dictionaryRepository: DictionaryRepository,
     private val settingsRepository: DictionarySettingsRepository,
@@ -146,22 +149,53 @@ internal class AndroidDictionaryViewModelRepository(
     }
 }
 
-internal class DictionaryViewModel(
-    private val repository: DictionaryViewModelRepository,
-    coroutineScope: CoroutineScope? = null,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-) : ViewModel() {
-    private val ownedScope = if (coroutineScope == null) {
-        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    } else {
-        null
+@HiltViewModel
+internal class DictionaryViewModel : ViewModel {
+    private val repository: DictionaryViewModelRepository
+    private val ioDispatcher: CoroutineDispatcher
+    private val injectedScope: CoroutineScope?
+    private val scope: CoroutineScope
+        get() = injectedScope ?: viewModelScope
+
+    @Inject
+    constructor(
+        repository: DictionaryViewModelRepository,
+        @IoDispatcher ioDispatcher: CoroutineDispatcher,
+    ) : this(
+        repository = repository,
+        coroutineScope = null,
+        ioDispatcher = ioDispatcher,
+        marker = Unit,
+    )
+
+    internal constructor(
+        repository: DictionaryViewModelRepository,
+        coroutineScope: CoroutineScope,
+        ioDispatcher: CoroutineDispatcher,
+    ) : this(
+        repository = repository,
+        coroutineScope = coroutineScope,
+        ioDispatcher = ioDispatcher,
+        marker = Unit,
+    )
+
+    private constructor(
+        repository: DictionaryViewModelRepository,
+        coroutineScope: CoroutineScope?,
+        ioDispatcher: CoroutineDispatcher,
+        @Suppress("UNUSED_PARAMETER") marker: Unit,
+    ) : super() {
+        this.repository = repository
+        this.ioDispatcher = ioDispatcher
+        injectedScope = coroutineScope
+        collectSettings()
     }
-    private val scope = coroutineScope ?: ownedScope!!
+
     private val _uiState = MutableStateFlow(DictionaryUiState())
 
     val uiState: StateFlow<DictionaryUiState> = _uiState.asStateFlow()
 
-    init {
+    private fun collectSettings() {
         scope.launch {
             repository.settings.collect { settings ->
                 _uiState.update { it.copy(settings = settings) }
@@ -390,10 +424,6 @@ internal class DictionaryViewModel(
         }
     }
 
-    override fun onCleared() {
-        ownedScope?.cancel()
-        super.onCleared()
-    }
 }
 
 private fun DictionaryUpdateProgress.message(): UiText =

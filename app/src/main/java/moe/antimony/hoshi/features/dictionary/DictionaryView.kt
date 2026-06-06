@@ -72,7 +72,6 @@ import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -97,12 +96,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.LocalHoshiUiDependencies
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.dictionary.DictionaryInfo
 import moe.antimony.hoshi.dictionary.DictionaryType
@@ -126,19 +124,9 @@ fun DictionaryView(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val appContainer = LocalHoshiAppContainer.current
-    val dictionaryViewModel: DictionaryViewModel = viewModel(
-        factory = remember(context, appContainer) {
-            object : ViewModelProvider.Factory {
-                @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    DictionaryViewModel(
-                        appContainer.dictionaryViewModelRepository(context.contentResolver),
-                    ) as T
-            }
-        },
-    )
-    val uiState by dictionaryViewModel.uiState.collectAsState()
+    val appContainer = LocalHoshiUiDependencies.current
+    val dictionaryViewModel: DictionaryViewModel = hiltViewModel()
+    val uiState by dictionaryViewModel.uiState.collectAsStateWithLifecycle()
     var destination by remember { mutableStateOf<DictionaryDestination?>(null) }
     var showUpdateConfirmation by remember { mutableStateOf(false) }
     var showDownloadConfirmation by remember { mutableStateOf(false) }

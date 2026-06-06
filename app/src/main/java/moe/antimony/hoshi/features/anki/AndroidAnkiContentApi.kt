@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
+import dagger.hilt.android.qualifiers.ApplicationContext
 import com.ichi2.anki.FlashCardsContract
 import com.ichi2.anki.api.AddContentApi
 import java.lang.SecurityException
@@ -12,8 +13,10 @@ import java.math.BigInteger
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.Locale
+import javax.inject.Inject
 
-class AndroidAnkiContentApi(
+class AndroidAnkiContentApi @Inject constructor(
+    @ApplicationContext
     context: Context,
 ) : AnkiContentApi {
     private val appContext = context.applicationContext

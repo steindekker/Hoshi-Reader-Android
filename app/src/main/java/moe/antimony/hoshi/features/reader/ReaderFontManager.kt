@@ -6,6 +6,9 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import java.io.File
 import java.net.URLEncoder
+import javax.inject.Inject
+import javax.inject.Singleton
+import moe.antimony.hoshi.di.FilesDir
 
 data class ReaderFontInfo(
     val name: String,
@@ -13,7 +16,10 @@ data class ReaderFontInfo(
     val file: File,
 )
 
-class ReaderFontManager(private val filesDir: File) {
+@Singleton
+class ReaderFontManager @Inject constructor(
+    @param:FilesDir private val filesDir: File,
+) {
     private val fontsDirectory = File(filesDir, "Fonts")
 
     fun importFont(source: File): ReaderFontInfo {

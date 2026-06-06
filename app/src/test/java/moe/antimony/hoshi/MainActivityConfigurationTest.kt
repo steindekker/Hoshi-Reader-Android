@@ -1,11 +1,15 @@
 package moe.antimony.hoshi
 
-import org.junit.Assert.assertTrue
+import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Configuration
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.w3c.dom.Document
 import org.w3c.dom.Element
 import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
+import javax.inject.Inject
 
 class MainActivityConfigurationTest {
     @Test
@@ -23,6 +27,64 @@ class MainActivityConfigurationTest {
         assertTrue(
             "ProcessTextLookupActivity must use the same build variant label as the application.",
             processTextLookupActivityManifestElement().getAttribute("android:label") == expectedLabel,
+        )
+    }
+
+    @Test
+    fun applicationUsesHoshiApplicationForHiltStartup() {
+        assertTrue(
+            "The manifest application class must be HoshiApplication so Hilt can install the app component before activities, receivers, and workers run.",
+            applicationManifestElement(debugMergedManifestDocument()).getAttribute("android:name") ==
+                "moe.antimony.hoshi.HoshiApplication",
+        )
+    }
+
+    @Test
+    fun workManagerDefaultInitializerIsRemovedForHiltConfiguration() {
+        val provider = providerManifestElement(
+            name = "androidx.startup.InitializationProvider",
+            document = debugMergedManifestDocument(),
+        )
+
+        assertFalse(
+            "WorkManager's default initializer must be removed when HoshiApplication supplies a HiltWorkerFactory configuration.",
+            provider.hasMetaData(
+                name = "androidx.work.WorkManagerInitializer",
+                value = "androidx.startup",
+            ),
+        )
+        assertTrue(
+            "The AndroidX Startup provider must remain merged for other Startup initializers.",
+            provider.hasMetaData(
+                name = "androidx.lifecycle.ProcessLifecycleInitializer",
+                value = "androidx.startup",
+            ),
+        )
+    }
+
+    @Test
+    fun hoshiApplicationSuppliesHiltWorkerFactoryConfigurationContract() {
+        assertTrue(
+            "HoshiApplication must implement WorkManager's Configuration.Provider for Hilt worker injection.",
+            Configuration.Provider::class.java.isAssignableFrom(HoshiApplication::class.java),
+        )
+
+        val workerFactoryField = HoshiApplication::class.java.declaredFields.singleOrNull { field ->
+            field.type == HiltWorkerFactory::class.java
+        }
+        assertTrue(
+            "HoshiApplication must receive HiltWorkerFactory from Hilt instead of manually constructing a WorkerFactory.",
+            workerFactoryField != null,
+        )
+        assertTrue(
+            "The HiltWorkerFactory field must be annotated with @Inject.",
+            workerFactoryField!!.isAnnotationPresent(Inject::class.java),
+        )
+        assertTrue(
+            "HoshiApplication must expose the Configuration property consumed by WorkManager.",
+            HoshiApplication::class.java
+                .getDeclaredMethod("getWorkManagerConfiguration")
+                .returnType == Configuration::class.java,
         )
     }
 
@@ -106,8 +168,8 @@ class MainActivityConfigurationTest {
         return activityManifestElement(".features.dictionary.ProcessTextLookupActivity")
     }
 
-    private fun applicationManifestElement(): Element {
-        return manifestDocument().documentElement
+    private fun applicationManifestElement(document: Document = sourceManifestDocument()): Element {
+        return document.documentElement
             .getElementsByTagName("application")
             .item(0) as Element
     }
@@ -147,8 +209,10 @@ class MainActivityConfigurationTest {
         return false
     }
 
-    private fun activityManifestElement(name: String): Element {
-        val document = manifestDocument()
+    private fun activityManifestElement(
+        name: String,
+        document: Document = sourceManifestDocument(),
+    ): Element {
         val activities = document.getElementsByTagName("activity")
         for (index in 0 until activities.length) {
             val element = activities.item(index) as Element
@@ -159,8 +223,42 @@ class MainActivityConfigurationTest {
         error("$name not found in AndroidManifest.xml")
     }
 
-    private fun manifestDocument() = DocumentBuilderFactory.newInstance()
+    private fun providerManifestElement(
+        name: String,
+        document: Document = sourceManifestDocument(),
+    ): Element {
+        val providers = document.getElementsByTagName("provider")
+        for (index in 0 until providers.length) {
+            val element = providers.item(index) as Element
+            if (element.getAttribute("android:name") == name) {
+                return element
+            }
+        }
+        error("$name not found in AndroidManifest.xml")
+    }
+
+    private fun Element.hasMetaData(
+        name: String,
+        value: String,
+    ): Boolean {
+        val metadata = getElementsByTagName("meta-data")
+        for (index in 0 until metadata.length) {
+            val element = metadata.item(index) as Element
+            val matches = element.getAttribute("android:name") == name &&
+                element.getAttribute("android:value") == value
+            if (matches) return true
+        }
+        return false
+    }
+
+    private fun sourceManifestDocument() = manifestDocument(File("src/main/AndroidManifest.xml"))
+
+    private fun debugMergedManifestDocument() = manifestDocument(
+        File("build/intermediates/merged_manifest/debug/processDebugMainManifest/AndroidManifest.xml"),
+    )
+
+    private fun manifestDocument(file: File) = DocumentBuilderFactory.newInstance()
         .newDocumentBuilder()
-        .parse(File("src/main/AndroidManifest.xml"))
+        .parse(file)
 
 }

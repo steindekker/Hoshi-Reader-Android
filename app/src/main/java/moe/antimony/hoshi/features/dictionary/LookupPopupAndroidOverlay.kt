@@ -17,17 +17,15 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.manhhao.hoshi.LookupResult
-import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.LocalHoshiUiDependencies
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.dictionary.LookupEngine
 import moe.antimony.hoshi.epub.SasayakiMatch
@@ -59,25 +57,18 @@ internal fun LookupPopupAndroidStack(
     rootHighlightEInkMode: Boolean = false,
     rootHighlightVerticalWriting: Boolean = false,
     rootHighlightEInkStyle: PopupSelectionEInkStyle = PopupSelectionEInkStyle.Underline,
+    fontManager: ReaderFontManager? = null,
 ) {
     val context = LocalContext.current
-    val appContainer = LocalHoshiAppContainer.current
-    val ankiViewModel: AnkiViewModel = viewModel(
-        factory = remember(appContainer) {
-            object : ViewModelProvider.Factory {
-                @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    AnkiViewModel(appContainer.ankiRepository) as T
-            }
-        },
-    )
-    val ankiUiState by ankiViewModel.uiState.collectAsState()
+    val resolvedFontManager = fontManager ?: LocalHoshiUiDependencies.current.readerFontManager
+    val ankiViewModel: AnkiViewModel = hiltViewModel()
+    val ankiUiState by ankiViewModel.uiState.collectAsStateWithLifecycle()
     val assets = remember(context) { LookupPopupAssets.load(context) }
-    val controller = remember(context) {
+    val controller = remember(context, resolvedFontManager) {
         LookupPopupOverlayController(
             context = context,
             assets = assets,
-            fontManager = appContainer.readerFontManager,
+            fontManager = resolvedFontManager,
         )
     }
     AndroidView(

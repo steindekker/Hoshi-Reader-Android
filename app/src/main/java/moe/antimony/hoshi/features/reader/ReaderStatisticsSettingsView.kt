@@ -37,7 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.LocalHoshiUiDependencies
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.settings.collectAsLoadedSettings
 import moe.antimony.hoshi.features.sync.StatisticsSyncMode
@@ -50,7 +50,7 @@ fun ReaderStatisticsSettingsView(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val appContainer = LocalHoshiAppContainer.current
+    val appContainer = LocalHoshiUiDependencies.current
     val syncSettings = appContainer.syncSettingsRepository.settings.collectAsLoadedSettings()
     var autostartMenuExpanded by remember { mutableStateOf(false) }
     var syncModeMenuExpanded by remember { mutableStateOf(false) }

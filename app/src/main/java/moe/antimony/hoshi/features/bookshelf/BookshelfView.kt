@@ -88,7 +88,6 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -110,12 +109,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.LocalHoshiUiDependencies
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.epub.BookEntry
 import moe.antimony.hoshi.epub.BookRepository
@@ -159,24 +157,18 @@ fun BookshelfView(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val appContainer = LocalHoshiAppContainer.current
-    val syncSettings by appContainer.syncSettingsRepository.settings.collectAsState(initial = SyncSettings())
-    val readerSettings by appContainer.readerSettingsRepository.settings.collectAsState(initial = ReaderSettings())
-    val sasayakiSettings by appContainer.sasayakiSettingsRepository.settings.collectAsState(
-        initial = moe.antimony.hoshi.features.sasayaki.SasayakiSettings(),
+    val appContainer = LocalHoshiUiDependencies.current
+    val syncSettings by appContainer.syncSettingsRepository.settings.collectAsStateWithLifecycle(
+        initialValue = SyncSettings(),
     )
-    val booksViewModel: BookshelfViewModel = viewModel(
-        factory = remember(context, appContainer) {
-            object : ViewModelProvider.Factory {
-                @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    BookshelfViewModel(
-                        appContainer.bookshelfRepository(context.contentResolver),
-                    ) as T
-            }
-        },
+    val readerSettings by appContainer.readerSettingsRepository.settings.collectAsStateWithLifecycle(
+        initialValue = ReaderSettings(),
     )
-    val uiState by booksViewModel.uiState.collectAsState()
+    val sasayakiSettings by appContainer.sasayakiSettingsRepository.settings.collectAsStateWithLifecycle(
+        initialValue = moe.antimony.hoshi.features.sasayaki.SasayakiSettings(),
+    )
+    val booksViewModel: BookshelfViewModel = hiltViewModel()
+    val uiState by booksViewModel.uiState.collectAsStateWithLifecycle()
     var sortMenuExpanded by remember { mutableStateOf(false) }
     var contextMenuTarget by remember { mutableStateOf<BookContextMenuTarget?>(null) }
     var deleteCandidate by remember { mutableStateOf<BookEntry?>(null) }

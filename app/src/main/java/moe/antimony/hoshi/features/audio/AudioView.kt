@@ -56,7 +56,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import moe.antimony.hoshi.LocalHoshiAppContainer
+import moe.antimony.hoshi.LocalHoshiUiDependencies
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.settings.collectAsLoadedSettings
 import moe.antimony.hoshi.features.settings.GroupCard
@@ -77,7 +77,7 @@ fun AudioSettingsView(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val appContainer = LocalHoshiAppContainer.current
+    val appContainer = LocalHoshiUiDependencies.current
     val scope = rememberCoroutineScope()
     val audioSettingsRepository = appContainer.audioSettingsRepository
     val settings = audioSettingsRepository.settings.collectAsLoadedSettings()

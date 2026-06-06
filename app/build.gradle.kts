@@ -2,6 +2,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.hilt)
+    alias(libs.plugins.ksp)
 }
 
 val rustProjectDir = file("src/main/rust/hoshiepub")
@@ -103,8 +105,8 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
         isCoreLibraryDesugaringEnabled = true
     }
     buildFeatures {
@@ -144,6 +146,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.media3.datasource)
@@ -152,9 +155,14 @@ dependencies {
     implementation(libs.androidx.media3.transformer)
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.navigation3.ui)
+    implementation(libs.androidx.hilt.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.hilt.work)
     implementation(libs.ankidroid.api)
+    implementation(libs.google.dagger.hilt.android)
     implementation(libs.kotlinx.serialization.json)
     implementation("net.java.dev.jna:jna:${libs.versions.jna.get()}@aar")
+    ksp(libs.androidx.hilt.compiler)
+    ksp(libs.google.dagger.hilt.android.compiler)
     testImplementation(libs.junit)
     testRuntimeOnly("net.java.dev.jna:jna:${libs.versions.jna.get()}@jar")
     androidTestImplementation(platform(libs.androidx.compose.bom))
@@ -272,6 +280,9 @@ tasks.named("preBuild") {
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
     dependsOn(generateUniffiKotlin)
     source(uniffiOutDir)
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
 }
 
 tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {

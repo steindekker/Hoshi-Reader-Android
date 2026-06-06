@@ -17,6 +17,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.launch
 import moe.antimony.hoshi.features.reader.ReaderSettings
 import moe.antimony.hoshi.features.reader.usesDarkInterface
@@ -25,7 +27,10 @@ import moe.antimony.hoshi.features.update.DownloadedUpdatePrompt
 import moe.antimony.hoshi.navigation.AppShell
 import moe.antimony.hoshi.ui.theme.HoshiReaderTheme
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject internal lateinit var uiDependencies: HoshiUiDependencies
+
     private var pendingImportUri by mutableStateOf<Uri?>(null)
     private var readerKeyEventHandler: ((KeyEvent) -> Boolean)? = null
 
@@ -37,8 +42,7 @@ class MainActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
         setContent {
-            val appContainer = remember { HoshiAppContainer(applicationContext) }
-            val readerSettingsRepository = appContainer.readerSettingsRepository
+            val readerSettingsRepository = uiDependencies.readerSettingsRepository
             val scope = rememberCoroutineScope()
             var readerSettings by remember { mutableStateOf<ReaderSettings?>(null) }
             LaunchedEffect(readerSettingsRepository) {
@@ -50,7 +54,7 @@ class MainActivity : ComponentActivity() {
             val loadedReaderSettings = readerSettings
             val darkTheme = loadedReaderSettings?.usesDarkInterface(systemDark) ?: systemDark
             val useDarkSystemBarIcons = loadedReaderSettings?.usesDarkSystemBarIcons(systemDark) ?: !systemDark
-            CompositionLocalProvider(LocalHoshiAppContainer provides appContainer) {
+            CompositionLocalProvider(LocalHoshiUiDependencies provides uiDependencies) {
                 HoshiReaderTheme(
                     darkTheme = darkTheme,
                     eInkMode = loadedReaderSettings?.eInkMode ?: false,

@@ -1,6 +1,6 @@
 # Hoshi Android Current Architecture
 
-Date: 2026-06-05
+Date: 2026-06-06
 
 This document describes the current architecture that exists in the Android
 repo. It is not a future plan and should not track task status. Long-lived
@@ -10,11 +10,18 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
 
 - The app is a single Android application module under `app`.
 - UI is Jetpack Compose + Material 3.
-- Navigation uses Navigation3 typed route keys, an explicit back stack,
-  `AppShell`, `NavDisplay`, and saveable entry state.
-- App-wide dependencies are currently created by `HoshiAppContainer` and exposed
-  to Compose through `LocalHoshiAppContainer`.
-- Many screens use ViewModels with immutable UI state exposed through
+- Navigation uses Navigation3 typed route keys, `AppShell`, and `NavDisplay`.
+  Top-level Books, Dictionary, and Settings tabs each own an independent Nav3
+  back stack with its own saveable entry state and per-entry ViewModel stores.
+- Production dependency injection is Hilt-backed. `HoshiApplication` owns the
+  app component through `@HiltAndroidApp`, and Android entry points receive
+  dependencies from the Hilt graph.
+- Compose still receives a Hilt-created `HoshiUiDependencies` through
+  `LocalHoshiUiDependencies` as a lazy temporary bridge for app-wide
+  dependencies that have not yet moved behind screen ViewModels. The bridge
+  does not build the object graph manually and resolves each dependency from
+  Hilt only when the current UI path reads it.
+- Many screens use Hilt-backed ViewModels with immutable UI state exposed through
   `StateFlow`.
 - Settings and small persisted preferences are stored behind DataStore-backed
   repositories.
@@ -54,7 +61,8 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   repository/sync boundary.
 - Audio and Sasayaki playback use Media3/ExoPlayer with controller/repository
   boundaries.
-- Update checks use WorkManager unique work.
+- Update checks use WorkManager unique work, with worker dependencies supplied
+  by Hilt's WorkManager integration.
 
 ## Native And Rust Build
 
@@ -76,6 +84,7 @@ Current build wiring lives in `app/build.gradle.kts`:
 - Wires generated sources into Kotlin compilation and Rust host libraries into
   JVM tests.
 - Uses JNA AAR for Android packaging and JNA jar for JVM unit tests.
+- Uses Java 17 targets and KSP-backed Hilt code generation for the app graph.
 
 Hard constraints:
 

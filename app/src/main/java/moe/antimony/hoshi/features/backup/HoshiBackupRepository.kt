@@ -19,10 +19,15 @@ import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
+import javax.inject.Inject
+import javax.inject.Singleton
+import moe.antimony.hoshi.di.FilesDir
+import moe.antimony.hoshi.di.IoDispatcher
 
-class HoshiBackupRepository(
-    private val filesDir: File,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+@Singleton
+class HoshiBackupRepository @Inject constructor(
+    @param:FilesDir private val filesDir: File,
+    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     suspend fun exportBooks(contentResolver: ContentResolver, uri: Uri) {
         exportFolder(contentResolver, uri, BackupTarget.Books)

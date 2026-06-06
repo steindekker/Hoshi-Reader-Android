@@ -16,13 +16,19 @@ import java.io.InputStream
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import javax.inject.Inject
+import javax.inject.Singleton
+import moe.antimony.hoshi.di.FilesDir
 
 data class LocalAudioImportProgress(
     val copiedBytes: Long,
     val totalBytes: Long?,
 )
 
-class LocalAudioRepository(private val filesDir: File) {
+@Singleton
+class LocalAudioRepository @Inject constructor(
+    @param:FilesDir private val filesDir: File,
+) {
     private val privateDbFile: File
         get() = File(filesDir, AudioSettings.LocalAudioPath)
     private val sourceConfigFile: File

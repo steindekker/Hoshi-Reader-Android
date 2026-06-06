@@ -9,6 +9,7 @@ internal class AppLaunchRouteStateHolder {
     fun defaultRouteAfterSettingsLoad(
         settings: DictionarySettings,
         hasPendingImport: Boolean,
+        isBooksTabSelected: Boolean,
         backStack: List<NavKey>,
     ): AppRoute? {
         if (dictionaryDefaultRouteApplied) {
@@ -18,6 +19,7 @@ internal class AppLaunchRouteStateHolder {
         return if (
             settings.dictionaryTabDefault &&
             !hasPendingImport &&
+            isBooksTabSelected &&
             backStack.size == 1 &&
             backStack.lastOrNull() == AppRoute.BooksRoute
         ) {

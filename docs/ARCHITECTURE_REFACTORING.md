@@ -1,6 +1,6 @@
 # Hoshi Android Architecture Refactoring
 
-Date: 2026-06-05
+Date: 2026-06-06
 
 This document tracks future architecture direction only. It is not a current
 architecture overview, task log, handoff file, or completion ledger. Current
@@ -60,60 +60,7 @@ Relevant official guidance reviewed for this direction:
   avoid broad file URL access; prefer safe local resource loading such as
   `WebViewAssetLoader` where it fits.
 
-## Target 1: Move From Manual DI Toward Hilt
-
-Priority: high
-
-Official guidance recommends DI generally and Hilt for apps with multiple
-screens, ViewModels, WorkManager, or navigation-scoped ViewModels. Hoshi already
-has those characteristics, so Hilt is a valid long-term target. Do not introduce
-Hilt annotations piecemeal until the migration slice is explicitly scoped.
-
-Target shape:
-
-- Add Hilt with KSP and required Gradle/toolchain changes after confirming the
-  current official setup instructions.
-- Annotate the `Application` with `@HiltAndroidApp`.
-- Convert repositories, settings stores, platform adapters, dispatchers, and
-  app-wide scopes to constructor-injected bindings.
-- Convert ViewModels to `@HiltViewModel` with constructor injection.
-- Integrate WorkManager with Hilt workers only when worker dependencies are
-  ready to move out of manual construction.
-- Keep feature behavior unchanged during the DI migration.
-
-Exit criteria:
-
-- `HoshiAppContainer` is removed or reduced to temporary compatibility glue.
-- Production and test graphs can swap repositories, dispatchers, and platform
-  adapters without Composable-level factories.
-- `./gradlew test`, `./gradlew assembleDebug`, and `./gradlew lint` pass after
-  the migration.
-
-## Target 2: Make Flow Collection Lifecycle-Aware
-
-Priority: high
-
-The dependency for lifecycle-aware Compose collection is already present, but
-usage is not consistent.
-
-Target shape:
-
-- Replace screen-level `collectAsState()` on ViewModel or repository flows with
-  `collectAsStateWithLifecycle()` where the collection is lifecycle-bound UI.
-- Keep helper wrappers such as `collectAsLoadedSettings()` lifecycle-aware.
-- Avoid collecting business data directly in Composables when a ViewModel should
-  own the screen state.
-- Preserve purely local UI element state in Compose or plain state holders, not
-  in ViewModels unless business logic needs it.
-
-Exit criteria:
-
-- Screen-level flows pause/resume with lifecycle correctly.
-- Settings controls still update immediately.
-- Reader settings, dictionary settings, bookshelf, lookup, and update prompt
-  behavior are manually checked or covered by focused tests.
-
-## Target 3: Inject Dispatchers And Long-Lived Scopes
+## Target 1: Inject Dispatchers And Long-Lived Scopes
 
 Priority: high
 
@@ -138,7 +85,7 @@ Exit criteria:
   `withContext(Dispatchers.IO)`.
 - No new ad hoc `CoroutineScope(...)` is introduced outside a deliberate owner.
 
-## Target 4: Reduce Composable Business Orchestration
+## Target 2: Reduce Composable Business Orchestration
 
 Priority: high
 
@@ -162,7 +109,7 @@ Exit criteria:
   event functions and immutable UI state.
 - Composables can be read as rendering/wiring code, not business workflows.
 
-## Target 5: Split Reader WebView Responsibilities
+## Target 3: Split Reader WebView Responsibilities
 
 Priority: high
 
@@ -199,7 +146,7 @@ Exit criteria:
   lookup popup open, bookmark restoration, and Sasayaki cue behavior.
 - `ReaderWebView.kt` no longer owns business orchestration.
 
-## Target 7: Keep DataStore Behind Repositories
+## Target 4: Keep DataStore Behind Repositories
 
 Priority: medium-high
 
@@ -221,7 +168,7 @@ Exit criteria:
 - Settings storage remains Flow-based and transactionally updated.
 - UI code does not directly read or write DataStore.
 
-## Target 8: Harden WorkManager Usage
+## Target 5: Harden WorkManager Usage
 
 Priority: medium
 
@@ -235,8 +182,8 @@ Target shape:
 - Use constraints, backoff, expedited work, and foreground work only when the
   official background-work guidance fits the user-visible requirement.
 - Keep in-process coroutines for work that may stop when the app process stops.
-- When Hilt lands, migrate worker dependencies through Hilt-compatible worker
-  injection instead of manual lookups.
+- Keep worker dependencies on Hilt-compatible worker injection instead of manual
+  lookups.
 
 Exit criteria:
 
@@ -244,7 +191,7 @@ Exit criteria:
 - Sync, backup, download, or import work uses WorkManager only when the
   persistence requirement is explicit.
 
-## Target 9: Split Rust And Native Build Logic
+## Target 6: Split Rust And Native Build Logic
 
 Priority: medium-high
 
@@ -286,7 +233,7 @@ Exit criteria:
   remain stable.
 - Generated source and native library registration remains deterministic.
 
-## Target 10: Modularize After Boundaries Stabilize
+## Target 7: Modularize After Boundaries Stabilize
 
 Priority: medium
 
@@ -315,7 +262,7 @@ Avoid:
 - Moving native or Rust packaging into another module before task behavior is
   protected.
 
-## Target 11: Add Baseline Profiles And Macrobenchmarks
+## Target 8: Add Baseline Profiles And Macrobenchmarks
 
 Priority: medium
 
@@ -338,7 +285,7 @@ Exit criteria:
   paths.
 - Macrobenchmarks can compare before/after reader and lookup changes.
 
-## Target 12: Replace Brittle Source-String Tests
+## Target 9: Replace Brittle Source-String Tests
 
 Priority: medium
 
@@ -360,18 +307,17 @@ Exit criteria:
 
 ## Recommended Sequence
 
-1. Finish lifecycle-aware Flow collection in touched UI.
-2. Introduce dispatcher/scope injection in the next repository or ViewModel
-   slice that already needs coroutine cleanup.
+1. Continue dispatcher/scope injection in the next repository or ViewModel slice
+   that already needs coroutine cleanup.
+2. Reduce Composable business orchestration while touching screen state flows.
 3. Split reader WebView command families with behavior tests or manual
    validation after each slice.
-4. Prepare Hilt migration with a small graph inventory and Java/toolchain check.
-5. Migrate to Hilt in one deliberate slice.
-6. Stabilize sidecar/model contracts.
-7. Extract long reader JavaScript/CSS out of Kotlin string script files.
-8. Characterize and split Rust/native build logic.
-9. Add baseline profile and macrobenchmark entry points.
-10. Modularize only after DI, model, reader, and build boundaries are stable.
+4. Stabilize sidecar/model contracts.
+5. Extract long reader JavaScript/CSS out of Kotlin string script files.
+6. Characterize and split Rust/native build logic.
+7. Add baseline profile and macrobenchmark entry points.
+8. Modularize only after the Hilt graph and model, reader, and build boundaries
+   are stable.
 
 Every slice must preserve iOS-aligned user-visible behavior unless it explicitly
 fixes a known Android behavior bug. When a slice completes a target or changes

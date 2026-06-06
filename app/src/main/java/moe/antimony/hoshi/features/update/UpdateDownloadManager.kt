@@ -6,6 +6,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Environment
+import dagger.hilt.android.AndroidEntryPoint
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -14,8 +18,9 @@ import moe.antimony.hoshi.R
 import java.io.File
 import java.security.MessageDigest
 
-internal class AndroidUpdateDownloadManager(
-    context: Context,
+@Singleton
+internal class AndroidUpdateDownloadManager @Inject constructor(
+    @param:ApplicationContext context: Context,
     private val store: UpdateDownloadStore,
 ) : UpdateDownloadController {
     private val appContext = context.applicationContext
@@ -108,7 +113,11 @@ internal class AndroidUpdateDownloadManager(
     }
 }
 
+@AndroidEntryPoint
 internal class UpdateDownloadCompleteReceiver : BroadcastReceiver() {
+    @Inject lateinit var store: UpdateDownloadStore
+    @Inject lateinit var updateDownloadManager: AndroidUpdateDownloadManager
+
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != DownloadManager.ACTION_DOWNLOAD_COMPLETE) return
         val downloadId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
@@ -117,16 +126,14 @@ internal class UpdateDownloadCompleteReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 runCatching {
-                    val appContext = context.applicationContext
-                    val store = appContext.updateDownloadStore()
                     val record = store.load() ?: return@launch
                     if (record.downloadId != downloadId) return@launch
-                    val manager = appContext.getSystemService(DownloadManager::class.java)
+                    val manager = context.applicationContext.getSystemService(DownloadManager::class.java)
                     if (manager.queryStatus(downloadId) != DownloadManager.STATUS_SUCCESSFUL) {
                         store.markFailed(downloadId)
                         return@launch
                     }
-                    val file = AndroidUpdateDownloadManager(appContext, store).updateFile(record.fileName)
+                    val file = updateDownloadManager.updateFile(record.fileName)
                     val valid = record.sha256 == null || file.sha256Hex().equals(record.sha256, ignoreCase = true)
                     if (valid) {
                         store.markDownloaded(downloadId)

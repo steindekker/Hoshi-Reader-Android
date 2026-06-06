@@ -3,6 +3,9 @@ package moe.antimony.hoshi.features.update
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import moe.antimony.hoshi.BuildConfig
@@ -20,8 +23,9 @@ internal fun shouldDeleteUpdateApk(
     archiveInfo?.packageName == currentPackageName &&
         archiveInfo.versionName == currentVersionName
 
-internal class UpdateApkCleanup(
-    private val context: Context,
+@Singleton
+internal class UpdateApkCleanup @Inject constructor(
+    @param:ApplicationContext private val context: Context,
     private val downloadManager: AndroidUpdateDownloadManager,
     private val store: UpdateDownloadStore,
 ) {

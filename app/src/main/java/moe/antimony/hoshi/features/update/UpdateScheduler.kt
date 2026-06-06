@@ -10,35 +10,44 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.hilt.work.HiltWorker
+import dagger.Lazy
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import moe.antimony.hoshi.BuildConfig
+import moe.antimony.hoshi.di.ApplicationScope
+import moe.antimony.hoshi.di.IoDispatcher
 import java.util.concurrent.TimeUnit
 
-internal object UpdateScheduler {
-    const val UniqueWorkName = "github-release-update-check"
-    const val UniqueImmediateWorkName = "github-release-update-check-now"
-
-    fun sync(context: Context) {
-        val appContext = context.applicationContext
-        CoroutineScope(Dispatchers.IO).launch {
-            syncNow(appContext)
+@Singleton
+internal class UpdateScheduler @Inject constructor(
+    private val updateSettingsRepository: UpdateSettingsRepository,
+    private val workManager: Lazy<WorkManager>,
+    @param:ApplicationScope private val appScope: CoroutineScope,
+    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+) {
+    fun sync() {
+        appScope.launch(ioDispatcher) {
+            syncNow()
         }
     }
 
-    suspend fun syncNow(context: Context) {
-        val enabled = context.updateSettingsRepository().settings.first().autoCheckUpdates
+    suspend fun syncNow() {
+        val enabled = updateSettingsRepository.settings.first().autoCheckUpdates
         if (enabled) {
-            schedule(context)
-            scheduleImmediateCheck(context)
+            schedule()
+            scheduleImmediateCheck()
         } else {
-            cancel(context)
+            cancel()
         }
     }
 
-    fun schedule(context: Context) {
+    fun schedule() {
         val request = PeriodicWorkRequestBuilder<UpdateCheckWorker>(1, TimeUnit.DAYS)
             .setConstraints(
                 Constraints.Builder()
@@ -46,24 +55,23 @@ internal object UpdateScheduler {
                     .build(),
             )
             .build()
-        WorkManager.getInstance(context.applicationContext).enqueueUniquePeriodicWork(
+        workManager.get().enqueueUniquePeriodicWork(
             UniqueWorkName,
             ExistingPeriodicWorkPolicy.UPDATE,
             request,
         )
     }
 
-    fun cancel(context: Context) {
-        val workManager = WorkManager.getInstance(context.applicationContext)
-        workManager.cancelUniqueWork(UniqueWorkName)
-        workManager.cancelUniqueWork(UniqueImmediateWorkName)
+    fun cancel() {
+        workManager.get().cancelUniqueWork(UniqueWorkName)
+        workManager.get().cancelUniqueWork(UniqueImmediateWorkName)
     }
 
-    fun scheduleImmediateCheck(context: Context) {
+    fun scheduleImmediateCheck() {
         val request = OneTimeWorkRequestBuilder<UpdateCheckWorker>()
             .setConstraints(networkConstraints())
             .build()
-        WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
+        workManager.get().enqueueUniqueWork(
             UniqueImmediateWorkName,
             ExistingWorkPolicy.KEEP,
             request,
@@ -74,31 +82,28 @@ internal object UpdateScheduler {
         Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
+
+    companion object {
+        const val UniqueWorkName = "github-release-update-check"
+        const val UniqueImmediateWorkName = "github-release-update-check-now"
+    }
 }
 
-internal class UpdateCheckWorker(
-    appContext: Context,
-    params: WorkerParameters,
+@HiltWorker
+internal class UpdateCheckWorker @AssistedInject constructor(
+    @Assisted appContext: Context,
+    @Assisted params: WorkerParameters,
+    private val updateSettingsRepository: UpdateSettingsRepository,
+    private val updateCheckService: UpdateCheckService,
 ) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
-        val enabled = applicationContext.updateSettingsRepository().settings.first().autoCheckUpdates
+        val enabled = updateSettingsRepository.settings.first().autoCheckUpdates
         if (!enabled) return Result.success()
         return runCatching {
-            updateCheckService(applicationContext).check()
+            updateCheckService.check(notifyAvailable = true)
         }.fold(
             onSuccess = { Result.success() },
             onFailure = { Result.retry() },
         )
     }
 }
-
-internal fun updateCheckService(context: Context): UpdateCheckService =
-    UpdateCheckService(
-        currentVersionName = BuildConfig.VERSION_NAME,
-        releaseRepository = GitHubReleaseUpdateRepository(),
-        downloadController = AndroidUpdateDownloadManager(
-            context = context.applicationContext,
-            store = context.applicationContext.updateDownloadStore(),
-        ),
-        updateStore = context.applicationContext.updateDownloadStore(),
-    )
