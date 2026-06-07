@@ -743,6 +743,31 @@ test('vertical e-ink sasayaki line follows the outer ruby-aware edge for the who
     assert.equal(sasayakiHighlights[0].style.height, '30px');
 });
 
+test('vertical e-ink sasayaki keeps adjacent columns split when ruby edges barely overlap', () => {
+    const scene = popupHost();
+    scene.document.documentElement.style['--hoshi-reader-eink-mode'] = '1';
+    scene.document.documentElement.style['--hoshi-reader-vertical-writing'] = '1';
+
+    scene.host.renderSasayakiHighlight({
+        eInkMode: true,
+        verticalWriting: true,
+        rects: [
+            { x: 100, y: 120, width: 20, height: 80 },
+            { x: 80, y: 0, width: 21, height: 160 },
+        ],
+    });
+
+    const layer = scene.document.getElementById('hoshi-reader-popup-layer');
+    const sasayakiHighlights = layer.querySelector('.hoshi-reader-sasayaki-highlight-layer').children;
+    assert.equal(sasayakiHighlights.length, 2);
+    assert.equal(sasayakiHighlights[0].style.left, '118.5px');
+    assert.equal(sasayakiHighlights[0].style.top, '120px');
+    assert.equal(sasayakiHighlights[0].style.height, '80px');
+    assert.equal(sasayakiHighlights[1].style.left, '99.5px');
+    assert.equal(sasayakiHighlights[1].style.top, '0px');
+    assert.equal(sasayakiHighlights[1].style.height, '160px');
+});
+
 test('horizontal e-ink sasayaki draws below the ruby-aware rect and clears explicitly', () => {
     const scene = renderRootHighlightScene({
         popupId: 'root',

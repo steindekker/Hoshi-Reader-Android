@@ -101,6 +101,12 @@ window.hoshiRubyGeometry = window.hoshiRubyGeometry || {
         return Math.min(aEnd, bEnd) - Math.max(aStart, bStart);
     },
 
+    rangesSubstantiallyOverlap(aStart, aEnd, bStart, bEnd) {
+        const overlap = this.rangeOverlapAmount(aStart, aEnd, bStart, bEnd);
+        const shorter = Math.min(aEnd - aStart, bEnd - bStart);
+        return shorter > 0 && overlap > shorter / 2;
+    },
+
     rubyForNode(node) {
         const el = node?.nodeType === Node.TEXT_NODE ? node.parentElement : node;
         return el?.closest ? el.closest('ruby') : null;
@@ -152,11 +158,11 @@ window.hoshiRubyGeometry = window.hoshiRubyGeometry || {
     inlineRectsTouch(a, b) {
         const tolerance = 0.5;
         if (this.isVertical()) {
-            return this.rangesOverlap(a.x, a.x + a.width, b.x, b.x + b.width, tolerance) &&
+            return this.rangesSubstantiallyOverlap(a.x, a.x + a.width, b.x, b.x + b.width) &&
                 b.y <= a.y + a.height + tolerance &&
                 b.y + b.height >= a.y - tolerance;
         }
-        return this.rangesOverlap(a.y, a.y + a.height, b.y, b.y + b.height, tolerance) &&
+        return this.rangesSubstantiallyOverlap(a.y, a.y + a.height, b.y, b.y + b.height) &&
             b.x <= a.x + a.width + tolerance &&
             b.x + b.width >= a.x - tolerance;
     },

@@ -240,6 +240,22 @@ test('shared ruby geometry exposes merged inline rects for reader Sasayaki overl
     assert.equal(merged[0].height, 12);
 });
 
+test('shared ruby geometry keeps vertical adjacent columns split when ruby edges barely overlap', () => {
+    const { window } = loadSelection('誰');
+    window.getComputedStyle = () => ({ writingMode: 'vertical-rl' });
+
+    const merged = window.hoshiRubyGeometry.mergeInlineRects([
+        { x: 100, y: 120, width: 20, height: 80 },
+        { x: 80, y: 0, width: 21, height: 160 },
+    ]);
+
+    assert.equal(merged.length, 2);
+    assert.equal(merged[0].x, 100);
+    assert.equal(merged[0].height, 80);
+    assert.equal(merged[1].x, 80);
+    assert.equal(merged[1].height, 160);
+});
+
 test('shared ruby geometry does not cascade a vertical single-character base rect into adjacent ruby text', () => {
     const { window } = loadSelection('花');
     window.getComputedStyle = () => ({ writingMode: 'vertical-rl' });
