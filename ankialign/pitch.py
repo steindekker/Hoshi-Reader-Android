@@ -1,19 +1,16 @@
 """Pitch-graph backfill engine. Uses the anki `col` API; no aqt (GUI) imports
-so it can be tested headless. Mirrors convert.normalize_media: idempotent,
-writes only changed notes.
+so it can be tested headless. Idempotent: writes only changed notes.
 
-Uses the shared, dict-authoritative AccentIndex (gold -> NHK2016 -> アクセント辞典v2,
-so the dictionaries own the accent/order for words they cover and unverified gold only
-fills the words they lack). positions[0] is the primary accent."""
-import os
+Uses the shared, dict-authoritative AccentIndex (NHK2016 + アクセント辞典v2).
+positions[0] is the primary accent."""
 from . import config, pitch_svg
 from .jrp_fill.accent import AccentIndex
-from .jrp_fill._utils import hira
+from .jrp_fill.kana import hira
+from .paths import ACCENT_INDEX as _INDEX_PATH
 
-_INDEX_PATH = os.path.join(os.path.dirname(__file__), "data", "accent_index.marshal.gz")
-_FIELD = "Pitch Accent"
+_FIELD = config.PITCH
 
-# Provenance baked into accent_index.marshal.gz (verified gold first, then dicts).
+# Provenance baked into accent_index.marshal.gz.
 SOURCES = ("NHK2016", "アクセント辞典v2")
 
 
@@ -47,17 +44,17 @@ def _iter_targets(col, idx, *, overwrite=False):
     accent dicts and yielded as "filled" only when the render differs (so an
     already-correct graph isn't rewritten); a note the dicts can't cover keeps
     its existing graph untouched (never cleared)."""
-    for nid in col.find_notes(f'note:"{config.TARGET_NOTETYPE}"'):
+    for nid in col.find_notes(f'note:"{config.NOTETYPE}"'):
         note = col.get_note(nid)
         has_graph = bool(note[_FIELD].strip())
         if has_graph and not overwrite:
             continue
-        reading = note["Reading"].strip()
+        reading = note[config.READING].strip()
         if not reading:
             if not has_graph:
                 yield note, "skipped", None
             continue
-        accents = accents_for(idx, note["Term"], reading)
+        accents = accents_for(idx, note[config.TERM], reading)
         if not accents:
             if not has_graph:
                 yield note, "not_found", None
@@ -76,7 +73,7 @@ def build_pitch_plan(col, *, overwrite=False) -> dict:
     for note, action, svg in _iter_targets(col, idx, overwrite=overwrite):
         counts[action] += 1
         if action == "filled" and len(samples) < config.SAMPLE_N:
-            samples.append((note["Term"], note["Reading"], svg))
+            samples.append((note[config.TERM], note[config.READING], svg))
     return {"counts": counts, "samples": samples}
 
 
