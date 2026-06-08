@@ -1,4 +1,16 @@
+from anki.sync import SyncAuth, SyncOutput
+
 from ankialign import sync
+
+
+def test_endpoint_for_honors_redirect():
+    auth = SyncAuth(hkey="KEY", endpoint="https://sync.ankiweb.net/")
+    redirected = sync.endpoint_for(auth, SyncOutput(new_endpoint="https://sync7.ankiweb.net/"))
+    assert redirected.endpoint == "https://sync7.ankiweb.net/"
+    assert redirected.hkey == "KEY"
+    # no redirect -> auth returned unchanged
+    same = sync.endpoint_for(auth, SyncOutput())
+    assert same.endpoint == "https://sync.ankiweb.net/"
 
 
 def test_resolve_pull_actions():

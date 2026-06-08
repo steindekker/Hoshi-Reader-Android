@@ -9,7 +9,7 @@ def test_template_dry_run_does_not_apply(monkeypatch):
 
     monkeypatch.setattr(cli.collection, "open_working", lambda: FakeCol())
     monkeypatch.setattr(cli.sync, "login", lambda col: None)
-    monkeypatch.setattr(cli.sync, "pull", lambda col, auth: "none")
+    monkeypatch.setattr(cli.sync, "pull", lambda col, auth: ("none", auth))
     monkeypatch.setattr(cli.template, "apply", lambda col: applied.append(True))
     cli.main(["template"])
     assert applied == [], "template.apply must not be called on dry-run"
@@ -30,7 +30,7 @@ def test_overwrite_fans_out(monkeypatch):
 
     monkeypatch.setattr(cli.collection, "open_working", lambda: FakeCol())
     monkeypatch.setattr(cli.sync, "login", lambda col: None)
-    monkeypatch.setattr(cli.sync, "pull", lambda col, auth: "none")
+    monkeypatch.setattr(cli.sync, "pull", lambda col, auth: ("none", auth))
     monkeypatch.setattr(cli.pipeline, "run", fake_run)
     cli.main(["--overwrite"])
     assert captured["overwrite_pitch"] and captured["overwrite_cloze"]

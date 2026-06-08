@@ -32,8 +32,11 @@ def test_strict_accent_coverage_at_least_98pct():
     con = sqlite3.connect(f"file:{DB}?immutable=1", uri=True)
     con.create_collation("unicase",
         lambda a, b: (a.casefold() > b.casefold()) - (a.casefold() < b.casefold()))
-    mid = con.execute(
-        "SELECT id FROM notetypes WHERE name=?", (config.NOTETYPE,)).fetchone()[0]
+    row = con.execute(
+        "SELECT id FROM notetypes WHERE name=?", (config.NOTETYPE,)).fetchone()
+    if row is None:
+        pytest.skip(f"collection has no {config.NOTETYPE} notes")
+    mid = row[0]
     names = [r[0] for r in con.execute(
         "SELECT name FROM fields WHERE ntid=? ORDER BY ord", (mid,))]
     si = names.index(config.SENTENCE)
@@ -75,8 +78,11 @@ def test_few_bare_kanji_in_rendered_output():
     con = sqlite3.connect(f"file:{DB}?immutable=1", uri=True)
     con.create_collation("unicase",
         lambda a, b: (a.casefold() > b.casefold()) - (a.casefold() < b.casefold()))
-    mid = con.execute(
-        "SELECT id FROM notetypes WHERE name=?", (config.NOTETYPE,)).fetchone()[0]
+    row = con.execute(
+        "SELECT id FROM notetypes WHERE name=?", (config.NOTETYPE,)).fetchone()
+    if row is None:
+        pytest.skip(f"collection has no {config.NOTETYPE} notes")
+    mid = row[0]
     names = [r[0] for r in con.execute(
         "SELECT name FROM fields WHERE ntid=? ORDER BY ord", (mid,))]
     si = names.index(config.SENTENCE)

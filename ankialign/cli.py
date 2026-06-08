@@ -64,19 +64,22 @@ def main(argv=None) -> int:
     col = collection.open_working()
     try:
         auth = sync.login(col)
-        print(f"  sync      pull: {sync.pull(col, auth)}")
+        pull_action, auth = sync.pull(col, auth)
+        print(f"  sync      pull: {pull_action}")
         if args.command == "dedupe":
             if args.apply:
                 collection.backup(col)
             res = _dedupe.run(col, apply=args.apply)
             if args.apply:
-                print(f"  sync      push: {sync.push(col, auth)}")
+                push_action, auth = sync.push(col, auth)
+                print(f"  sync      push: {push_action}")
             _render_dedupe(res, args.apply)
         elif args.command == "template":
             if args.apply:
                 collection.backup(col)
                 template.apply(col)
-                print(f"  sync      push: {sync.push(col, auth)}")
+                push_action, auth = sync.push(col, auth)
+                print(f"  sync      push: {push_action}")
                 print("\n  ✓ card design applied + pushed.\n")
             else:
                 print("\n  dry run — would apply repo card design (front/back/style.css).")
@@ -89,7 +92,8 @@ def main(argv=None) -> int:
                 overwrite_defs=args.overwrite_defs or args.overwrite,
                 overwrite_cloze=args.overwrite_cloze or args.overwrite)
             if args.apply:
-                print(f"  sync      push: {sync.push(col, auth)}")
+                push_action, auth = sync.push(col, auth)
+                print(f"  sync      push: {push_action}")
             _render(res, args.apply)
     finally:
         col.close()

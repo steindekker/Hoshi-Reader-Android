@@ -25,9 +25,11 @@ def test_jrp_reading_matches_yuuna_reading_field():
     """For Yuuna notes whose Term carries jrp markup, derived reading should
     match the stored Reading field at a high rate."""
     con = _con()
-    mid = con.execute(
-        "SELECT id FROM notetypes WHERE name='jidoujisho Yuuna'"
-    ).fetchone()[0]
+    row = con.execute(
+        "SELECT id FROM notetypes WHERE name='jidoujisho Yuuna'").fetchone()
+    if row is None:
+        pytest.skip("collection has no jidoujisho Yuuna notes")
+    mid = row[0]
     names = [r[0] for r in con.execute(
         "SELECT name FROM fields WHERE ntid=? ORDER BY ord", (mid,))]
     idx = {n: i for i, n in enumerate(names)}

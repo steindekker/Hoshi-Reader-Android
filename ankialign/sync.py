@@ -1,10 +1,14 @@
 """Headless AnkiWeb sync for the working-copy collection.
 
-pull() brings the latest down (used at the start of every run, dry-run included).
-push() uploads after --apply; enrichment adds fields, so a full upload is the
-common outcome. Credentials come from the environment (config)."""
+pull() brings the latest down (start of every run, dry-run included). push()
+uploads after --apply; enrichment adds fields, so a full upload is the common
+outcome. A full transfer mirrors Anki's own sequence: honor the server-assigned
+endpoint, close_for_full_sync, full_upload_or_download, then reopen — the
+collection object is reopened in place, so callers keep using the same handle.
+pull/push return (action, auth); auth may carry an updated endpoint.
+"""
 from anki.collection import Collection
-from anki.sync import SyncOutput
+from anki.sync import SyncAuth, SyncOutput
 
 from . import config
 
@@ -13,7 +17,7 @@ from . import config
 Required = SyncOutput.ChangesRequired
 
 
-def login(col: Collection):
+def login(col: Collection) -> SyncAuth:
     user, pw = config.ankiweb_credentials()
     return col.sync_login(user, pw, None)
 
@@ -37,21 +41,36 @@ def resolve_push(required) -> str:
     return "upload"
 
 
-def pull(col: Collection, auth) -> str:
+def endpoint_for(auth: SyncAuth, out: SyncOutput) -> SyncAuth:
+    """AnkiWeb hands a normal sync a regional endpoint; the full transfer and
+    later media sync must target it, else the server 400s. Returns auth
+    unchanged when no redirect was given."""
+    if out.new_endpoint:
+        return SyncAuth(hkey=auth.hkey, endpoint=out.new_endpoint)
+    return auth
+
+
+def _full_transfer(col: Collection, auth: SyncAuth, out: SyncOutput, *, upload: bool) -> None:
+    col.close_for_full_sync()
+    col.full_upload_or_download(auth=auth, server_usn=out.server_media_usn, upload=upload)
+    col.reopen(after_full_sync=True)
+
+
+def pull(col: Collection, auth: SyncAuth) -> tuple[str, SyncAuth]:
     out = col.sync_collection(auth, sync_media=True)
+    auth = endpoint_for(auth, out)
     action = resolve_pull(out.required)
     if action == "download":
-        # SyncOutput has no server_usn; pass None (server resolves USN).
-        col.full_upload_or_download(auth=auth, server_usn=None, upload=False)
+        _full_transfer(col, auth, out, upload=False)
     col.sync_media(auth)
-    return action
+    return action, auth
 
 
-def push(col: Collection, auth) -> str:
+def push(col: Collection, auth: SyncAuth) -> tuple[str, SyncAuth]:
     out = col.sync_collection(auth, sync_media=True)
+    auth = endpoint_for(auth, out)
     action = resolve_push(out.required)
     if action == "upload":
-        # SyncOutput has no server_usn; pass None (server resolves USN).
-        col.full_upload_or_download(auth=auth, server_usn=None, upload=True)
+        _full_transfer(col, auth, out, upload=True)
     col.sync_media(auth)
-    return action
+    return action, auth

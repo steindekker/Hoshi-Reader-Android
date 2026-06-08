@@ -59,8 +59,11 @@ def _con():
 
 def test_dict_agrees_with_existing_svgs():
     con = _con()
-    mid = con.execute(
-        "SELECT id FROM notetypes WHERE name=?", (config.NOTETYPE,)).fetchone()[0]
+    row = con.execute(
+        "SELECT id FROM notetypes WHERE name=?", (config.NOTETYPE,)).fetchone()
+    if row is None:
+        pytest.skip(f"collection has no {config.NOTETYPE} notes")
+    mid = row[0]
     names = [r[0] for r in con.execute(
         "SELECT name FROM fields WHERE ntid=? ORDER BY ord", (mid,))]
     ix = {n: i for i, n in enumerate(names)}
