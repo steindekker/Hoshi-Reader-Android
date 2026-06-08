@@ -10,8 +10,6 @@ anki-align = "ankialign.cli:main"
 dev = ["pytest>=8", "anki>=24.11"]
 jrp = ["sudachipy>=0.6.8", "sudachidict-full>=20240409"]
 
-# `uv run` pulls anki + sudachi automatically, so the console scripts work
-# with no --group/--with flags.
 [tool.uv]
 default-groups = ["dev", "jrp"]
 
