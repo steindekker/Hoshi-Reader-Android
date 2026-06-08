@@ -1,0 +1,23 @@
+# Personal Anki data (large / private)
+collection.anki2
+collection.anki2-*
+research/template-preview/media/
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+
+# Tooling / local state
+.playwright-mcp/
+.claude/
+
+# Generated preview artifacts
+*.png
+research/template-preview/preview.html
+research/audio-compare/site/
+
+.venv/
+
+# Generated definition index (built by tools/build_def_index.py)
+ankialign/user_files/
