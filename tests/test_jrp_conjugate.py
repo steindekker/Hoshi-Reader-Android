@@ -1,4 +1,4 @@
-"""The conjugated-pitch rule engine, validated against OJAD ground truth frozen
+"""The conjugated-pitch rule engine, validated against OJAD reference cases frozen
 in tests/data/conj_accent_cases.tsv (built by research/jrp-pipeline/ojad_oracle.py)."""
 import os
 from ankialign.jrp_fill.conjugate import verb_downstep, adj_downstep, count_moras
@@ -19,7 +19,7 @@ def _load():
     return by
 
 
-def test_engine_matches_ojad_ground_truth():
+def test_engine_matches_ojad_reference_cases():
     by = _load()
     assert by, "fixture missing"
     checked = 0

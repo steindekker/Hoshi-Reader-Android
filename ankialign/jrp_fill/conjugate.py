@@ -1,9 +1,8 @@
 """Pitch-accent rules for conjugated 用言 (pure, no Sudachi/Anki).
 
 Given the accent CLASS (heiban vs accented) and the outermost conjugation form,
-compute the downstep mora on the conjugated reading. Rules derived from OJAD
-ground truth (tests/data/conj_accent_cases.tsv); see
-docs/superpowers/specs/2026-06-05-conjugated-pitch-accent-design.md.
+compute the downstep mora on the conjugated reading. Rules derived from OJAD;
+reference cases in tests/data/conj_accent_cases.tsv.
 
 Accent number convention matches the rest of jrp_fill: N = downstep AFTER the
 Nth mora (1-based); 0 = heiban (no downstep). The caller emits it on the
