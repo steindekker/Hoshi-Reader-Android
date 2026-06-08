@@ -1,4 +1,4 @@
-"""Open the working-copy collection, in-scope note search, and verified backup.
+"""Open the working-copy collection, notetype search, and verified backup.
 
 The tool operates on its OWN collection file (paths.WORKING_COLLECTION), never
 the Anki desktop profile."""
@@ -16,10 +16,9 @@ def open_working() -> Collection:
     return Collection(paths.WORKING_COLLECTION)
 
 
-def in_scope_search() -> str:
-    """Anki search for in-scope notes of the target note type."""
-    excl = config.deck_exclusion_search()
-    return f'note:"{config.NOTETYPE}" {excl}'.strip()
+def notetype_search() -> str:
+    """Anki search for all notes of the target note type."""
+    return f'note:"{config.NOTETYPE}"'
 
 
 def backup(col, backup_dir: str | None = None) -> str:

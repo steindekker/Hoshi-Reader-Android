@@ -166,7 +166,7 @@ def test_enrich_notes_drops_few_nohit(kcol, tmp_path):
     conn.close()
 
 
-def test_enrich_notes_applies_both_css_layers(kcol, tmp_path):
+def test_enrich_notes_applies_dict_styles(kcol, tmp_path):
     db = str(tmp_path / "defs.sqlite"); _make_db(db)
     styles = tmp_path / "dict_styles.css"
     styles.write_text('.aa-jj[data-dict="daijisen"] x { color: red }', encoding="utf-8")
@@ -175,8 +175,7 @@ def test_enrich_notes_applies_both_css_layers(kcol, tmp_path):
     conn = index.open_index(db)
     enrich.enrich_notes(kcol, conn, styles_path=str(styles))
     css = kcol.models.by_name(config.NOTETYPE)["css"]
-    assert ".aa-jj" in css            # layer 2 (kinomoto.css via template.apply)
-    assert "color: red" in css        # layer 1 (scoped dict styles, appended after)
+    assert "color: red" in css        # scoped dict styles appended by apply_dict_styles
     conn.close()
 
 

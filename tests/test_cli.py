@@ -1,6 +1,20 @@
 from ankialign import cli
 
 
+def test_template_dry_run_does_not_apply(monkeypatch):
+    applied = []
+
+    class FakeCol:
+        def close(self): pass
+
+    monkeypatch.setattr(cli.collection, "open_working", lambda: FakeCol())
+    monkeypatch.setattr(cli.sync, "login", lambda col: None)
+    monkeypatch.setattr(cli.sync, "pull", lambda col, auth: "none")
+    monkeypatch.setattr(cli.template, "apply", lambda col: applied.append(True))
+    cli.main(["template"])
+    assert applied == [], "template.apply must not be called on dry-run"
+
+
 def test_overwrite_fans_out(monkeypatch):
     captured = {}
 

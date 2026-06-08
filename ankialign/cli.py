@@ -4,10 +4,11 @@
   uv run anki-align --apply    # pull, backup, write, push to AnkiWeb
   uv run anki-align --apply --overwrite   # re-assert pitch/sentences/defs/cloze
   uv run anki-align dedupe --apply         # destructive duplicate merge (separate)
+  uv run anki-align template --apply       # apply repo card design to note type
 """
 import argparse
 
-from . import collection, dedupe as _dedupe, pipeline, sync
+from . import collection, dedupe as _dedupe, pipeline, sync, template
 
 
 def _render(res: dict, apply: bool) -> None:
@@ -20,9 +21,9 @@ def _render(res: dict, apply: bool) -> None:
     if "skipped" in a:
         print(f"  audio     — skipped: {a['skipped']}")
     elif apply:
-        print(f"  audio     {sum(a['filled'].values())} filled")
+        print(f"  audio     {sum(a['filled'].values())} filled · {sum(a['upgraded'].values())} upgraded")
     else:
-        print(f"  audio     {a['will_fill']} to fill · {a['none']} no match")
+        print(f"  audio     {a['will_fill']} to fill · {a['will_upgrade']} to upgrade · {a['none']} no match")
     p = s["pitch"]
     print(f"  pitch     {p['filled']} · {p['not_found']} not in dict · {p['skipped']} no reading")
     print(f"  sentence  {s['sentences']['filled']} JRP markup")
@@ -50,7 +51,7 @@ def _render_dedupe(res: dict, apply: bool) -> None:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="anki-align",
                                  description="Post-sync Anki enrichment.")
-    ap.add_argument("command", nargs="?", default="rerun", choices=["rerun", "dedupe"])
+    ap.add_argument("command", nargs="?", default="rerun", choices=["rerun", "dedupe", "template"])
     ap.add_argument("--apply", action="store_true", help="write + push (else dry run)")
     ap.add_argument("--overwrite", action="store_true",
                     help="re-assert pitch, sentences, defs AND cloze on every card")
@@ -71,6 +72,15 @@ def main(argv=None) -> int:
             if args.apply:
                 print(f"  sync      push: {sync.push(col, auth)}")
             _render_dedupe(res, args.apply)
+        elif args.command == "template":
+            if args.apply:
+                collection.backup(col)
+                template.apply(col)
+                print(f"  sync      push: {sync.push(col, auth)}")
+                print("\n  ✓ card design applied + pushed.\n")
+            else:
+                print("\n  dry run — would apply repo card design (front/back/style.css).")
+                print("  pass --apply to write.\n")
         else:
             res = pipeline.run(
                 col, apply=args.apply,

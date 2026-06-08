@@ -132,22 +132,20 @@ def col(tmp_path):
     kino = c.models.by_name(config.NOTETYPE)
     c.models.set_current(kino)
     mined = c.decks.id("言葉文章")
-    core = c.decks.id("言葉Core2.3k")
 
-    def add(term, reading, audio_val, deck):
+    def add(term, reading, audio_val):
         n = c.new_note(kino)
         n[config.TERM] = term
         n[config.READING] = reading
         n[config.TERM_AUDIO] = audio_val
-        c.add_note(n, deck)
+        c.add_note(n, mined)
         return n.id
 
     ids = {
-        "empty_nhk": add("橋", "はし", "", mined),       # -> nhk16
-        "empty_forvo": add("筋トレ", "きんとれ", "", mined),  # -> forvo
-        "empty_none": add("造語", "ぞうご", "", mined),    # -> nothing
-        "filled": add("猫", "ねこ", "[sound:cat.mp3]", mined),  # skip (has audio)
-        "excluded": add("端", "はし", "", core),          # skip (Core deck)
+        "empty_nhk": add("橋", "はし", ""),       # -> nhk16
+        "empty_forvo": add("筋トレ", "きんとれ", ""),  # -> forvo
+        "empty_none": add("造語", "ぞうご", ""),    # -> nothing
+        "filled": add("猫", "ねこ", "[sound:cat.mp3]"),  # skip (has audio)
     }
     yield c, ids
     c.close()
@@ -159,26 +157,23 @@ def laudio(tmp_path):
     rows = [
         ("橋", "はし", "nhk16", None, "audio/n.opus"),
         ("筋トレ", None, "forvo", "strawberrybrown", "strawberrybrown/b.opus"),
-        ("端", "はし", "nhk16", None, "audio/e.opus"),
     ]
     con = _entries_db(str(tmp_path / "e.db"), rows)
     # create the referenced media files
-    for src, rel in [("nhk16", "audio/n.opus"), ("forvo", "strawberrybrown/b.opus"),
-                     ("nhk16", "audio/e.opus")]:
+    for src, rel in [("nhk16", "audio/n.opus"), ("forvo", "strawberrybrown/b.opus")]:
         f = uf / f"{src}_files" / rel
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_bytes(b"OggS-fake-opus")
     return con, str(uf)
 
 
-def test_select_targets_only_empty_inscope(col, laudio):
+def test_select_targets_only_empty(col, laudio):
     c, ids = col
     targets = set(audio.select_targets(c))
     assert ids["empty_nhk"] in targets
     assert ids["empty_forvo"] in targets
     assert ids["empty_none"] in targets
     assert ids["filled"] not in targets       # already has audio
-    assert ids["excluded"] not in targets     # Core deck
 
 
 def test_plan_backfill_classifies(col, laudio):
@@ -201,7 +196,7 @@ def test_run_backfill_writes_sound_and_copies_media(col, laudio):
     # media actually copied into the collection
     fname = _re.search(r"\[sound:([^\]]+)\]", n[config.TERM_AUDIO]).group(1)
     assert c.media.have(fname)
-    # untouched ones
+    # untouched: no match, already filled
     assert c.get_note(ids["empty_none"])[config.TERM_AUDIO] == ""
     assert c.get_note(ids["filled"])[config.TERM_AUDIO] == "[sound:cat.mp3]"
 
@@ -254,14 +249,13 @@ def repitch_col(tmp_path):
     kino = c.models.by_name(config.NOTETYPE)
     c.models.set_current(kino)
     mined = c.decks.id("言葉文章")
-    core = c.decks.id("言葉Core2.3k")
 
-    def add(term, reading, audio_val, deck=mined):
+    def add(term, reading, audio_val):
         n = c.new_note(kino)
         n[config.TERM] = term
         n[config.READING] = reading
         n[config.TERM_AUDIO] = audio_val
-        c.add_note(n, deck)
+        c.add_note(n, mined)
         return n.id
 
     ids = {
@@ -270,7 +264,6 @@ def repitch_col(tmp_path):
         "mp3_nodict": add("造語", "ぞうご", "[sound:old3.mp3]"),  # no dict -> keep
         "opus_already": add("猫", "ねこ", "[sound:la_nhk16_x.opus]"),  # skip (opus)
         "empty": add("空", "から", ""),                        # skip (no audio)
-        "excluded": add("端", "はし", "[sound:c.mp3]", core),   # skip (Core)
     }
     yield c, ids
     c.close()
@@ -292,13 +285,12 @@ def repitch_audio(tmp_path):
     return con, str(uf)
 
 
-def test_select_repitch_targets_nonopus_inscope(repitch_col, repitch_audio):
+def test_select_repitch_targets_nonopus(repitch_col, repitch_audio):
     c, ids = repitch_col
     t = set(audio.select_repitch_targets(c))
     assert ids["mp3_dict"] in t and ids["ogg_dict"] in t and ids["mp3_nodict"] in t
     assert ids["opus_already"] not in t   # already opus
     assert ids["empty"] not in t          # no audio
-    assert ids["excluded"] not in t       # Core deck
 
 
 def test_plan_repitch_only_dict_hits(repitch_col, repitch_audio):

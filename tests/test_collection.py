@@ -5,10 +5,9 @@ from anki.collection import Collection
 from ankialign import collection, config
 
 
-def test_in_scope_search_shape():
-    s = collection.in_scope_search()
-    assert s.startswith(f'note:"{config.NOTETYPE}"')
-    assert "-deck:*Core2.3k*" in s
+def test_notetype_search_shape():
+    s = collection.notetype_search()
+    assert s == f'note:"{config.NOTETYPE}"'
 
 
 def test_backup_creates_fresh_colpkg(tmp_path):

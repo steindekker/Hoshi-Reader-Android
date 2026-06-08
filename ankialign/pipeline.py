@@ -20,10 +20,14 @@ def _step_audio(col, apply):
     try:
         if apply:
             res = audio.run_backfill(col, conn, ufd)
-            return {"filled": dict(res["filled"]), "errors": len(res.get("errors", []))}
+            rep = audio.run_repitch(col, conn, ufd)
+            return {"filled": dict(res["filled"]), "errors": len(res.get("errors", [])),
+                    "upgraded": dict(rep["replaced"]), "upgrade_errors": len(rep.get("errors", []))}
         plan = audio.plan_backfill(col, conn, ufd)
+        rplan = audio.plan_repitch(col, conn, ufd)
         return {"will_fill": plan["filled"], "by_source": dict(plan["by_source"]),
-                "none": plan["nothing"], "missing_file": plan["missing_file"]}
+                "none": plan["nothing"], "missing_file": plan["missing_file"],
+                "will_upgrade": rplan["replaceable"], "no_dict": rplan["no_dict"]}
     finally:
         conn.close()
 

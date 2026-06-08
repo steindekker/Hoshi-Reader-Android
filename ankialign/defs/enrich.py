@@ -1,9 +1,9 @@
 """Anki-facing definition enrichment: index lookup + note rewriting."""
 import os
 
-from ankialign import config, paths, template
+from ankialign import config, paths
 from ankialign.defs import index, render
-from ankialign.collection import in_scope_search
+from ankialign.collection import notetype_search
 
 _STYLE_MARKER = "/* ---- AnkiAlign dict styles"
 
@@ -47,7 +47,7 @@ def _compute(conn, term, reading):
 
 
 def _in_scope_nids(col):
-    return col.find_notes(in_scope_search())
+    return col.find_notes(notetype_search())
 
 
 def _will_write(note, meaning, source, fld, overwrite) -> bool:
@@ -101,14 +101,10 @@ def enrich_notes(col, conn, styles_path=None, *, overwrite=False):
     enrichment, regardless.
 
     Caller is responsible for the backup + schema acknowledgement (the preview
-    dialog does this). ensure_fields / template.apply / apply_dict_styles are
-    called here so the function is self-contained for headless use.
+    dialog does this). ensure_fields / apply_dict_styles are called here so
+    the function is self-contained for headless use.
     """
     ensure_fields(col)
-    # CSS ordering matters: template.apply re-syncs kinomoto.css (the .aa-jj/.aa-je
-    # base rules); then apply_dict_styles appends the scoped native dict styles after
-    # it. Running them in this order keeps both blocks.
-    template.apply(col)
     apply_dict_styles(col, styles_path)
     fld = {f["name"] for f in col.models.by_name(config.NOTETYPE)["flds"]}
     written = 0

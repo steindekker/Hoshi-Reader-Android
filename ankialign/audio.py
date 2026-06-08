@@ -115,9 +115,8 @@ def locate(addons_folder: str) -> Optional[tuple]:
 # --- collection-level pass (anki, no aqt) ---------------------------------------
 
 def _search() -> str:
-    excl = config.deck_exclusion_search()
     # `"Term Audio:"` matches notes whose Term Audio field is empty.
-    return f'note:"{config.NOTETYPE}" "{config.TERM_AUDIO}:" {excl}'.strip()
+    return f'note:"{config.NOTETYPE}" "{config.TERM_AUDIO}:"'
 
 
 def select_targets(col) -> list:
@@ -213,8 +212,7 @@ def select_repitch_targets(col) -> list:
     mined audio eligible for a dictionary upgrade."""
     if col.models.by_name(config.NOTETYPE) is None:
         return []
-    excl = config.deck_exclusion_search()
-    search = f'note:"{config.NOTETYPE}" -"{config.TERM_AUDIO}:" {excl}'.strip()
+    search = f'note:"{config.NOTETYPE}" -"{config.TERM_AUDIO}:"'
     out = []
     for nid in col.find_notes(search):
         fn = _current_sound_file(col.get_note(nid)[config.TERM_AUDIO])
