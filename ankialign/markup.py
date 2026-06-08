@@ -7,8 +7,6 @@ import re
 # matches an Anki furigana segment: base[reading]
 _RUBY = re.compile(r"([^\s\[\]<>]+)\[([^\]]+)\]")
 _HAS_KANJI = re.compile(r"[㐀-鿿豈-﫿々\U00020000-\U0002A6DF\U0002A700-\U0002CEAF\U0002CEB0-\U0002EBEF]")
-_AUDIO_EXT = re.compile(r"\.(mp3|ogg|wav|m4a|flac|aac|opus)$", re.I)
-_IMG_EXT = re.compile(r"\.(jpe?g|png|gif|webp|avif|svg|bmp)$", re.I)
 
 
 def _anki_surface(s: str) -> str:
@@ -41,33 +39,3 @@ def jrp_reading(s: str) -> str:
     """Kana reading, or '' when bare kanji remains (no clean reading available)."""
     r = _anki_reading(jrp_to_furigana(s))
     return "" if _HAS_KANJI.search(r) else r
-
-
-def entryfurigana_surface(s: str) -> str:
-    """Anki EntryFurigana -> plain surface string."""
-    return _anki_surface(s)
-
-
-def entryfurigana_reading(s: str) -> str:
-    """Anki EntryFurigana -> kana reading, or '' when bare kanji remains."""
-    r = _anki_reading(s)
-    return "" if _HAS_KANJI.search(r) else r
-
-
-def as_sound(v: str) -> str:
-    """Wrap a bare audio filename in [sound:...]; leave existing [sound:],
-    empty, or non-audio values untouched. (jidoujisho Yuuna stores bare
-    filenames.)"""
-    s = v.strip()
-    if not s or "[sound:" in s:
-        return v
-    return f"[sound:{s}]" if _AUDIO_EXT.search(s) else v
-
-
-def as_image(v: str) -> str:
-    """Wrap a bare image filename in <img src="...">; leave existing <img>,
-    empty, or non-image values untouched."""
-    s = v.strip()
-    if not s or "<img" in s.lower():
-        return v
-    return f'<img src="{s}">' if _IMG_EXT.search(s) else v

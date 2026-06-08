@@ -23,24 +23,3 @@ def test_jrp_reading():
     assert markup.jrp_reading("それ") == "それ"
     assert markup.jrp_reading("一") == ""
     assert markup.jrp_reading("{[気付|きづ];0}{[いた=く];Y2}") == "きづいた"
-
-def test_entryfurigana_split():
-    assert markup.entryfurigana_surface("有[あ]りそう") == "有りそう"
-    assert markup.entryfurigana_reading("有[あ]りそう") == "ありそう"
-    assert markup.entryfurigana_surface("気[き] 合[あい]") == "気合"
-    assert markup.entryfurigana_reading("気[き] 合[あい]") == "きあい"
-    assert markup.entryfurigana_reading("未[み]定") == ""  # 定 has no reading -> no clean reading
-
-
-def test_as_sound_wraps_bare_filename():
-    assert markup.as_sound("jidoujisho-20230403T145621_4476.mp3") == "[sound:jidoujisho-20230403T145621_4476.mp3]"
-    assert markup.as_sound("[sound:x.mp3]") == "[sound:x.mp3]"   # already wrapped, no-op
-    assert markup.as_sound("") == ""                              # empty, no-op
-    assert markup.as_sound("not audio") == "not audio"            # non-audio, no-op
-
-
-def test_as_image_wraps_bare_filename():
-    assert markup.as_image("jidoujisho-20230403T145621_3162.jpg") == '<img src="jidoujisho-20230403T145621_3162.jpg">'
-    assert markup.as_image('<img src="x.jpg">') == '<img src="x.jpg">'  # already wrapped, no-op
-    assert markup.as_image("") == ""                                    # empty, no-op
-    assert markup.as_image("plain text") == "plain text"               # non-image, no-op
