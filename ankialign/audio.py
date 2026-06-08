@@ -24,6 +24,11 @@ DICT_SOURCES = ("nhk16", "shinmeikai8")
 # Term-only crowd source (tail fallback) and its preferred curated voice.
 FORVO_SPEAKER = "strawberrybrown"
 
+# Full fill order (mirrors lookup() below) + display labels, for the sources legend.
+FILL_ORDER = ("nhk16", "shinmeikai8", "forvo", "jpod")
+SOURCE_LABELS = {"nhk16": "NHK", "shinmeikai8": "Shinmeikai",
+                 "forvo": "Forvo", "jpod": "JPod"}
+
 _TAG = re.compile(r"<[^>]+>")
 _SOUND = re.compile(r"\[sound:[^\]]+\]")
 _KATA_TO_HIRA = {cp: cp - 0x60 for cp in range(0x30A1, 0x30F7)}

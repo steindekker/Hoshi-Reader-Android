@@ -67,9 +67,23 @@ def _in_scope_nids(col):
     return col.find_notes(convert._search(config.TARGET_NOTETYPE))
 
 
-def build_plan(col, conn):
+def _will_write(note, meaning, source, fld, overwrite) -> bool:
+    """Would enrich_notes write this (non-nohit) note under `overwrite`?
+
+    A never-enriched note is always written. An already-enriched note is left
+    alone (preserving manual edits) unless overwrite re-asserts a differing def."""
+    if config.ENRICHED_TAG not in note.tags:
+        return True
+    if not overwrite:
+        return False
+    cur_src = note[config.DEFINITION_SOURCE_FIELD] if config.DEFINITION_SOURCE_FIELD in fld else ""
+    return not (note["Meaning"] == meaning and cur_src == source)
+
+
+def build_plan(col, conn, *, overwrite=False):
     counts = {"enrich": 0, "english": 0, "nohit": 0}
     nohit_nids, samples, errors = [], [], []
+    to_write = 0
     fld = {f["name"] for f in col.models.by_name(config.TARGET_NOTETYPE)["flds"]}
     for nid in _in_scope_nids(col):
         note = col.get_note(nid)
@@ -85,14 +99,23 @@ def build_plan(col, conn):
         counts[kind] += 1
         if kind == "nohit":
             nohit_nids.append(nid)
-        elif len(samples) < config.SAMPLE_N:
+            continue
+        if _will_write(note, meaning, source, fld, overwrite):
+            to_write += 1
+        if len(samples) < config.SAMPLE_N:
             samples.append((term, note["Meaning"], meaning, source))
-    return {"counts": counts, "nohit_nids": nohit_nids,
+    return {"counts": counts, "to_write": to_write, "nohit_nids": nohit_nids,
             "samples": samples, "errors": errors}
 
 
-def enrich_notes(col, conn, styles_path=None):
+def enrich_notes(col, conn, styles_path=None, *, overwrite=False):
     """Rewrite Meaning for in-scope Kinomoto notes. Returns counts. Idempotent.
+
+    By default only notes that have never been enriched are written, so manual
+    edits to an already-enriched Meaning are preserved. Pass overwrite=True to
+    re-assert the dictionary definition on every in-scope note (clobbering any
+    later hand-edits). The original mined Meaning is archived once, on the first
+    enrichment, regardless.
 
     Caller is responsible for the backup + schema acknowledgement (the preview
     dialog does this). ensure_fields / template.apply / apply_dict_styles are
@@ -118,17 +141,14 @@ def enrich_notes(col, conn, styles_path=None):
         if kind == "nohit":
             nohit_nids.append(nid)
             continue
-        # stash the true original exactly once
-        if config.ENRICHED_TAG not in note.tags:
+        first_time = config.ENRICHED_TAG not in note.tags
+        if not _will_write(note, meaning, source, fld, overwrite):
+            continue                                  # already enriched, preserved
+        if first_time:                                # stash the true original once
             note[config.ORIGINAL_MEANING_FIELD] = note["Meaning"]
-        unchanged = (note["Meaning"] == meaning
-                     and note[config.DEFINITION_SOURCE_FIELD] == source
-                     and config.ENRICHED_TAG in note.tags)
-        if unchanged:
-            continue
         note["Meaning"] = meaning
         note[config.DEFINITION_SOURCE_FIELD] = source
-        if config.ENRICHED_TAG not in note.tags:
+        if first_time:
             note.add_tag(config.ENRICHED_TAG)
         col.update_note(note)
         written += 1
