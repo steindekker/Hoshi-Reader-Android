@@ -1,59 +1,72 @@
+import os
+import tempfile
+
 import pytest
-anki = pytest.importorskip("anki")
 from anki.collection import Collection
-from ankialign import template, config
 
-KINOMOTO_FIELDS = ["Term", "Reading", "Furigana", "Sentence", "SentenceFurigana",
-    "Cloze Before", "Cloze Inside", "Cloze After", "Meaning", "Expanded Meaning",
-    "Collapsed Meaning", "Notes", "Context", "Frequency", "Pitch Accent", "Image",
-    "Term Audio", "Sentence Audio"]
+from ankialign import config, paths, template
 
 
-@pytest.fixture
-def col(tmp_path):
-    c = Collection(str(tmp_path / "t.anki2"))
-    m = c.models.new(config.TARGET_NOTETYPE)
-    for f in KINOMOTO_FIELDS:
-        c.models.add_field(m, c.models.new_field(f))
-    t = c.models.new_template("Card 1")
-    t["qfmt"] = '<div id="sentence">{{Sentence}}</div>'
-    t["afmt"] = '<div id="sentence" data-jrp-generate>{{Sentence}}</div>'
-    c.models.add_template(m, t)
-    c.models.add(m)
-    yield c
-    c.close()
+_ALL_FIELDS = [
+    config.TERM, config.READING, config.TERM_FURIGANA, config.SENTENCE,
+    config.SENTENCE_FURIGANA, config.CLOZE_BEFORE, config.CLOZE_INSIDE,
+    config.CLOZE_AFTER, config.DEFINITION, "Expanded Meaning", "Collapsed Meaning",
+    "Notes", "Context", "Frequency", config.PITCH, "Image",
+    config.TERM_AUDIO, "Sentence Audio",
+]
 
 
-def test_apply_injects_strip_marker_and_css(col):
-    template.apply(col)
-    m = col.models.by_name(config.TARGET_NOTETYPE)
-    assert "ankialign-front-strip" in m["tmpls"][0]["qfmt"]
-    assert "AnkiAlign custom" in m["css"]
-    assert "Hiragino Mincho ProN" in m["css"]   # real font stack, not a placeholder
-    assert "{LAPIS" not in m["css"]              # no unsubstituted f-string placeholder
+def _col(tmp):
+    col = Collection(os.path.join(tmp, "c.anki2"))
+    m = col.models.new(config.NOTETYPE)
+    for fname in _ALL_FIELDS:
+        col.models.add_field(m, col.models.new_field(fname))
+    t = col.models.new_template("jidoujisho Kinomoto")
+    t["qfmt"] = f"{{{{{config.TERM}}}}}"
+    t["afmt"] = f"{{{{{config.SENTENCE}}}}}"
+    col.models.add_template(m, t)
+    m["css"] = "OLD CSS"
+    col.models.add(m)
+    return col
 
-def test_apply_is_idempotent(col):
-    template.apply(col); first = col.models.by_name(config.TARGET_NOTETYPE)["css"]
-    template.apply(col); second = col.models.by_name(config.TARGET_NOTETYPE)["css"]
-    assert first == second
 
-def test_apply_replaces_stale_custom_block(col):
-    # Regression: an earlier run can leave a definition-less AnkiAlign block.
-    # apply() must REPLACE it (not skip on marker presence) so an updated
-    # kinomoto.css lands; otherwise .aa-je never reaches the card.
-    m = col.models.by_name(config.TARGET_NOTETYPE)
-    m["css"] = ".card{}\n\n/* ---- AnkiAlign custom (OLD) ---- */\n.aa-jj{color:OLD}"
-    col.models.update_dict(m)
-    template.apply(col)
-    css = col.models.by_name(config.TARGET_NOTETYPE)["css"]
-    assert ".aa-je" in css                       # updated block landed
-    assert "color:OLD" not in css                # stale block replaced, not kept
-    assert css.count("AnkiAlign custom") == 1     # marker not duplicated
+def test_apply_writes_repo_design(tmp_path, monkeypatch):
+    col = _col(str(tmp_path))
+    try:
+        template.apply(col)
+        m = col.models.by_name(config.NOTETYPE)
+        assert m["tmpls"][0]["qfmt"] == open(
+            os.path.join(paths.CARD_DIR, "front.html"), encoding="utf-8").read()
+        assert m["tmpls"][0]["afmt"] == open(
+            os.path.join(paths.CARD_DIR, "back.html"), encoding="utf-8").read()
+        assert m["css"].startswith(open(
+            os.path.join(paths.CARD_DIR, "style.css"), encoding="utf-8").read().rstrip())
+        assert "OLD CSS" not in m["css"]
+    finally:
+        col.close()
 
-def test_kinomoto_css_has_definition_styles():
-    import os
-    from ankialign import template
-    css = template._css()
-    assert ".aa-jj" in css and ".aa-je" in css
-    assert ".aa-jj ruby rt" in css            # furigana polish present
-    assert "border-top" in css                # the .aa-je divider between J-J and English
+
+def test_apply_appends_dict_styles_when_present(tmp_path, monkeypatch):
+    styles = tmp_path / "dict_styles.css"
+    styles.write_text(".aa-jj{color:red}", encoding="utf-8")
+    monkeypatch.setattr(paths, "DICT_STYLES", str(styles))
+    col = _col(str(tmp_path))
+    try:
+        template.apply(col)
+        m = col.models.by_name(config.NOTETYPE)
+        assert template._STYLE_MARKER in m["css"]
+        assert ".aa-jj{color:red}" in m["css"]
+    finally:
+        col.close()
+
+
+def test_apply_idempotent(tmp_path):
+    col = _col(str(tmp_path))
+    try:
+        template.apply(col)
+        css1 = col.models.by_name(config.NOTETYPE)["css"]
+        template.apply(col)
+        css2 = col.models.by_name(config.NOTETYPE)["css"]
+        assert css1 == css2
+    finally:
+        col.close()
