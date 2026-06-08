@@ -1,8 +1,9 @@
 """Load and query the prebuilt accent index (source priority baked in)."""
 from __future__ import annotations
-import os, gzip, marshal
+import gzip, marshal
 
-_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "data", "accent_index.marshal.gz")
+from ankialign.paths import ACCENT_INDEX as _DEFAULT
+
 
 class AccentIndex:
     def __init__(self, table: dict[str, list[int]]):
