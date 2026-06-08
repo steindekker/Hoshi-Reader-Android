@@ -8,18 +8,18 @@ from __future__ import annotations
 from functools import lru_cache
 from .unit import Unit
 from .accent import AccentIndex
-from ._utils import hira, KANJI_RE
+from .kana import hira, KANJI_RE
 
 _CONTENT = {"名詞", "代名詞", "動詞", "形容詞", "副詞", "形状詞", "連体詞", "感動詞"}
 _YOUGEN = {"動詞", "形容詞"}
 # Light/auxiliary verbs Sudachi peels off fixed expressions (もしかしたら,
 # かもしれない) and て-form chains. Pitching their bound fragments (し, い, しれ)
-# looks wrong and never appears in the user's accepted gold. Multi-mora real
-# auxiliaries (しまう, くれる, full いる, できる, なる...) are unaffected.
+# looks wrong. Multi-mora real auxiliaries (しまう, くれる, full いる, できる, なる...)
+# are unaffected.
 _LIGHT_LEMMAS = {"する", "しれる"}
 
-# Very common, low-information words: keep furigana but DROP the pitch color, it
-# only adds clutter and hurts readability (user call). Keyed by lemma.
+# Very common, low-information words: keep furigana but DROP the pitch color —
+# it only adds clutter and hurts readability. Keyed by lemma.
 # both kana and kanji lemma variants, since Sudachi uses either (言う/いう, 物/もの)
 _NO_PITCH_LEMMAS = {
     "こと", "事", "言う", "いう", "物", "もの", "ある", "有る",
@@ -63,7 +63,7 @@ _KOSOADO = {"こう", "そう", "ああ", "どう"}
 _READING_OVERRIDE = {"私": "わたし"}
 
 # stoplisted words rendered WITHOUT furigana too — 何's reading (なに/なん) is
-# ambiguous & low-value, user prefers the bare kanji
+# ambiguous & low-value; bare kanji preferred
 _NO_FURIGANA = {"何"}
 
 def _is_bound_aux(pos0: str, surface: str, lemma: str) -> bool:

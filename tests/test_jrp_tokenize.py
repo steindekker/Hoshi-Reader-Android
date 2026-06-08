@@ -42,8 +42,8 @@ def test_split_cascade_recovers_overmerge():
 @pytest.mark.skipif(not _sudachi_available(), reason="sudachipy not installed")
 def test_bound_aux_fragments_not_pitched():
     # する/しれる fragments and single-mora kana verb fragments (し, い, しれ)
-    # shredded out of fixed expressions / て-form chains must NOT get a pitch
-    # unit — the gold never pitches them. Real auxiliaries (しまう, etc.) do.
+    # shredded out of fixed expressions / て-form chains must NOT get a pitch unit.
+    # Real auxiliaries (しまう, etc.) do.
     from ankialign.jrp_fill.accent import AccentIndex
     from ankialign.jrp_fill.tokenize import units
     from ankialign.jrp_fill.emit import emit_sentence
