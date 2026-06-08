@@ -1,9 +1,12 @@
-# tests/test_markup_groundtruth.py
-import os, sqlite3
-import pytest
-from ankialign import markup
+import os
+import sqlite3
 
-DB = os.path.join(os.path.dirname(__file__), "..", "collection.anki2")
+import pytest
+
+from ankialign import markup
+from ankialign import paths as _paths
+
+DB = _paths.WORKING_COLLECTION
 FS = "\x1f"
 
 pytestmark = pytest.mark.skipif(not os.path.exists(DB), reason="no collection.anki2")
@@ -38,8 +41,7 @@ def test_jrp_reading_matches_yuuna_reading_field():
         if markup.jrp_reading(term) == reading.strip():
             match += 1
     assert total > 0
-    # Calibrated to the data, not weakened to hide a bug: the only mismatch in this
-    # small sample (n~15) is a genuine collection data conflict — 大人気 has jrp markup
-    # おとなげ but a stored Reading of だいにんき (both valid). The parser is correct;
-    # this guard still catches a real regression (multiple mismatches drop below 0.90).
+    # The only mismatch in this small sample (n~15) is a genuine collection data
+    # conflict — 大人気 has jrp markup おとなげ but stored Reading だいにんき (both valid).
+    # Parser is correct; this guard still catches real regressions.
     assert match / total >= 0.90, f"{match}/{total} readings matched"

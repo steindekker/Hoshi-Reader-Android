@@ -1,9 +1,14 @@
-import os, random
+import os
+import random
+
 import pytest
 
-DB = os.path.join(os.path.dirname(__file__), "..", "collection.anki2")
-IDX = os.path.join(os.path.dirname(__file__), "..",
-                   "ankialign", "data", "accent_index.marshal.gz")
+from ankialign import config
+from ankialign import paths as _paths
+
+DB = _paths.WORKING_COLLECTION
+IDX = _paths.ACCENT_INDEX
+
 
 def _sudachi():
     try:
@@ -12,9 +17,11 @@ def _sudachi():
     except Exception:
         return False
 
+
 pytestmark = pytest.mark.skipif(
     not (os.path.exists(DB) and os.path.exists(IDX) and _sudachi()),
     reason="needs collection + accent index + sudachipy")
+
 
 def test_strict_accent_coverage_at_least_98pct():
     import sqlite3
@@ -26,12 +33,12 @@ def test_strict_accent_coverage_at_least_98pct():
     con.create_collation("unicase",
         lambda a, b: (a.casefold() > b.casefold()) - (a.casefold() < b.casefold()))
     mid = con.execute(
-        "SELECT id FROM notetypes WHERE name='jidoujisho Kinomoto'").fetchone()[0]
+        "SELECT id FROM notetypes WHERE name=?", (config.NOTETYPE,)).fetchone()[0]
     names = [r[0] for r in con.execute(
         "SELECT name FROM fields WHERE ntid=? ORDER BY ord", (mid,))]
-    si = names.index("Sentence")
-    # strip any existing markup back to plain surface so the gate works whether
-    # or not the deck has already been filled (post-apply the deck is all marked)
+    si = names.index(config.SENTENCE)
+    # Strip existing markup back to plain surface so the gate works whether or
+    # not the deck has already been filled.
     plain = []
     for (flds,) in con.execute("SELECT flds FROM notes WHERE mid=?", (mid,)):
         s = flds.split("\x1f")[si]
@@ -43,7 +50,7 @@ def test_strict_accent_coverage_at_least_98pct():
     total = hit = 0
     for s in sample:
         for u in units(s, acc):
-            # exclude intentionally-unpitched common words from the denominator
+            # Exclude intentionally-unpitched common words from the denominator.
             if (u.is_content and u.lemma not in _NO_PITCH_LEMMAS
                     and (u.lemma, u.reading) not in _NO_PITCH_FORMS):
                 total += 1
@@ -51,13 +58,15 @@ def test_strict_accent_coverage_at_least_98pct():
                     hit += 1
     assert total > 0
     cov = hit / total
-    # ~97.5% across the WHOLE deck (stripped to surface); the residual misses are
-    # mimetics (テクテク), numerals/units (7,000/kcal), slang/dialect (ほな, ボンクラ)
-    # and proper nouns — none in the accent dict. Threshold catches real regressions.
+    # ~97.5% across the whole deck (stripped to surface); residual misses are
+    # mimetics (テクテク), numerals/units, slang/dialect, proper nouns — all absent
+    # from the accent dict. Threshold catches real regressions.
     assert cov >= 0.97, f"strict accent coverage regressed: {cov:.3f} ({hit}/{total})"
 
+
 def test_few_bare_kanji_in_rendered_output():
-    import sqlite3, re
+    import sqlite3
+    import re
     from ankialign.jrp_fill.accent import AccentIndex
     from ankialign.jrp_fill.tokenize import units
     from ankialign.jrp_fill.emit import emit_sentence
@@ -67,10 +76,10 @@ def test_few_bare_kanji_in_rendered_output():
     con.create_collation("unicase",
         lambda a, b: (a.casefold() > b.casefold()) - (a.casefold() < b.casefold()))
     mid = con.execute(
-        "SELECT id FROM notetypes WHERE name='jidoujisho Kinomoto'").fetchone()[0]
+        "SELECT id FROM notetypes WHERE name=?", (config.NOTETYPE,)).fetchone()[0]
     names = [r[0] for r in con.execute(
         "SELECT name FROM fields WHERE ntid=? ORDER BY ord", (mid,))]
-    si = names.index("Sentence")
+    si = names.index(config.SENTENCE)
     plain = []
     for (flds,) in con.execute("SELECT flds FROM notes WHERE mid=?", (mid,)):
         s = flds.split("\x1f")[si]
@@ -86,5 +95,5 @@ def test_few_bare_kanji_in_rendered_output():
         if bare:
             sents_with_bare += 1
     # 代名詞 in content keeps this low; counters (接尾辞) intentionally stay bare
-    # (adding them would introduce wrong irregular-counter readings like 二日->ふたか).
+    # (adding them would introduce wrong irregular readings like 二日->ふたか).
     assert sents_with_bare <= 15, f"too many bare-kanji sentences: {sents_with_bare}/200"
