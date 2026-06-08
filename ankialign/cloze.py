@@ -17,7 +17,7 @@ import re
 
 from . import config
 from .jrp_fill.accent import AccentIndex
-from .jrp_fill._utils import hira
+from .jrp_fill.kana import hira
 from .jrp_fill.tokenize import units
 
 _FURI = re.compile(r"\[([^|\]]+)\|([^\]]+)\]")
@@ -88,17 +88,17 @@ def run(col, *, apply: bool = False, acc=None, overwrite=False) -> dict:
     new split differs (no churn) and only when the term can still be located (an
     existing split is never cleared). `acc` (AccentIndex) is loaded lazily.
     """
-    m = col.models.by_name(config.TARGET_NOTETYPE)
+    m = col.models.by_name(config.NOTETYPE)
     if m is None:
         return {"filled": 0, "skipped": 0}
     if acc is None:
         acc = AccentIndex.load()
     fld = {f["name"]: i for i, f in enumerate(m["flds"])}
-    iT, iS, iR = fld["Term"], fld["Sentence"], fld["Reading"]
-    iB, iI, iA = fld["Cloze Before"], fld["Cloze Inside"], fld["Cloze After"]
+    iT, iS, iR = fld[config.TERM], fld[config.SENTENCE], fld[config.READING]
+    iB, iI, iA = fld[config.CLOZE_BEFORE], fld[config.CLOZE_INSIDE], fld[config.CLOZE_AFTER]
 
     filled, skipped, batch = 0, 0, []
-    for nid in col.find_notes(f'note:"{config.TARGET_NOTETYPE}"'):
+    for nid in col.find_notes(f'note:"{config.NOTETYPE}"'):
         note = col.get_note(nid)
         f = note.fields
         has_cloze = any(f[k].strip() for k in (iB, iI, iA))

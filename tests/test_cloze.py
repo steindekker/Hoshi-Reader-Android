@@ -1,24 +1,24 @@
 import pytest
+
 anki = pytest.importorskip("anki")
 from anki.collection import Collection
+
 from ankialign import cloze, config
 from ankialign.jrp_fill.accent import AccentIndex
 
-KINOMOTO_FIELDS = ["Term", "Reading", "Furigana", "Sentence", "SentenceFurigana",
-    "Cloze Before", "Cloze Inside", "Cloze After", "Meaning", "Expanded Meaning",
-    "Collapsed Meaning", "Notes", "Context", "Frequency", "Pitch Accent", "Image",
-    "Term Audio", "Sentence Audio"]
-
 
 def _kinomoto(col):
-    m = col.models.new(config.TARGET_NOTETYPE)
-    for fn in KINOMOTO_FIELDS:
+    m = col.models.new(config.NOTETYPE)
+    for fn in (config.TERM, config.READING, config.TERM_FURIGANA, config.SENTENCE,
+               config.SENTENCE_FURIGANA, config.CLOZE_BEFORE, config.CLOZE_INSIDE,
+               config.CLOZE_AFTER, config.DEFINITION, config.PITCH, config.TERM_AUDIO):
         col.models.add_field(m, col.models.new_field(fn))
     t = col.models.new_template("Card 1")
-    t["qfmt"] = "{{Term}}"; t["afmt"] = "{{Reading}}"
+    t["qfmt"] = "{{%s}}" % config.TERM
+    t["afmt"] = "{{%s}}" % config.READING
     col.models.add_template(m, t)
     col.models.add(m)
-    return col.models.by_name(config.TARGET_NOTETYPE)
+    return col.models.by_name(config.NOTETYPE)
 
 
 def test_strip_markup_drops_jrp_and_furigana_keeps_text():
@@ -39,14 +39,20 @@ def test_locate_unfindable_returns_none():
 @pytest.fixture
 def col(tmp_path):
     c = Collection(str(tmp_path / "t.anki2"))
-    m = _kinomoto(c); c.models.set_current(m)
+    m = _kinomoto(c)
+    c.models.set_current(m)
     deck = c.decks.id("言葉文章")
 
     def add(term, reading, sentence, before="", inside="", after=""):
         n = c.new_note(m)
-        n["Term"] = term; n["Reading"] = reading; n["Sentence"] = sentence
-        n["Cloze Before"] = before; n["Cloze Inside"] = inside; n["Cloze After"] = after
-        c.add_note(n, deck); return n.id
+        n[config.TERM] = term
+        n[config.READING] = reading
+        n[config.SENTENCE] = sentence
+        n[config.CLOZE_BEFORE] = before
+        n[config.CLOZE_INSIDE] = inside
+        n[config.CLOZE_AFTER] = after
+        c.add_note(n, deck)
+        return n.id
 
     add("猫", "ねこ", "{猫;ねこ}が[歩|ある]いた。")          # fillable verbatim
     add("犬", "いぬ", "犬だ。", "", "犬", "だ。")            # has cloze -> skip
@@ -65,8 +71,8 @@ def test_run_fills_only_empty_verbatim(col):
     res = cloze.run(col, apply=True, acc=object())
     assert res == {"filled": 1, "skipped": 0}
     n = _by_term(col, "猫")
-    assert (n["Cloze Before"], n["Cloze Inside"], n["Cloze After"]) == ("", "猫", "が歩いた。")
-    assert _by_term(col, "犬")["Cloze Inside"] == "犬"     # untouched
+    assert (n[config.CLOZE_BEFORE], n[config.CLOZE_INSIDE], n[config.CLOZE_AFTER]) == ("", "猫", "が歩いた。")
+    assert _by_term(col, "犬")[config.CLOZE_INSIDE] == "犬"     # untouched
 
 
 def test_run_idempotent(col):
@@ -79,14 +85,14 @@ def test_overwrite_resplits_stale_only(col):
     assert cloze.run(col, apply=True, acc=object())["filled"] == 0
 
     n = _by_term(col, "犬")                                        # corrupt its split
-    n["Cloze Before"], n["Cloze Inside"], n["Cloze After"] = "X", "Y", "Z"
+    n[config.CLOZE_BEFORE], n[config.CLOZE_INSIDE], n[config.CLOZE_AFTER] = "X", "Y", "Z"
     col.update_note(n)
 
     # default leaves the existing (stale) split alone
     assert cloze.run(col, apply=True, acc=object())["filled"] == 0
-    assert _by_term(col, "犬")["Cloze Inside"] == "Y"
+    assert _by_term(col, "犬")[config.CLOZE_INSIDE] == "Y"
 
     # overwrite re-splits only the stale one
     assert cloze.run(col, apply=True, acc=object(), overwrite=True)["filled"] == 1
     n2 = _by_term(col, "犬")
-    assert (n2["Cloze Before"], n2["Cloze Inside"], n2["Cloze After"]) == ("", "犬", "だ。")
+    assert (n2[config.CLOZE_BEFORE], n2[config.CLOZE_INSIDE], n2[config.CLOZE_AFTER]) == ("", "犬", "だ。")
