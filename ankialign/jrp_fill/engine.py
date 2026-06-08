@@ -24,7 +24,7 @@ def build_plan(col, note_type: str, field: str,
 
     Default (splice) preserves any existing `{..}`/`[..]` markup and only fills
     plain runs. `regenerate=True` instead strips each field back to its plain
-    surface and rebuilds it wholesale — replacing previously-accepted gold so the
+    surface and rebuilds it wholesale — replacing previously-accepted markup so the
     whole deck uses the current generator consistently. The round-trip guard
     below still protects the visible text in both modes."""
     mid = col.models.id_for_name(note_type)

@@ -10,7 +10,7 @@ or punctuation-only runs are left untouched.
 from __future__ import annotations
 import re
 from collections.abc import Callable
-from ._utils import KANJI_RE
+from .kana import KANJI_RE
 from .tokenize import _NO_PITCH_LEMMAS, _NO_PITCH_FORMS
 
 _FURI = re.compile(r'\[([^|\]]+)\|([^\]]+)\]')
