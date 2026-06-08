@@ -5,7 +5,7 @@ Returns a list of (text, reading|None). reading is None for kana/other runs
 cleanly returns a single (surface, reading) segment, which always round-trips.
 """
 from __future__ import annotations
-from ._utils import KANJI_RE, hira
+from .kana import KANJI_RE, hira
 
 def _is_kanji(ch: str) -> bool:
     return bool(KANJI_RE.match(ch))
