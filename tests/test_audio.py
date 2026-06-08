@@ -1,3 +1,4 @@
+import re as _re
 import sqlite3
 
 import pytest
@@ -6,8 +7,27 @@ from ankialign import audio
 
 anki = pytest.importorskip("anki")
 from anki.collection import Collection
+
 from ankialign import config
-from tests.test_convert import _new_notetype, KINOMOTO_FIELDS
+
+# Field list matching the real Kinomoto note type.
+_KINOMOTO_FIELDS = [
+    config.TERM, config.READING, config.TERM_FURIGANA, config.SENTENCE,
+    config.SENTENCE_FURIGANA, config.CLOZE_BEFORE, config.CLOZE_INSIDE,
+    config.CLOZE_AFTER, config.DEFINITION, config.PITCH, config.TERM_AUDIO,
+]
+
+
+def _new_notetype(col, name, fields):
+    m = col.models.new(name)
+    for fname in fields:
+        col.models.add_field(m, col.models.new_field(fname))
+    t = col.models.new_template("Card 1")
+    t["qfmt"] = "{{%s}}" % fields[0]
+    t["afmt"] = "{{FrontSide}}<hr>{{%s}}" % fields[1] if len(fields) > 1 else "{{FrontSide}}"
+    col.models.add_template(m, t)
+    col.models.add(m)
+    return col.models.by_name(name)
 
 
 def _entries_db(path, rows):
@@ -108,15 +128,17 @@ def test_locate(tmp_path):
 @pytest.fixture
 def col(tmp_path):
     c = Collection(str(tmp_path / "test.anki2"))
-    _new_notetype(c, config.TARGET_NOTETYPE, KINOMOTO_FIELDS)
-    kino = c.models.by_name(config.TARGET_NOTETYPE)
+    _new_notetype(c, config.NOTETYPE, _KINOMOTO_FIELDS)
+    kino = c.models.by_name(config.NOTETYPE)
     c.models.set_current(kino)
     mined = c.decks.id("言葉文章")
     core = c.decks.id("言葉Core2.3k")
 
     def add(term, reading, audio_val, deck):
         n = c.new_note(kino)
-        n["Term"] = term; n["Reading"] = reading; n["Term Audio"] = audio_val
+        n[config.TERM] = term
+        n[config.READING] = reading
+        n[config.TERM_AUDIO] = audio_val
         c.add_note(n, deck)
         return n.id
 
@@ -175,14 +197,13 @@ def test_run_backfill_writes_sound_and_copies_media(col, laudio):
     res = audio.run_backfill(c, con, uf)
     assert res["filled"] == {"nhk16": 1, "forvo": 1}
     n = c.get_note(ids["empty_nhk"])
-    assert n["Term Audio"].startswith("[sound:") and n["Term Audio"].endswith(".opus]")
+    assert n[config.TERM_AUDIO].startswith("[sound:") and n[config.TERM_AUDIO].endswith(".opus]")
     # media actually copied into the collection
-    import re as _re
-    fname = _re.search(r"\[sound:([^\]]+)\]", n["Term Audio"]).group(1)
+    fname = _re.search(r"\[sound:([^\]]+)\]", n[config.TERM_AUDIO]).group(1)
     assert c.media.have(fname)
     # untouched ones
-    assert c.get_note(ids["empty_none"])["Term Audio"] == ""
-    assert c.get_note(ids["filled"])["Term Audio"] == "[sound:cat.mp3]"
+    assert c.get_note(ids["empty_none"])[config.TERM_AUDIO] == ""
+    assert c.get_note(ids["filled"])[config.TERM_AUDIO] == "[sound:cat.mp3]"
 
 
 def test_run_backfill_is_rerun_safe(col, laudio):
@@ -229,15 +250,17 @@ def test_lookup_dict_only_returns_dictionaries(tmp_path):
 @pytest.fixture
 def repitch_col(tmp_path):
     c = Collection(str(tmp_path / "rp.anki2"))
-    _new_notetype(c, config.TARGET_NOTETYPE, KINOMOTO_FIELDS)
-    kino = c.models.by_name(config.TARGET_NOTETYPE)
+    _new_notetype(c, config.NOTETYPE, _KINOMOTO_FIELDS)
+    kino = c.models.by_name(config.NOTETYPE)
     c.models.set_current(kino)
     mined = c.decks.id("言葉文章")
     core = c.decks.id("言葉Core2.3k")
 
     def add(term, reading, audio_val, deck=mined):
         n = c.new_note(kino)
-        n["Term"] = term; n["Reading"] = reading; n["Term Audio"] = audio_val
+        n[config.TERM] = term
+        n[config.READING] = reading
+        n[config.TERM_AUDIO] = audio_val
         c.add_note(n, deck)
         return n.id
 
@@ -293,10 +316,10 @@ def test_run_repitch_replaces_and_keeps_old_media(repitch_col, repitch_audio):
     res = audio.run_repitch(c, con, uf)
     assert res["replaced"] == {"nhk16": 1, "shinmeikai8": 1}
     # replaced with opus
-    assert c.get_note(ids["mp3_dict"])["Term Audio"].endswith(".opus]")
-    assert c.get_note(ids["ogg_dict"])["Term Audio"].endswith(".opus]")
+    assert c.get_note(ids["mp3_dict"])[config.TERM_AUDIO].endswith(".opus]")
+    assert c.get_note(ids["ogg_dict"])[config.TERM_AUDIO].endswith(".opus]")
     # no-dict and opus-already untouched
-    assert c.get_note(ids["mp3_nodict"])["Term Audio"] == "[sound:old3.mp3]"
-    assert c.get_note(ids["opus_already"])["Term Audio"] == "[sound:la_nhk16_x.opus]"
+    assert c.get_note(ids["mp3_nodict"])[config.TERM_AUDIO] == "[sound:old3.mp3]"
+    assert c.get_note(ids["opus_already"])[config.TERM_AUDIO] == "[sound:la_nhk16_x.opus]"
     # re-run is a no-op (already the dictionary recording)
     assert audio.run_repitch(c, con, uf)["replaced"] == {}

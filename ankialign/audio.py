@@ -1,7 +1,7 @@
-"""Term-audio backfill (goal #3).
+"""Term-audio backfill.
 
 Fills empty `Term Audio` on in-scope Kinomoto notes from the local-audio-yomichan
-offline DB. Decided lookup chain (research/HANDOFF-audio-backfill.md):
+offline DB. Lookup chain:
 
     nhk16 → shinmeikai8 → forvo[strawberrybrown] → jpod   (stop at first hit)
 
@@ -10,7 +10,7 @@ right accent; forvo is term-only and only fires when both dictionaries miss (the
 long tail), preferring the strawberrybrown voice.
 
 No `aqt` imports — the entries.db connection and the local-audio user_files dir are
-passed in, so this is unit-testable headless (mirrors convert.py).
+passed in, so this is unit-testable headless.
 """
 import os
 import re
@@ -52,8 +52,7 @@ class Pick:
 
 def lookup_dict(conn, term: str, reading: str) -> Optional[Pick]:
     """Reading-keyed accent-dictionary lookup only (nhk16 → shinmeikai8). Never
-    returns forvo/jpod. This is the authoritative-pitch source used by the
-    replace/re-pitch pass. Pure read."""
+    returns forvo/jpod. Used by the re-pitch pass. Pure read."""
     term = _clean(term)
     reading = _to_hira(_clean(reading))
     if not term or not reading:
@@ -107,7 +106,7 @@ def source_file_path(user_files_dir: str, pick: Pick) -> str:
 def locate(addons_folder: str) -> Optional[tuple]:
     """Find the local-audio-yomichan install. Returns (entries_db, user_files_dir)
     or None if the add-on / index isn't present. `addons_folder` is Anki's
-    addons21 dir (mw.addonManager.addonsFolder())."""
+    addons21 dir."""
     user_files = os.path.join(addons_folder, config.LOCAL_AUDIO_ADDON_ID, "user_files")
     db = os.path.join(user_files, "entries.db")
     return (db, user_files) if os.path.isfile(db) else None
@@ -116,14 +115,14 @@ def locate(addons_folder: str) -> Optional[tuple]:
 # --- collection-level pass (anki, no aqt) ---------------------------------------
 
 def _search() -> str:
-    excl = " ".join(f"-deck:*{sub}*" for sub in config.EXCLUDE_DECK_SUBSTRINGS)
+    excl = config.deck_exclusion_search()
     # `"Term Audio:"` matches notes whose Term Audio field is empty.
-    return f'note:"{config.TARGET_NOTETYPE}" "Term Audio:" {excl}'.strip()
+    return f'note:"{config.NOTETYPE}" "{config.TERM_AUDIO}:" {excl}'.strip()
 
 
 def select_targets(col) -> list:
     """In-scope Kinomoto note ids with an empty Term Audio field."""
-    if col.models.by_name(config.TARGET_NOTETYPE) is None:
+    if col.models.by_name(config.NOTETYPE) is None:
         return []
     return list(col.find_notes(_search()))
 
@@ -140,7 +139,7 @@ def plan_backfill(col, conn, user_files_dir: str) -> dict:
     picks = {}
     for nid in select_targets(col):
         note = col.get_note(nid)
-        term, reading = note["Term"], note["Reading"]
+        term, reading = note[config.TERM], note[config.READING]
         pick = lookup(conn, term, reading)
         if pick is None:
             nothing += 1
@@ -176,10 +175,10 @@ def run_backfill(col, conn, user_files_dir: str) -> dict:
     for nid, pick in plan["picks"].items():
         try:
             note = col.get_note(nid)
-            if _SOUND.search(note["Term Audio"] or ""):
+            if _SOUND.search(note[config.TERM_AUDIO] or ""):
                 continue  # already has audio (race / re-run)
             fname = col.media.add_file(source_file_path(user_files_dir, pick))
-            note["Term Audio"] = f"[sound:{fname}]"
+            note[config.TERM_AUDIO] = f"[sound:{fname}]"
             col.update_note(note)
             filled[pick.source] = filled.get(pick.source, 0) + 1
         except Exception as e:
@@ -188,12 +187,12 @@ def run_backfill(col, conn, user_files_dir: str) -> dict:
 
 
 # --- re-pitch pass: replace mined audio with accent-dictionary audio ------------
-# Separate from the fill pass. Targets in-scope Kinomoto notes whose Term Audio is
-# a NON-.opus recording (the pre-existing jidoujisho-mined mp3/ogg — likely jpod,
-# with frequent wrong pitch) and replaces it ONLY when an accent dictionary
-# (nhk16/shinmeikai8) has a reading-correct hit. Never replaces with forvo/jpod.
-# Non-destructive: the old media file is left in the collection (only the field
-# reference changes); caller backs up first. See research/HANDOFF-audio-backfill.md.
+# Targets in-scope Kinomoto notes whose Term Audio is a NON-.opus recording (the
+# pre-existing jidoujisho-mined mp3/ogg — likely jpod, with frequent wrong pitch)
+# and replaces it ONLY when an accent dictionary (nhk16/shinmeikai8) has a
+# reading-correct hit. Never replaces with forvo/jpod. Non-destructive: the old
+# media file is left in the collection (only the field reference changes); caller
+# backs up first.
 
 
 def _current_sound(field_val: str) -> Optional[str]:
@@ -212,13 +211,13 @@ def select_repitch_targets(col) -> list:
     `.opus` files are only ever written by our own local-audio passes (already a
     best-available source), so they're excluded; everything else is pre-existing
     mined audio eligible for a dictionary upgrade."""
-    if col.models.by_name(config.TARGET_NOTETYPE) is None:
+    if col.models.by_name(config.NOTETYPE) is None:
         return []
-    excl = " ".join(f"-deck:*{sub}*" for sub in config.EXCLUDE_DECK_SUBSTRINGS)
-    search = f'note:"{config.TARGET_NOTETYPE}" -"Term Audio:" {excl}'.strip()
+    excl = config.deck_exclusion_search()
+    search = f'note:"{config.NOTETYPE}" -"{config.TERM_AUDIO}:" {excl}'.strip()
     out = []
     for nid in col.find_notes(search):
-        fn = _current_sound_file(col.get_note(nid)["Term Audio"])
+        fn = _current_sound_file(col.get_note(nid)[config.TERM_AUDIO])
         if fn and not fn.lower().endswith(".opus"):
             out.append(nid)
     return out
@@ -235,7 +234,7 @@ def plan_repitch(col, conn, user_files_dir: str) -> dict:
     picks = {}
     for nid in select_repitch_targets(col):
         note = col.get_note(nid)
-        pick = lookup_dict(conn, note["Term"], note["Reading"])
+        pick = lookup_dict(conn, note[config.TERM], note[config.READING])
         if pick is None:
             no_dict += 1
             continue
@@ -244,8 +243,8 @@ def plan_repitch(col, conn, user_files_dir: str) -> dict:
         picks[nid] = pick
         by_source[pick.source] = by_source.get(pick.source, 0) + 1
         if len(samples) < config.SAMPLE_N * 3:
-            samples.append((_clean(note["Term"]), _clean(note["Reading"]),
-                            _current_sound_file(note["Term Audio"]), pick.source))
+            samples.append((_clean(note[config.TERM]), _clean(note[config.READING]),
+                            _current_sound_file(note[config.TERM_AUDIO]), pick.source))
     return {
         "targets": len(picks) + no_dict,
         "replaceable": len(picks),
@@ -269,9 +268,9 @@ def run_repitch(col, conn, user_files_dir: str) -> dict:
             note = col.get_note(nid)
             fname = col.media.add_file(source_file_path(user_files_dir, pick))
             newval = f"[sound:{fname}]"
-            if (note["Term Audio"] or "").strip() == newval:
+            if (note[config.TERM_AUDIO] or "").strip() == newval:
                 continue  # already this exact recording
-            note["Term Audio"] = newval
+            note[config.TERM_AUDIO] = newval
             col.update_note(note)
             replaced[pick.source] = replaced.get(pick.source, 0) + 1
         except Exception as e:
