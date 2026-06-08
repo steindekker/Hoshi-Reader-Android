@@ -9,7 +9,6 @@ from .defs import build as def_build, enrich
 
 
 def _step_audio(col, apply):
-    from . import paths
     addons = os.environ.get("ANKI_ADDONS_DIR", os.path.expanduser(
         "~/.local/share/Anki2/addons21"))
     located = audio.locate(addons)

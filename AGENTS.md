@@ -23,3 +23,12 @@ tiny and intentionally omits implementation detail.
 A proof-of-concept lives in `poc/`. Use it as inspiration only — **nothing may be
 linked against or compiled against it**. If you need data (dicts, etc.), copy it
 over.
+
+## Running
+
+- `ANKIWEB_USERNAME`/`ANKIWEB_PASSWORD` must be set; the tool keeps its own
+  collection at `var/collection.anki2` (never the desktop profile).
+- `uv run anki-align` — pull latest, dry-run preview. `--apply` writes + pushes.
+- `uv run anki-align dedupe --apply` — destructive duplicate merge (separate).
+- First run builds `var/defs.sqlite` from `dicts/` (the J-J chain + JMdict);
+  the accent index ships in `ankialign/data/`.

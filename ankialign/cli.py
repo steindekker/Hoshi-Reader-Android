@@ -6,7 +6,6 @@
   uv run anki-align dedupe --apply         # destructive duplicate merge (separate)
 """
 import argparse
-import sys
 
 from . import collection, dedupe as _dedupe, pipeline, sync
 
