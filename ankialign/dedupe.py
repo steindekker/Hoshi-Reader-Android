@@ -6,8 +6,8 @@ it (their revlog rows are reassigned to the kept card's id, and their reps/lapse
 are summed in), then DELETE the duplicate notes. The kept card's own schedule
 (due / ivl / factor) is left untouched.
 
-Destructive. Revlog reassignment is a raw edit, so after running do a sync and,
-if Anki flags a conflict, choose "Upload to AnkiWeb".
+Destructive. Revlog reassignment is a raw edit; the tool re-uploads via
+`sync.push` after dedupe.
 """
 from __future__ import annotations
 
@@ -37,14 +37,14 @@ def _sort_key(c: dict, crt: int):
 
 def plan(col) -> list:
     """Return [(key, keep_card, [drop_cards])] for every duplicate group."""
-    m = col.models.by_name(config.TARGET_NOTETYPE)
+    m = col.models.by_name(config.NOTETYPE)
     if m is None:
         return []
     crt = col.db.scalar("select crt from col")
     mid = m["id"]
     names = [f["name"] for f in m["flds"]]
     ix = {n: i for i, n in enumerate(names)}
-    ti = ix["Term"]; ri = ix.get("Reading", ti)
+    ti = ix[config.TERM]; ri = ix.get(config.READING, ti)
 
     groups = collections.defaultdict(list)
     for nnid, flds in col.db.execute("select id, flds from notes where mid=?", mid):
@@ -77,7 +77,7 @@ def run(col, *, apply: bool = False) -> dict:
     """Merge + delete duplicates. Returns {'groups','removed','revlog_moved','merges'}."""
     merges = plan(col)
     del_notes = [d["nid"] for _, _, drop in merges for d in drop]
-    m = col.models.by_name(config.TARGET_NOTETYPE)
+    m = col.models.by_name(config.NOTETYPE)
     scanned = col.db.scalar("select count(*) from notes where mid=?", m["id"]) if m else 0
     out = {"scanned": scanned, "groups": len(merges), "removed": len(del_notes),
            "revlog_moved": 0, "merges": merges}

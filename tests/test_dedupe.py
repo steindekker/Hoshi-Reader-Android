@@ -3,21 +3,24 @@ anki = pytest.importorskip("anki")
 from anki.collection import Collection
 from ankialign import config, dedupe
 
-KINOMOTO_FIELDS = ["Term", "Reading", "Furigana", "Sentence", "SentenceFurigana",
-    "Cloze Before", "Cloze Inside", "Cloze After", "Meaning", "Expanded Meaning",
-    "Collapsed Meaning", "Notes", "Context", "Frequency", "Pitch Accent", "Image",
-    "Term Audio", "Sentence Audio"]
+KINOMOTO_FIELDS = [
+    config.TERM, config.READING, config.TERM_FURIGANA, config.SENTENCE,
+    config.SENTENCE_FURIGANA, config.CLOZE_BEFORE, config.CLOZE_INSIDE,
+    config.CLOZE_AFTER, config.DEFINITION, "Expanded Meaning",
+    "Collapsed Meaning", "Notes", "Context", "Frequency", config.PITCH,
+    "Image", config.TERM_AUDIO, "Sentence Audio",
+]
 
 
 def _kinomoto(col):
-    m = col.models.new(config.TARGET_NOTETYPE)
+    m = col.models.new(config.NOTETYPE)
     for fn in KINOMOTO_FIELDS:
         col.models.add_field(m, col.models.new_field(fn))
     t = col.models.new_template("Card 1")
-    t["qfmt"] = "{{Term}}"; t["afmt"] = "{{Reading}}"
+    t["qfmt"] = f"{{{{{config.TERM}}}}}"; t["afmt"] = f"{{{{{config.READING}}}}}"
     col.models.add_template(m, t)
     col.models.add(m)
-    return col.models.by_name(config.TARGET_NOTETYPE)
+    return col.models.by_name(config.NOTETYPE)
 
 
 @pytest.fixture
@@ -27,7 +30,7 @@ def col(tmp_path):
     deck = c.decks.id("言葉文章")
 
     def add(term, reading):
-        n = c.new_note(m); n["Term"] = term; n["Reading"] = reading
+        n = c.new_note(m); n[config.TERM] = term; n[config.READING] = reading
         c.add_note(n, deck); return n.id
 
     dup_a = add("投降", "とうこう")        # duplicate pair
@@ -60,5 +63,5 @@ def test_run_apply_removes_duplicate(col):
     assert res["removed"] == 1
     assert col.note_count() == 2
     # the surviving 投降 note is the soonest-due one
-    survivors = [col.get_note(i)["Term"] for i in col.find_notes("")]
+    survivors = [col.get_note(i)[config.TERM] for i in col.find_notes("")]
     assert survivors.count("投降") == 1
