@@ -65,3 +65,22 @@ def apply_plan(col, plan: list[Fill], field: str = "Sentence") -> int:
     if notes:
         col.update_notes(notes)
     return len(notes)
+
+
+def apply_to_fixpoint(col, note_type: str, field: str,
+                      generate: Callable[[str], str], *, regenerate: bool = False,
+                      max_passes: int = 6) -> int:
+    """Plan + apply repeatedly until no note changes (or max_passes).
+
+    A single splice pass isn't a fixpoint: `generate` can emit a bare kanji that
+    splice re-fills next pass, so one apply leaves multi-pass cases behind. Loop
+    until stable. After a regenerate pass the rest is splice-converged (we don't
+    re-strip accepted markup every pass). Returns total notes written."""
+    total = 0
+    for _ in range(max_passes):
+        plan = build_plan(col, note_type, field, generate, regenerate=regenerate)
+        if not plan:
+            break
+        total += apply_plan(col, plan, field)
+        regenerate = False
+    return total

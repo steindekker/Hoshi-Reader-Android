@@ -3,11 +3,8 @@ from __future__ import annotations
 import argparse, os, shutil, sys, time
 
 def _generate_factory(conj_accent: bool = False):
-    from .accent import AccentIndex
-    from .tokenize import units
-    from .emit import emit_sentence
-    acc = AccentIndex.load()
-    return lambda text: emit_sentence(units(text, acc, conj_accent=conj_accent))
+    from . import make_generator
+    return make_generator(conj_accent)
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="ankialign.jrp_fill")

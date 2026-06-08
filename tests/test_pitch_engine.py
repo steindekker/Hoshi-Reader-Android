@@ -74,3 +74,24 @@ def test_backfill_is_idempotent(col):
     pitch.backfill_pitch(col)
     res2 = pitch.backfill_pitch(col)
     assert res2["filled"] == 0
+
+
+def test_overwrite_rerenders_stale_only(col):
+    pitch.backfill_pitch(col)                                  # fill all empties
+    assert pitch.backfill_pitch(col)["filled"] == 0           # idempotent
+
+    nid = col.find_notes('"Term:異変"')[0]                     # in-dict, give a stale graph
+    n = col.get_note(nid); n["Pitch Accent"] = "<svg>STALE</svg>"; col.update_note(n)
+
+    # default leaves the existing (stale) graph alone
+    assert pitch.backfill_pitch(col)["filled"] == 0
+    assert "STALE" in col.get_note(nid)["Pitch Accent"]
+
+    # overwrite re-renders the stale one (and only it — the rest already match)
+    assert pitch.backfill_pitch(col, overwrite=True)["filled"] == 1
+    pa = col.get_note(nid)["Pitch Accent"]
+    assert "STALE" not in pa and "<svg" in pa
+
+    # a note the dicts can't cover keeps its existing graph (never cleared)
+    ek = col.find_notes('"Term:既存"')[0]
+    assert col.get_note(ek)["Pitch Accent"] == "<svg>existing</svg>"

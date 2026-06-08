@@ -106,6 +106,31 @@ def test_enrich_notes_writes_stashes_and_is_idempotent(kcol, tmp_path):
     conn.close()
 
 
+def test_default_preserves_manual_edits_overwrite_clobbers(kcol, tmp_path):
+    db = str(tmp_path / "defs.sqlite"); _make_db(db)
+    enrich.ensure_fields(kcol)
+    nid = _add_kino(kcol, "迷惑", "めいわく", meaning="OLD")
+    conn = enrich.open_index(db)
+    dict_def = enrich.enrich_notes(kcol, conn) and kcol.get_note(nid)["Meaning"]
+
+    # hand-edit the enriched Meaning
+    n = kcol.get_note(nid); n["Meaning"] = "MY EDIT"; kcol.update_note(n)
+
+    # default re-run: edit preserved, nothing written
+    assert enrich.enrich_notes(kcol, conn)["written"] == 0
+    assert kcol.get_note(nid)["Meaning"] == "MY EDIT"
+    # build_plan agrees nothing would be written by default
+    assert enrich.build_plan(kcol, conn)["to_write"] == 0
+    assert enrich.build_plan(kcol, conn, overwrite=True)["to_write"] == 1
+
+    # overwrite=True clobbers the edit back to the dictionary definition
+    assert enrich.enrich_notes(kcol, conn, overwrite=True)["written"] == 1
+    assert kcol.get_note(nid)["Meaning"] == dict_def
+    # original mined Meaning still archived (not re-stashed to the edit)
+    assert kcol.get_note(nid)[config.ORIGINAL_MEANING_FIELD] == "OLD"
+    conn.close()
+
+
 def test_enrich_notes_drops_few_nohit(kcol, tmp_path):
     db = str(tmp_path / "defs.sqlite"); _make_db(db)
     enrich.ensure_fields(kcol)
