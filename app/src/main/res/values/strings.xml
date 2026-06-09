@@ -41,7 +41,7 @@
     <string name="import_select_audio_database">Select a .db audio database file.</string>
     <string name="import_select_dictionary_archive">Select a .zip dictionary archive file.</string>
     <string name="import_select_hoshi_backup">Select a .hoshi Hoshi backup file.</string>
-    <string name="import_select_ttu_bookdata_backup">Select a .zip TTU bookdata backup file.</string>
+    <string name="import_select_ttu_bookdata_backup">Select a .zip ッツ bookdata backup file.</string>
     <string name="import_select_font">Select a .ttf, .otf, .woff, or .woff2 font file.</string>
     <string name="main_tab_books" comment="Main navigation tab label, intentionally matching the backup Books section.">Books</string>
     <string name="main_tab_dictionary">Dictionary</string>
@@ -250,7 +250,7 @@
     <string name="reader_appearance_font" comment="Reader font setting, intentionally matching dictionary custom CSS font.">Font</string>
     <string name="reader_appearance_font_file" comment="Fallback filename label, intentionally matching font setting labels.">font</string>
     <string name="reader_appearance_import_font">Import Font</string>
-    <string name="reader_appearance_importing" comment="Generic import progress label, intentionally shared with TTU backup import.">Importing...</string>
+    <string name="reader_appearance_importing" comment="Generic import progress label, intentionally shared with ッツ backup import.">Importing...</string>
     <string name="reader_appearance_font_size">Font Size</string>
     <string name="reader_appearance_hide_furigana">Hide Furigana</string>
     <string name="reader_appearance_mode" comment="Reader appearance setting label, intentionally matching dictionary mode.">Mode</string>
@@ -296,7 +296,7 @@
     <string name="sync_direction">Direction</string>
     <string name="sync_auto_sync">Auto Sync</string>
     <string name="sync_upload_books">Upload Books</string>
-    <string name="sync_upload_books_description">Upload TTU bookdata to Google Drive when a synced book folder is missing bookdata.</string>
+    <string name="sync_upload_books_description">Upload ッツ bookdata to Google Drive when a synced book folder is missing bookdata.</string>
     <string name="sync_stats">Sync Stats</string>
     <string name="sync_audiobook_progress">Sync Audiobook Progress</string>
     <string name="sync_clear_cache">Clear Google Drive cache</string>
@@ -314,16 +314,16 @@
     <string name="sync_google_device_code">Google device code</string>
     <string name="sync_device_code_copied">Device code copied</string>
     <string name="sync_connect_google_drive">Connect Google Drive</string>
-    <string name="sync_device_code_setup">Device Code setup</string>
-    <string name="sync_ttu_google_cloud_setup">TTU Google Cloud setup</string>
-    <string name="sync_device_code_intro">Google Drive sync uses Device Code flow so this Android app can use the same user-owned Google Cloud project as iOS/ッツ.</string>
+    <string name="sync_device_code_setup">ッツ Sync setup</string>
+    <string name="sync_ttu_google_cloud_setup">ッツ Sync guide</string>
+    <string name="sync_device_code_intro">Google Drive sync uses Device Code flow so this Android app can use the same user-owned Google Cloud project described in the ッツ Sync guide.</string>
     <string-array name="sync_device_code_instructions">
-        <item>Open the same Google Cloud project used by iOS/ッツ sync and make sure the Google Drive API is enabled.</item>
-        <item>Open Google Auth Platform -&gt; Clients in the Google Cloud Console, click CREATE CLIENT, and select application type TVs and Limited Input devices. If your console still shows the older navigation, use APIs &amp; Services -&gt; Credentials -&gt; Create Credentials -&gt; OAuth client ID.</item>
-        <item>Paste that client ID and client secret here. Do not create an Android OAuth client for this flow.</item>
-        <item>Press Connect Google Drive, open the verification URL, and enter the displayed device code.</item>
-        <item>If authorization has trouble while Hoshi is in the background, open the Google device page on another phone or computer and enter the device code shown here.</item>
-        <item>Authorize the same Google Account whose Drive contains the ッツ sync folder.</item>
+        <item>Follow the ッツ Sync guide to create or open the shared Google Cloud project, publish the OAuth consent screen, and enable the Google Drive API.</item>
+        <item>In that same project, open Google Auth Platform -&gt; Clients in the Google Cloud Console, click CREATE CLIENT, and select application type TVs and Limited Input devices.</item>
+        <item>Copy the client ID and client secret from that TVs and Limited Input devices client and paste them here. Do not use the iOS bundle ID or a standard Android OAuth client for this flow.</item>
+        <item>Press Connect Google Drive, copy the code shown by Hoshi, open the verification URL, and enter the code.</item>
+        <item>If the verification URL is hard to use on this device, open the Google device page on another phone or computer and enter the same code.</item>
+        <item>Authorize the Google Account whose Drive contains the ッツ or Hoshi sync folder.</item>
     </string-array>
     <string name="sync_google_drive_authorization_failed">Google Drive authorization failed.</string>
     <string name="sync_google_drive_authorization_expired">Google Drive authorization code expired.</string>
@@ -345,21 +345,21 @@
     <string name="backup_books_save_failed">Unable to save Books backup.</string>
     <string name="backup_dictionaries_saved">Dictionaries backup saved.</string>
     <string name="backup_dictionaries_save_failed">Unable to save Dictionaries backup.</string>
-    <string name="backup_ttu_saved">TTU bookdata backup saved.</string>
-    <string name="backup_ttu_save_failed">Unable to save TTU bookdata backup.</string>
+    <string name="backup_ttu_saved">ッツ bookdata backup saved.</string>
+    <string name="backup_ttu_save_failed">Unable to save ッツ bookdata backup.</string>
     <string name="backup_books_restored">Books restored.</string>
     <string name="backup_books_restore_failed">Unable to restore Books backup.</string>
     <string name="backup_dictionaries_restored">Dictionaries restored.</string>
     <string name="backup_dictionaries_restore_failed">Unable to restore Dictionaries backup.</string>
-    <string name="backup_ttu_restored">TTU bookdata imported.</string>
-    <string name="backup_ttu_restore_failed">Unable to import TTU bookdata backup.</string>
+    <string name="backup_ttu_restored">ッツ bookdata imported.</string>
+    <string name="backup_ttu_restore_failed">Unable to import ッツ bookdata backup.</string>
     <string name="backup_restore_overwrites">Restoring will overwrite the current collection.</string>
     <string name="backup_action_backup" comment="Verb for creating a backup, intentionally matching the Backup settings noun.">Backup</string>
     <string name="backup_action_restore">Restore</string>
     <string name="backup_archiving">Archiving...</string>
     <string name="backup_restoring">Restoring...</string>
     <string name="backup_exporting">Exporting...</string>
-    <string name="backup_importing" comment="TTU backup import progress label, intentionally matching the generic importing progress text.">Importing...</string>
+    <string name="backup_importing" comment="ッツ backup import progress label, intentionally matching the generic importing progress text.">Importing...</string>
     <string name="advanced_audio">Audio</string>
     <string name="advanced_statistics" comment="Advanced settings row label, intentionally matching reader statistics label.">Statistics</string>
     <string name="advanced_statistics_subtitle">Track per-book reading time, speed, and characters read</string>

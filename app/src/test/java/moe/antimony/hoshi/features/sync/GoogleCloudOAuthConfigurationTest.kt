@@ -12,18 +12,18 @@ class GoogleCloudOAuthConfigurationTest {
         val steps = configuration.instructions
 
         assertEquals(
-            "https://github.com/ttu-ttu/ebook-reader?tab=readme-ov-file#storage-sources",
+            "https://github.com/Manhhao/Hoshi-Reader/blob/main/TTUSYNC.md",
             configuration.ttuSetupUrl,
         )
         assertTrue(configuration.introduction.contains("Device Code flow"))
-        assertTrue(configuration.introduction.contains("same user-owned Google Cloud project"))
+        assertTrue(configuration.introduction.contains("ッツ Sync guide"))
         assertEquals(6, steps.size)
-        assertEquals("ッツ Google Cloud setup", configuration.ttuSetupLinkLabel)
+        assertEquals("ッツ Sync guide", configuration.ttuSetupLinkLabel)
         assertEquals("Google Cloud Console", configuration.googleCloudConsoleLinkLabel)
         assertEquals("https://console.cloud.google.com/auth/clients", configuration.googleCloudConsoleUrl)
         assertEquals("https://www.google.com/device", configuration.googleDeviceUrl)
         assertEquals("Google device page", configuration.googleDeviceLinkLabel)
-        assertTrue(steps.any { it.contains("same Google Cloud project") && it.contains("Google Drive API") })
+        assertTrue(steps.any { it.contains("ッツ Sync guide") && it.contains("Google Drive API") })
         assertTrue(
             steps.any {
                 it.contains(configuration.googleCloudConsoleLinkLabel) &&
@@ -34,8 +34,8 @@ class GoogleCloudOAuthConfigurationTest {
             },
         )
         assertTrue(steps.any { it.contains("client ID") && it.contains("client secret") })
-        assertTrue(steps.any { it.contains("Do not create an Android OAuth client") })
-        assertTrue(steps.any { it.contains("another phone or computer") && it.contains(configuration.googleDeviceLinkLabel) })
+        assertTrue(steps.any { it.contains("standard Android OAuth client") })
+        assertTrue(steps.any { it.contains("verification URL") && it.contains(configuration.googleDeviceLinkLabel) })
         assertFalse(steps.any { it.contains(configuration.googleDeviceUrl) })
         assertFalse(steps.any { it.contains(configuration.googleCloudConsoleUrl) })
         assertEquals(

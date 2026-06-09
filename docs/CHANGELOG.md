@@ -5,6 +5,10 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+### Changed
+
+- Update the ッツ Sync setup guidance to link to Hoshi Reader's ッツ Sync guide and match the Android Device Code client setup steps.
+
 ### Fixed
 
 - Recover packed EPUB reader caches when a cached chapter file is missing, preventing migrated books from showing a WebView 404 for an otherwise valid chapter.
@@ -14,7 +18,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 ### Added
 
 - Show the installed WebView package and version in Settings -> Diagnostics.
-- Add iOS-compatible Books backup storage, EPUB export, TTU bookdata import/export with edge-case handling, Google Drive Upload Books sync, and remote-only book import/trash actions.
+- Add iOS-compatible Books backup storage, EPUB export, ッツ bookdata import/export with edge-case handling, Google Drive Upload Books sync, and remote-only book import/trash actions.
 
 ### Changed
 

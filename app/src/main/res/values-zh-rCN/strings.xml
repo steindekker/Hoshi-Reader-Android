@@ -41,7 +41,7 @@
     <string name="import_select_audio_database">请选择 .db 音频数据库文件。</string>
     <string name="import_select_dictionary_archive">请选择 .zip 辞典压缩包文件。</string>
     <string name="import_select_hoshi_backup">请选择 .hoshi Hoshi 备份文件。</string>
-    <string name="import_select_ttu_bookdata_backup">请选择 .zip TTU bookdata 备份文件。</string>
+    <string name="import_select_ttu_bookdata_backup">请选择 .zip ッツ bookdata 备份文件。</string>
     <string name="import_select_font">请选择 .ttf、.otf、.woff 或 .woff2 字体文件。</string>
     <string name="main_tab_books" comment="Main navigation tab label, intentionally matching the backup Books section.">书库</string>
     <string name="main_tab_dictionary">查词</string>
@@ -248,7 +248,7 @@
     <string name="reader_appearance_font" comment="Reader font setting, intentionally matching dictionary custom CSS font.">字体</string>
     <string name="reader_appearance_font_file" comment="Fallback filename label, intentionally matching font setting labels.">字体</string>
     <string name="reader_appearance_import_font">导入字体</string>
-    <string name="reader_appearance_importing" comment="Generic import progress label, intentionally shared with TTU backup import.">正在导入...</string>
+    <string name="reader_appearance_importing" comment="Generic import progress label, intentionally shared with ッツ backup import.">正在导入...</string>
     <string name="reader_appearance_font_size">字号</string>
     <string name="reader_appearance_hide_furigana">隐藏振假名</string>
     <string name="reader_appearance_mode" comment="Reader appearance setting label, intentionally matching dictionary mode.">模式</string>
@@ -294,7 +294,7 @@
     <string name="sync_direction">方向</string>
     <string name="sync_auto_sync">自动同步</string>
     <string name="sync_upload_books">上传书籍</string>
-    <string name="sync_upload_books_description">当同步的 Google Drive 书籍文件夹缺少 bookdata 时，上传 TTU bookdata。</string>
+    <string name="sync_upload_books_description">当同步的 Google Drive 书籍文件夹缺少 bookdata 时，上传 ッツ bookdata。</string>
     <string name="sync_stats">同步统计</string>
     <string name="sync_audiobook_progress">同步有声书进度</string>
     <string name="sync_clear_cache">清除 Google Drive 缓存</string>
@@ -312,16 +312,16 @@
     <string name="sync_google_device_code">Google 设备代码</string>
     <string name="sync_device_code_copied">设备代码已复制</string>
     <string name="sync_connect_google_drive">连接 Google Drive</string>
-    <string name="sync_device_code_setup">设备代码设置</string>
-    <string name="sync_ttu_google_cloud_setup">TTU Google Cloud 设置</string>
-    <string name="sync_device_code_intro">Google Drive 同步使用设备代码流程，因此这个 Android 应用可以使用与 iOS/ッツ 相同的用户自有 Google Cloud 项目。</string>
+    <string name="sync_device_code_setup">ッツ 同步设置</string>
+    <string name="sync_ttu_google_cloud_setup">ッツ 同步教程</string>
+    <string name="sync_device_code_intro">Google Drive 同步使用设备代码流程，因此这个 Android 应用可以使用 ッツ 同步教程中说明的同一个用户自有 Google Cloud 项目。</string>
     <string-array name="sync_device_code_instructions">
-        <item>打开 iOS/ッツ 同步所使用的同一个 Google Cloud 项目，并确认已启用 Google Drive API。</item>
-        <item>在 Google Cloud Console 中打开 Google Auth Platform -&gt; Clients，点击 CREATE CLIENT，并选择“电视和输入受限设备”应用类型。如果你的控制台仍显示旧导航，请使用 APIs &amp; Services -&gt; Credentials -&gt; Create Credentials -&gt; OAuth client ID。</item>
-        <item>在此粘贴客户端 ID 和客户端密钥。此流程不要创建 Android OAuth 客户端。</item>
-        <item>点击连接 Google Drive，打开验证 URL，并输入显示的设备代码。</item>
-        <item>如果 Hoshi 在后台时授权遇到问题，请在另一台手机或电脑上打开 Google device page，并输入这里显示的设备代码。</item>
-        <item>授权同一个 Google 账号，该账号的 Drive 中包含 ッツ 同步文件夹。</item>
+        <item>按照 ッツ 同步教程创建或打开共享的 Google Cloud 项目，发布 OAuth 同意屏幕，并启用 Google Drive API。</item>
+        <item>在同一个项目中打开 Google Cloud Console 的 Google Auth Platform -&gt; Clients，点击 CREATE CLIENT，并选择“电视和输入受限设备”应用类型。</item>
+        <item>复制这个“电视和输入受限设备”客户端的客户端 ID 和客户端密钥，并粘贴到这里。此流程不要使用 iOS bundle ID，也不要创建标准 Android OAuth 客户端。</item>
+        <item>点击连接 Google Drive，复制 Hoshi 显示的代码，打开验证 URL，并输入该代码。</item>
+        <item>如果在此设备上使用验证 URL 不方便，请在另一台手机或电脑上打开 Google device page，并输入同一个代码。</item>
+        <item>授权 Google Drive 中包含 ッツ 或 Hoshi 同步文件夹的 Google 账号。</item>
     </string-array>
     <string name="sync_google_drive_authorization_failed">Google Drive 授权失败。</string>
     <string name="sync_google_drive_authorization_expired">Google Drive 授权代码已过期。</string>
@@ -343,21 +343,21 @@
     <string name="backup_books_save_failed">无法保存书籍备份。</string>
     <string name="backup_dictionaries_saved">辞典备份已保存。</string>
     <string name="backup_dictionaries_save_failed">无法保存辞典备份。</string>
-    <string name="backup_ttu_saved">TTU bookdata 备份已保存。</string>
-    <string name="backup_ttu_save_failed">无法保存 TTU bookdata 备份。</string>
+    <string name="backup_ttu_saved">ッツ bookdata 备份已保存。</string>
+    <string name="backup_ttu_save_failed">无法保存 ッツ bookdata 备份。</string>
     <string name="backup_books_restored">书籍已恢复。</string>
     <string name="backup_books_restore_failed">无法恢复书籍备份。</string>
     <string name="backup_dictionaries_restored">辞典已恢复。</string>
     <string name="backup_dictionaries_restore_failed">无法恢复辞典备份。</string>
-    <string name="backup_ttu_restored">TTU bookdata 已导入。</string>
-    <string name="backup_ttu_restore_failed">无法导入 TTU bookdata 备份。</string>
+    <string name="backup_ttu_restored">ッツ bookdata 已导入。</string>
+    <string name="backup_ttu_restore_failed">无法导入 ッツ bookdata 备份。</string>
     <string name="backup_restore_overwrites">恢复会覆盖当前集合。</string>
     <string name="backup_action_backup" comment="Verb for creating a backup, intentionally matching the Backup settings noun.">备份</string>
     <string name="backup_action_restore">恢复</string>
     <string name="backup_archiving">正在归档...</string>
     <string name="backup_restoring">正在恢复...</string>
     <string name="backup_exporting">正在导出...</string>
-    <string name="backup_importing" comment="TTU backup import progress label, intentionally matching the generic importing progress text.">正在导入...</string>
+    <string name="backup_importing" comment="ッツ backup import progress label, intentionally matching the generic importing progress text.">正在导入...</string>
     <string name="advanced_audio">音频</string>
     <string name="advanced_statistics" comment="Advanced settings row label, intentionally matching reader statistics label.">统计</string>
     <string name="advanced_statistics_subtitle">跟踪每本书的阅读时间、速度和已读字符数</string>
