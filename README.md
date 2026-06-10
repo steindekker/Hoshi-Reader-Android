@@ -80,6 +80,28 @@ This project is a native Android recreation of [Hoshi Reader](https://github.com
 - Sync reading progress, statistics, and books through Google Drive, compatible with ッツ Reader.
 - Import or export ッツ bookdata, and back up or restore books and dictionaries with `.hoshi` archives compatible with Hoshi Reader iOS.
 
+## Why Migrate From Yomitan + ッツ Reader
+
+- **One app instead of a stitched setup:** EPUB reading, Yomitan lookup, Anki mining, local audio, and audiobook read-along all live inside Hoshi.
+- **Faster import and lookup speed:** native C++ hoshidicts makes dictionary import roughly 100x faster, supports batch importing Yomitan dictionaries, and heavily optimizes lookup speed, especially on low-end and e-ink devices.
+- **Better Android reading experience:** custom reader themes, e-ink display tuning, low-end-device performance, and volume-key paging are treated as first-class reader features.
+- **Annotations and bookshelf control:** sentence highlights and bookmarks make it easy to save passages you want to revisit, while custom bookshelves and recursive folder import keep local libraries organized.
+- **Smoother popups and local audio:** dictionary popups can be dismissed with a swipe, and local word audio can be used directly in reading and card creation without configuring AnkiConnect Android.
+- **Direct AnkiDroid card mining:** Hoshi can create cards through AnkiDroid without AnkiConnect Android, keeping the common Android mining path simpler.
+- **Better audiobook workflow:** Hoshi streamlines audiobook setup and provides better audiobook audio progress and playback controls; when creating cards, it can also expand captured audio to the full sentence instead of making you stitch subtitle lines manually.
+- **Sync and migration path:** Google Drive sync covers progress, statistics, and books with ッツ compatibility, plus `.hoshi` iOS backup restore and ッツ bookdata import/export.
+
+## Why Choose Hoshi Over jidoujisho For EPUB Reading
+
+- **Reading-focused design:** Hoshi keeps Japanese EPUB reading, lookup, and card mining in one focused flow; jidoujisho's video, manga, web, and cross-media tooling can feel heavy for reading-only workflows.
+- **Reliable support for core Yomitan dictionaries:** Hoshi supports term, frequency, and pitch dictionaries; jidoujisho is unreliable with structured glossary content and dictionary media rendering.
+- **Dedicated C++ dictionary engine:** native hoshidicts keeps imports fast, lookups responsive, and dictionary storage compact, with Low Memory Usage Mode for low-memory devices.
+- **Recursive lookup inside definitions:** tap unknown words directly inside dictionary definitions to open nested lookups without copying text, starting a new search, or leaving the current context.
+- **Maintained EPUB reader:** Hoshi ships a customizable EPUB reader with annotations and reading statistics in the core flow; jidoujisho bundles an older ッツ Reader build that can fail to import or open real-world EPUBs.
+- **E-ink device support:** high-contrast UI, dedicated popup definition CSS, and underline-style lookup and audiobook highlights improve e-ink readability, with solid support for low-end devices.
+- **EPUB audiobook read-along:** Hoshi aligns audiobook subtitles with the book text for sentence highlighting, auto page turning, playback control, and sentence-audio mining; jidoujisho does not provide an equivalent book-aligned audiobook workflow for EPUB reading.
+- **Multi-device sync and migration:** Google Drive sync is compatible with ッツ Reader, and Hoshi supports cross-device import, export, and backup restore; jidoujisho does not provide an equivalent sync or backup migration path.
+
 ## Download Hoshi Reader Android APK
 
 Download the latest Hoshi Reader Android APK from [GitHub Releases](https://github.com/HuangAntimony/Hoshi-Reader-Android/releases/latest).
