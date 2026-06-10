@@ -24,10 +24,6 @@ let selectedDictionaries = {};
 let dictionaryMediaObserver = null;
 let renderGeneration = 0;
 
-if (typeof window.nativePopupButtons !== 'boolean') {
-    window.nativePopupButtons = true;
-}
-
 function getPopupSelectionText() {
     return window.hoshiSelection?.selection?.text || window.getSelection()?.toString() || '';
 }
@@ -1210,7 +1206,6 @@ function createTags(entry) {
                 const swap = harmonicRow.style.display !== 'none';
                 harmonicRow.style.display = swap ? 'none' : '';
                 normalRow.style.display = swap ? '' : 'none';
-                scheduleButtonFrameSyncAtVisualState();
             };
 
             normalRow.addEventListener('click', toggle);
@@ -1283,9 +1278,6 @@ function playWordAudio(audioUrl) {
     }
 }
 
-let buttonFrameSyncScheduled = false;
-let visualStateButtonFrameSyncScheduled = false;
-
 function getButtonRectScale() {
     const zoom = Number.parseFloat(getComputedStyle(document.documentElement).zoom);
     if (zoom === 1) {
@@ -1299,70 +1291,13 @@ function getButtonRectScale() {
     return 100 * zoom / width;
 }
 
-function collectButtonFrames() {
-    const scale = getButtonRectScale();
-    return [...document.querySelectorAll('.button-slot')].map(slot => {
-        const rect = slot.getBoundingClientRect();
-        return {
-            kind: slot.dataset.kind,
-            entryIndex: Number(slot.dataset.entryIndex),
-            x: (rect.left + window.scrollX) * scale,
-            y: (rect.top + window.scrollY) * scale,
-            width: rect.width * scale,
-            height: rect.height * scale,
-            state: slot.dataset.state || 'default',
-            enabled: slot.dataset.enabled !== 'false'
-        };
-    });
-}
-
-function postButtonFrames(frames, visualState = false) {
-    const handler = visualState
-        ? window.webkit?.messageHandlers?.visualStateButtonFrames
-        : window.webkit?.messageHandlers?.buttonFrames;
-    if (!handler) { return; }
-    handler.postMessage(frames);
-}
-
-function syncButtonFrames() {
-    postButtonFrames(collectButtonFrames());
-}
-
-function syncButtonFramesAtVisualState() {
-    postButtonFrames(collectButtonFrames(), true);
-}
-
-function scheduleButtonFrameSync() {
-    if (buttonFrameSyncScheduled) { return; }
-    buttonFrameSyncScheduled = true;
-    requestAnimationFrame(() => {
-        buttonFrameSyncScheduled = false;
-        syncButtonFrames();
-    });
-}
-
-function scheduleButtonFrameSyncAtVisualState() {
-    if (visualStateButtonFrameSyncScheduled) { return; }
-    visualStateButtonFrameSyncScheduled = true;
-    requestAnimationFrame(() => {
-        visualStateButtonFrameSyncScheduled = false;
-        syncButtonFramesAtVisualState();
-    });
-}
-
-window.addEventListener('resize', scheduleButtonFrameSync);
-document.addEventListener('toggle', scheduleButtonFrameSyncAtVisualState, true);
-
 function createButtonSlot(kind, entryIndex, enabled = true) {
-    const slot = el(window.nativePopupButtons ? 'span' : 'button', {
+    const slot = el('button', {
         className: 'button-slot',
         'data-kind': kind,
         'data-entry-index': entryIndex,
         'data-enabled': String(enabled)
     });
-    if (window.nativePopupButtons) {
-        return slot;
-    }
     slot.type = 'button';
     slot.setAttribute('aria-label', kind === 'audio' ? 'Play audio' : 'Add to Anki');
     slot.addEventListener('click', (event) => {
@@ -1389,11 +1324,10 @@ function updateButtonSlot(slot, changes) {
     if ('state' in changes) { slot.dataset.state = changes.state; }
     if ('enabled' in changes) { slot.dataset.enabled = String(changes.enabled); }
     applyButtonSlotVisualState(slot);
-    scheduleButtonFrameSync();
 }
 
 function applyButtonSlotVisualState(slot) {
-    if (window.nativePopupButtons || !slot) { return; }
+    if (!slot) { return; }
     const kind = slot.dataset.kind;
     const state = slot.dataset.state || 'default';
     const enabled = slot.dataset.enabled !== 'false';
@@ -1478,7 +1412,6 @@ function createEntryHeader(entry, idx) {
     });
 
     header.appendChild(buttonsContainer);
-    scheduleButtonFrameSync();
 
     return header;
 }
@@ -1516,8 +1449,6 @@ function createGlossarySection(dictName, contents, isFirst, entryIdx) {
             return;
         }
         details.open = !details.open;
-        syncButtonFramesAtVisualState();
-        scheduleButtonFrameSyncAtVisualState();
     });
     details.appendChild(summary);
 
@@ -1616,7 +1547,6 @@ function appendPendingHistoryRestore(flush = false) {
     if (chunk.length) {
         pending.container.append(...chunk);
         observePendingDictionaryMedia(pending.container);
-        scheduleButtonFrameSync();
     }
     if (!pending.nodes.length) {
         pendingHistoryRestore = null;
@@ -1641,7 +1571,6 @@ function redirect(count) {
     audioUrls = {};
     selectedDictionaries = {};
     document.getElementById('entries-container').innerHTML = '';
-    syncButtonFrames();
     window.renderPopup();
     requestAnimationFrame(() => {
         document.scrollingElement.scrollTop = 0;
@@ -1666,7 +1595,6 @@ window.replacePopupResults = function(count, initialEntries) {
     if (container) {
         container.innerHTML = '';
     }
-    syncButtonFrames();
     window.hoshiPopupObserveContentReady?.();
     window.renderPopup();
     requestAnimationFrame(() => {
@@ -1704,7 +1632,6 @@ function restore(snapshot) {
     audioUrls = {};
     selectedDictionaries = {};
     applyHoshiPopupThemeOverrides(container);
-    scheduleButtonFrameSync();
     requestAnimationFrame(() => {
         document.scrollingElement.scrollTop = snapshot.scrollTop;
     });

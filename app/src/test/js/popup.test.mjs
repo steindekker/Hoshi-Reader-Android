@@ -23,15 +23,52 @@ class FakeContainer {
 }
 
 class FakeElement {
-    constructor(matches = []) {
+    constructor(matches = [], tagName = 'div') {
+        this.attributes = new Map();
+        this.children = [];
+        this.className = '';
+        this.dataset = {};
         this.matches = new Set(matches);
         this.nodeType = 1;
         this.parentElement = null;
+        this.style = {
+            properties: new Map(),
+            setProperty(name, value) {
+                this.properties.set(name, value);
+            },
+        };
+        this.tagName = tagName.toUpperCase();
+    }
+
+    setAttribute(name, value) {
+        const stringValue = String(value);
+        this.attributes.set(name, stringValue);
+        if (name.startsWith('data-')) {
+            const dataKey = name.slice(5).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+            this.dataset[dataKey] = stringValue;
+        }
+    }
+
+    getAttribute(name) {
+        return this.attributes.get(name) ?? null;
+    }
+
+    appendChild(child) {
+        child.parentElement = this;
+        this.children.push(child);
+        return child;
+    }
+
+    addEventListener(type, listener) {
+        const listeners = this.listeners?.get(type) ?? [];
+        listeners.push(listener);
+        this.listeners ??= new Map();
+        this.listeners.set(type, listeners);
     }
 
     closest(selector) {
         const selectors = selector.split(',').map((item) => item.trim());
-        return selectors.some((item) => this.matches.has(item)) ? this : null;
+        return selectors.some((item) => this.matches.has(item) || item === this.tagName.toLowerCase()) ? this : null;
     }
 
     remove() {}
@@ -55,8 +92,8 @@ function popupContext() {
         dispatch(type, event) {
             (documentListeners.get(type) ?? []).forEach((listener) => listener(event));
         },
-        createElement() {
-            return new FakeElement();
+        createElement(tagName) {
+            return new FakeElement([], tagName);
         },
         querySelectorAll() {
             return [];
@@ -204,4 +241,20 @@ test('popup viewport blank area click posts tapOutside when it misses body conte
     document.dispatch('click', clickEvent(document.documentElement, 48, 640));
 
     assert.deepEqual(tapOutsideMessages, [null]);
+});
+
+test('popup action controls remain DOM buttons even if a legacy native button flag is present', () => {
+    const { context } = popupContext();
+
+    context.window.nativePopupButtons = true;
+    const audioSlot = context.createButtonSlot('audio', 0);
+    const mineSlot = context.createButtonSlot('mine', 1, false);
+
+    assert.equal(audioSlot.tagName, 'BUTTON');
+    assert.equal(audioSlot.type, 'button');
+    assert.equal(audioSlot.getAttribute('aria-label'), 'Play audio');
+    assert.equal(audioSlot.children.length, 1);
+    assert.equal(audioSlot.children[0].className, 'button-slot-icon');
+    assert.equal(mineSlot.tagName, 'BUTTON');
+    assert.equal(mineSlot.disabled, true);
 });

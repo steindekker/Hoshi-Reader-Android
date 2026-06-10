@@ -12,6 +12,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 ### Fixed
 
 - Recover packed EPUB reader caches when a cached chapter file is missing, preventing migrated books from showing a WebView 404 for an otherwise valid chapter.
+- Improve lookup popup responsiveness after repeated lookups by removing obsolete native button frame synchronization from iframe popups.
 
 ## [v1.1.4] - 2026-06-08
 

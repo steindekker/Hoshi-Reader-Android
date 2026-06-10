@@ -27,7 +27,6 @@ class LookupPopupHtmlTest {
         assertTrue(html.contains("""<link rel="stylesheet" href="https://appassets.androidplatform.net/popup/popup.css">"""))
         assertTrue(html.contains("""<script src="https://appassets.androidplatform.net/popup/selection.js"></script>"""))
         assertTrue(html.contains("""<script src="https://appassets.androidplatform.net/popup/popup.js"></script>"""))
-        assertTrue(html.contains("window.nativePopupButtons = false;"))
         assertTrue(html.contains("window.scanLength = 24;"))
         assertTrue(html.contains("html { zoom: 1.15; }"))
         assertTrue(html.contains("""data-hoshi-color-scheme="dark""""))

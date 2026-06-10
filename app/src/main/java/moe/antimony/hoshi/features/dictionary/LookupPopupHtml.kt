@@ -104,7 +104,6 @@ internal object LookupPopupHtml {
                     }
                 </style>
                 <script>
-                    window.nativePopupButtons = false;
                     window.HoshiAndroidPopup = window.HoshiAndroidPopup || (function() {
                         var nextMessageId = 1;
                         var pendingMessages = {};
@@ -145,10 +144,8 @@ internal object LookupPopupHtml {
                             tapOutside: { postMessage: function() { window.HoshiAndroidPopup.postMessage('tapOutside'); } },
                             swipeDismiss: { postMessage: function() { window.HoshiAndroidPopup.postMessage('swipeDismiss'); } },
                             playWordAudio: { postMessage: function(content) { window.HoshiAndroidPopup.postMessage('playWordAudio', content); } },
-                            buttonFrames: { postMessage: function() {} },
-                            visualStateButtonFrames: { postMessage: function() {} },
                             shellReady: { postMessage: function() { window.HoshiAndroidPopup.postMessage('shellReady'); } },
-                            contentReady: { postMessage: function(frames) { window.HoshiAndroidPopup.postMessage('contentReady', frames); } },
+                            contentReady: { postMessage: function() { window.HoshiAndroidPopup.postMessage('contentReady'); } },
                             popupScrolled: { postMessage: function() { window.HoshiAndroidPopup.postMessage('popupScrolled'); } },
                             mineEntry: { postMessage: function(content) { return window.HoshiAndroidPopup.requestMessage('mineEntry', content); } },
                             duplicateCheck: { postMessage: function(expression) { return window.HoshiAndroidPopup.requestMessage('duplicateCheck', expression); } },
@@ -216,7 +213,7 @@ internal object LookupPopupHtml {
                         function postReady() {
                             if (posted) return;
                             posted = true;
-                            webkit.messageHandlers.contentReady.postMessage(collectButtonFrames());
+                            webkit.messageHandlers.contentReady.postMessage();
                         }
                         function hasRenderableContent() {
                             if (!container || !window.entryCount) {
@@ -356,28 +353,18 @@ internal object LookupPopupHtml {
                 }
                 return true;
             }
-            function syncAfterFontLoad() {
-                if (typeof scheduleButtonFrameSyncAtVisualState === 'function') {
-                    scheduleButtonFrameSyncAtVisualState();
-                } else if (typeof scheduleButtonFrameSync === 'function') {
-                    scheduleButtonFrameSync();
-                }
-            }
             window.hoshiPopupPrewarmFonts = function() {
                 if (!document.fonts) return;
-                var loads = [];
                 try {
                     document.fonts.forEach(function(face) {
                         if (!rememberFace(face) || face.status !== 'unloaded' || typeof face.load !== 'function') {
                             return;
                         }
                         try {
-                            loads.push(face.load().catch(function() {}));
+                            face.load().catch(function() {});
                         } catch (e) {}
                     });
                 } catch (e) {}
-                if (!loads.length) return;
-                Promise.all(loads).then(syncAfterFontLoad, syncAfterFontLoad);
             };
             window.hoshiPopupPrewarmFonts();
             setTimeout(window.hoshiPopupPrewarmFonts, 0);
