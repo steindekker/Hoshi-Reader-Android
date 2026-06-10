@@ -216,7 +216,7 @@ internal fun ChapterWebView(
         val cuesJson = chapterSasayakiCuesJson ?: return@LaunchedEffect
         if (isWebViewRestoring) return@LaunchedEffect
         if (webView.tag != loadKey) return@LaunchedEffect
-        webView.evaluateJavascript(ReaderPaginationScripts.applySasayakiCuesInvocation(cuesJson), null)
+        webView.applyReaderSasayakiCues(loadKey, cuesJson)
     }
     AndroidView(
         modifier = modifier
@@ -257,7 +257,11 @@ internal fun ChapterWebView(
                     onInternalLink = onInternalLink,
                     popupResourceHandler = { currentReaderPopupResourceHandler.value },
                 ) { view ->
-                    view.evaluateJavascript(readerSetupScript, null)
+                    view.evaluateReaderSetupScript(
+                        source = readerSetupScript,
+                        loadKey = loadKey,
+                        sasayakiCuesJson = chapterSasayakiCuesJson,
+                    )
                 }
                 readerWebView = this
                 onWebViewReady(this)
@@ -409,7 +413,11 @@ internal fun ChapterWebView(
                     onInternalLink = onInternalLink,
                     popupResourceHandler = { currentReaderPopupResourceHandler.value },
                 ) { view ->
-                    view.evaluateJavascript(readerSetupScript, null)
+                    view.evaluateReaderSetupScript(
+                        source = readerSetupScript,
+                        loadKey = loadKey,
+                        sasayakiCuesJson = chapterSasayakiCuesJson,
+                    )
                 }
                 webView.loadUrl(baseUrl)
             }
@@ -1109,7 +1117,33 @@ private fun WebView.showAfterReaderRestore() {
     )
 }
 
+private fun WebView.evaluateReaderSetupScript(
+    source: String,
+    loadKey: String,
+    sasayakiCuesJson: String?,
+) {
+    if (sasayakiCuesJson != null) {
+        readerAppliedSasayakiCues[this] = ReaderAppliedSasayakiCues(loadKey, sasayakiCuesJson)
+    } else {
+        readerAppliedSasayakiCues.remove(this)
+    }
+    evaluateJavascript(source, null)
+}
+
+private fun WebView.applyReaderSasayakiCues(loadKey: String, cuesJson: String) {
+    val appliedCues = ReaderAppliedSasayakiCues(loadKey, cuesJson)
+    if (readerAppliedSasayakiCues[this] == appliedCues) return
+    readerAppliedSasayakiCues[this] = appliedCues
+    evaluateJavascript(ReaderPaginationScripts.applySasayakiCuesInvocation(cuesJson), null)
+}
+
+private data class ReaderAppliedSasayakiCues(
+    val loadKey: String,
+    val cuesJson: String,
+)
+
 private val readerRestoreGenerations = WeakHashMap<WebView, Long>()
+private val readerAppliedSasayakiCues = WeakHashMap<WebView, ReaderAppliedSasayakiCues>()
 private val readerPendingProgressSaveCallbacks = WeakHashMap<WebView, Runnable>()
 private val readerPageTurnProgressRequestIds = WeakHashMap<WebView, Long>()
 private var readerPageTurnProgressRequestId = 0L
