@@ -327,6 +327,15 @@ function applyTableStyles(html) {
     .replace(/<td(?=[>\s])/g, `<td style="${cellStyle}"`);
 }
 
+function escapeHtml(value) {
+    return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function applyImageStyles(node, imageContainer, aspectRatioSizer, imageBackground, image, filename, appearance, useEmUnits) {
     // .gloss-image-link
     node.style.cssText += 'display:inline-block;position:relative;line-height:1;max-width:100%;';
@@ -616,6 +625,25 @@ function constructPitchCategories(pitches, reading, rules) {
     return categories.join(',');
 }
 
+function constructPhoneticTranscriptionsHtml(pitches) {
+    if (!pitches?.length) {
+        return '';
+    }
+
+    const items = [];
+    pitches.forEach(pitchGroup => {
+        pitchGroup.transcriptions?.forEach(transcription => {
+            if (!transcription) return;
+            items.push(`<li class="pronunciation" data-pronunciation-type="phonetic-transcription">${escapeHtml(transcription)}</li>`);
+        });
+    });
+
+    if (!items.length) {
+        return '';
+    }
+    return `<ul>${items.join('')}</ul>`;
+}
+
 // https://github.com/yomidevs/yomitan/blob/d810b2f0842536d24ab82b6cd75d00841710e57b/ext/js/display/structured-content-generator.js#L64
 function createDefinitionImage(data, dictionary, exporting = false) {
     const {
@@ -874,6 +902,7 @@ async function mineEntry(expression, reading, frequencies, pitches, rules, match
     const glossaryFirst = Object.values(singleGlossaries)[0] || '';
     const pitchPositions = constructPitchPositionHtml(pitches);
     const pitchCategories = constructPitchCategories(pitches, reading, rules);
+    const phoneticTranscriptions = constructPhoneticTranscriptionsHtml(pitches);
 
     if (!audioUrls[idx] && window.audioSources?.length && window.needsAudio) {
         audioUrls[idx] = await fetchAudioUrl(expression, reading || expression);
@@ -893,6 +922,7 @@ async function mineEntry(expression, reading, frequencies, pitches, rules, match
         singleGlossaries: JSON.stringify(singleGlossaries),
         pitchPositions,
         pitchCategories,
+        phoneticTranscriptions,
         popupSelectionText,
         audio,
         selectedDictionary: selectedDictionaries[idx]?.name || '',

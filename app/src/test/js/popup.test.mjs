@@ -106,6 +106,7 @@ function popupContext() {
     };
     const selectTextCalls = [];
     const tapOutsideMessages = [];
+    const mineEntryMessages = [];
     const window = {
         scrollX: 0,
         scrollY: 0,
@@ -132,6 +133,12 @@ function popupContext() {
                         tapOutsideMessages.push(message);
                     },
                 },
+                mineEntry: {
+                    postMessage(message) {
+                        mineEntryMessages.push(message);
+                        return true;
+                    },
+                },
             },
         },
         window,
@@ -143,6 +150,7 @@ function popupContext() {
         document,
         selectTextCalls,
         tapOutsideMessages,
+        mineEntryMessages,
     };
 }
 
@@ -317,4 +325,43 @@ test('popup preserves IPA dictionary transcription delimiters', () => {
 
     assert.equal(nodes.some((node) => node.textContent === '/riːd/'), true);
     assert.equal(nodes.some((node) => node.textContent === '//riːd//'), false);
+});
+
+test('popup builds Yomitan-compatible phonetic transcriptions Anki HTML', () => {
+    const { context } = popupContext();
+
+    const html = context.constructPhoneticTranscriptionsHtml([
+        {
+            dictionary: 'seth-oald-ipa',
+            pitchPositions: [],
+            transcriptions: ['/riːd/', '/rɛd/'],
+        },
+    ]);
+
+    assert.equal(
+        html,
+        '<ul><li class="pronunciation" data-pronunciation-type="phonetic-transcription">/riːd/</li><li class="pronunciation" data-pronunciation-type="phonetic-transcription">/rɛd/</li></ul>',
+    );
+});
+
+test('mineEntry posts phonetic transcriptions for Anki handlebar rendering', async () => {
+    const { context, mineEntryMessages } = popupContext();
+    context.window.lookupEntries = [{ glossaries: [] }];
+
+    await context.mineEntry(
+        'read',
+        'read',
+        [],
+        [{ dictionary: 'seth-oald-ipa', pitchPositions: [], transcriptions: ['/riːd/'] }],
+        [],
+        'read',
+        0,
+        'read',
+    );
+
+    assert.equal(mineEntryMessages.length, 1);
+    assert.equal(
+        mineEntryMessages[0].phoneticTranscriptions,
+        '<ul><li class="pronunciation" data-pronunciation-type="phonetic-transcription">/riːd/</li></ul>',
+    );
 });

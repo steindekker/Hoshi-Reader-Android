@@ -94,6 +94,7 @@ data class AnkiMiningPayload(
     val singleGlossaries: Map<String, String> = emptyMap(),
     val pitchPositions: String = "",
     val pitchCategories: String = "",
+    val phoneticTranscriptions: String = "",
     val popupSelectionText: String = "",
     val audio: String = "",
     val selectedDictionary: String = "",
@@ -124,6 +125,7 @@ data class AnkiMiningPayload(
                 singleGlossaries = singleGlossaries,
                 pitchPositions = root.string("pitchPositions"),
                 pitchCategories = root.string("pitchCategories"),
+                phoneticTranscriptions = root.string("phoneticTranscriptions"),
                 popupSelectionText = root.string("popupSelectionText"),
                 audio = root.string("audio"),
                 selectedDictionary = root.string("selectedDictionary"),
@@ -195,6 +197,7 @@ object AnkiHandlebarRenderer {
             "{frequency-harmonic-rank}" -> payload.freqHarmonicRank
             "{pitch-accent-positions}" -> payload.pitchPositions
             "{pitch-accent-categories}" -> payload.pitchCategories
+            "{phonetic-transcriptions}" -> payload.phoneticTranscriptions
             "{document-title}" -> context.documentTitle.orEmpty()
             "{book-cover}" -> context.coverPath.orEmpty()
             "{sasayaki-audio}" -> context.sasayakiAudioPath.orEmpty()

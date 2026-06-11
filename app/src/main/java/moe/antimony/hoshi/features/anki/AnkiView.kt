@@ -517,6 +517,7 @@ internal object AnkiHandlebarOptions {
         "{frequency-harmonic-rank}",
         "{pitch-accent-positions}",
         "{pitch-accent-categories}",
+        "{phonetic-transcriptions}",
         "{document-title}",
         "{book-cover}",
         "{sasayaki-audio}",

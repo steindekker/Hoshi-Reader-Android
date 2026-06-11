@@ -18,6 +18,7 @@ class AnkiHandlebarRendererTest {
             singleGlossaries = mapOf("JMdict" to "<li>eat</li>"),
             pitchPositions = "<span>2</span>",
             pitchCategories = "heiban",
+            phoneticTranscriptions = """<ul><li class="pronunciation" data-pronunciation-type="phonetic-transcription">/riːd/</li></ul>""",
             popupSelectionText = "食べる",
             audio = "https://audio.example/taberu.mp3",
             selectedDictionary = "JMdict",
@@ -33,7 +34,8 @@ class AnkiHandlebarRendererTest {
         val rendered = AnkiHandlebarRenderer.render(
             template = "{expression}|{reading}|{furigana-plain}|{audio}|{glossary}|{glossary-first}|" +
                 "{selected-glossary}|{popup-selection-text}|{sentence}|{frequencies}|{frequency-harmonic-rank}|" +
-                "{pitch-accent-positions}|{pitch-accent-categories}|{document-title}|{book-cover}|{sasayaki-audio}",
+                "{pitch-accent-positions}|{pitch-accent-categories}|{phonetic-transcriptions}|" +
+                "{document-title}|{book-cover}|{sasayaki-audio}",
             payload = payload,
             context = context,
         )
@@ -41,9 +43,24 @@ class AnkiHandlebarRendererTest {
         assertEquals(
             "食べる|たべる|食[た]べる|https://audio.example/taberu.mp3|<ol><li>eat</li></ol>|<li>eat</li>|" +
                 "<li>eat</li>|食べる|パンを<b>食べる</b>。|<span>1139</span>|1139|" +
-                "<span>2</span>|heiban|テスト本|cover.jpg|cue.m4a",
+                """<span>2</span>|heiban|<ul><li class="pronunciation" data-pronunciation-type="phonetic-transcription">/riːd/</li></ul>|""" +
+                "テスト本|cover.jpg|cue.m4a",
             rendered,
         )
+    }
+
+    @Test
+    fun parsesPhoneticTranscriptionsFromMiningPayloadJson() {
+        val payload = AnkiMiningPayload.fromJson(
+            """
+            {
+              "expression": "read",
+              "phoneticTranscriptions": "<ul><li>/riːd/</li></ul>"
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals("<ul><li>/riːd/</li></ul>", payload.phoneticTranscriptions)
     }
 
     @Test

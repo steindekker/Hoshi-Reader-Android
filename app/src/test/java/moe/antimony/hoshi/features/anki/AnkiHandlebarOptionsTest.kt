@@ -13,6 +13,7 @@ class AnkiHandlebarOptionsTest {
 
         assertTrue(options.contains("{expression}"))
         assertTrue(options.contains("{glossary-brief}"))
+        assertTrue(options.contains("{phonetic-transcriptions}"))
         assertTrue(options.contains("{selected-glossary-fallback}"))
         assertEquals(
             listOf("{single-glossary-JMdict}", "{single-glossary-明鏡国語辞典 第三版}"),
