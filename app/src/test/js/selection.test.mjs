@@ -4,9 +4,17 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 const sharedSelectionUrl = new URL('../../main/assets/hoshi-web/shared/selection.js', import.meta.url);
+const japaneseLanguageUrl = new URL('../../main/assets/hoshi-web/shared/language-ja.js', import.meta.url);
+const japaneseSelectionUrl = new URL('../../main/assets/hoshi-web/shared/selection-ja.js', import.meta.url);
+const englishSelectionUrl = new URL('../../main/assets/hoshi-web/shared/selection-en.js', import.meta.url);
 
 function selectionSource() {
-    return fs.readFileSync(sharedSelectionUrl, 'utf8');
+    return [
+        japaneseLanguageUrl,
+        japaneseSelectionUrl,
+        englishSelectionUrl,
+        sharedSelectionUrl,
+    ].map((url) => fs.readFileSync(url, 'utf8')).join('\n');
 }
 
 function loadSelection(text) {
@@ -88,6 +96,42 @@ function loadSelection(text) {
         textNode,
         window,
     };
+}
+
+function loadSharedSelectionWithoutPolicy() {
+    const document = {
+        body: {},
+        documentElement: {},
+        addEventListener() {},
+    };
+    const window = {
+        getComputedStyle() {
+            return { writingMode: 'horizontal-tb' };
+        },
+    };
+
+    vm.runInNewContext(fs.readFileSync(sharedSelectionUrl, 'utf8'), {
+        document,
+        getSelection() {
+            return null;
+        },
+        Node: { TEXT_NODE: 3 },
+        NodeFilter: { SHOW_TEXT: 4, FILTER_ACCEPT: 1, FILTER_REJECT: 2 },
+        window,
+    });
+
+    return window.hoshiSelection;
+}
+
+function scanTextFromOffset(text, offset, configureOptions = {}) {
+    const { document, selection, textNode, window } = loadSelection(text);
+    document.pointElement = hitElement([]);
+    selection.configure(configureOptions);
+    selection.postTextSelected = () => {};
+    selection.clearSelection = () => {};
+    selection.getCharacterAtPoint = () => ({ node: textNode, offset });
+    window.scanNonJapaneseText = false;
+    return selection.selectText(1, 1, 80);
 }
 
 function hitElement(matches) {
@@ -186,6 +230,68 @@ test('shared selection can preserve reader link and image tap tokens', () => {
 
     assert.equal(selection.linkTapResult(), 'link');
     assert.equal(selection.imageTapResult(), 'image');
+});
+
+test('shared selection treats missing language policy as a no-scan boundary', () => {
+    const selection = loadSharedSelectionWithoutPolicy();
+
+    assert.equal(selection.languagePolicy(), undefined);
+    assert.doesNotThrow(() => selection.isScanBoundary('猫'));
+    assert.equal(selection.isScanBoundary('猫'), true);
+    assert.equal(selection.selectionStartForHit({ node: {}, offset: 3 }).offset, 3);
+});
+
+test('english reader selection ignores the Japanese non-Japanese scan toggle', () => {
+    assert.equal(
+        scanTextFromOffset('reading', 0, { language: 'en' }),
+        'reading',
+    );
+});
+
+test('english reader selection scans from the beginning of a tapped word', () => {
+    assert.equal(
+        scanTextFromOffset('reading', 3, { language: 'en' }),
+        'reading',
+    );
+});
+
+test('english reader selection keeps spaces while scanning for phrase lookups', () => {
+    assert.equal(
+        scanTextFromOffset('New York style pizza.', 0, { language: 'en' }),
+        'New York style pizza',
+    );
+});
+
+test('english reader selection does not include leading quotation punctuation', () => {
+    assert.equal(
+        scanTextFromOffset('"And finally, ...', 1, { language: 'en' }),
+        'And finally',
+    );
+    assert.equal(
+        scanTextFromOffset('“And finally, ...', 1, { language: 'en' }),
+        'And finally',
+    );
+});
+
+test('english reader selection stops at English sentence punctuation', () => {
+    assert.equal(
+        scanTextFromOffset('Hello! Next', 0, { language: 'en' }),
+        'Hello',
+    );
+});
+
+test('english reader selection keeps word-internal apostrophes', () => {
+    assert.equal(
+        scanTextFromOffset("can't stop.", 1, { language: 'en' }),
+        "can't stop",
+    );
+});
+
+test('japanese reader selection still honors the non-Japanese scan toggle', () => {
+    assert.equal(
+        scanTextFromOffset('reading', 0, { language: 'ja' }),
+        null,
+    );
 });
 
 test('shared selection treats svg containers as reader taps while preserving svg image hits', () => {

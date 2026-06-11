@@ -6,6 +6,7 @@ import de.manhhao.hoshi.LookupResult
 import de.manhhao.hoshi.PitchEntry
 import de.manhhao.hoshi.TermResult
 import de.manhhao.hoshi.TransformGroup
+import moe.antimony.hoshi.content.ContentLanguageProfile
 import moe.antimony.hoshi.features.anki.AnkiPopupSettings
 import moe.antimony.hoshi.features.audio.AudioSettings
 import moe.antimony.hoshi.features.audio.AudioSource
@@ -25,8 +26,14 @@ class LookupPopupHtmlTest {
         )
 
         assertTrue(html.contains("""<link rel="stylesheet" href="https://appassets.androidplatform.net/popup/popup.css">"""))
-        assertTrue(html.contains("""<script src="https://appassets.androidplatform.net/popup/selection.js"></script>"""))
-        assertTrue(html.contains("""<script src="https://appassets.androidplatform.net/popup/popup.js"></script>"""))
+        assertScriptOrder(
+            html,
+            "language-ja.js",
+            "selection-ja.js",
+            "selection.js",
+            """window.hoshiSelection?.configure?.({ language: "ja" });""",
+            "popup.js",
+        )
         assertTrue(html.contains("window.scanLength = 24;"))
         assertTrue(html.contains("html { zoom: 1.15; }"))
         assertTrue(html.contains("""data-hoshi-color-scheme="dark""""))
@@ -50,6 +57,25 @@ class LookupPopupHtmlTest {
         assertTrue(html.contains("<style>.entry-header {}</style>"))
         assertTrue(html.contains("<script>window.hoshiSelection = { selectText: function() {} };</script>"))
         assertTrue(html.contains("<script>window.renderPopup = function() {};</script>"))
+    }
+
+    @Test
+    fun iframePopupShellUsesEnglishSelectionPolicyForEnglishProfiles() {
+        val html = LookupPopupHtml.renderIframeDocument(
+            assets = null,
+            contentLanguageProfile = ContentLanguageProfile.English,
+        )
+
+        assertTrue(html.contains("""<html lang="en""""))
+        assertFalse(html.contains("""<script src="https://appassets.androidplatform.net/popup/selection-ja.js"></script>"""))
+        assertScriptOrder(
+            html,
+            "language-ja.js",
+            "selection-en.js",
+            "selection.js",
+            """window.hoshiSelection?.configure?.({ language: "en" });""",
+            "popup.js",
+        )
     }
 
     @Test
@@ -234,4 +260,14 @@ class LookupPopupHtmlTest {
         ),
         0,
     )
+
+    private fun assertScriptOrder(html: String, vararg snippets: String) {
+        var previous = -1
+        snippets.forEach { snippet ->
+            val index = html.indexOf(snippet)
+            assertTrue("$snippet should be present", index >= 0)
+            assertTrue("$snippet should appear after previous script", index > previous)
+            previous = index
+        }
+    }
 }

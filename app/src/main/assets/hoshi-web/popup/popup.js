@@ -58,8 +58,9 @@ function isStringPartiallyJapanese(str) {
     if (!str) {
         return false;
     }
+    const isCodePointJapanese = window.hoshiLanguageUtilities?.ja?.isCodePointJapanese;
     for (const c of str) {
-        if (window.hoshiSelection?.isCodePointJapanese(c.codePointAt(0))) {
+        if (isCodePointJapanese?.(c.codePointAt(0))) {
             return true;
         }
     }

@@ -1,6 +1,6 @@
 # Hoshi Android Current Architecture
 
-Date: 2026-06-11
+Date: 2026-06-12
 
 This document describes the current architecture that exists in the Android
 repo. It is not a future plan and should not track task status. Long-lived
@@ -80,6 +80,11 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   `app/src/main/assets/hoshi-web`; Kotlin owns typed commands, escaped
   parameters, asset loading, dynamic configuration fill-in, and WebView bridge
   invocation.
+- Reader and lookup popup text selection use shared selection plumbing. Language
+  utilities live in language-named assets such as `language-ja.js`, while
+  selection scan policies live in `selection-ja.js` and `selection-en.js`;
+  Kotlin loads the utility plus policy selected from `ContentLanguageProfile`,
+  and the Japanese policy owns `scanNonJapaneseText` filtering.
 - Reader, Dictionary search, and Process Text lookup popups render through the
   shared `reader-popup-host.js` iframe stack and `ReaderLookupPopupWebBridge`.
   Kotlin owns popup payloads, resource handling, and native service bridges for

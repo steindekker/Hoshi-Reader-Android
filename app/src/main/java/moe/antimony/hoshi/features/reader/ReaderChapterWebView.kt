@@ -752,6 +752,7 @@ private fun readerSetupScript(
 ): String {
     val eInkMode = readerJavaScriptStringLiteral(if (settings.eInkMode) "true" else "false")
     val contentLanguageTag = readerJavaScriptStringLiteral(contentLanguageProfile.htmlLang)
+    val selectionLanguageId = readerJavaScriptStringLiteral(contentLanguageProfile.dictionaryLanguageId)
     val viewportLayout = readerViewportCssLayout(
         settings = settings,
         viewportCssWidth = webViewViewportCssSize.width,
@@ -768,6 +769,7 @@ private fun readerSetupScript(
     ).let { css ->
         "${viewportLayout.cssVariables()}\n$css"
     }.let(::readerJavaScriptStringLiteral)
+    val selectionSupportScript = assets.selectionSupportJs(contentLanguageProfile)
     val selectionScript = assets.selectionJs
     val paginationScript = ReaderPaginationScripts.shellScriptWithRestoreToken(
         initialProgress = initialProgress,
@@ -787,9 +789,11 @@ private fun readerSetupScript(
           style.textContent = $css;
           document.head.appendChild(style);
           window.scanNonJapaneseText = $scanNonJapaneseText;
+          $selectionSupportScript
           $selectionScript
           window.hoshiSelection.configure({
             bridge: 'android-reader',
+            language: $selectionLanguageId,
             linkTapResult: 'link',
             imageTapResult: 'image',
             rubyAwareRects: true,

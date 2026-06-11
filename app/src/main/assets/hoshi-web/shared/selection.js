@@ -3,60 +3,9 @@
 //  Hoshi Reader
 //
 //  Copyright © 2026 Manhhao.
+//  Copyright © 2026 Antimony.
 //  SPDX-License-Identifier: GPL-3.0-or-later
 //
-
-// https://github.com/yomidevs/yomitan/blob/ddbe4a2c0bf778583b38962d4b0b85442dfa8f6a/ext/js/language/CJK-util.js#L19
-const CJK_UNIFIED_IDEOGRAPHS_RANGE = [0x4e00, 0x9fff];
-const CJK_UNIFIED_IDEOGRAPHS_EXTENSION_A_RANGE = [0x3400, 0x4dbf];
-const CJK_UNIFIED_IDEOGRAPHS_EXTENSION_B_RANGE = [0x20000, 0x2a6df];
-const CJK_UNIFIED_IDEOGRAPHS_EXTENSION_C_RANGE = [0x2a700, 0x2b73f];
-const CJK_UNIFIED_IDEOGRAPHS_EXTENSION_D_RANGE = [0x2b740, 0x2b81f];
-const CJK_UNIFIED_IDEOGRAPHS_EXTENSION_E_RANGE = [0x2b820, 0x2ceaf];
-const CJK_UNIFIED_IDEOGRAPHS_EXTENSION_F_RANGE = [0x2ceb0, 0x2ebef];
-const CJK_UNIFIED_IDEOGRAPHS_EXTENSION_G_RANGE = [0x30000, 0x3134f];
-const CJK_UNIFIED_IDEOGRAPHS_EXTENSION_H_RANGE = [0x31350, 0x323af];
-const CJK_UNIFIED_IDEOGRAPHS_EXTENSION_I_RANGE = [0x2ebf0, 0x2ee5f];
-const CJK_COMPATIBILITY_IDEOGRAPHS_RANGE = [0xf900, 0xfaff];
-const CJK_COMPATIBILITY_IDEOGRAPHS_SUPPLEMENT_RANGE = [0x2f800, 0x2fa1f];
-const CJK_IDEOGRAPH_RANGES = [
-    CJK_UNIFIED_IDEOGRAPHS_RANGE,
-    CJK_UNIFIED_IDEOGRAPHS_EXTENSION_A_RANGE,
-    CJK_UNIFIED_IDEOGRAPHS_EXTENSION_B_RANGE,
-    CJK_UNIFIED_IDEOGRAPHS_EXTENSION_C_RANGE,
-    CJK_UNIFIED_IDEOGRAPHS_EXTENSION_D_RANGE,
-    CJK_UNIFIED_IDEOGRAPHS_EXTENSION_E_RANGE,
-    CJK_UNIFIED_IDEOGRAPHS_EXTENSION_F_RANGE,
-    CJK_UNIFIED_IDEOGRAPHS_EXTENSION_G_RANGE,
-    CJK_UNIFIED_IDEOGRAPHS_EXTENSION_H_RANGE,
-    CJK_UNIFIED_IDEOGRAPHS_EXTENSION_I_RANGE,
-    CJK_COMPATIBILITY_IDEOGRAPHS_RANGE,
-    CJK_COMPATIBILITY_IDEOGRAPHS_SUPPLEMENT_RANGE,
-];
-
-// https://github.com/yomidevs/yomitan/blob/ddbe4a2c0bf778583b38962d4b0b85442dfa8f6a/ext/js/language/CJK-util.js#L60
-const FULLWIDTH_CHARACTER_RANGES = [
-    [0xff10, 0xff19],
-    [0xff21, 0xff3a],
-    [0xff41, 0xff5a],
-    [0xff01, 0xff0f],
-    [0xff1a, 0xff1f],
-    [0xff3b, 0xff3f],
-    [0xff5b, 0xff60],
-    [0xffe0, 0xffee],
-];
-
-// https://github.com/yomidevs/yomitan/blob/ddbe4a2c0bf778583b38962d4b0b85442dfa8f6a/ext/js/language/ja/japanese.js#L44
-const JAPANESE_RANGES = [
-    [0x3040, 0x309f],
-    [0x30a0, 0x30ff],
-    ...CJK_IDEOGRAPH_RANGES,
-    [0xff66, 0xff9f],
-    [0x30fb, 0x30fc],
-    [0xff61, 0xff65],
-    [0x3000, 0x303f],
-    ...FULLWIDTH_CHARACTER_RANGES,
-];
 
 window.hoshiRubyGeometry = window.hoshiRubyGeometry || {
     isVertical() {
@@ -193,6 +142,7 @@ window.hoshiSelection = {
     selection: null,
     options: {
         bridge: 'webkit',
+        language: 'ja',
         linkTapResult: null,
         imageTapResult: null,
         rubyAwareRects: false,
@@ -228,15 +178,73 @@ window.hoshiSelection = {
         return window.getComputedStyle(document.body).writingMode === "vertical-rl";
     },
 
-    // https://github.com/yomidevs/yomitan/blob/ddbe4a2c0bf778583b38962d4b0b85442dfa8f6a/ext/js/language/ja/japanese.js#L307
-    isCodePointJapanese(codePoint) {
-        return JAPANESE_RANGES.some(([start, end]) => codePoint >= start && codePoint <= end);
+    languagePolicy() {
+        const configured = String(
+            this.options.language ||
+            document.documentElement?.dataset?.hoshiContentLanguage ||
+            'ja'
+        );
+        const normalized = configured.toLowerCase().split('-')[0];
+        const policies = window.hoshiSelectionLanguagePolicies || {};
+        return policies[normalized] || policies[configured] || policies.default;
     },
 
     isScanBoundary(char) {
-        return /^[\s\u3000]$/.test(char) ||
-            this.scanDelimiters.includes(char) ||
-            (window.scanNonJapaneseText === false && !this.isCodePointJapanese(char.codePointAt(0)));
+        const policy = this.languagePolicy();
+        if (!policy) return true;
+        return policy.isScanBoundary.call(policy, char, this);
+    },
+
+    isScanBoundaryAt(text, offset) {
+        const policy = this.languagePolicy();
+        if (!policy) return true;
+        if (policy.isScanBoundaryAt) return policy.isScanBoundaryAt.call(policy, text, offset, this);
+        return policy.isScanBoundary.call(policy, text[offset], this);
+    },
+
+    isHitBoundary(char) {
+        const policy = this.languagePolicy();
+        if (!policy) return true;
+        const isBoundary = policy.isHitBoundary || policy.isScanBoundary;
+        return isBoundary.call(policy, char, this);
+    },
+
+    isHitBoundaryAt(text, offset) {
+        const policy = this.languagePolicy();
+        if (!policy) return true;
+        if (policy.isHitBoundaryAt) return policy.isHitBoundaryAt.call(policy, text, offset, this);
+        const isBoundary = policy.isHitBoundary || policy.isScanBoundary;
+        return isBoundary.call(policy, text[offset], this);
+    },
+
+    isWordStartBoundary(char) {
+        const policy = this.languagePolicy();
+        if (!policy) return true;
+        const isBoundary = policy.isWordStartBoundary || policy.isHitBoundary || policy.isScanBoundary;
+        return isBoundary.call(policy, char, this);
+    },
+
+    isWordStartBoundaryAt(text, offset) {
+        const policy = this.languagePolicy();
+        if (!policy) return true;
+        if (policy.isWordStartBoundaryAt) return policy.isWordStartBoundaryAt.call(policy, text, offset, this);
+        const isBoundary = policy.isWordStartBoundary || policy.isHitBoundary || policy.isScanBoundary;
+        return isBoundary.call(policy, text[offset], this);
+    },
+
+    selectionStartForHit(hit) {
+        const policy = this.languagePolicy();
+        if (!policy) return hit;
+        return policy.selectionStartForHit ? policy.selectionStartForHit(hit, this) : hit;
+    },
+
+    findWordStart(hit) {
+        const text = hit.node.textContent;
+        let offset = hit.offset;
+        while (offset > 0 && !this.isWordStartBoundaryAt(text, offset - 1)) {
+            offset -= 1;
+        }
+        return { node: hit.node, offset };
     },
 
     isFurigana(node) {
@@ -334,7 +342,7 @@ window.hoshiSelection = {
             charRange.setStart(node, offset);
             charRange.setEnd(node, offset + 1);
             if (this.inCharRange(charRange, rectX, rectY)) {
-                if (this.isScanBoundary(text[offset])) {
+                if (this.isHitBoundaryAt(text, offset)) {
                     return null;
                 }
                 return { node, offset };
@@ -470,12 +478,13 @@ window.hoshiSelection = {
         if (hitElement?.closest('img, image, .blur-wrapper')) {
             return this.imageTapResult();
         }
-        const hit = this.getCharacterAtPoint(x, y, rectX, rectY);
+        const rawHit = this.getCharacterAtPoint(x, y, rectX, rectY);
 
-        if (!hit) {
+        if (!rawHit) {
             this.clearSelection();
             return null;
         }
+        const hit = this.selectionStartForHit(rawHit);
 
         if (this.selection &&
             hit.node === this.selection.startNode &&
@@ -501,7 +510,7 @@ window.hoshiSelection = {
 
             while (offset < content.length && text.length < maxLength) {
                 const char = content[offset];
-                if (this.isScanBoundary(char)) {
+                if (this.isScanBoundaryAt(content, offset)) {
                     break;
                 }
                 text += char;

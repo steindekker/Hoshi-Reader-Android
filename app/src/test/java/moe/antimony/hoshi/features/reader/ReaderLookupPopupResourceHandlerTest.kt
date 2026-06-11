@@ -1,5 +1,6 @@
 package moe.antimony.hoshi.features.reader
 
+import moe.antimony.hoshi.features.dictionary.LookupPopupAssets
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -7,6 +8,14 @@ import org.junit.Test
 class ReaderLookupPopupResourceHandlerTest {
     @Test
     fun appAssetsRoutesRecognizePopupFontAndImageRequestsForNotFoundFallbacks() {
+        assertEquals(
+            ReaderLookupPopupAppAssetRoute.Popup,
+            readerLookupPopupAppAssetRoute(
+                scheme = "https",
+                host = "appassets.androidplatform.net",
+                path = "/popup/language-ja.js",
+            ),
+        )
         assertEquals(
             ReaderLookupPopupAppAssetRoute.Popup,
             readerLookupPopupAppAssetRoute(
@@ -38,5 +47,20 @@ class ReaderLookupPopupResourceHandlerTest {
                 path = "/fonts/Missing.ttf",
             ),
         )
+    }
+
+    @Test
+    fun popupAssetContentIncludesLanguageUtilities() {
+        val response = lookupPopupAssetResponse(
+            name = "language-ja.js",
+            assets = LookupPopupAssets(
+                popupJs = "",
+                popupCss = "",
+                languageJapaneseJs = "window.hoshiLanguageUtilities = {};",
+            ),
+        )
+
+        assertEquals("application/javascript", response?.mimeType)
+        assertEquals("window.hoshiLanguageUtilities = {};", response?.content)
     }
 }

@@ -9,6 +9,9 @@ class ReaderWebAssetsTest {
     @Test
     fun readerWebAssetsExistInNeutralAssetTree() {
         val assets = listOf(
+            "hoshi-web/shared/language-ja.js",
+            "hoshi-web/shared/selection-ja.js",
+            "hoshi-web/shared/selection-en.js",
             "hoshi-web/shared/selection.js",
             "hoshi-web/reader/reader-paginated.js",
             "hoshi-web/reader/reader-continuous.js",

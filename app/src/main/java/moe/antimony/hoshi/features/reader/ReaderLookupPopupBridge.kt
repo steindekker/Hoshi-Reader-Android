@@ -471,15 +471,8 @@ internal class ReaderLookupPopupResourceHandler(
                 )
             }.getOrNull()
         }
-        val content = when (uri.lastPathSegment) {
-            "popup.css" -> assets.popupCss
-            "selection.js" -> assets.selectionJs
-            "popup.js" -> assets.popupJs
-            "reader-popup-host.js" -> assets.readerPopupHostJs
-            else -> return null
-        }
-        val mimeType = if (uri.lastPathSegment == "popup.css") "text/css" else "application/javascript"
-        return textResponse(mimeType, content)
+        val asset = lookupPopupAssetResponse(uri.lastPathSegment.orEmpty(), assets) ?: return null
+        return textResponse(asset.mimeType, asset.content)
     }
 
     private fun handleFontRequest(uri: Uri): WebResourceResponse? {
@@ -509,6 +502,26 @@ internal class ReaderLookupPopupResourceHandler(
             mapOf("Access-Control-Allow-Origin" to "*"),
             ByteArrayInputStream(ByteArray(0)),
         )
+}
+
+internal data class LookupPopupAssetResponse(
+    val mimeType: String,
+    val content: String,
+)
+
+internal fun lookupPopupAssetResponse(name: String, assets: LookupPopupAssets): LookupPopupAssetResponse? {
+    val content = when (name) {
+        "popup.css" -> assets.popupCss
+        "language-ja.js" -> assets.languageJapaneseJs
+        "selection-ja.js" -> assets.selectionJapaneseJs
+        "selection-en.js" -> assets.selectionEnglishJs
+        "selection.js" -> assets.selectionJs
+        "popup.js" -> assets.popupJs
+        "reader-popup-host.js" -> assets.readerPopupHostJs
+        else -> return null
+    }
+    val mimeType = if (name == "popup.css") "text/css" else "application/javascript"
+    return LookupPopupAssetResponse(mimeType, content)
 }
 
 internal enum class ReaderLookupPopupAppAssetRoute {

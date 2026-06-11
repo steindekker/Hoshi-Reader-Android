@@ -16,6 +16,9 @@ import java.util.Locale
 internal data class LookupPopupAssets(
     val popupJs: String,
     val popupCss: String,
+    val languageJapaneseJs: String = "",
+    val selectionJapaneseJs: String = "",
+    val selectionEnglishJs: String = "",
     val selectionJs: String = "",
     val readerPopupHostJs: String = "",
 ) {
@@ -29,20 +32,26 @@ internal data class LookupPopupAssets(
             }
 
         private fun read(context: Context): LookupPopupAssets = LookupPopupAssets(
-            popupJs = context.assets.open("hoshi-web/popup/popup.js")
-                .bufferedReader()
-                .use { it.readText() },
-            popupCss = context.assets.open("hoshi-web/popup/popup.css")
-                .bufferedReader()
-                .use { it.readText() },
-            selectionJs = context.assets.open("hoshi-web/shared/selection.js")
-                .bufferedReader()
-                .use { it.readText() },
-            readerPopupHostJs = context.assets.open("hoshi-web/popup/reader-popup-host.js")
-                .bufferedReader()
-                .use { it.readText() },
+            popupJs = context.readAsset("hoshi-web/popup/popup.js"),
+            popupCss = context.readAsset("hoshi-web/popup/popup.css"),
+            languageJapaneseJs = context.readAsset("hoshi-web/shared/language-ja.js"),
+            selectionJapaneseJs = context.readAsset("hoshi-web/shared/selection-ja.js"),
+            selectionEnglishJs = context.readAsset("hoshi-web/shared/selection-en.js"),
+            selectionJs = context.readAsset("hoshi-web/shared/selection.js"),
+            readerPopupHostJs = context.readAsset("hoshi-web/popup/reader-popup-host.js"),
         )
+
+        private fun Context.readAsset(path: String): String =
+            assets.open(path)
+                .bufferedReader()
+                .use { it.readText() }
     }
+
+    fun selectionSupportJs(contentLanguageProfile: ContentLanguageProfile): String =
+        when (contentLanguageProfile.dictionaryLanguageId) {
+            ContentLanguageProfile.EnglishLanguageId -> "$languageJapaneseJs\n$selectionEnglishJs"
+            else -> "$languageJapaneseJs\n$selectionJapaneseJs"
+        }
 }
 
 internal object LookupPopupHtml {
@@ -82,8 +91,21 @@ internal object LookupPopupHtml {
         val customCss = customCssStyle(normalizedSettings.customCSS)
         val fontPrewarmScript = """<script>${popupFontPrewarmScript()}</script>"""
         val eInkCss = if (eInkMode) """<style>$eInkPopupCss</style>""" else ""
+        val selectionSupportJs = assets
+            ?.selectionSupportJs(contentLanguageProfile)
+            ?.takeIf(String::isNotBlank)
+            ?.let { """<script>$it</script>""" }
+            ?: if (assets == null) {
+                selectionSupportAssetNames(contentLanguageProfile).joinToString("\n") { name ->
+                    """<script src="$PopupAssetBaseUrl/$name"></script>"""
+                }
+            } else {
+                ""
+            }
         val selectionJs = assets?.let { """<script>${it.selectionJs}</script>""" }
             ?: """<script src="$PopupAssetBaseUrl/selection.js"></script>"""
+        val selectionLanguageId = JsonPrimitive(contentLanguageProfile.dictionaryLanguageId)
+        val selectionConfigureJs = """<script>window.hoshiSelection?.configure?.({ language: $selectionLanguageId });</script>"""
         val popupJs = assets?.let { """<script>${it.popupJs}</script>""" }
             ?: """<script src="$PopupAssetBaseUrl/popup.js"></script>"""
         return """
@@ -195,7 +217,9 @@ internal object LookupPopupHtml {
                         window.hoshiPostPopupScrollState();
                     }, { passive: true });
                 </script>
+                $selectionSupportJs
                 $selectionJs
+                $selectionConfigureJs
                 $popupJs
             </head>
             <body>
@@ -684,3 +708,9 @@ internal object LookupPopupHtml {
 
     private const val PopupAssetBaseUrl = "https://appassets.androidplatform.net/popup"
 }
+
+private fun selectionSupportAssetNames(contentLanguageProfile: ContentLanguageProfile): List<String> =
+    when (contentLanguageProfile.dictionaryLanguageId) {
+        ContentLanguageProfile.EnglishLanguageId -> listOf("language-ja.js", "selection-en.js")
+        else -> listOf("language-ja.js", "selection-ja.js")
+    }

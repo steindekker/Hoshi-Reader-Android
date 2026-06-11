@@ -4,6 +4,9 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 const popupSourceUrl = new URL('../../main/assets/hoshi-web/popup/popup.js', import.meta.url);
+const japaneseLanguageUrl = new URL('../../main/assets/hoshi-web/shared/language-ja.js', import.meta.url);
+const japaneseSelectionUrl = new URL('../../main/assets/hoshi-web/shared/selection-ja.js', import.meta.url);
+const sharedSelectionUrl = new URL('../../main/assets/hoshi-web/shared/selection.js', import.meta.url);
 
 class FakeContainer {
     constructor() {
@@ -79,7 +82,7 @@ class FakeElement {
     remove() {}
 }
 
-function popupContext() {
+function popupContext({ loadJapaneseLanguageAsset = false, loadSelectionAssets = false } = {}) {
     const documentElement = new FakeElement();
     const body = new FakeContainer();
     body.appendChild = function(element) {
@@ -143,6 +146,13 @@ function popupContext() {
         },
         window,
     };
+    if (loadJapaneseLanguageAsset) {
+        vm.runInNewContext(fs.readFileSync(japaneseLanguageUrl, 'utf8'), context);
+    }
+    if (loadSelectionAssets) {
+        vm.runInNewContext(fs.readFileSync(japaneseSelectionUrl, 'utf8'), context);
+        vm.runInNewContext(fs.readFileSync(sharedSelectionUrl, 'utf8'), context);
+    }
     vm.runInNewContext(fs.readFileSync(popupSourceUrl, 'utf8'), context);
     return {
         context,
@@ -279,6 +289,24 @@ test('popup action controls remain DOM buttons even if a legacy native button fl
     assert.equal(audioSlot.children[0].className, 'button-slot-icon');
     assert.equal(mineSlot.tagName, 'BUTTON');
     assert.equal(mineSlot.disabled, true);
+});
+
+test('popup language detection works with split selection policy assets', () => {
+    const { context } = popupContext({
+        loadJapaneseLanguageAsset: true,
+        loadSelectionAssets: true,
+    });
+
+    assert.doesNotThrow(() => context.getLanguageFromText('plain English glossary', 'en'));
+    assert.equal(context.getLanguageFromText('plain English glossary', 'en'), 'en');
+    assert.equal(context.getLanguageFromText('猫 glossary', 'en'), 'ja');
+});
+
+test('popup language detection does not depend on the selection object', () => {
+    const { context } = popupContext({ loadJapaneseLanguageAsset: true });
+    delete context.window.hoshiSelection;
+
+    assert.equal(context.getLanguageFromText('猫 glossary', 'en'), 'ja');
 });
 
 test('popup transcription entries do not render as Japanese pitch accents', () => {

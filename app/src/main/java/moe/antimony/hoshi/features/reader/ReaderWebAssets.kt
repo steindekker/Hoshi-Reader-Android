@@ -1,8 +1,12 @@
 package moe.antimony.hoshi.features.reader
 
 import android.content.Context
+import moe.antimony.hoshi.content.ContentLanguageProfile
 
 internal data class ReaderWebAssets(
+    val languageJapaneseJs: String,
+    val selectionJapaneseJs: String,
+    val selectionEnglishJs: String,
     val selectionJs: String,
     val readerPaginatedJs: String,
     val readerContinuousJs: String,
@@ -20,6 +24,9 @@ internal data class ReaderWebAssets(
 
         private fun read(context: Context): ReaderWebAssets =
             ReaderWebAssets(
+                languageJapaneseJs = context.readAsset("hoshi-web/shared/language-ja.js"),
+                selectionJapaneseJs = context.readAsset("hoshi-web/shared/selection-ja.js"),
+                selectionEnglishJs = context.readAsset("hoshi-web/shared/selection-en.js"),
                 selectionJs = context.readAsset("hoshi-web/shared/selection.js"),
                 readerPaginatedJs = context.readAsset("hoshi-web/reader/reader-paginated.js"),
                 readerContinuousJs = context.readAsset("hoshi-web/reader/reader-continuous.js"),
@@ -32,4 +39,10 @@ internal data class ReaderWebAssets(
                 .bufferedReader()
                 .use { it.readText() }
     }
+
+    fun selectionSupportJs(contentLanguageProfile: ContentLanguageProfile): String =
+        when (contentLanguageProfile.dictionaryLanguageId) {
+            ContentLanguageProfile.EnglishLanguageId -> "$languageJapaneseJs\n$selectionEnglishJs"
+            else -> "$languageJapaneseJs\n$selectionJapaneseJs"
+        }
 }
