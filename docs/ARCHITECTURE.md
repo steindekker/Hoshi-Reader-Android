@@ -1,6 +1,6 @@
 # Hoshi Android Current Architecture
 
-Date: 2026-06-06
+Date: 2026-06-11
 
 This document describes the current architecture that exists in the Android
 repo. It is not a future plan and should not track task status. Long-lived
@@ -25,6 +25,11 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   `StateFlow`.
 - Settings and small persisted preferences are stored behind DataStore-backed
   repositories.
+- Profiles are Hilt-backed app-wide state. `ProfileRepository` stores profile
+  metadata under app-specific files, exposes active profile state through
+  `StateFlow`, and controls the effective content language for Reader,
+  Dictionary search, Process Text lookup, Anki settings, and dictionary lookup
+  sessions.
 
 ## Storage And Data
 
@@ -38,12 +43,19 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   controlled app cache/temp directories when they need the EPUB tree.
 - Book metadata, bookmarks, highlights, reading statistics, and Sasayaki data
   are persisted through book sidecar repositories and models.
+- Book metadata sidecars may include a forced profile id and parsed EPUB
+  language. Reader opening resolves the effective profile from forced profile,
+  then EPUB language primary profile, then the global active profile.
 - Dictionary import, lookup, media, style extraction, and deinflection behavior
   are owned by `third_party/hoshidicts-kotlin-bridge`.
 - `DictionaryLookupQueryService` owns the active native lookup session. Rebuilds
-  construct a new native query session before swapping it into service; lookup,
-  style, and dictionary-media reads use the currently published session and
-  return empty results when no session is ready.
+  construct a new native query session for the active profile's dictionary
+  language before swapping it into service; lookup, style, and dictionary-media
+  reads use the currently published session and return empty results when no
+  session is ready.
+- Dictionary data directories remain global under `Dictionaries/`, while each
+  profile owns `dictionary_config.json` and `dictionary_collapsed.json` under
+  `Profiles/<profileId>/`.
 - Frequency and pitch dictionaries are type-specific and are not treated as term
   fallback dictionaries.
 - Dictionary storage/config mutations share a Hilt singleton mutation
@@ -75,6 +87,9 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
 ## Integrations
 
 - Anki work stays behind the Anki backend/repository boundary.
+- Anki settings are stored per active profile in
+  `Profiles/<profileId>/anki_config.json`; duplicate checks and note creation
+  still go through the existing Anki backend/repository boundary.
 - Google Drive sync uses Android/Google OAuth and Drive APIs through the
   repository/sync boundary. The Drive data source owns paginated folder listing,
   grouped sync-file discovery, bookdata upload/download, trash, cache clearing,

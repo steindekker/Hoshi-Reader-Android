@@ -781,6 +781,18 @@ class BookshelfViewModelTest {
     }
 
     @Test
+    fun setBookProfilePersistsProfileAndReloadsShelf() {
+        val entry = bookEntry("book-a")
+        val repository = FakeBookshelfRepository(entries = listOf(entry))
+        val viewModel = BookshelfViewModel(repository, testScope())
+
+        viewModel.setBookProfile(entry, "english")
+
+        assertEquals(listOf(entry to "english"), repository.profiledBooks)
+        assertEquals(listOf(BookSortOption.Recent), repository.loadRequests)
+    }
+
+    @Test
     fun sasayakiEnabledCanBeDrivenByObservedSettingsState() {
         val viewModel = BookshelfViewModel(FakeBookshelfRepository(), testScope())
 
@@ -918,6 +930,7 @@ class BookshelfViewModelTest {
         val exportedBooks = mutableListOf<BookEntry>()
         val showReadingUpdates = mutableListOf<Boolean>()
         val renamedBooks = mutableListOf<Pair<BookEntry, String?>>()
+        val profiledBooks = mutableListOf<Pair<BookEntry, String?>>()
 
         override suspend fun loadBooks(
             sortOption: BookSortOption,
@@ -1008,6 +1021,10 @@ class BookshelfViewModelTest {
 
         override suspend fun renameBook(entry: BookEntry, title: String?) {
             renamedBooks += entry to title
+        }
+
+        override suspend fun setBookProfile(entry: BookEntry, profileId: String?) {
+            profiledBooks += entry to profileId
         }
 
         override suspend fun changeSort(sortOption: BookSortOption) {

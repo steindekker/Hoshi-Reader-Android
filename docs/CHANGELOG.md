@@ -5,6 +5,15 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ## [Unreleased]
 
+### Added
+
+- Add Profiles for Japanese and English dictionary sessions, including profile-scoped dictionary configuration, dictionary collapse state, Anki settings, and per-book profile overrides.
+- Show English dictionary transcriptions in lookup popups while keeping Japanese pitch accent rendering separate.
+
+### Changed
+
+- Use each book's EPUB language metadata to auto-select the active reading profile when no per-book profile override is set.
+
 ## [v1.1.5] - 2026-06-11
 
 ### Added

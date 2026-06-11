@@ -93,6 +93,7 @@ fun ReaderWebView(
     onFlushAutoSyncExport: () -> Unit = {},
     onForegroundAutoSyncImport: () -> Unit = {},
     onTextSelected: (ReaderSelectionData) -> Int? = { null },
+    contentLanguageProfile: ContentLanguageProfile = ContentLanguageProfile.Default,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -189,7 +190,7 @@ fun ReaderWebView(
     val popupAssets = remember(context) { LookupPopupAssets.load(context) }
     val readerPopupBridgeHolder = remember { ReaderLookupPopupBridgeCallbackHolder() }
     val popupDarkMode = effectiveSettings.usesDarkInterface(systemDarkTheme)
-    val popupContentLanguageProfile = ContentLanguageProfile.Default
+    val popupContentLanguageProfile = contentLanguageProfile
     val readerPopupIframeDocument = remember(
         dictionaryStyles,
         dictionarySettings,

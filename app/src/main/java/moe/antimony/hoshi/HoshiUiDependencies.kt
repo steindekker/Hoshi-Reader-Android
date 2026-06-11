@@ -24,6 +24,8 @@ import moe.antimony.hoshi.features.update.UpdateCheckService
 import moe.antimony.hoshi.features.update.UpdateDownloadStore
 import moe.antimony.hoshi.features.update.UpdatePromptEvents
 import moe.antimony.hoshi.features.update.UpdateScheduler
+import moe.antimony.hoshi.profiles.ProfileActivationService
+import moe.antimony.hoshi.profiles.ProfileRepository
 import moe.antimony.hoshi.features.update.UpdateSettingsRepository
 
 internal class HoshiUiDependencies @Inject constructor(
@@ -48,6 +50,8 @@ internal class HoshiUiDependencies @Inject constructor(
     private val updateCheckServiceProvider: Lazy<UpdateCheckService>,
     private val updatePromptEventsProvider: Lazy<UpdatePromptEvents>,
     private val updateSchedulerProvider: Lazy<UpdateScheduler>,
+    private val profileRepositoryProvider: Lazy<ProfileRepository>,
+    private val profileActivationServiceProvider: Lazy<ProfileActivationService>,
 ) {
     val appScope: CoroutineScope get() = appScopeProvider.get()
     val bookRepository: BookRepository get() = bookRepositoryProvider.get()
@@ -70,6 +74,8 @@ internal class HoshiUiDependencies @Inject constructor(
     val updateCheckService: UpdateCheckService get() = updateCheckServiceProvider.get()
     val updatePromptEvents: UpdatePromptEvents get() = updatePromptEventsProvider.get()
     val updateScheduler: UpdateScheduler get() = updateSchedulerProvider.get()
+    val profileRepository: ProfileRepository get() = profileRepositoryProvider.get()
+    val profileActivationService: ProfileActivationService get() = profileActivationServiceProvider.get()
 }
 
 internal val LocalHoshiUiDependencies = staticCompositionLocalOf<HoshiUiDependencies> {

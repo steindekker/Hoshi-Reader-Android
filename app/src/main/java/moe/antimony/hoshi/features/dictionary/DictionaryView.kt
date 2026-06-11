@@ -106,7 +106,7 @@ import moe.antimony.hoshi.LocalHoshiUiDependencies
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.dictionary.DictionaryInfo
 import moe.antimony.hoshi.dictionary.DictionaryType
-import moe.antimony.hoshi.dictionary.RecommendedDictionaries
+import moe.antimony.hoshi.dictionary.recommendedDictionariesForLanguage
 import moe.antimony.hoshi.features.settings.SettingsDetailScaffold
 import moe.antimony.hoshi.features.reader.ReaderFontManager
 import moe.antimony.hoshi.importing.ImportFileType
@@ -129,10 +129,18 @@ fun DictionaryView(
     val appContainer = LocalHoshiUiDependencies.current
     val dictionaryViewModel: DictionaryViewModel = hiltViewModel()
     val uiState by dictionaryViewModel.uiState.collectAsStateWithLifecycle()
+    val profileState by appContainer.profileRepository.state.collectAsStateWithLifecycle()
     var destination by remember { mutableStateOf<DictionaryDestination?>(null) }
     var showUpdateConfirmation by remember { mutableStateOf(false) }
     var showDownloadConfirmation by remember { mutableStateOf(false) }
     var intervalMenuExpanded by remember { mutableStateOf(false) }
+    val recommendedDictionaries = remember(profileState.effectiveContentLanguageProfile.dictionaryLanguageId) {
+        recommendedDictionariesForLanguage(profileState.effectiveContentLanguageProfile.dictionaryLanguageId)
+    }
+
+    LaunchedEffect(profileState.effectiveProfile.id) {
+        dictionaryViewModel.reload()
+    }
 
     val importer = rememberLauncherForActivityResult(MultipleFileImportContent()) { uris: List<Uri> ->
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
@@ -719,24 +727,32 @@ fun DictionaryView(
                 Column {
                     Text(stringResource(R.string.dictionary_download_prompt))
                     Spacer(modifier = Modifier.height(8.dp))
-                    RecommendedDictionaries.forEach { dictionary ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    showDownloadConfirmation = false
-                                    dictionaryViewModel.importRecommendedDictionaries(listOf(dictionary))
-                                }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                stringResource(
-                                    R.string.dictionary_download_item_format,
-                                    dictionary.name,
-                                    stringResource(dictionary.type.displayNameRes),
-                                ),
-                            )
+                    if (recommendedDictionaries.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.dictionary_download_no_recommended),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        recommendedDictionaries.forEach { dictionary ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        showDownloadConfirmation = false
+                                        dictionaryViewModel.importRecommendedDictionaries(listOf(dictionary))
+                                    }
+                                    .padding(vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    stringResource(
+                                        R.string.dictionary_download_item_format,
+                                        dictionary.name,
+                                        stringResource(dictionary.type.displayNameRes),
+                                    ),
+                                )
+                            }
                         }
                     }
                 }

@@ -7,14 +7,36 @@ import org.junit.Test
 
 class ContentLanguageProfileTest {
     @Test
-    fun defaultProfileIsFixedJapaneseAndUsesAndroidFonts() {
+    fun defaultProfileIsJapaneseAndUsesAndroidFonts() {
         val japanese = ContentLanguageProfile.Default
 
+        assertEquals("ja", japanese.id)
+        assertEquals("ja", japanese.dictionaryLanguageId)
         assertEquals("ja", japanese.htmlLang)
         assertEquals("ja-JP", japanese.composeLocaleTag)
         assertEquals("ja-JP", japanese.inputLocaleTag)
         assertTrue(japanese.webViewFontFamilyCss.contains("Noto Sans CJK JP"))
         assertTrue(japanese.readerSerifFontFamilyCss.contains("Noto Serif CJK JP"))
         assertFalse(japanese.webViewFontFamilyCss.contains("Hira" + "gino"))
+    }
+
+    @Test
+    fun englishProfileUsesEnglishLanguageAndLatinFallbacks() {
+        val english = ContentLanguageProfile.English
+
+        assertEquals("en", english.id)
+        assertEquals("en", english.dictionaryLanguageId)
+        assertEquals("en", english.htmlLang)
+        assertEquals("en-US", english.composeLocaleTag)
+        assertEquals("en-US", english.inputLocaleTag)
+        assertTrue(english.webViewFontFamilyCss.contains("Roboto"))
+        assertFalse(english.webViewFontFamilyCss.contains("Noto Sans CJK JP"))
+    }
+
+    @Test
+    fun supportedLanguagesRejectUnsupportedDictionaryIds() {
+        assertEquals(ContentLanguageProfile.Japanese, ContentLanguageProfile.fromDictionaryLanguageId("ja"))
+        assertEquals(ContentLanguageProfile.English, ContentLanguageProfile.fromDictionaryLanguageId("en"))
+        assertEquals(null, ContentLanguageProfile.fromDictionaryLanguageId("fr"))
     }
 }

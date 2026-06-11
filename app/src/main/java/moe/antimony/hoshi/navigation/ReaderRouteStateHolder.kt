@@ -30,6 +30,7 @@ internal class ReaderRouteStateHolder(
                 cover = repository.metadataCoverPath(entry.root, parsedBook.coverHref) ?: entry.metadata.cover,
                 folder = entry.root.name,
                 lastAccess = repository.currentAppleReferenceDateSeconds(),
+                bookLanguage = entry.metadata.bookLanguage ?: parsedBook.language,
             )
             repository.saveMetadata(
                 entry.root,

@@ -64,9 +64,10 @@ data class RecommendedDictionary(
     val type: DictionaryType,
     val indexUrl: String,
     val description: String = "",
+    val languageId: String = "ja",
 )
 
-val RecommendedDictionaries = listOf(
+val RecommendedDictionaries: List<RecommendedDictionary> = listOf(
     RecommendedDictionary(
         id = "jmdict",
         name = "JMdict",
@@ -96,6 +97,9 @@ val RecommendedDictionaries = listOf(
         description = "Term",
     ),
 )
+
+fun recommendedDictionariesForLanguage(languageId: String): List<RecommendedDictionary> =
+    RecommendedDictionaries.filter { it.languageId == languageId }
 
 @Serializable
 data class DictionaryConfig(

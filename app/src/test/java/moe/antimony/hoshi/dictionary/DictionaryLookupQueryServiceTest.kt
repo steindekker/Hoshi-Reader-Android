@@ -24,8 +24,10 @@ class DictionaryLookupQueryServiceTest {
             termDictionaries = listOf(File("/dicts/Term/JMdict")),
             frequencyDictionaries = listOf(File("/dicts/Frequency/Freq")),
             pitchDictionaries = listOf(File("/dicts/Pitch/Pitch")),
+            dictionaryLanguageId = "en",
         )
 
+        assertEquals(listOf("en"), bridge.createdLanguageIds)
         assertArrayEquals(arrayOf("/dicts/Term/JMdict"), bridge.termPaths)
         assertArrayEquals(arrayOf("/dicts/Frequency/Freq"), bridge.freqPaths)
         assertArrayEquals(arrayOf("/dicts/Pitch/Pitch"), bridge.pitchPaths)
@@ -40,6 +42,7 @@ class DictionaryLookupQueryServiceTest {
             termDictionaries = listOf(File("/dicts/Term/Old")),
             frequencyDictionaries = emptyList(),
             pitchDictionaries = emptyList(),
+            dictionaryLanguageId = "ja",
         )
         val oldResult = service.lookup("食べる").single().term.glossaries.single().glossary
 
@@ -47,10 +50,12 @@ class DictionaryLookupQueryServiceTest {
             termDictionaries = listOf(File("/dicts/Term/New")),
             frequencyDictionaries = emptyList(),
             pitchDictionaries = emptyList(),
+            dictionaryLanguageId = "en",
         )
 
         assertEquals("session-1:/dicts/Term/Old", oldResult)
         assertEquals("session-2:/dicts/Term/New", service.lookup("食べる").single().term.glossaries.single().glossary)
+        assertEquals(listOf("ja", "en"), bridge.createdLanguageIds)
         assertEquals(listOf(1L), bridge.destroyedSessions)
     }
 
@@ -63,6 +68,7 @@ class DictionaryLookupQueryServiceTest {
             termDictionaries = listOf(File("/dicts/Term/Stable")),
             frequencyDictionaries = emptyList(),
             pitchDictionaries = emptyList(),
+            dictionaryLanguageId = "ja",
         )
         bridge.failNextRebuild = true
 
@@ -71,6 +77,7 @@ class DictionaryLookupQueryServiceTest {
                 termDictionaries = listOf(File("/dicts/Term/Broken")),
                 frequencyDictionaries = emptyList(),
                 pitchDictionaries = emptyList(),
+                dictionaryLanguageId = "en",
             )
         }
 
@@ -96,6 +103,7 @@ class DictionaryLookupQueryServiceTest {
             termDictionaries = listOf(File("/dicts/Term/Old")),
             frequencyDictionaries = emptyList(),
             pitchDictionaries = emptyList(),
+            dictionaryLanguageId = "ja",
         )
 
         val lookupThread = thread(start = true) {
@@ -108,6 +116,7 @@ class DictionaryLookupQueryServiceTest {
                 termDictionaries = listOf(File("/dicts/Term/New")),
                 frequencyDictionaries = emptyList(),
                 pitchDictionaries = emptyList(),
+                dictionaryLanguageId = "en",
             )
         }
         Thread.sleep(100)
@@ -135,6 +144,7 @@ class DictionaryLookupQueryServiceTest {
         private var nextSession = 1L
         private val sessionTermPaths = mutableMapOf<Long, Array<String>>()
         private var onLookup: (Long) -> Unit = {}
+        val createdLanguageIds = mutableListOf<String>()
 
         override fun importDictionary(zipPath: String, outputDir: String, lowRam: Boolean): NativeDictionaryImportResult =
             NativeDictionaryImportResult(
@@ -147,7 +157,10 @@ class DictionaryLookupQueryServiceTest {
                 mediaCount = 0,
             )
 
-        override fun createLookupObject(): Long = nextSession++
+        override fun createLookupObject(languageId: String): Long {
+            createdLanguageIds += languageId
+            return nextSession++
+        }
 
         override fun destroyLookupObject(session: Long) {
             destroyedSessions += session

@@ -60,6 +60,7 @@ import moe.antimony.hoshi.features.reader.readerLookupPopupFramePayloads
 import moe.antimony.hoshi.features.reader.readerLookupPopupIframeUrl
 import moe.antimony.hoshi.features.reader.usesDarkInterface
 import moe.antimony.hoshi.features.reader.usesDarkSystemBarIcons
+import moe.antimony.hoshi.profiles.ProfileRepository
 import moe.antimony.hoshi.ui.theme.HoshiReaderTheme
 import moe.antimony.hoshi.webview.applyHoshiWebViewSecurityDefaults
 import kotlin.math.min
@@ -71,6 +72,7 @@ internal class ProcessTextLookupDependencies @Inject constructor(
     val audioSettingsRepository: AudioSettingsRepository,
     val localAudioRepository: LocalAudioRepository,
     val readerFontManager: ReaderFontManager,
+    val profileRepository: ProfileRepository,
 )
 
 @AndroidEntryPoint
@@ -96,6 +98,7 @@ class ProcessTextLookupActivity : ComponentActivity() {
                 }
             }
             val loadedReaderSettings = readerSettings ?: return@setContent
+            val profileState by dependencies.profileRepository.state.collectAsStateWithLifecycle()
             val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
             HoshiReaderTheme(
                 darkTheme = loadedReaderSettings.usesDarkInterface(systemDark),
@@ -105,7 +108,7 @@ class ProcessTextLookupActivity : ComponentActivity() {
                 ProcessTextLookupOverlay(
                     query = request.query,
                     readerSettings = loadedReaderSettings,
-                    contentLanguageProfile = ContentLanguageProfile.Default,
+                    contentLanguageProfile = profileState.effectiveContentLanguageProfile,
                     dependencies = dependencies,
                     onClose = ::finish,
                 )

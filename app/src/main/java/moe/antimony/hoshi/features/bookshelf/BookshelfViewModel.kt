@@ -451,6 +451,13 @@ internal class BookshelfViewModel : ViewModel {
         }
     }
 
+    fun setBookProfile(entry: BookEntry, profileId: String?) {
+        workScope.launch {
+            repository.setBookProfile(entry, profileId)
+            reloadBookEntriesSync()
+        }
+    }
+
     fun changeShowReading(showReading: Boolean) {
         workScope.launch {
             repository.changeShowReading(showReading)

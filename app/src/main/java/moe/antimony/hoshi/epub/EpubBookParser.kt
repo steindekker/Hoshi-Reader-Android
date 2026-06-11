@@ -11,6 +11,7 @@ import moe.antimony.hoshi.di.CacheDir
 
 data class EpubBook(
     val title: String,
+    val language: String? = null,
     val chapters: List<EpubChapter>,
     val toc: List<EpubTocItem> = emptyList(),
     val coverHref: String? = null,
@@ -166,6 +167,7 @@ class EpubBookParser @Inject constructor(
 
         return EpubBook(
             title = title()?.ifBlank { null } ?: fallbackTitle?.takeIf { it.isNotBlank() } ?: root.nameWithoutExtension,
+            language = language()?.ifBlank { null },
             coverHref = coverHref()
                 ?.let { contentDirectoryPrefix.resolveManifestHref(it) }
                 ?: resources.entries.firstOrNull { (_, resource) -> resource.mediaType.startsWith("image/") }?.key,

@@ -31,6 +31,7 @@ class FakeElement {
         this.matches = new Set(matches);
         this.nodeType = 1;
         this.parentElement = null;
+        this.textContent = '';
         this.style = {
             properties: new Map(),
             setProperty(name, value) {
@@ -57,6 +58,10 @@ class FakeElement {
         child.parentElement = this;
         this.children.push(child);
         return child;
+    }
+
+    append(...children) {
+        children.forEach((child) => this.appendChild(child));
     }
 
     addEventListener(type, listener) {
@@ -166,6 +171,15 @@ function clickEvent(target, x, y) {
     };
 }
 
+function descendants(element) {
+    const out = [];
+    for (const child of element.children ?? []) {
+        out.push(child);
+        out.push(...descendants(child));
+    }
+    return out;
+}
+
 test('popup touch tap selects text even when WebView suppresses the follow-up click', () => {
     const { context, selectTextCalls, tapOutsideMessages } = popupContext();
     const container = new FakeContainer();
@@ -257,4 +271,28 @@ test('popup action controls remain DOM buttons even if a legacy native button fl
     assert.equal(audioSlot.children[0].className, 'button-slot-icon');
     assert.equal(mineSlot.tagName, 'BUTTON');
     assert.equal(mineSlot.disabled, true);
+});
+
+test('popup transcription entries do not render as Japanese pitch accents', () => {
+    const { context } = popupContext();
+
+    const tags = context.createTags({
+        expression: 'read',
+        reading: 'read',
+        deinflectionTrace: [],
+        frequencies: [],
+        pitches: [
+            {
+                dictionary: 'English',
+                pitchPositions: [],
+                transcriptions: ['riːd', 'rɛd'],
+            },
+        ],
+    });
+    const nodes = descendants(tags);
+
+    assert.ok(tags);
+    assert.equal(nodes.some((node) => String(node.className).split(' ').includes('transcription-list')), true);
+    assert.equal(nodes.some((node) => String(node.className).split(' ').includes('pitch-group')), false);
+    assert.equal(nodes.some((node) => node.textContent === '/riːd/'), true);
 });

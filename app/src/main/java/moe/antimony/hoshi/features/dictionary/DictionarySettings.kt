@@ -13,9 +13,12 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import moe.antimony.hoshi.R
+import moe.antimony.hoshi.profiles.ProfileRepository
 
 enum class DictionaryCollapseMode(val rawValue: String, @get:StringRes val labelRes: Int) {
     ExpandAll("Expand All", R.string.dictionary_collapse_mode_expand_all),
@@ -172,25 +175,61 @@ class DictionarySettingsStore(context: Context) : DictionarySettingsLegacySource
 
 private val Context.dictionarySettingsDataStore by preferencesDataStore(name = DictionarySettingsRepository.DataStoreName)
 
-fun Context.dictionarySettingsRepository(): DictionarySettingsRepository =
+fun Context.dictionarySettingsRepository(profileRepository: ProfileRepository? = null): DictionarySettingsRepository =
     DictionarySettingsRepository(
         dataStore = dictionarySettingsDataStore,
         legacySource = DictionarySettingsStore(this),
+        profileRepository = profileRepository,
     )
 
 class DictionarySettingsRepository(
     private val dataStore: DataStore<Preferences>,
     private val legacySource: DictionarySettingsLegacySource? = null,
+    private val profileRepository: ProfileRepository? = null,
 ) {
-    val settings: Flow<DictionarySettings> = dataStore.data
-        .onStart { migrateLegacySettingsIfNeeded() }
-        .map { preferences -> preferences.toDictionarySettings() }
+    private val profileSettingsVersion = MutableStateFlow(0)
+
+    val settings: Flow<DictionarySettings> =
+        if (profileRepository == null) {
+            dataStore.data
+                .onStart { migrateLegacySettingsIfNeeded() }
+                .map { preferences -> preferences.toDictionarySettings() }
+        } else {
+            combine(
+                dataStore.data.onStart { migrateLegacySettingsIfNeeded() },
+                profileRepository.state,
+                profileSettingsVersion,
+            ) { preferences, _, _ ->
+                    val globalSettings = preferences.toDictionarySettings()
+                    globalSettings.copy(
+                        collapsedDictionaries = profileRepository.loadCollapsedDictionariesOrMigrate(
+                            globalSettings.collapsedDictionaries,
+                        ),
+                    )
+            }
+        }
 
     suspend fun update(transform: (DictionarySettings) -> DictionarySettings) {
         migrateLegacySettingsIfNeeded()
         dataStore.edit { preferences ->
-            val current = preferences.toDictionarySettings()
-            preferences.writeDictionarySettings(transform(current).normalized())
+            val globalCurrent = preferences.toDictionarySettings()
+            val current = if (profileRepository == null) {
+                globalCurrent
+            } else {
+                globalCurrent.copy(
+                    collapsedDictionaries = profileRepository.loadCollapsedDictionariesOrMigrate(
+                        globalCurrent.collapsedDictionaries,
+                    ),
+                )
+            }
+            val updated = transform(current).normalized()
+            if (profileRepository != null) {
+                profileRepository.saveCollapsedDictionaries(updated.collapsedDictionaries)
+                profileSettingsVersion.value += 1
+                preferences.writeDictionarySettings(updated.copy(collapsedDictionaries = emptySet()))
+            } else {
+                preferences.writeDictionarySettings(updated)
+            }
             preferences[KEY_MIGRATED_FROM_SHARED_PREFERENCES] = true
         }
     }

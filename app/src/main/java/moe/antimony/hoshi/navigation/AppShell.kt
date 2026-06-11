@@ -45,6 +45,7 @@ import moe.antimony.hoshi.features.reader.ReaderAppearanceScreen
 import moe.antimony.hoshi.features.reader.ReaderBehaviorScreen
 import moe.antimony.hoshi.features.reader.ReaderFontManager
 import moe.antimony.hoshi.features.reader.ReaderSettings
+import moe.antimony.hoshi.features.profiles.ProfilesView
 import moe.antimony.hoshi.features.sasayaki.SasayakiMatchView
 import moe.antimony.hoshi.features.sasayaki.SasayakiSettings
 import moe.antimony.hoshi.features.settings.AdvancedSettingsView
@@ -150,6 +151,7 @@ fun AppShell(
         if (readerBookmarkRefreshState.consumeDirty()) {
             bookshelfRefreshKey += 1
         }
+        appContainer.profileActivationService.clearLoadedProfile()
         booksBackStack.popAppRoute()
     }
 
@@ -408,6 +410,10 @@ private fun SettingsDetailDestination(
             onClose = onClose,
             modifier = Modifier.fillMaxSize(),
         )
+        SettingsDetailSection.Profiles -> ProfilesView(
+            onClose = onClose,
+            modifier = Modifier.fillMaxSize(),
+        )
         SettingsDetailSection.Appearance -> ReaderAppearanceScreen(
             settings = readerSettings,
             onSettingsChange = onReaderSettingsChange,
@@ -469,6 +475,7 @@ private fun AppRoute.toMainTab(): MainTab = when (this) {
 private fun SettingsDestination.toSection(): SettingsDetailSection = when (this) {
     SettingsDestination.Dictionaries -> SettingsDetailSection.Dictionaries
     SettingsDestination.Anki -> SettingsDetailSection.Anki
+    SettingsDestination.Profiles -> SettingsDetailSection.Profiles
     SettingsDestination.Appearance -> SettingsDetailSection.Appearance
     SettingsDestination.Behavior -> SettingsDetailSection.Behavior
     SettingsDestination.Advanced -> SettingsDetailSection.Advanced

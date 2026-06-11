@@ -19,7 +19,7 @@ internal data class NativeDictionaryImportResult(
 internal interface DictionaryNativeBridge {
     fun importDictionary(zipPath: String, outputDir: String, lowRam: Boolean): NativeDictionaryImportResult
 
-    fun createLookupObject(): Long = 0L
+    fun createLookupObject(languageId: String): Long = 0L
 
     fun destroyLookupObject(session: Long) = Unit
 
@@ -52,8 +52,8 @@ internal class HoshiDictionaryNativeBridge @Inject constructor() : DictionaryNat
             )
         }
 
-    override fun createLookupObject(): Long =
-        HoshiDicts.createLookupObject()
+    override fun createLookupObject(languageId: String): Long =
+        HoshiDicts.createLookupObject(languageId)
 
     override fun destroyLookupObject(session: Long) {
         HoshiDicts.destroyLookupObject(session)

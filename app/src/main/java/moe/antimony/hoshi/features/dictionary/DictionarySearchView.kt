@@ -166,6 +166,7 @@ fun DictionarySearchView(
     val ankiViewModel: AnkiViewModel = hiltViewModel()
     val uiState by searchViewModel.uiState.collectAsStateWithLifecycle()
     val ankiUiState by ankiViewModel.uiState.collectAsStateWithLifecycle()
+    val profileState by appContainer.profileRepository.state.collectAsStateWithLifecycle()
     var rootIframeAtTop by remember { mutableStateOf(true) }
     var childHistories by remember { mutableStateOf<Map<String, ReaderPopupHistoryCounts>>(emptyMap()) }
     var iframeHostWebView by remember { mutableStateOf<WebView?>(null) }
@@ -177,7 +178,7 @@ fun DictionarySearchView(
     val dictionaryRepository = appContainer.dictionaryRepository
     val fontManager = appContainer.readerFontManager
     val fontFaceCss = fontManager.popupFontFaceCss()
-    val rootContentLanguageProfile = ContentLanguageProfile.Default
+    val rootContentLanguageProfile = profileState.effectiveContentLanguageProfile
     val readerPopupBridgeHolder = remember { ReaderLookupPopupBridgeCallbackHolder() }
     val popupDarkMode = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val popupOptions = dictionarySearchPopupOptions(

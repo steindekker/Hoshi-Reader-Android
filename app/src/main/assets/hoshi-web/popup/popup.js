@@ -1156,10 +1156,26 @@ function createPitchGroup(pitchData, reading) {
     container.appendChild(el('span', { className: 'pitch-dict-label', textContent: pitchData.dictionary }));
 
     const list = el('ul', { className: 'pitch-entries' });
-    pitchData.pitchPositions.forEach((pitch) => {
+    pitchData.pitchPositions?.forEach((pitch) => {
         const li = el('li');
         li.appendChild(createPitchHtml(reading, pitch));
         li.appendChild(document.createTextNode(` [${pitch}]`));
+        list.appendChild(li);
+    });
+    container.appendChild(list);
+
+    return container;
+}
+
+function createTranscriptionGroup(transcriptionData) {
+    const container = el('div', { className: 'transcription-group', 'data-details': transcriptionData.dictionary });
+    container.appendChild(el('span', { className: 'pitch-dict-label', textContent: transcriptionData.dictionary }));
+
+    const list = el('ul', { className: 'pitch-entries transcription-entries' });
+    transcriptionData.transcriptions?.forEach((transcription) => {
+        if (!transcription) return;
+        const li = el('li');
+        li.appendChild(el('span', { className: 'transcription-text', textContent: `/${transcription}/` }));
         list.appendChild(li);
     });
     container.appendChild(list);
@@ -1171,9 +1187,12 @@ function createTags(entry) {
     const { deinflectionTrace, frequencies, pitches, reading, expression } = entry;
     const hasDeinflection = deinflectionTrace?.length;
     const hasFrequencies = frequencies?.length;
-    const hasPitches = pitches?.length;
+    const pitchGroups = (pitches || []).filter(pitch => pitch?.pitchPositions?.length);
+    const transcriptionGroups = (pitches || []).filter(pitch => pitch?.transcriptions?.length);
+    const hasPitches = pitchGroups.length;
+    const hasTranscriptions = transcriptionGroups.length;
 
-    if (!hasDeinflection && !hasFrequencies && !hasPitches && !window.showExpressionTags) {
+    if (!hasDeinflection && !hasFrequencies && !hasPitches && !hasTranscriptions && !window.showExpressionTags) {
         return null;
     }
 
@@ -1223,7 +1242,7 @@ function createTags(entry) {
         const pitchContainer = el('div', { className: 'pitch-list' });
         if (window.deduplicatePitchAccents) {
             const seen = new Set();
-            pitches.forEach(pitch => {
+            pitchGroups.forEach(pitch => {
                 const unique = pitch.pitchPositions.filter(pos => !seen.has(pos));
                 if (unique.length > 0) {
                     unique.forEach(pos => seen.add(pos));
@@ -1231,9 +1250,15 @@ function createTags(entry) {
                 }
             });
         } else {
-            pitches.forEach(pitch => pitchContainer.appendChild(createPitchGroup(pitch, reading)));
+            pitchGroups.forEach(pitch => pitchContainer.appendChild(createPitchGroup(pitch, reading)));
         }
         container.appendChild(pitchContainer);
+    }
+
+    if (hasTranscriptions) {
+        const transcriptionContainer = el('div', { className: 'pitch-list transcription-list' });
+        transcriptionGroups.forEach(transcription => transcriptionContainer.appendChild(createTranscriptionGroup(transcription)));
+        container.appendChild(transcriptionContainer);
     }
 
     return container;

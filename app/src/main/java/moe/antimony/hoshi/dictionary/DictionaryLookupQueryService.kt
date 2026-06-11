@@ -8,6 +8,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.concurrent.read
 import kotlin.concurrent.write
+import moe.antimony.hoshi.content.ContentLanguageProfile
 
 @Singleton
 internal class DictionaryLookupQueryService @Inject constructor(
@@ -21,9 +22,10 @@ internal class DictionaryLookupQueryService @Inject constructor(
         termDictionaries: List<File>,
         frequencyDictionaries: List<File>,
         pitchDictionaries: List<File>,
+        dictionaryLanguageId: String = ContentLanguageProfile.Default.dictionaryLanguageId,
     ) {
         synchronized(rebuildLock) {
-            val nextSession = nativeBridge.createLookupObject()
+            val nextSession = nativeBridge.createLookupObject(dictionaryLanguageId)
             var committed = false
             try {
                 nativeBridge.rebuildQuery(

@@ -489,6 +489,9 @@ internal object LookupPopupHtml {
                         putJsonArray("pitchPositions") {
                             pitch.pitchPositions.distinct().forEach { add(JsonPrimitive(it)) }
                         }
+                        putJsonArray("transcriptions") {
+                            pitch.transcriptions.distinct().forEach { add(JsonPrimitive(it)) }
+                        }
                     },
                 )
             }

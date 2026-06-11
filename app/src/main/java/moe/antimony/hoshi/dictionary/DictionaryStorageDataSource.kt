@@ -4,19 +4,23 @@ import java.io.File
 import javax.inject.Inject
 import kotlinx.serialization.json.Json
 import moe.antimony.hoshi.di.FilesDir
+import moe.antimony.hoshi.profiles.ProfileRepository
 
 internal class DictionaryStorageDataSource(
     filesDir: File,
-    private val json: Json,
+    private val json: Json = defaultJson(),
+    private val profileRepository: ProfileRepository? = null,
 ) {
     @Inject
-    constructor(@FilesDir filesDir: File) : this(
+    constructor(@FilesDir filesDir: File, profileRepository: ProfileRepository) : this(
         filesDir = filesDir,
         json = defaultJson(),
+        profileRepository = profileRepository,
     )
 
     private val dictionariesDir = File(filesDir, "Dictionaries")
-    private val configFile = File(dictionariesDir, "config.json")
+    private val configFile: File
+        get() = profileRepository?.dictionaryConfigFile() ?: File(dictionariesDir, "config.json")
 
     fun loadDictionaries(type: DictionaryType): List<DictionaryInfo> {
         val stored = storedDictionaries(type)
@@ -95,6 +99,7 @@ internal class DictionaryStorageDataSource(
 
     fun saveConfig(config: DictionaryConfig) {
         dictionariesDir.mkdirs()
+        configFile.parentFile?.mkdirs()
         configFile.writeText(json.encodeToString(config))
     }
 

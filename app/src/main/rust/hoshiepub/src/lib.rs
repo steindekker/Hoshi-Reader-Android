@@ -71,6 +71,10 @@ impl EpubBook {
         self.epub.metadata().title().map(|t| t.value().to_string())
     }
 
+    pub fn language(&self) -> Option<String> {
+        self.epub.metadata().language().map(|l| l.value().to_string())
+    }
+
     pub fn cover_href(&self) -> Option<String> {
         self.epub
             .manifest()

@@ -35,6 +35,7 @@ class FrequencyEntry(
 class PitchEntry(
     val dictName: String,
     val pitchPositions: IntArray,
+    val transcriptions: Array<String>,
 )
 
 class TermResult(
@@ -64,10 +65,8 @@ object HoshiDicts {
         System.loadLibrary("hoshidicts_jni")
     }
 
-    val lookupObject: Long = createLookupObject()
-
     external fun importDictionary(zipPath: String, outputDir: String, lowRam: Boolean = false): ImportResult
-    external fun createLookupObject(): Long
+    external fun createLookupObject(languageId: String): Long
     external fun destroyLookupObject(session: Long)
     external fun rebuildQuery(
         session: Long,

@@ -185,6 +185,27 @@ class LookupPopupHtmlTest {
         assertTrue(html.contains("""<div class="overlay-close" onclick="closeOverlay()">×</div>"""))
     }
 
+    @Test
+    fun transcriptionDataIsCarriedSeparatelyFromJapanesePitchPositions() {
+        val entryJson = LookupPopupHtml.entryJsonString(
+            lookupResult(
+                expression = "read",
+                reading = "read",
+                glossary = "look at and comprehend",
+                pitches = arrayOf(
+                    PitchEntry(
+                        dictName = "English",
+                        pitchPositions = intArrayOf(),
+                        transcriptions = arrayOf("riːd", "rɛd"),
+                    ),
+                ),
+            ),
+        )
+
+        assertTrue(entryJson.contains(""""transcriptions":["riːd","rɛd"]"""))
+        assertTrue(entryJson.contains(""""pitchPositions":[]"""))
+    }
+
     private fun lookupResult(
         expression: String,
         reading: String,

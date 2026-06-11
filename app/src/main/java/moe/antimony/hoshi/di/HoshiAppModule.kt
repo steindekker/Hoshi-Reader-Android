@@ -34,6 +34,7 @@ import moe.antimony.hoshi.features.update.UpdateDownloadStore
 import moe.antimony.hoshi.features.update.UpdateSettingsRepository
 import moe.antimony.hoshi.features.update.updateDownloadStore
 import moe.antimony.hoshi.features.update.updateSettingsRepository
+import moe.antimony.hoshi.profiles.ProfileRepository
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -84,8 +85,11 @@ internal object HoshiAppModule {
 
     @Provides
     @Singleton
-    fun provideDictionarySettingsRepository(@ApplicationContext context: Context): DictionarySettingsRepository =
-        context.dictionarySettingsRepository()
+    fun provideDictionarySettingsRepository(
+        @ApplicationContext context: Context,
+        profileRepository: ProfileRepository,
+    ): DictionarySettingsRepository =
+        context.dictionarySettingsRepository(profileRepository)
 
     @Provides
     @Singleton
@@ -94,8 +98,11 @@ internal object HoshiAppModule {
 
     @Provides
     @Singleton
-    fun provideAnkiSettingsRepository(@ApplicationContext context: Context): AnkiSettingsRepository =
-        context.ankiSettingsRepository()
+    fun provideAnkiSettingsRepository(
+        @ApplicationContext context: Context,
+        profileRepository: ProfileRepository,
+    ): AnkiSettingsRepository =
+        context.ankiSettingsRepository(profileRepository)
 
     @Provides
     @Singleton

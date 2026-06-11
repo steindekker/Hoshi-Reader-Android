@@ -113,6 +113,16 @@ class EpubBookParserTest {
     }
 
     @Test
+    fun parsesPackageLanguageForProfileAutoSelection() {
+        val root = tempFolder.newFolder("english-book")
+        writeMinimalExtractedEpub(root, title = "English Book", language = "en-US")
+
+        val book = EpubBookParser().parse(root)
+
+        assertEquals("en-US", book.language)
+    }
+
+    @Test
     fun parsesPackedEpubIntoStableCacheDirectoryForRepeatedReads() {
         val archive = tempFolder.newFile("stable-packed.epub")
         val cacheRoot = tempFolder.newFolder("stable-cache")

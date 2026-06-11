@@ -7,6 +7,7 @@ import java.util.zip.ZipOutputStream
 internal fun writeMinimalExtractedEpub(
     root: File,
     title: String = "Sample Book",
+    language: String? = null,
     firstChapterHtml: String = "<html><body><p>First</p></body></html>",
     secondChapterHtml: String = "<html><body><p>Second</p></body></html>",
 ) {
@@ -29,12 +30,14 @@ internal fun writeMinimalExtractedEpub(
     root.resolve("OPS/text/chapter-2.xhtml").writeText(secondChapterHtml)
     root.resolve("OPS/styles/book.css").writeText("body {}")
     root.resolve("OPS/images/cover.jpg").writeBytes(byteArrayOf(1, 2, 3))
+    val languageElement = language?.let { "<dc:language>$it</dc:language>" }.orEmpty()
     root.resolve("OPS/package.opf").writeText(
         """
         <?xml version="1.0" encoding="UTF-8"?>
         <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
           <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
               <dc:title>$title</dc:title>
+              $languageElement
           </metadata>
           <manifest>
             <item id="chapter-1" href="text/chapter-1.xhtml" media-type="application/xhtml+xml"/>
