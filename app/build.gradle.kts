@@ -46,6 +46,7 @@ val hostLibExtension = when {
 
 android {
     namespace = "moe.antimony.hoshi"
+    ndkVersion = "29.0.14206865"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
