@@ -1,14 +1,12 @@
 """Anki-facing definition enrichment: index lookup + note rewriting."""
-import os
+from pathlib import Path
 
-from ankialign import config, paths
-from ankialign.defs import index, render
-from ankialign.collection import notetype_search
-
-_STYLE_MARKER = "/* ---- AnkiAlign dict styles"
+from ankienrich import config, paths
+from ankienrich.defs import index, render
+from ankienrich.collection import notetype_search
 
 
-def ensure_fields(col):
+def ensure_fields(col) -> None:
     """Add Original Meaning + Definition Source to the Kinomoto notetype if missing."""
     m = col.models.by_name(config.NOTETYPE)
     if m is None:
@@ -23,15 +21,15 @@ def ensure_fields(col):
         col.models.update_dict(m)
 
 
-def apply_dict_styles(col, styles_path=None):
+def apply_dict_styles(col, styles_path=None) -> None:
     """Append the scoped dict stylesheet to the notetype CSS (marker-guarded)."""
-    path = styles_path or paths.DICT_STYLES
-    if not os.path.exists(path):
+    path = Path(styles_path or paths.DICT_STYLES)
+    if not path.exists():
         return
-    css = open(path, encoding="utf-8").read()
+    css = path.read_text(encoding="utf-8")
     m = col.models.by_name(config.NOTETYPE)
-    base = m["css"].split(_STYLE_MARKER, 1)[0]
-    m["css"] = base.rstrip() + f"\n\n{_STYLE_MARKER} (generated) ---- */\n" + css
+    base = m["css"].split(config.DICT_STYLES_MARKER, 1)[0]
+    m["css"] = base.rstrip() + f"\n\n{config.DICT_STYLES_MARKER}\n" + css
     col.models.update_dict(m)
 
 
@@ -126,6 +124,8 @@ def enrich_notes(col, conn, styles_path=None, *, overwrite=False):
             note[config.ORIGINAL_MEANING] = note[config.DEFINITION]
         note[config.DEFINITION] = meaning
         note[config.DEFINITION_SOURCE] = source
+        if config.EXPANDED_MEANING in fld:
+            note[config.EXPANDED_MEANING] = ""
         if first_time:
             note.add_tag(config.ENRICHED_TAG)
         col.update_note(note)

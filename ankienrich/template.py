@@ -4,27 +4,28 @@ The canonical front/back/style live in card/kinomoto/ (first-class repo files).
 apply() writes them onto the note type verbatim, then appends the generated
 scoped dictionary styles (var/dict_styles.css) after a marker so a def-index
 rebuild can refresh them without disturbing the authored design."""
-import os
+from pathlib import Path
 
 from . import config, paths
 
-_STYLE_MARKER = "/* ---- AnkiAlign dict styles (generated) ---- */"
-
 
 def _read(name: str) -> str:
-    with open(os.path.join(paths.CARD_DIR, name), encoding="utf-8") as fh:
-        return fh.read()
+    return Path(paths.CARD_DIR, name).read_text(encoding="utf-8")
 
 
 def apply(col) -> None:
     m = col.models.by_name(config.NOTETYPE)
     if m is None:
         raise RuntimeError("target notetype missing: " + config.NOTETYPE)
+    # back.html references {{Examples}}; add the field first so Anki's template
+    # validation doesn't reject the design when examples enrichment hasn't run yet.
+    if config.EXAMPLES not in {f["name"] for f in m["flds"]}:
+        col.models.add_field(m, col.models.new_field(config.EXAMPLES))
     base_css = _read("style.css").rstrip()
     dict_css = ""
-    if os.path.exists(paths.DICT_STYLES):
-        with open(paths.DICT_STYLES, encoding="utf-8") as fh:
-            dict_css = "\n\n" + _STYLE_MARKER + "\n" + fh.read()
+    dict_styles = Path(paths.DICT_STYLES)
+    if dict_styles.exists():
+        dict_css = "\n\n" + config.DICT_STYLES_MARKER + "\n" + dict_styles.read_text(encoding="utf-8")
     m["css"] = base_css + dict_css
     tmpl = m["tmpls"][0]
     tmpl["qfmt"] = _read("front.html")

@@ -1,5 +1,5 @@
 # tests/test_pitch_svg.py
-from ankialign import pitch_svg
+from ankienrich import pitch_svg
 
 
 def test_split_moras_basic():

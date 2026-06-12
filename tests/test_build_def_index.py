@@ -1,7 +1,7 @@
 import json
 import sqlite3
 
-from ankialign.defs import build as b
+from ankienrich.defs import build as b
 
 
 def _write_dict(root, dict_id, entries, styles=None):

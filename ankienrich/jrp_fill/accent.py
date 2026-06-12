@@ -1,8 +1,9 @@
 """Load and query the prebuilt accent index (source priority baked in)."""
 from __future__ import annotations
-import gzip, marshal
+import gzip
+import marshal
 
-from ankialign.paths import ACCENT_INDEX as _DEFAULT
+from ankienrich.paths import ACCENT_INDEX as _DEFAULT
 
 
 class AccentIndex:

@@ -167,7 +167,7 @@ def _conj_downstep(head, tail, heiban: bool, dict_acc: int,
     # other endings: only clean inflectional chains; reject て/補助動詞/modals so we
     # don't mis-accent (べき, よう, ましょう, ている-as-past...) -> dict-form fallback
     _OK = {"た", "だ", "ない", "ば", "れる", "られる", "せる", "させる"}
-    if any(l not in _OK for l in lemmas):
+    if any(lem not in _OK for lem in lemmas):
         return None
     if last == "ば":
         form = "ba"
@@ -179,7 +179,7 @@ def _conj_downstep(head, tail, heiban: bool, dict_acc: int,
         form = "dict"            # derived verb in plain present (断られる)
     else:
         return None
-    derived = any(l in _DERIV for l in lemmas)
+    derived = any(lem in _DERIV for lem in lemmas)
     if head.part_of_speech()[0] == "形容詞":
         if derived:
             return None

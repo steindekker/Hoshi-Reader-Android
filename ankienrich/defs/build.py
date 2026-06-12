@@ -1,20 +1,23 @@
 """Build the definition index (defs.sqlite) + scoped dict_styles.css from the
 user's Yomitan dictionary folders."""
-import glob
 import json
-import os
 import re
 import sqlite3
+from pathlib import Path
 
-from ankialign import config
-from ankialign.defs import render
+from ankienrich import config
+from ankienrich.defs import render
 
 JJ_DICTS = config.JJ_CHAIN
 JE_DICT = config.JE_DICT
 
 
-def _banks(dicts_dir, dict_id):
-    return sorted(glob.glob(os.path.join(dicts_dir, dict_id, "term_bank_*.json")))
+def _banks(dicts_dir, dict_id) -> list[Path]:
+    return sorted(Path(dicts_dir, dict_id).glob("term_bank_*.json"))
+
+
+def _load_bank(bank: Path) -> list:
+    return json.loads(bank.read_text(encoding="utf-8"))
 
 
 def _schema(conn):
@@ -30,7 +33,7 @@ def _index_jj(conn, dicts_dir, dict_id):
     n = 0
     for bank in _banks(dicts_dir, dict_id):
         rows = []
-        for e in json.load(open(bank, encoding="utf-8")):
+        for e in _load_bank(bank):
             html = render.render_sc(e[5])
             if html:
                 rows.append((e[0], e[1] or "", dict_id, "jj", 0, html))
@@ -68,7 +71,7 @@ def _index_je(conn, dicts_dir):
     n = 0
     for bank in _banks(dicts_dir, JE_DICT):
         rows = []
-        for i, e in enumerate(json.load(open(bank, encoding="utf-8"))):
+        for i, e in enumerate(_load_bank(bank)):
             gl = _glosses(e[5])
             if gl:
                 rows.append((e[0], e[1] or "", JE_DICT, "je",
@@ -91,18 +94,19 @@ def _scope_css(css, selector):
 def _build_styles(dicts_dir, styles_path):
     chunks = []
     for dict_id in JJ_DICTS:
-        sp = os.path.join(dicts_dir, dict_id, "styles.css")
-        if os.path.exists(sp):
-            scoped = _scope_css(open(sp, encoding="utf-8").read(), f'.aa-jj[data-dict="{dict_id}"]')
+        sp = Path(dicts_dir, dict_id, "styles.css")
+        if sp.exists():
+            scoped = _scope_css(sp.read_text(encoding="utf-8"), f'.aa-jj[data-dict="{dict_id}"]')
             chunks.append(f"/* {dict_id} */\n{scoped}")
-    os.makedirs(os.path.dirname(styles_path), exist_ok=True)
-    open(styles_path, "w", encoding="utf-8").write("\n\n".join(chunks))
+    out = Path(styles_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n\n".join(chunks), encoding="utf-8")
 
 
 def build(dicts_dir, db_path, styles_path):
-    from ankialign import paths
+    from ankienrich import paths
     paths.ensure_var()
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     _schema(conn)
     total = 0
@@ -120,13 +124,13 @@ def build(dicts_dir, db_path, styles_path):
 
 def ensure(dicts_dir=None, db_path=None, styles_path=None) -> str:
     """Return 'present' if index exists, 'built' after building, 'no-source' if dicts missing."""
-    from ankialign import paths
-    dicts_dir = dicts_dir or paths.DICTS_DIR
+    from ankienrich import paths
+    dicts_dir = Path(dicts_dir or paths.DICTS_DIR)
     db_path = db_path or paths.DEFS_DB
     styles_path = styles_path or paths.DICT_STYLES
-    if os.path.exists(db_path):
+    if Path(db_path).exists():
         return "present"
-    if not os.path.isdir(dicts_dir) or not os.listdir(dicts_dir):
+    if not dicts_dir.is_dir() or not any(dicts_dir.iterdir()):
         return "no-source"
     build(dicts_dir, db_path, styles_path)
     return "built"

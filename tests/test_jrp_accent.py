@@ -1,9 +1,9 @@
 import os
 import pytest
-from ankialign.jrp_fill.accent import AccentIndex
+from ankienrich.jrp_fill.accent import AccentIndex
 
 IDX = os.path.join(os.path.dirname(__file__), "..",
-                   "ankialign", "data", "accent_index.marshal.gz")
+                   "ankienrich", "data", "accent_index.marshal.gz")
 pytestmark = pytest.mark.skipif(not os.path.exists(IDX), reason="no accent index")
 
 def test_known_word_returns_positions():

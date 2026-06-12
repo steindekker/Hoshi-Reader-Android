@@ -14,7 +14,7 @@ _FIELD = config.PITCH
 SOURCES = ("NHK2016", "アクセント辞典v2")
 
 
-def accents_for(idx: AccentIndex, term: str, reading: str):
+def accents_for(idx: AccentIndex, term: str, reading: str) -> list[int] | None:
     """All accepted downstep positions for (term, reading), or None.
 
     AccentIndex is keyed `lemma\\treading_hira` -> preference-ordered list[int].
@@ -29,7 +29,7 @@ def accents_for(idx: AccentIndex, term: str, reading: str):
     return None
 
 
-def primary_accent(idx: AccentIndex, term: str, reading: str):
+def primary_accent(idx: AccentIndex, term: str, reading: str) -> int | None:
     """Preferred (first) downstep position for (term, reading), or None."""
     positions = accents_for(idx, term, reading)
     return positions[0] if positions else None

@@ -14,8 +14,8 @@ passed in, so this is unit-testable headless.
 """
 import os
 import re
+from collections import Counter
 from dataclasses import dataclass
-from typing import Optional
 
 from . import config
 
@@ -47,10 +47,10 @@ class Pick:
     """A chosen recording. `file` is relative to `<source>_files/`."""
     source: str
     file: str
-    speaker: Optional[str] = None
+    speaker: str | None = None
 
 
-def lookup_dict(conn, term: str, reading: str) -> Optional[Pick]:
+def lookup_dict(conn, term: str, reading: str) -> Pick | None:
     """Reading-keyed accent-dictionary lookup only (nhk16 → shinmeikai8). Never
     returns forvo/jpod. Used by the re-pitch pass. Pure read."""
     term = _clean(term)
@@ -67,7 +67,7 @@ def lookup_dict(conn, term: str, reading: str) -> Optional[Pick]:
     return None
 
 
-def lookup(conn, term: str, reading: str) -> Optional[Pick]:
+def lookup(conn, term: str, reading: str) -> Pick | None:
     """Run the full fill chain (nhk16 → shinmeikai8 → forvo[strawberrybrown] →
     jpod) against an entries.db connection. Returns the best Pick or None."""
     dict_pick = lookup_dict(conn, term, reading)
@@ -103,7 +103,7 @@ def source_file_path(user_files_dir: str, pick: Pick) -> str:
     return os.path.join(user_files_dir, f"{pick.source}_files", pick.file)
 
 
-def locate(addons_folder: str) -> Optional[tuple]:
+def locate(addons_folder: str) -> tuple[str, str] | None:
     """Find the local-audio-yomichan install. Returns (entries_db, user_files_dir)
     or None if the add-on / index isn't present. `addons_folder` is Anki's
     addons21 dir."""
@@ -132,7 +132,7 @@ def plan_backfill(col, conn, user_files_dir: str) -> dict:
     Returns {'total', 'by_source': {src: n}, 'nothing', 'missing_file',
     'samples': [(term, reading, source, speaker)], 'picks': {nid: Pick}}.
     """
-    by_source = {}
+    by_source = Counter()
     nothing = missing_file = 0
     samples = []
     picks = {}
@@ -147,7 +147,7 @@ def plan_backfill(col, conn, user_files_dir: str) -> dict:
             missing_file += 1
             continue
         picks[nid] = pick
-        by_source[pick.source] = by_source.get(pick.source, 0) + 1
+        by_source[pick.source] += 1
         if len(samples) < config.SAMPLE_N * 3:
             samples.append((_clean(term), _clean(reading), pick.source, pick.speaker))
     return {
@@ -169,7 +169,7 @@ def run_backfill(col, conn, user_files_dir: str) -> dict:
     Returns {'filled': {src: n}, 'errors': [(nid, repr)]}.
     """
     plan = plan_backfill(col, conn, user_files_dir)
-    filled = {}
+    filled = Counter()
     errors = []
     for nid, pick in plan["picks"].items():
         try:
@@ -179,7 +179,7 @@ def run_backfill(col, conn, user_files_dir: str) -> dict:
             fname = col.media.add_file(source_file_path(user_files_dir, pick))
             note[config.TERM_AUDIO] = f"[sound:{fname}]"
             col.update_note(note)
-            filled[pick.source] = filled.get(pick.source, 0) + 1
+            filled[pick.source] += 1
         except Exception as e:
             errors.append((nid, repr(e)))
     return {"filled": filled, "errors": errors}
@@ -194,12 +194,12 @@ def run_backfill(col, conn, user_files_dir: str) -> dict:
 # backs up first.
 
 
-def _current_sound(field_val: str) -> Optional[str]:
+def _current_sound(field_val: str) -> str | None:
     m = _SOUND.search(field_val or "")
     return m.group(0) if m else None  # full "[sound:...]" token
 
 
-def _current_sound_file(field_val: str) -> Optional[str]:
+def _current_sound_file(field_val: str) -> str | None:
     tok = _current_sound(field_val)
     return tok[len("[sound:"):-1] if tok else None
 
@@ -226,7 +226,7 @@ def plan_repitch(col, conn, user_files_dir: str) -> dict:
 
     Returns {'targets', 'replaceable', 'no_dict', 'by_source', 'samples', 'picks'}.
     """
-    by_source = {}
+    by_source = Counter()
     no_dict = 0
     samples = []
     picks = {}
@@ -239,7 +239,7 @@ def plan_repitch(col, conn, user_files_dir: str) -> dict:
         if not os.path.isfile(source_file_path(user_files_dir, pick)):
             continue
         picks[nid] = pick
-        by_source[pick.source] = by_source.get(pick.source, 0) + 1
+        by_source[pick.source] += 1
         if len(samples) < config.SAMPLE_N * 3:
             samples.append((_clean(note[config.TERM]), _clean(note[config.READING]),
                             _current_sound_file(note[config.TERM_AUDIO]), pick.source))
@@ -259,7 +259,7 @@ def run_repitch(col, conn, user_files_dir: str) -> dict:
     Returns {'replaced': {src: n}, 'errors': [(nid, repr)]}.
     """
     plan = plan_repitch(col, conn, user_files_dir)
-    replaced = {}
+    replaced = Counter()
     errors = []
     for nid, pick in plan["picks"].items():
         try:
@@ -270,7 +270,7 @@ def run_repitch(col, conn, user_files_dir: str) -> dict:
                 continue  # already this exact recording
             note[config.TERM_AUDIO] = newval
             col.update_note(note)
-            replaced[pick.source] = replaced.get(pick.source, 0) + 1
+            replaced[pick.source] += 1
         except Exception as e:
             errors.append((nid, repr(e)))
     return {"replaced": replaced, "errors": errors}

@@ -1,6 +1,6 @@
-from ankialign.jrp_fill.unit import Unit
-from ankialign.jrp_fill.emit import emit_unit, emit_sentence
-from ankialign import markup
+from ankienrich.jrp_fill.unit import Unit
+from ankienrich.jrp_fill.emit import emit_unit, emit_sentence
+from ankienrich import markup
 
 def U(**kw):
     base = dict(surface="", lemma="", reading="", lemma_reading="",

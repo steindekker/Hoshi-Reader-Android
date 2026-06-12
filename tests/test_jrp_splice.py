@@ -1,4 +1,4 @@
-from ankialign.jrp_fill.splice import splice
+from ankienrich.jrp_fill.splice import splice
 
 def gen(text):  # stub generator: wraps kanji-bearing runs distinctly
     return "<<" + text + ">>"

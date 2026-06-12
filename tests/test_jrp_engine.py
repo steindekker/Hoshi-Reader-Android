@@ -1,7 +1,7 @@
 import os, pytest
 anki = pytest.importorskip("anki")
 from anki.collection import Collection
-from ankialign.jrp_fill import engine
+from ankienrich.jrp_fill import engine
 
 def _make_col(tmp_path):
     col = Collection(str(tmp_path / "col.anki2"))
@@ -44,11 +44,11 @@ def test_apply_writes_through_col(tmp_path):
     col.close()
 
 def test_make_generator_marks_a_plain_sentence():
-    # the real (Sudachi + accent index) generator used by `anki-align`
-    from ankialign.jrp_fill import make_generator
+    # the real (Sudachi + accent index) generator used by `anki-enrich`
+    from ankienrich.jrp_fill import make_generator
     gen = make_generator()
     out = gen("猫が歩いた")
-    from ankialign import markup
+    from ankienrich import markup
     assert ("{" in out or "[" in out)              # produced JRP markup
     assert markup.jrp_surface(out) == "猫が歩いた"   # round-trips to the input
 

@@ -3,8 +3,8 @@ import pytest
 anki = pytest.importorskip("anki")
 from anki.collection import Collection
 
-from ankialign import cloze, config
-from ankialign.jrp_fill.accent import AccentIndex
+from ankienrich import cloze, config
+from ankienrich.jrp_fill.accent import AccentIndex
 
 
 def _kinomoto(col):

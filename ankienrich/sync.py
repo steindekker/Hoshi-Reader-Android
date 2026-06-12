@@ -6,7 +6,15 @@ outcome. A full transfer mirrors Anki's own sequence: honor the server-assigned
 endpoint, close_for_full_sync, full_upload_or_download, then reopen — the
 collection object is reopened in place, so callers keep using the same handle.
 pull/push return (action, auth); auth may carry an updated endpoint.
+
+Backend sync commands are dispatched on a worker thread: anki's backend prints a
+stack trace for any command running >0.2s on the main thread (a nudge to keep
+the GUI responsive — Anki itself syncs off-thread). Off-thread keeps the console
+clean without patching the vendored lib.
 """
+import concurrent.futures
+import functools
+
 from anki.collection import Collection
 from anki.sync import SyncAuth, SyncOutput
 
@@ -17,6 +25,15 @@ from . import config
 Required = SyncOutput.ChangesRequired
 
 
+def _off_main(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            return ex.submit(fn, *args, **kwargs).result()
+    return wrapper
+
+
+@_off_main
 def login(col: Collection) -> SyncAuth:
     user, pw = config.ankiweb_credentials()
     return col.sync_login(user, pw, None)
@@ -56,6 +73,7 @@ def _full_transfer(col: Collection, auth: SyncAuth, out: SyncOutput, *, upload: 
     col.reopen(after_full_sync=True)
 
 
+@_off_main
 def pull(col: Collection, auth: SyncAuth) -> tuple[str, SyncAuth]:
     out = col.sync_collection(auth, sync_media=True)
     auth = endpoint_for(auth, out)
@@ -66,6 +84,7 @@ def pull(col: Collection, auth: SyncAuth) -> tuple[str, SyncAuth]:
     return action, auth
 
 
+@_off_main
 def push(col: Collection, auth: SyncAuth) -> tuple[str, SyncAuth]:
     out = col.sync_collection(auth, sync_media=True)
     auth = endpoint_for(auth, out)

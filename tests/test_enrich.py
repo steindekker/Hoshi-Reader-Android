@@ -2,8 +2,8 @@ import sqlite3
 import pytest
 anki = pytest.importorskip("anki")
 from anki.collection import Collection
-from ankialign import config
-from ankialign.defs import enrich, index
+from ankienrich import config
+from ankienrich.defs import enrich, index
 
 
 # Inlined from poc/tests/test_convert.py (no convert module in this tree).

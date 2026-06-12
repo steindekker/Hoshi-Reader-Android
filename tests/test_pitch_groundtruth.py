@@ -3,17 +3,17 @@
 
 Parses the downstep position from the SVG's circle heights (cy=5 high / 30 low)
 and compares to the shipped index. Skips if the collection isn't present
-(gitignored; run `anki-align` to populate var/collection.anki2)."""
+(gitignored; run `anki-enrich` to populate var/collection.anki2)."""
 import os
 import re
 import sqlite3
 
 import pytest
 
-from ankialign import config
-from ankialign import paths as _paths
-from ankialign.jrp_fill.accent import AccentIndex
-from ankialign.pitch import primary_accent
+from ankienrich import config
+from ankienrich import paths as _paths
+from ankienrich.jrp_fill.accent import AccentIndex
+from ankienrich.pitch import primary_accent
 
 DB = _paths.WORKING_COLLECTION
 IDX = _paths.ACCENT_INDEX

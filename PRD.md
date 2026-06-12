@@ -1,4 +1,4 @@
-# Anki Align
+# Anki Enrich
 
 A personal CLI that keeps my Anki collection consistent. It syncs the latest
 collection from AnkiWeb, applies the passes below, and pushes back — without

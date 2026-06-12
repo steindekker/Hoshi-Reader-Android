@@ -22,3 +22,6 @@ poc/collection.anki2*
 poc/collection.media/
 poc/ankialign/user_files/
 poc/ankialign/data/
+
+# direnv local env (creds)
+.envrc

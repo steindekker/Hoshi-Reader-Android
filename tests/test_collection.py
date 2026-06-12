@@ -2,7 +2,7 @@ import os
 
 from anki.collection import Collection
 
-from ankialign import collection, config
+from ankienrich import collection, config
 
 
 def test_notetype_search_shape():

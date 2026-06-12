@@ -3,8 +3,8 @@ import sqlite3
 
 import pytest
 
-from ankialign import markup
-from ankialign import paths as _paths
+from ankienrich import markup
+from ankienrich import paths as _paths
 
 DB = _paths.WORKING_COLLECTION
 FS = "\x1f"

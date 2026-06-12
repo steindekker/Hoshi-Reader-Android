@@ -2,8 +2,8 @@
 
 The tool operates on its OWN collection file (paths.WORKING_COLLECTION), never
 the Anki desktop profile."""
-import os
 import time
+from pathlib import Path
 
 from anki.collection import Collection
 
@@ -26,16 +26,15 @@ def backup(col, backup_dir: str | None = None) -> str:
 
     create_backup(force=True) writes nothing when there are no pending changes
     and the dir may hold old backups, so require a file newer than this call."""
-    backup_dir = backup_dir or os.path.join(paths.VAR_DIR, "backups")
-    os.makedirs(backup_dir, exist_ok=True)
+    dir_path = Path(backup_dir) if backup_dir else Path(paths.VAR_DIR, "backups")
+    dir_path.mkdir(parents=True, exist_ok=True)
     before = time.time()
-    col.create_backup(backup_folder=backup_dir, force=True, wait_for_completion=True)
+    col.create_backup(backup_folder=str(dir_path), force=True, wait_for_completion=True)
     fresh = [
-        f for f in os.listdir(backup_dir)
-        if f.endswith(".colpkg")
-        and os.path.getmtime(os.path.join(backup_dir, f)) >= before - 1
+        f for f in dir_path.glob("*.colpkg")
+        if f.stat().st_mtime >= before - 1
     ]
     if not fresh:
         raise RuntimeError(
-            f"no fresh backup created in {backup_dir}; aborting before mutation")
-    return backup_dir
+            f"no fresh backup created in {dir_path}; aborting before mutation")
+    return str(dir_path)

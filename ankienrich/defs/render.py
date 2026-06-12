@@ -81,10 +81,9 @@ def choose_jj(jj_rows, reading, chain):
     Returns (dict_id, html) or None. Reading match prefers exact reading, then a
     reading-less entry, then any entry from that dict.
 
-    Note: the spec's katakana-homograph guard (e.g. ヤギ goat vs. typhoon) is
-    intentionally NOT implemented — in the cited cases the dict holds only the one
-    homograph entry, so the guard can't help; such rare cases are auditable via the
-    Definition Source field instead. See the plan's self-review.
+    No katakana-homograph guard (e.g. ヤギ goat vs. typhoon): in the cases that
+    motivate it the dict holds only one homograph entry, so a guard can't help;
+    such rare misses are auditable via the Definition Source field instead.
     """
     for dict_id in chain:
         rows = [r for r in jj_rows if r["dict_id"] == dict_id]

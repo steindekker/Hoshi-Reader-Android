@@ -1,4 +1,4 @@
-from ankialign import cli
+from ankienrich import cli
 
 
 def test_template_dry_run_does_not_apply(monkeypatch):
@@ -23,7 +23,7 @@ def test_overwrite_fans_out(monkeypatch):
         return {"scanned": 0, "backup": None, "steps": {
             "audio": {"skipped": "x"}, "pitch": {"filled": 0, "not_found": 0, "skipped": 0},
             "sentences": {"filled": 0}, "enrich": {"skipped": "x"},
-            "cloze": {"filled": 0, "skipped": 0}}}
+            "examples": {"skipped": "x"}, "cloze": {"filled": 0, "skipped": 0}}}
 
     class FakeCol:
         def close(self): pass
@@ -35,3 +35,4 @@ def test_overwrite_fans_out(monkeypatch):
     cli.main(["--overwrite"])
     assert captured["overwrite_pitch"] and captured["overwrite_cloze"]
     assert captured["overwrite_sentences"] and captured["overwrite_defs"]
+    assert captured["overwrite_examples"]

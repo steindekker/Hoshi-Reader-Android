@@ -1,4 +1,4 @@
-from ankialign.jrp_fill.unit import Unit
+from ankienrich.jrp_fill.unit import Unit
 
 def test_unit_is_frozen_with_defaults():
     u = Unit(surface="立て", lemma="立てる", reading="たて",

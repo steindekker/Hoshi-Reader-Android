@@ -1,6 +1,6 @@
 from anki.sync import SyncAuth, SyncOutput
 
-from ankialign import sync
+from ankienrich import sync
 
 
 def test_endpoint_for_honors_redirect():

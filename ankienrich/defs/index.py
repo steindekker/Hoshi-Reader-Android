@@ -1,18 +1,18 @@
 """Open + query the definition index (defs.sqlite)."""
 import sqlite3
 
-from ankialign import paths
+from ankienrich import paths
 
 _COLS = ("term", "reading", "dict_id", "kind", "sense_ord", "html")
 
 
-def open_index(path=None):
+def open_index(path=None) -> sqlite3.Connection:
     conn = sqlite3.connect(path or paths.DEFS_DB)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def lookup(conn, term):
+def lookup(conn, term: str) -> tuple[list[dict], list[dict]]:
     """Return (jj_rows, je_rows) as lists of plain dicts for one term."""
     rows = conn.execute(
         "SELECT term, reading, dict_id, kind, sense_ord, html FROM defs WHERE term=?",

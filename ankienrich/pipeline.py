@@ -1,21 +1,22 @@
 """Headless enrichment suite. Order: audio -> pitch -> sentences -> definitions
--> cloze. Dedupe is destructive and lives in its own command, not here.
+-> examples -> cloze. Dedupe is destructive and lives in its own command, not here.
 
 Dry-run unless apply=True; a verified backup is taken before any write."""
 import os
+import sqlite3
 
 from . import audio, cloze, config, collection, pitch
 from .defs import build as def_build, enrich
+from .examples import build as ex_build
 
 
-def _step_audio(col, apply):
+def _step_audio(col, apply: bool) -> dict:
     addons = os.environ.get("ANKI_ADDONS_DIR", os.path.expanduser(
         "~/.local/share/Anki2/addons21"))
     located = audio.locate(addons)
     if located is None:
         return {"skipped": "local-audio-yomichan entries.db not found"}
     db_path, ufd = located
-    import sqlite3
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     try:
         if apply:
@@ -32,7 +33,7 @@ def _step_audio(col, apply):
         conn.close()
 
 
-def _step_sentences(col, apply, overwrite):
+def _step_sentences(col, apply: bool, overwrite: bool) -> dict:
     from .jrp_fill import engine, make_generator
     gen = make_generator()
     if apply:
@@ -44,7 +45,7 @@ def _step_sentences(col, apply, overwrite):
     return {"filled": len(plan)}
 
 
-def _step_enrich(col, apply, def_index, overwrite):
+def _step_enrich(col, apply: bool, def_index: str, overwrite: bool) -> dict:
     if def_index == "no-source":
         return {"skipped": "defs.sqlite missing and no dict source to build it"}
     from .defs import index
@@ -58,8 +59,23 @@ def _step_enrich(col, apply, def_index, overwrite):
         conn.close()
 
 
+def _step_examples(col, apply: bool, overwrite: bool) -> dict:
+    ex_index = ex_build.ensure()
+    if ex_index == "no-source":
+        return {"skipped": "examples.sqlite missing and no dict/Tatoeba source to build it"}
+    from .examples import index, enrich as ex_enrich
+    conn = index.open_index()
+    try:
+        if apply:
+            return ex_enrich.enrich_notes(col, conn, overwrite=overwrite)
+        plan = ex_enrich.build_plan(col, conn, overwrite=overwrite)
+        return {"to_write": plan["to_write"], **plan["counts"]}
+    finally:
+        conn.close()
+
+
 def run(col, *, apply=False, overwrite_pitch=False, overwrite_cloze=False,
-        overwrite_sentences=False, overwrite_defs=False) -> dict:
+        overwrite_sentences=False, overwrite_defs=False, overwrite_examples=False) -> dict:
     def_index = def_build.ensure()
     scanned = len(col.find_notes(f'note:"{config.NOTETYPE}"'))
     out = {"def_index": def_index, "scanned": scanned, "backup": None, "steps": {}}
@@ -72,5 +88,6 @@ def run(col, *, apply=False, overwrite_pitch=False, overwrite_cloze=False,
                              else pitch.build_pitch_plan(col, overwrite=overwrite_pitch)["counts"])
     out["steps"]["sentences"] = _step_sentences(col, apply, overwrite_sentences)
     out["steps"]["enrich"] = _step_enrich(col, apply, def_index, overwrite_defs)
+    out["steps"]["examples"] = _step_examples(col, apply, overwrite_examples)
     out["steps"]["cloze"] = cloze.run(col, apply=apply, overwrite=overwrite_cloze)
     return out

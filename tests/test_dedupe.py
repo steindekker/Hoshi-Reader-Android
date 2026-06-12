@@ -1,7 +1,7 @@
 import pytest
 anki = pytest.importorskip("anki")
 from anki.collection import Collection
-from ankialign import config, dedupe
+from ankienrich import config, dedupe
 
 KINOMOTO_FIELDS = [
     config.TERM, config.READING, config.TERM_FURIGANA, config.SENTENCE,

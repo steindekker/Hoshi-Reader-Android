@@ -18,6 +18,7 @@ CLOZE_INSIDE = "Cloze Inside"
 CLOZE_AFTER = "Cloze After"
 ORIGINAL_MEANING = "Original Meaning"
 DEFINITION_SOURCE = "Definition Source"
+EXPANDED_MEANING = "Expanded Meaning"
 
 # Definition enrichment.
 JJ_CHAIN = ["sankoku8", "koujien7", "jitsuyo", "daijisen"]  # first hit wins
@@ -27,9 +28,26 @@ DICT_LABELS = {
     "sankoku8": "三省堂", "koujien7": "広辞苑", "jitsuyo": "実用",
     "daijisen": "大辞泉", "jmdict": "JMdict",
 }
-ENRICHED_TAG = "ankialign::enriched"
-NO_DEF_TAG = "ankialign::no-definition"
+ENRICHED_TAG = "ankienrich::enriched"
+NO_DEF_TAG = "ankienrich::no-definition"
 NO_HIT_DROP_THRESHOLD = 20
+
+# Example-sentence enrichment. Up to EXAMPLE_CAP sentences per card, filled in
+# EXAMPLE_SOURCES priority order with cross-source dedupe. Jitendex leads (ships
+# furigana + EN but ~1 example/word); Tatoeba tops up the thin words (same corpus,
+# plain JP + EN); 斎藤 / 用例.jp backfill what Tatoeba misses.
+EXAMPLES = "Examples"
+EXAMPLE_SOURCES = ["jitendex", "tatoeba", "saito", "yourei"]
+EXAMPLE_CAP = 3
+EXAMPLE_BUILD_CAP = 12  # max stored per (dict, term, reading); ≥ CAP for dedupe headroom
+EX_LABELS = {"jitendex": "Jitendex", "tatoeba": "Tatoeba", "saito": "斎藤", "yourei": "用例.jp"}
+EXAMPLES_TAG = "ankienrich::examples"
+NO_EXAMPLE_TAG = "ankienrich::no-example"
+
+# Delimits the generated, scoped dictionary CSS appended to the notetype styling.
+# template.apply (authoritative design) and defs.enrich.apply_dict_styles both
+# split on this exact string to refresh the block in place — keep it singular.
+DICT_STYLES_MARKER = "/* ---- AnkiAlign dict styles (generated) ---- */"
 
 # local-audio-yomichan add-on (AnkiWeb code) — source of term-audio backfill.
 LOCAL_AUDIO_ADDON_ID = "1045800357"

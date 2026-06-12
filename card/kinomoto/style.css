@@ -32,6 +32,8 @@
 	position: absolute;
 	right: -40px;
 	top: 8px;
+	display: flex;
+	align-items: center;
 }
 
 .replay-button svg { 
@@ -182,7 +184,6 @@
 }
 
 .image img { box-shadow: var(--shadow); }
-.cloze     { color: var(--accent); }
 /* drop Kinomoto's white emboss text-shadows (built for the old grey bg) */
 .details-summary, .furigana { text-shadow: none; }
 
@@ -202,6 +203,23 @@
   border-top: 1px solid rgba(0,0,0,.12); font-size: 13.5px; line-height: 1.6; color: #555; }
 .nightMode .aa-je { color: #bbb; border-top-color: rgba(255,255,255,.15); }
 
+/* ---- AnkiAlign example sentences (expandable 例文 block) ---- */
+.aa-ex { text-align: left; margin: 14px 0 20px; background: var(--panel);
+  border-left: 3px solid var(--panel-border); border-radius: 8px; }
+.aa-ex > summary { cursor: pointer; padding: 9px 14px; font-size: 14px; font-weight: 600;
+  color: var(--accent); list-style: none; user-select: none; }
+.aa-ex > summary::-webkit-details-marker { display: none; }
+.aa-ex > summary::before { content: "▸ "; font-size: .85em; }
+.aa-ex[open] > summary::before { content: "▾ "; }
+.aa-ex-list { margin: 0; padding: 0 14px 12px 14px; }
+.aa-ex-item { margin: .55em 0; line-height: 1.65; }
+.aa-ex-jp { display: block; font-size: 15.5px;
+  font-family: "Hiragino Mincho ProN", "Noto Serif CJK JP", serif; }
+.aa-ex-jp ruby rt { font-size: .55em; opacity: .8; font-weight: 400; }
+.aa-ex-kw { font-weight: 700; color: var(--accent); }
+.aa-ex-en { display: block; font-size: 12.5px; line-height: 1.5; color: #666; margin-top: 1px; }
+.nightMode .aa-ex-en { color: #aaa; }
+
 /* ---- 広辞苑 → 三省堂 resemblance (layer 3) ----
    広辞苑 has no data-name hooks: it is plain-text headword + 【漢字】, small
    font-size:60% annotation spans, and one <div> per ①②③ sense. Normalize its
@@ -210,3 +228,23 @@
 .aa-jj[data-dict="koujien7"] div { margin: 0; }            /* tighten per-sense blocks */
 .aa-jj[data-dict="koujien7"] span[style*="font-size:60%"] {
   font-size: .7em !important; opacity: .65; }              /* match 三省堂 annotation scale */
+
+#img-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.88);
+  z-index: 9999;
+  cursor: zoom-out;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+}
+#img-overlay.active { display: flex; }
+#img-overlay img {
+  max-width: 92vw;
+  max-height: 92vh;
+  border-radius: 4px;
+  object-fit: contain;
+}
+.image img { cursor: zoom-in; }

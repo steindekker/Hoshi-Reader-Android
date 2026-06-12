@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from collections.abc import Callable
 from .splice import splice
-from ankialign import markup
+from ankienrich import markup
 
 
 def _norm(s: str) -> str:

@@ -1,5 +1,5 @@
 import pytest
-from ankialign import config
+from ankienrich import config
 
 
 def test_credentials_require_env(monkeypatch):

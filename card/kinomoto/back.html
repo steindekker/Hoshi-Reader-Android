@@ -17,9 +17,31 @@
 </div>
 
 {{#Meaning}}<div class="meaning">{{Meaning}}</div>{{/Meaning}}
+{{#Examples}}{{Examples}}{{/Examples}}
 {{#Expanded Meaning}}<p>{{Expanded Meaning}}</p>{{/Expanded Meaning}}{{#Collapsed Meaning}}<details><summary></summary><p><small>{{Collapsed Meaning}}</small></p></details><br>
 {{/Collapsed Meaning}}
 </div>
+
+<script id="ankialign-lightbox">
+(function(){
+  var ov = document.createElement('div');
+  ov.id = 'img-overlay';
+  var zi = document.createElement('img');
+  ov.appendChild(zi);
+  document.body.appendChild(ov);
+  document.querySelectorAll('.image img').forEach(function(el){
+    el.addEventListener('click', function(e){
+      e.stopPropagation();
+      zi.src = el.src;
+      ov.classList.add('active');
+    });
+  });
+  ov.addEventListener('click', function(){ ov.classList.remove('active'); });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') ov.classList.remove('active');
+  });
+})();
+</script>
 
 <!-- JRP add-on managed section start [version:0] -->
 <!-- Changing the opening and closing tags in any way will break automatic CSS/JS handling.

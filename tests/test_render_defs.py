@@ -1,4 +1,4 @@
-from ankialign.defs import render as rd
+from ankienrich.defs import render as rd
 
 
 def test_render_sc_string_and_list():

@@ -2,7 +2,7 @@ import os
 
 from anki.collection import Collection
 
-from ankialign import config, pipeline
+from ankienrich import config, pipeline
 
 
 def _kino_col(tmp):
@@ -22,14 +22,17 @@ def _kino_col(tmp):
 def test_dry_run_reports_steps(tmp_path, monkeypatch):
     # Force audio + defs to the skip path so the test needs no external assets.
     monkeypatch.setenv("ANKI_ADDONS_DIR", str(tmp_path / "nope"))
-    from ankialign.defs import build
+    from ankienrich.defs import build
+    from ankienrich.examples import build as ex_build
     monkeypatch.setattr(build, "ensure", lambda: "no-source")
+    monkeypatch.setattr(ex_build, "ensure", lambda: "no-source")
     col = _kino_col(str(tmp_path))
     try:
         res = pipeline.run(col, apply=False)
-        assert set(res["steps"]) == {"audio", "pitch", "sentences", "enrich", "cloze"}
+        assert set(res["steps"]) == {"audio", "pitch", "sentences", "enrich", "examples", "cloze"}
         assert "skipped" in res["steps"]["audio"]
         assert "skipped" in res["steps"]["enrich"]
+        assert "skipped" in res["steps"]["examples"]
         assert res["backup"] is None
     finally:
         col.close()

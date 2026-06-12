@@ -3,8 +3,8 @@ import random
 
 import pytest
 
-from ankialign import config
-from ankialign import paths as _paths
+from ankienrich import config
+from ankienrich import paths as _paths
 
 DB = _paths.WORKING_COLLECTION
 IDX = _paths.ACCENT_INDEX
@@ -25,9 +25,9 @@ pytestmark = pytest.mark.skipif(
 
 def test_strict_accent_coverage_at_least_98pct():
     import sqlite3
-    from ankialign.jrp_fill.accent import AccentIndex
-    from ankialign.jrp_fill.tokenize import units, _NO_PITCH_LEMMAS, _NO_PITCH_FORMS
-    from ankialign import markup
+    from ankienrich.jrp_fill.accent import AccentIndex
+    from ankienrich.jrp_fill.tokenize import units, _NO_PITCH_LEMMAS, _NO_PITCH_FORMS
+    from ankienrich import markup
     acc = AccentIndex.load(IDX)
     con = sqlite3.connect(f"file:{DB}?immutable=1", uri=True)
     con.create_collation("unicase",
@@ -72,10 +72,10 @@ def test_strict_accent_coverage_at_least_98pct():
 def test_few_bare_kanji_in_rendered_output():
     import sqlite3
     import re
-    from ankialign.jrp_fill.accent import AccentIndex
-    from ankialign.jrp_fill.tokenize import units
-    from ankialign.jrp_fill.emit import emit_sentence
-    from ankialign.jrp_fill.splice import _spans
+    from ankienrich.jrp_fill.accent import AccentIndex
+    from ankienrich.jrp_fill.tokenize import units
+    from ankienrich.jrp_fill.emit import emit_sentence
+    from ankienrich.jrp_fill.splice import _spans
     acc = AccentIndex.load(IDX)
     con = sqlite3.connect(f"file:{DB}?immutable=1", uri=True)
     con.create_collation("unicase",

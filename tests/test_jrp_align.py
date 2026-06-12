@@ -1,4 +1,4 @@
-from ankialign.jrp_fill.align import furigana_segments as fs
+from ankienrich.jrp_fill.align import furigana_segments as fs
 
 def test_pure_kana_is_bare():
     assert fs("それ", "それ") == [("それ", None)]

@@ -6,7 +6,7 @@ import pytest
 anki = pytest.importorskip("anki")
 from anki.collection import Collection
 
-from ankialign import config, pitch
+from ankienrich import config, pitch
 
 
 def _kinomoto(col):

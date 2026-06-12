@@ -1,4 +1,4 @@
-from ankialign import markup
+from ankienrich import markup
 
 def test_jrp_surface():
     assert markup.jrp_surface("{[異変|いへん];0}") == "異変"

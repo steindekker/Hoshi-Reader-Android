@@ -1,7 +1,7 @@
 """The conjugated-pitch rule engine, validated against OJAD reference cases frozen
 in tests/data/conj_accent_cases.tsv (built by research/jrp-pipeline/ojad_oracle.py)."""
 import os
-from ankialign.jrp_fill.conjugate import verb_downstep, adj_downstep, count_moras
+from ankienrich.jrp_fill.conjugate import verb_downstep, adj_downstep, count_moras
 
 TSV = os.path.join(os.path.dirname(__file__), "data", "conj_accent_cases.tsv")
 _DERIVED = {"causative", "passive", "potential"}

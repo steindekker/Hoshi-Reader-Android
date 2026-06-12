@@ -4,7 +4,7 @@ import tempfile
 import pytest
 from anki.collection import Collection
 
-from ankialign import config, paths, template
+from ankienrich import config, paths, template
 
 
 _ALL_FIELDS = [
@@ -54,7 +54,7 @@ def test_apply_appends_dict_styles_when_present(tmp_path, monkeypatch):
     try:
         template.apply(col)
         m = col.models.by_name(config.NOTETYPE)
-        assert template._STYLE_MARKER in m["css"]
+        assert config.DICT_STYLES_MARKER in m["css"]
         assert ".aa-jj{color:red}" in m["css"]
     finally:
         col.close()

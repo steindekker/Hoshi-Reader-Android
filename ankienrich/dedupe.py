@@ -44,7 +44,8 @@ def plan(col) -> list:
     mid = m["id"]
     names = [f["name"] for f in m["flds"]]
     ix = {n: i for i, n in enumerate(names)}
-    ti = ix[config.TERM]; ri = ix.get(config.READING, ti)
+    ti = ix[config.TERM]
+    ri = ix.get(config.READING, ti)
 
     groups = collections.defaultdict(list)
     for nnid, flds in col.db.execute("select id, flds from notes where mid=?", mid):
@@ -66,6 +67,8 @@ def plan(col) -> list:
         cs = []
         for nn in members:
             lst = cards.get(nn, [])
+            # Kinomoto is a single-template notetype, so one card per note; the
+            # merge picks the surviving card by scheduling, which assumes this.
             assert len(lst) == 1, f"note {nn} has {len(lst)} cards (expected 1)"
             cs.append(lst[0])
         cs.sort(key=lambda c: _sort_key(c, crt))

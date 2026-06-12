@@ -3,12 +3,12 @@ import sqlite3
 
 import pytest
 
-from ankialign import audio
+from ankienrich import audio
 
 anki = pytest.importorskip("anki")
 from anki.collection import Collection
 
-from ankialign import config
+from ankienrich import config
 
 # Field list matching the real Kinomoto note type.
 _KINOMOTO_FIELDS = [

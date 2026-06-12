@@ -2,7 +2,7 @@
 from __future__ import annotations
 import re
 
-# Kanji character class (CJK ideograph ranges + 々). Matches ankialign/markup.py.
+# Kanji character class (CJK ideograph ranges + 々). Matches ankienrich/markup.py.
 KANJI_RE = re.compile(
     r"[㐀-鿿豈-﫿々\U00020000-\U0002A6DF\U0002A700-\U0002CEAF"
     r"\U0002CEB0-\U0002EBEF]"

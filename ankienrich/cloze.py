@@ -32,9 +32,13 @@ def _spans(s: str):
             j = s.find(close, i)
             if j >= 0:
                 if buf:
-                    yield "plain", "".join(buf); buf = []
-                yield "markup", s[i:j + 1]; i = j + 1; continue
-        buf.append(c); i += 1
+                    yield "plain", "".join(buf)
+                    buf = []
+                yield "markup", s[i:j + 1]
+                i = j + 1
+                continue
+        buf.append(c)
+        i += 1
     if buf:
         yield "plain", "".join(buf)
 
@@ -62,14 +66,13 @@ def locate(term: str, reading: str, plain: str, acc) -> tuple[str, str, str] | N
     if "".join(u.surface for u in us) != plain:     # offsets wouldn't be exact
         return None
     tr = hira(reading.strip()) if reading else ""
-    target = None
-    for u in us:                                    # lemma match
-        if u.lemma == term:
-            target = u; break
+    target = next((u for u in us if u.lemma == term), None)  # lemma match
     if target is None and tr:                       # reading match (orthographic)
-        for u in us:
-            if u.is_content and (hira(u.reading) == tr or hira(u.lemma_reading) == tr):
-                target = u; break
+        target = next(
+            (u for u in us if u.is_content
+             and (hira(u.reading) == tr or hira(u.lemma_reading) == tr)),
+            None,
+        )
     if target is None:
         return None
     o = 0
