@@ -201,12 +201,13 @@
     <string name="profile_language_japanese">Japanese</string>
     <string name="profile_language_english">English</string>
     <string name="profiles_title" comment="Profiles screen title, intentionally matching the Settings row label.">Profiles</string>
-    <string name="profiles_active_global">Global Active Profile</string>
+    <string name="profiles_active_global">Active Profile</string>
     <string name="profiles_loaded_reader">Reader Profile</string>
-    <string name="profiles_language">Dictionary Language</string>
-    <string name="profiles_primary_for_language">Primary for Language</string>
-    <string name="profiles_set_global_active">Set Global Active</string>
-    <string name="profiles_set_primary">Set Primary</string>
+    <string name="profiles_language">Profile Language</string>
+    <string name="profiles_default_for_language_format">Default for %1$s</string>
+    <string name="profiles_default_profile">Default</string>
+    <string name="profiles_current_profile">Current</string>
+    <string name="profiles_default_current_profile">Default, current</string>
     <string name="profiles_create">Create Profile</string>
     <string name="profiles_new_profile_name">Profile name</string>
     <string name="profiles_delete_title_format" comment="Profile delete confirmation, intentionally matching book and imported-font delete confirmation formats.">Delete \"%1$s\"?</string>

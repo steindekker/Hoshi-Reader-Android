@@ -49,7 +49,7 @@
     <string name="main_tab_settings" comment="Main navigation tab label, intentionally matching settings page titles.">设置</string>
     <string name="settings_dictionaries" comment="Settings row label, intentionally matching the backup Dictionaries section.">辞典</string>
     <string name="settings_anki">Anki</string>
-    <string name="settings_profiles" comment="Settings row label, intentionally matching the Profiles screen title.">配置档案</string>
+    <string name="settings_profiles" comment="Settings row label, intentionally matching the Profiles screen title.">Profile</string>
     <string name="settings_appearance">外观</string>
     <string name="settings_behavior">行为</string>
     <string name="settings_advanced">高级</string>
@@ -155,7 +155,7 @@
     <string name="dictionary_update_confirmation_format">将检查并安装以下辞典的更新：\n%1$s</string>
     <string name="dictionary_download_title">下载辞典</string>
     <string name="dictionary_download_prompt">选择要下载并导入的辞典：</string>
-    <string name="dictionary_download_no_recommended">当前 profile 语言暂无推荐辞典。</string>
+    <string name="dictionary_download_no_recommended">当前 Profile 语言暂无推荐辞典。</string>
     <string name="dictionary_download_item_format">%1$s（%2$s）</string>
     <string name="dictionary_type_term">词条</string>
     <string name="dictionary_type_frequency">词频</string>
@@ -198,17 +198,18 @@
     <string name="dictionary_add_to_anki">添加到 Anki</string>
     <string name="profile_language_japanese">日语</string>
     <string name="profile_language_english">英语</string>
-    <string name="profiles_title" comment="Profiles screen title, intentionally matching the Settings row label.">配置档案</string>
-    <string name="profiles_active_global">全局启用 Profile</string>
+    <string name="profiles_title" comment="Profiles screen title, intentionally matching the Settings row label.">Profile</string>
+    <string name="profiles_active_global">当前启用 Profile</string>
     <string name="profiles_loaded_reader">阅读器 Profile</string>
-    <string name="profiles_language">辞典语言</string>
-    <string name="profiles_primary_for_language">作为该语言默认 Profile</string>
-    <string name="profiles_set_global_active">设为全局启用</string>
-    <string name="profiles_set_primary">设为默认</string>
+    <string name="profiles_language">Profile 语言</string>
+    <string name="profiles_default_for_language_format">%1$s 默认 Profile</string>
+    <string name="profiles_default_profile">默认</string>
+    <string name="profiles_current_profile">当前启用</string>
+    <string name="profiles_default_current_profile">默认，当前启用</string>
     <string name="profiles_create">创建 Profile</string>
     <string name="profiles_new_profile_name">Profile 名称</string>
     <string name="profiles_delete_title_format" comment="Profile delete confirmation, intentionally matching book and imported-font delete confirmation formats.">删除“%1$s”？</string>
-    <string name="profiles_default_cannot_delete">默认 profile 不能删除。</string>
+    <string name="profiles_default_cannot_delete">默认 Profile 不能删除。</string>
     <string name="bookshelf_profile">Profile</string>
     <string name="bookshelf_profile_automatic">自动</string>
     <string name="reader_behavior_volume_keys_turn_pages">音量键翻页</string>

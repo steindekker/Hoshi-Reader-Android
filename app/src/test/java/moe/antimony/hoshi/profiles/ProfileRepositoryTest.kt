@@ -48,6 +48,20 @@ class ProfileRepositoryTest {
     }
 
     @Test
+    fun firstProfileForLanguageBecomesPrimaryForAutomaticBookActivation() {
+        val repository = ProfileRepository(tempFolder.newFolder("files"))
+
+        val english = repository.createProfile("English mining", "en")
+
+        assertEquals(english.id, repository.state.value.primaryProfileIdsByLanguage.getValue("en"))
+
+        repository.activateForBook(bookMetadata(bookLanguage = "en-US"))
+
+        assertEquals(english.id, repository.state.value.effectiveProfile.id)
+        assertEquals(ContentLanguageProfile.English, repository.state.value.effectiveContentLanguageProfile)
+    }
+
+    @Test
     fun createProfileCopiesProfileOwnedFilesFromGlobalActiveProfile() {
         val repository = ProfileRepository(tempFolder.newFolder("files"))
         val sourceProfileId = repository.state.value.globalActiveProfileId

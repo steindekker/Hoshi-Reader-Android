@@ -116,8 +116,8 @@ class LocalizationResourceTest {
         assertEquals("复制", zhResources.strings.getValue("action_copy").value)
         assertEquals("分享", zhResources.strings.getValue("action_share").value)
         assertEquals("段落间距", zhResources.strings.getValue("reader_appearance_paragraph_spacing").value)
-        assertEquals("配置档案", zhResources.strings.getValue("settings_profiles").value)
-        assertEquals("配置档案", zhResources.strings.getValue("profiles_title").value)
+        assertEquals("Profile", zhResources.strings.getValue("settings_profiles").value)
+        assertEquals("Profile", zhResources.strings.getValue("profiles_title").value)
     }
 
     @Test

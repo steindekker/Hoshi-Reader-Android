@@ -187,13 +187,21 @@ class ProfileRepository internal constructor(
         val globalId = globalActiveProfileId.takeIf { id -> profiles.any { it.id == id } }
             ?: defaultId
         val validIds = profiles.mapTo(mutableSetOf()) { it.id }
-        val primary = primaryProfileIdsByLanguage
+        val profilesByLanguage = profiles.groupBy { it.dictionaryLanguageId }
+        val validPrimary = primaryProfileIdsByLanguage
             .filterKeys { ContentLanguageProfile.fromDictionaryLanguageId(it) != null }
             .filterValues { it in validIds }
-            .let { values ->
-                if (ContentLanguageProfile.JapaneseLanguageId in values) values
-                else values + (ContentLanguageProfile.JapaneseLanguageId to defaultId)
+            .filter { (languageId, profileId) ->
+                profilesByLanguage[languageId]?.any { profile -> profile.id == profileId } == true
             }
+        val primary = ContentLanguageProfile.Supported.fold(validPrimary) { current, language ->
+            val languageProfiles = profilesByLanguage[language.dictionaryLanguageId].orEmpty()
+            if (languageProfiles.isEmpty() || language.dictionaryLanguageId in current) {
+                current
+            } else {
+                current + (language.dictionaryLanguageId to languageProfiles.first().id)
+            }
+        }
         return copy(
             profiles = profiles,
             defaultProfileId = defaultId,

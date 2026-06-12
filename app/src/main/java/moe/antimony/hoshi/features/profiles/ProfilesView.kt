@@ -10,18 +10,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.Language
-import androidx.compose.material.icons.rounded.RadioButtonChecked
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -29,23 +25,29 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.content.ContentLanguageProfile
+import moe.antimony.hoshi.features.settings.GroupCard
+import moe.antimony.hoshi.features.settings.GroupDivider
+import moe.antimony.hoshi.features.settings.SectionTitle
 import moe.antimony.hoshi.features.settings.SettingsDetailScaffold
 import moe.antimony.hoshi.profiles.HoshiProfile
 import moe.antimony.hoshi.profiles.ProfileState
@@ -94,19 +96,23 @@ private fun ProfilesContent(
                 .fillMaxSize()
                 .padding(contentPadding)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             item {
-                ProfileHeader(state)
-            }
-            items(state.profiles, key = { it.id }) { profile ->
-                ProfileRow(
-                    profile = profile,
+                ActiveProfileSection(
                     state = state,
-                    onEdit = { editingProfile = profile },
-                    onDelete = { deletingProfile = profile },
-                    onActivateGlobal = { onActivateGlobal(profile.id) },
-                    onSetPrimary = { onSetPrimary(profile.dictionaryLanguageId, profile.id) },
+                    onActivateGlobal = onActivateGlobal,
+                )
+            }
+            items(state.profileLanguageGroups(), key = { it.language.dictionaryLanguageId }) { group ->
+                LanguageProfileSection(
+                    group = group,
+                    globalActiveProfileId = state.globalActiveProfileId,
+                    onEdit = { profile -> editingProfile = profile },
+                    onDelete = { profile -> deletingProfile = profile },
+                    onSetPrimary = { profile ->
+                        onSetPrimary(group.language.dictionaryLanguageId, profile.id)
+                    },
                 )
             }
             item {
@@ -184,97 +190,183 @@ private fun ProfilesContent(
 }
 
 @Composable
-private fun ProfileHeader(state: ProfileState) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = stringResource(R.string.profiles_active_global),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Text(
-            text = state.globalActiveProfile.name,
-            style = MaterialTheme.typography.titleMedium,
-        )
-        state.loadedProfileId?.let {
-            Text(
-                text = stringResource(R.string.profiles_loaded_reader),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Text(
-                text = state.effectiveProfile.name,
-                style = MaterialTheme.typography.titleMedium,
-            )
+private fun ActiveProfileSection(
+    state: ProfileState,
+    onActivateGlobal: (String) -> Unit,
+) {
+    Column {
+        SectionTitle(stringResource(R.string.profiles_active_global))
+        GroupCard {
+            if (state.profiles.size > 1) {
+                Column(modifier = Modifier.selectableGroup()) {
+                    state.profiles.forEachIndexed { index, profile ->
+                        ProfileSelectionRow(
+                            profile = profile,
+                            supportingText = profile.languageDisplayName(),
+                            selected = state.globalActiveProfileId == profile.id,
+                            onSelected = { onActivateGlobal(profile.id) },
+                        )
+                        if (index != state.profiles.lastIndex) {
+                            GroupDivider()
+                        }
+                    }
+                }
+            } else {
+                ProfileReadOnlyRow(
+                    profile = state.globalActiveProfile,
+                    supportingText = stringResource(R.string.profiles_current_profile),
+                    onEdit = null,
+                    onDelete = null,
+                )
+            }
+            state.loadedProfileId?.let {
+                GroupDivider()
+                ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = { Text(stringResource(R.string.profiles_loaded_reader)) },
+                    supportingContent = { Text(state.effectiveProfile.name) },
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun ProfileRow(
-    profile: HoshiProfile,
-    state: ProfileState,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onActivateGlobal: () -> Unit,
-    onSetPrimary: () -> Unit,
+private fun LanguageProfileSection(
+    group: ProfileLanguageGroup,
+    globalActiveProfileId: String,
+    onEdit: (HoshiProfile) -> Unit,
+    onDelete: (HoshiProfile) -> Unit,
+    onSetPrimary: (HoshiProfile) -> Unit,
 ) {
-    val language = ContentLanguageProfile.fromDictionaryLanguageId(profile.dictionaryLanguageId)
-        ?: ContentLanguageProfile.Default
-    val isGlobal = state.globalActiveProfileId == profile.id
-    val isPrimary = state.primaryProfileIdsByLanguage[profile.dictionaryLanguageId] == profile.id
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(profile.name, style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        text = stringResource(language.displayNameRes),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Rounded.Edit, contentDescription = stringResource(R.string.action_rename))
-                }
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Rounded.Delete, contentDescription = stringResource(R.string.action_delete))
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AssistChip(
-                    onClick = onActivateGlobal,
-                    label = { Text(stringResource(R.string.profiles_set_global_active)) },
-                    leadingIcon = {
-                        Icon(
-                            if (isGlobal) Icons.Rounded.Check else Icons.Rounded.RadioButtonChecked,
-                            contentDescription = null,
+    val languageName = stringResource(group.language.displayNameRes)
+    Column {
+        SectionTitle(stringResource(R.string.profiles_default_for_language_format, languageName))
+        GroupCard {
+            if (group.canChooseDefault) {
+                Column(modifier = Modifier.selectableGroup()) {
+                    group.profiles.forEachIndexed { index, profile ->
+                        ProfileSelectionRow(
+                            profile = profile,
+                            supportingText = profileStatusText(
+                                isGlobalActive = profile.id == globalActiveProfileId,
+                            ),
+                            selected = group.defaultProfileId == profile.id,
+                            onSelected = { onSetPrimary(profile) },
+                            onEdit = { onEdit(profile) },
+                            onDelete = { onDelete(profile) },
                         )
-                    },
-                )
-                AssistChip(
-                    onClick = onSetPrimary,
-                    label = { Text(stringResource(R.string.profiles_set_primary)) },
-                    leadingIcon = {
-                        Icon(
-                            if (isPrimary) Icons.Rounded.Check else Icons.Rounded.Language,
-                            contentDescription = null,
-                        )
-                    },
+                        if (index != group.profiles.lastIndex) {
+                            GroupDivider()
+                        }
+                    }
+                }
+            } else {
+                val profile = group.profiles.first()
+                ProfileReadOnlyRow(
+                    profile = profile,
+                    supportingText = profileStatusText(
+                        isGlobalActive = profile.id == globalActiveProfileId,
+                        fallbackText = stringResource(R.string.profiles_default_profile),
+                    ),
+                    onEdit = { onEdit(profile) },
+                    onDelete = { onDelete(profile) },
                 )
             }
         }
     }
 }
+
+@Composable
+private fun ProfileSelectionRow(
+    profile: HoshiProfile,
+    supportingText: String?,
+    selected: Boolean,
+    onSelected: () -> Unit,
+    onEdit: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
+) {
+    ListItem(
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        headlineContent = { Text(profile.name) },
+        supportingContent = supportingText?.let { text -> { Text(text) } },
+        leadingContent = {
+            RadioButton(
+                selected = selected,
+                onClick = null,
+            )
+        },
+        trailingContent = profileActions(onEdit, onDelete),
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(
+                selected = selected,
+                onClick = onSelected,
+                role = Role.RadioButton,
+            ),
+    )
+}
+
+@Composable
+private fun ProfileReadOnlyRow(
+    profile: HoshiProfile,
+    supportingText: String?,
+    onEdit: (() -> Unit)?,
+    onDelete: (() -> Unit)?,
+) {
+    ListItem(
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        headlineContent = { Text(profile.name) },
+        supportingContent = supportingText?.let { text -> { Text(text) } },
+        trailingContent = profileActions(onEdit, onDelete),
+    )
+}
+
+@Composable
+private fun profileActions(
+    onEdit: (() -> Unit)?,
+    onDelete: (() -> Unit)?,
+): (@Composable () -> Unit)? =
+    if (onEdit == null && onDelete == null) {
+        null
+    } else {
+        {
+            Row {
+                if (onEdit != null) {
+                    IconButton(onClick = onEdit) {
+                        Icon(Icons.Rounded.Edit, contentDescription = stringResource(R.string.action_rename))
+                    }
+                }
+                if (onDelete != null) {
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Rounded.Delete, contentDescription = stringResource(R.string.action_delete))
+                    }
+                }
+            }
+        }
+    }
+
+@Composable
+private fun HoshiProfile.languageDisplayName(): String {
+    val language = ContentLanguageProfile.fromDictionaryLanguageId(dictionaryLanguageId)
+        ?: ContentLanguageProfile.Default
+    return stringResource(language.displayNameRes)
+}
+
+@Composable
+private fun profileStatusText(
+    isGlobalActive: Boolean,
+    fallbackText: String? = null,
+): String? =
+    if (isGlobalActive) {
+        if (fallbackText != null) {
+            stringResource(R.string.profiles_default_current_profile)
+        } else {
+            stringResource(R.string.profiles_current_profile)
+        }
+    } else {
+        fallbackText
+    }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
