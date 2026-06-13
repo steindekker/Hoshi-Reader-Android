@@ -14,6 +14,7 @@ import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.CancellationException
 import moe.antimony.hoshi.content.ContentLanguageProfile
+import moe.antimony.hoshi.profiles.ProfileRepository
 import org.junit.Assert.assertThrows
 
 class DictionaryRepositoryTest {
@@ -170,6 +171,52 @@ class DictionaryRepositoryTest {
             ),
             bridge.termPaths.toList(),
         )
+    }
+
+    @Test
+    fun updateDictionariesPreservesEachProfileEnabledStateWhenDictionaryIsRenamed() {
+        val filesDir = temporaryFolder.newFolder("profile-update-files")
+        val profileRepository = ProfileRepository(filesDir)
+        val storage = DictionaryStorageDataSource(filesDir, profileRepository = profileRepository)
+        val bridge = ImportingDictionaryNativeBridge()
+        val installedIndex = updatableTestDictionaryIndex()
+        val remoteIndex = installedIndex.copy(
+            title = "JMdict [2099-01-01]",
+            revision = "JMdict.2099-01-01",
+            downloadUrl = "https://example.invalid/JMdict_english.zip",
+        )
+        val remote = FakeDictionaryRemoteDataSource(
+            indexes = mapOf(installedIndex.indexUrl to remoteIndex),
+            archives = mapOf(remoteIndex.downloadUrl to dictionaryArchive(remoteIndex)),
+        )
+        val repository = DictionaryRepository(
+            filesDir,
+            storage,
+            DictionaryImportDataSource(bridge),
+            DictionaryLookupQueryService(bridge),
+            remote,
+            profileRepository,
+        )
+        writeDictionary(storage.typeDirectory(DictionaryType.Term), installedIndex.title, installedIndex)
+        storage.saveConfigFromStorage()
+        val disabledProfile = profileRepository.createProfile(
+            name = "Second",
+            dictionaryLanguageId = ContentLanguageProfile.JapaneseLanguageId,
+        )
+        profileRepository.activateGlobal(disabledProfile.id)
+        repository.setDictionaryEnabled(DictionaryType.Term, installedIndex.title, enabled = false)
+        profileRepository.activateGlobal(ProfileRepository.DefaultProfileId)
+
+        val summary = repository.updateDictionaries()
+
+        assertEquals(1, summary.updatedCount)
+        assertEquals(listOf(remoteIndex.title), repository.loadDictionaries(DictionaryType.Term).map { it.index.title })
+        assertEquals(listOf(true), repository.loadDictionaries(DictionaryType.Term).map { it.isEnabled })
+
+        profileRepository.activateGlobal(disabledProfile.id)
+        val disabledProfileDictionaries = repository.loadDictionaries(DictionaryType.Term)
+        assertEquals(listOf(remoteIndex.title), disabledProfileDictionaries.map { it.index.title })
+        assertEquals(listOf(false), disabledProfileDictionaries.map { it.isEnabled })
     }
 
     @Test

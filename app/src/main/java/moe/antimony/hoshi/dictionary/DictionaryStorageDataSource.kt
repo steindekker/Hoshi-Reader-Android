@@ -20,7 +20,7 @@ internal class DictionaryStorageDataSource(
 
     private val dictionariesDir = File(filesDir, "Dictionaries")
     private val configFile: File
-        get() = profileRepository?.dictionaryConfigFile() ?: File(dictionariesDir, "config.json")
+        get() = configFile()
 
     fun loadDictionaries(type: DictionaryType): List<DictionaryInfo> {
         val stored = storedDictionaries(type)
@@ -93,14 +93,41 @@ internal class DictionaryStorageDataSource(
             }
         }
 
+    fun saveConfigsWithUpdatedDictionaryReplacement(
+        type: DictionaryType,
+        oldFileName: String,
+        replacementFileName: String,
+        enabled: Boolean,
+        order: Int,
+    ) {
+        val profiles = profileRepository?.state?.value?.profiles
+        if (profiles == null) {
+            saveConfig(configWithImportedDictionaryReplacing(type, replacementFileName, enabled, order))
+            return
+        }
+
+        profiles.forEach { profile ->
+            val file = configFile(profile.id)
+            val current = loadConfig(file)
+            val updated = current.withUpdatedDictionaryReplacement(type, oldFileName, replacementFileName)
+            if (updated != current) {
+                saveConfig(updated, file)
+            }
+        }
+    }
+
     fun saveConfigFromStorage() {
         saveConfig(currentConfig())
     }
 
     fun saveConfig(config: DictionaryConfig) {
+        saveConfig(config, configFile)
+    }
+
+    private fun saveConfig(config: DictionaryConfig, file: File) {
         dictionariesDir.mkdirs()
-        configFile.parentFile?.mkdirs()
-        configFile.writeText(json.encodeToString(config))
+        file.parentFile?.mkdirs()
+        file.writeText(json.encodeToString(config))
     }
 
     fun deleteDictionary(type: DictionaryType, fileName: String) {
@@ -141,10 +168,21 @@ internal class DictionaryStorageDataSource(
             DictionaryConfig.DictionaryEntry(dictionary.path.name, dictionary.isEnabled, index)
         }
 
-    private fun loadConfig(): DictionaryConfig =
+    private fun configFile(profileId: String? = null): File =
+        if (profileRepository != null) {
+            if (profileId == null) {
+                profileRepository.dictionaryConfigFile()
+            } else {
+                profileRepository.dictionaryConfigFile(profileId)
+            }
+        } else {
+            File(dictionariesDir, "config.json")
+        }
+
+    private fun loadConfig(file: File = configFile): DictionaryConfig =
         runCatching {
-            if (!configFile.exists()) return EmptyDictionaryConfig
-            json.decodeFromString<DictionaryConfig>(configFile.readText())
+            if (!file.exists()) return EmptyDictionaryConfig
+            json.decodeFromString<DictionaryConfig>(file.readText())
         }.getOrDefault(EmptyDictionaryConfig)
 
     private companion object {
@@ -175,4 +213,24 @@ private fun DictionaryConfig.copyForType(
     DictionaryType.Term -> copy(termDictionaries = transform(termDictionaries))
     DictionaryType.Frequency -> copy(frequencyDictionaries = transform(frequencyDictionaries))
     DictionaryType.Pitch -> copy(pitchDictionaries = transform(pitchDictionaries))
+}
+
+private fun DictionaryConfig.withUpdatedDictionaryReplacement(
+    type: DictionaryType,
+    oldFileName: String,
+    replacementFileName: String,
+): DictionaryConfig = copyForType(type) { entries ->
+    if (entries.none { it.fileName == oldFileName }) return@copyForType entries
+    var replaced = false
+    entries.mapNotNull { entry ->
+        when {
+            entry.fileName == oldFileName && !replaced -> {
+                replaced = true
+                entry.copy(fileName = replacementFileName)
+            }
+            entry.fileName == oldFileName -> null
+            entry.fileName == replacementFileName -> null
+            else -> entry
+        }
+    }
 }

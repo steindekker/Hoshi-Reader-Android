@@ -138,13 +138,12 @@ internal class DictionaryRepository @Inject constructor(
                 if (replacement.fileName != installed.path.name) {
                     storage.deleteDictionary(candidate.type, installed.path.name)
                 }
-                storage.saveConfig(
-                    storage.configWithImportedDictionaryReplacing(
-                        type = candidate.type,
-                        replacementFileName = replacement.fileName,
-                        enabled = installed.isEnabled,
-                        order = installed.order,
-                    ),
+                storage.saveConfigsWithUpdatedDictionaryReplacement(
+                    type = candidate.type,
+                    oldFileName = installed.path.name,
+                    replacementFileName = replacement.fileName,
+                    enabled = installed.isEnabled,
+                    order = installed.order,
                 )
                 if (replacement.index.title != installedIndex.title) {
                     renames += DictionaryRename(
