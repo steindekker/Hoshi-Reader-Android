@@ -30,10 +30,12 @@
 
 #audio-inner {
 	position: absolute;
-	right: -40px;
+	left: 100%;
+	margin-left: 8px;
 	top: 8px;
 	display: flex;
 	align-items: center;
+	gap: 4px;
 }
 
 .replay-button svg { 
