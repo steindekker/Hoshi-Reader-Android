@@ -81,9 +81,10 @@ internal fun ReaderRouteDestination(
                 }
             }
         }
-        if (loaded is ReaderRouteLoadState.Ready) {
-            appContainer.profileActivationService.activateForBook(loaded.entry.metadata)
-        }
+        loaded.publishProfileActivation(
+            activateForBook = { metadata -> appContainer.profileActivationService.activateForBook(metadata) },
+            clearLoadedProfile = appContainer.profileActivationService::clearLoadedProfile,
+        )
         value = loaded
     }
 

@@ -11,10 +11,12 @@ class AppRouteBackStackTest {
             AppRoute.BooksRoute,
             AppRoute.ReaderRoute("book-a"),
         )
+        var readerRouteRemoved = false
 
-        backStack.routeExternalBookImport()
+        backStack.routeExternalBookImport(onReaderRouteRemoved = { readerRouteRemoved = true })
 
         assertEquals(listOf(AppRoute.BooksRoute), backStack)
+        assertEquals(true, readerRouteRemoved)
     }
 
     @Test
@@ -30,6 +32,20 @@ class AppRouteBackStackTest {
             listOf(AppRoute.BooksRoute, AppRoute.ReaderRoute("book-a")),
             backStack,
         )
+    }
+
+    @Test
+    fun backPopClearsReaderProfileWhenReaderRouteIsRemoved() {
+        val backStack = mutableListOf<NavKey>(
+            AppRoute.BooksRoute,
+            AppRoute.ReaderRoute("book-a"),
+        )
+        var readerRouteRemoved = false
+
+        backStack.popAppRoute(onReaderRouteRemoved = { readerRouteRemoved = true })
+
+        assertEquals(listOf(AppRoute.BooksRoute), backStack)
+        assertEquals(true, readerRouteRemoved)
     }
 
     @Test

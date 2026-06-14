@@ -6,9 +6,10 @@ internal class PendingImportRouteCoordinator {
     fun routePendingImport(
         hasPendingImport: Boolean,
         backStack: MutableList<NavKey>,
+        onReaderRouteRemoved: () -> Unit = {},
     ) {
         if (hasPendingImport) {
-            backStack.routeExternalBookImport()
+            backStack.routeExternalBookImport(onReaderRouteRemoved = onReaderRouteRemoved)
         }
     }
 }

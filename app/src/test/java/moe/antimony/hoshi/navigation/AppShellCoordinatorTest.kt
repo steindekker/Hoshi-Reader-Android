@@ -77,12 +77,19 @@ class AppShellCoordinatorTest {
     fun pendingImportCoordinatorRoutesOnlyWhenImportIsPending() {
         val coordinator = PendingImportRouteCoordinator()
         val backStack = mutableListOf<NavKey>(AppRoute.SettingsRoute, AppRoute.ReaderRoute("book-a"))
+        var readerRouteRemovedCount = 0
 
         coordinator.routePendingImport(hasPendingImport = false, backStack = backStack)
         assertEquals(listOf(AppRoute.SettingsRoute, AppRoute.ReaderRoute("book-a")), backStack)
+        assertEquals(0, readerRouteRemovedCount)
 
-        coordinator.routePendingImport(hasPendingImport = true, backStack = backStack)
+        coordinator.routePendingImport(
+            hasPendingImport = true,
+            backStack = backStack,
+            onReaderRouteRemoved = { readerRouteRemovedCount += 1 },
+        )
         assertEquals(listOf(AppRoute.BooksRoute), backStack)
+        assertEquals(1, readerRouteRemovedCount)
     }
 
     @Test

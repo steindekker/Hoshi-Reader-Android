@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import moe.antimony.hoshi.epub.Bookmark
 import moe.antimony.hoshi.epub.BookInfo
+import moe.antimony.hoshi.epub.BookMetadata
 import moe.antimony.hoshi.epub.EpubBook
 import moe.antimony.hoshi.epub.EpubBookParser
 import moe.antimony.hoshi.epub.ReadingStatistics
@@ -104,6 +105,17 @@ internal sealed interface ReaderRouteLoadState {
     data class Error(
         val message: String,
     ) : ReaderRouteLoadState
+}
+
+internal fun ReaderRouteLoadState.publishProfileActivation(
+    activateForBook: (BookMetadata) -> Unit,
+    clearLoadedProfile: () -> Unit,
+) {
+    when (this) {
+        is ReaderRouteLoadState.Ready -> activateForBook(entry.metadata)
+        is ReaderRouteLoadState.Error -> clearLoadedProfile()
+        ReaderRouteLoadState.Loading -> Unit
+    }
 }
 
 internal fun resolveMetadataCoverFile(bookRoot: File, metadataCoverPath: String?): File? {

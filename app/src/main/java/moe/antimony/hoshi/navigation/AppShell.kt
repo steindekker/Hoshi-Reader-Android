@@ -132,6 +132,10 @@ fun AppShell(
         selectedTab = tab
     }
 
+    fun clearLoadedReaderProfile() {
+        appContainer.profileActivationService.clearLoadedProfile()
+    }
+
     LaunchedEffect(dictionarySettingsRepository) {
         dictionarySettingsRepository.settings.collect { settings ->
             launchRouteStateHolder.defaultRouteAfterSettingsLoad(
@@ -144,15 +148,18 @@ fun AppShell(
     }
 
     fun popRoute() {
-        selectedBackStack().popAppRoute()
+        if (selectedTab == MainTab.Books) {
+            booksBackStack.popAppRoute(onReaderRouteRemoved = ::clearLoadedReaderProfile)
+        } else {
+            selectedBackStack().popAppRoute()
+        }
     }
 
     fun closeReaderRoute() {
         if (readerBookmarkRefreshState.consumeDirty()) {
             bookshelfRefreshKey += 1
         }
-        appContainer.profileActivationService.clearLoadedProfile()
-        booksBackStack.popAppRoute()
+        booksBackStack.popAppRoute(onReaderRouteRemoved = ::clearLoadedReaderProfile)
     }
 
     fun openSettingsDetail(section: SettingsDetailSection) {
@@ -168,7 +175,10 @@ fun AppShell(
     fun openSasayakiMatch(request: SasayakiMatchRequest) {
         sasayakiMatchRequestStore.put(request)
         selectedTab = MainTab.Books
-        booksBackStack.openSasayakiMatchRoute(request.bookId)
+        booksBackStack.openSasayakiMatchRoute(
+            bookId = request.bookId,
+            onReaderRouteRemoved = ::clearLoadedReaderProfile,
+        )
     }
 
     LaunchedEffect(pendingImportUri) {
@@ -176,6 +186,7 @@ fun AppShell(
         pendingImportRouteCoordinator.routePendingImport(
             hasPendingImport = hasPendingImport,
             backStack = booksBackStack,
+            onReaderRouteRemoved = ::clearLoadedReaderProfile,
         )
         if (hasPendingImport) {
             selectedTab = MainTab.Books
@@ -269,7 +280,9 @@ fun AppShell(
                         )
                     } else {
                         MissingRouteRedirect {
-                            booksBackStack.routeExternalBookImport()
+                            booksBackStack.routeExternalBookImport(
+                                onReaderRouteRemoved = ::clearLoadedReaderProfile,
+                            )
                             selectedTab = MainTab.Books
                         }
                     }
