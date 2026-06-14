@@ -2,6 +2,8 @@ package moe.antimony.hoshi.profiles
 
 import moe.antimony.hoshi.content.ContentLanguageProfile
 import moe.antimony.hoshi.epub.BookMetadata
+import kotlinx.coroutines.runBlocking
+import moe.antimony.hoshi.testing.CountingCoroutineDispatcher
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -13,6 +15,25 @@ import org.junit.rules.TemporaryFolder
 class ProfileRepositoryTest {
     @get:Rule
     val tempFolder = TemporaryFolder()
+
+    @Test
+    fun profileMutationsUseInjectedIoDispatcher() = runBlocking {
+        CountingCoroutineDispatcher().use { ioDispatcher ->
+            val repository = ProfileRepository(
+                filesDir = tempFolder.newFolder("files"),
+                ioDispatcher = ioDispatcher,
+            )
+            val beforeMutations = ioDispatcher.dispatchCount
+
+            val english = repository.createProfile("English", "en")
+            repository.renameProfile(english.id, "English Mining")
+            repository.setPrimaryProfile("en", english.id)
+            repository.activateGlobal(english.id)
+            repository.deleteProfile(english.id)
+
+            assertTrue(ioDispatcher.dispatchCount >= beforeMutations + 5)
+        }
+    }
 
     @Test
     fun firstLaunchCreatesJapaneseDefaultProfileAndMigratesDictionaryConfig() {
@@ -33,7 +54,7 @@ class ProfileRepositoryTest {
     }
 
     @Test
-    fun createsActivatesAndSelectsPrimaryEnglishProfile() {
+    fun createsActivatesAndSelectsPrimaryEnglishProfile() = runBlocking {
         val repository = ProfileRepository(tempFolder.newFolder("files"))
 
         val english = repository.createProfile("English mining", "en")
@@ -48,7 +69,7 @@ class ProfileRepositoryTest {
     }
 
     @Test
-    fun firstProfileForLanguageBecomesPrimaryForAutomaticBookActivation() {
+    fun firstProfileForLanguageBecomesPrimaryForAutomaticBookActivation() = runBlocking {
         val repository = ProfileRepository(tempFolder.newFolder("files"))
 
         val english = repository.createProfile("English mining", "en")
@@ -62,7 +83,7 @@ class ProfileRepositoryTest {
     }
 
     @Test
-    fun createProfileCopiesProfileOwnedFilesFromGlobalActiveProfile() {
+    fun createProfileCopiesProfileOwnedFilesFromGlobalActiveProfile() = runBlocking {
         val repository = ProfileRepository(tempFolder.newFolder("files"))
         val sourceProfileId = repository.state.value.globalActiveProfileId
         val dictionaryConfig = """{"termDictionaries":[{"fileName":"b","isEnabled":true,"order":0}]}"""
@@ -83,7 +104,7 @@ class ProfileRepositoryTest {
     }
 
     @Test
-    fun dictionaryBackupPayloadCopiesOnlyDictionaryProfileFilesAndNormalizedIndex() {
+    fun dictionaryBackupPayloadCopiesOnlyDictionaryProfileFilesAndNormalizedIndex() = runBlocking {
         val repository = ProfileRepository(tempFolder.newFolder("files"))
         val defaultId = repository.state.value.defaultProfileId
         val defaultConfig = """{"termDictionaries":[{"fileName":"JMdict","isEnabled":false,"order":0}]}"""
@@ -113,7 +134,7 @@ class ProfileRepositoryTest {
     }
 
     @Test
-    fun prepareDictionaryBackupProfilesRestoreUsesPayloadAndRootConfigThenReloadPublishesState() {
+    fun prepareDictionaryBackupProfilesRestoreUsesPayloadAndRootConfigThenReloadPublishesState() = runBlocking {
         val filesDir = tempFolder.newFolder("files")
         val repository = ProfileRepository(filesDir)
         val restoredDictionaries = tempFolder.newFolder("restoredDictionaries")
@@ -143,7 +164,7 @@ class ProfileRepositoryTest {
     }
 
     @Test
-    fun rejectsUnsupportedDictionaryLanguageIds() {
+    fun rejectsUnsupportedDictionaryLanguageIds() = runBlocking {
         val repository = ProfileRepository(tempFolder.newFolder("files"))
 
         try {
@@ -155,7 +176,7 @@ class ProfileRepositoryTest {
     }
 
     @Test
-    fun activateForBookUsesForcedProfileThenLanguagePrimaryThenGlobalFallback() {
+    fun activateForBookUsesForcedProfileThenLanguagePrimaryThenGlobalFallback() = runBlocking {
         val repository = ProfileRepository(tempFolder.newFolder("files"))
         val english = repository.createProfile("English", "en")
         repository.setPrimaryProfile("en", english.id)

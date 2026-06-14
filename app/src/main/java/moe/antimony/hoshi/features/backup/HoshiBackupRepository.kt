@@ -228,7 +228,7 @@ class HoshiBackupRepository @Inject constructor(
         zip.writeFolderContents(root)
     }
 
-    private fun exportDictionariesFolder(zip: ZipOutputStream) {
+    private suspend fun exportDictionariesFolder(zip: ZipOutputStream) {
         val root = filesDir.resolve(BackupTarget.Dictionaries.folderName)
         if (root.isDirectory) {
             zip.writeFolderContents(root) { relativePath ->

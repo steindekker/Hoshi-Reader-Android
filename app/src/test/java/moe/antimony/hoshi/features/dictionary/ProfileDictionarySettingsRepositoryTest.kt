@@ -8,6 +8,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import moe.antimony.hoshi.profiles.ProfileRepository
+import moe.antimony.hoshi.testing.CountingCoroutineDispatcher
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -18,6 +19,26 @@ import org.junit.rules.TemporaryFolder
 class ProfileDictionarySettingsRepositoryTest {
     @get:Rule
     val tempFolder = TemporaryFolder()
+
+    @Test
+    fun profileJsonReadsAndWritesUseInjectedIoDispatcher() = runBlocking {
+        CountingCoroutineDispatcher().use { ioDispatcher ->
+            val profileRepository = ProfileRepository(
+                filesDir = tempFolder.newFolder("files"),
+                ioDispatcher = ioDispatcher,
+            )
+            val repository = repository(
+                profileRepository = profileRepository,
+                ioDispatcher = ioDispatcher,
+            )
+            val beforeProfileAccess = ioDispatcher.dispatchCount
+
+            repository.update { it.copy(customCSS = ".profile { color: red; }") }
+            assertEquals(".profile { color: red; }", repository.settings.first().customCSS)
+
+            assertTrue(ioDispatcher.dispatchCount >= beforeProfileAccess + 2)
+        }
+    }
 
     @Test
     fun profileDictionarySettingsAreScopedWhileOperationalSettingsStayGlobal() = runBlocking {
@@ -177,7 +198,10 @@ class ProfileDictionarySettingsRepositoryTest {
         }
     }
 
-    private fun repository(profileRepository: ProfileRepository): DictionarySettingsRepository {
+    private fun repository(
+        profileRepository: ProfileRepository,
+        ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.IO,
+    ): DictionarySettingsRepository {
         val scope = CoroutineScope(Dispatchers.IO + Job())
         val dataStore = PreferenceDataStoreFactory.create(
             scope = scope,
@@ -186,6 +210,7 @@ class ProfileDictionarySettingsRepositoryTest {
         return DictionarySettingsRepository(
             dataStore = dataStore,
             profileRepository = profileRepository,
+            ioDispatcher = ioDispatcher,
         ).also {
             tempFolder.root.deleteOnExit()
             Runtime.getRuntime().addShutdownHook(Thread { scope.cancel() })

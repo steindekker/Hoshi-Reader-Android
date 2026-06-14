@@ -12,12 +12,17 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import moe.antimony.hoshi.R
@@ -178,19 +183,25 @@ class DictionarySettingsStore(context: Context) : DictionarySettingsLegacySource
 
 private val Context.dictionarySettingsDataStore by preferencesDataStore(name = DictionarySettingsRepository.DataStoreName)
 
-fun Context.dictionarySettingsRepository(profileRepository: ProfileRepository? = null): DictionarySettingsRepository =
+fun Context.dictionarySettingsRepository(
+    profileRepository: ProfileRepository? = null,
+    ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+): DictionarySettingsRepository =
     DictionarySettingsRepository(
         dataStore = dictionarySettingsDataStore,
         legacySource = DictionarySettingsStore(this),
         profileRepository = profileRepository,
+        ioDispatcher = ioDispatcher,
     )
 
 class DictionarySettingsRepository(
     private val dataStore: DataStore<Preferences>,
     private val legacySource: DictionarySettingsLegacySource? = null,
     private val profileRepository: ProfileRepository? = null,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val profileSettingsVersion = MutableStateFlow(0)
+    private val profileSettingsLock = Mutex()
 
     val settings: Flow<DictionarySettings> =
         if (profileRepository == null) {
@@ -214,11 +225,14 @@ class DictionarySettingsRepository(
         migrateLegacySettingsIfNeeded()
         if (profileRepository != null) {
             val globalCurrent = dataStore.data.first().toDictionarySettings()
-            val current = globalCurrent.withProfileDictionarySettings(
-                profileDictionarySettingsOrMigrate(globalCurrent),
-            )
-            val updated = transform(current).normalized()
-            saveProfileDictionarySettings(updated.toProfileDictionarySettings())
+            val updated = profileSettingsLock.withLock {
+                val current = globalCurrent.withProfileDictionarySettings(
+                    readProfileDictionarySettingsOrMigrate(globalCurrent),
+                )
+                transform(current).normalized().also { settings ->
+                    saveProfileDictionarySettings(settings.toProfileDictionarySettings())
+                }
+            }
             dataStore.edit { preferences ->
                 preferences.writeGlobalDictionarySettings(updated)
                 preferences[KEY_MIGRATED_FROM_SHARED_PREFERENCES] = true
@@ -311,21 +325,31 @@ class DictionarySettingsRepository(
         this[KEY_LOW_RAM_DICTIONARY_IMPORT] = normalized.lowRamDictionaryImport
     }
 
-    private fun profileDictionarySettingsOrMigrate(globalSettings: DictionarySettings): ProfileDictionarySettings {
-        val repository = profileRepository ?: return globalSettings.toProfileDictionarySettings()
-        val file = repository.dictionarySettingsFile()
-        if (file.isFile) {
-            return runCatching {
-                json.decodeFromString<ProfileDictionarySettings>(file.readText()).normalized()
-            }.getOrDefault(globalSettings.toProfileDictionarySettings())
+    private suspend fun profileDictionarySettingsOrMigrate(globalSettings: DictionarySettings): ProfileDictionarySettings =
+        profileSettingsLock.withLock {
+            readProfileDictionarySettingsOrMigrate(globalSettings)
         }
-        val migrated = globalSettings.toProfileDictionarySettings()
-        saveProfileDictionarySettings(migrated)
-        return migrated
+
+    private suspend fun readProfileDictionarySettingsOrMigrate(globalSettings: DictionarySettings): ProfileDictionarySettings = withContext(ioDispatcher) {
+        val repository = profileRepository
+        if (repository == null) {
+            globalSettings.toProfileDictionarySettings()
+        } else {
+            val file = repository.dictionarySettingsFile()
+            if (file.isFile) {
+                runCatching {
+                    json.decodeFromString<ProfileDictionarySettings>(file.readText()).normalized()
+                }.getOrDefault(globalSettings.toProfileDictionarySettings())
+            } else {
+                val migrated = globalSettings.toProfileDictionarySettings()
+                saveProfileDictionarySettings(migrated)
+                migrated
+            }
+        }
     }
 
-    private fun saveProfileDictionarySettings(settings: ProfileDictionarySettings) {
-        val file = profileRepository?.dictionarySettingsFile() ?: return
+    private suspend fun saveProfileDictionarySettings(settings: ProfileDictionarySettings) = withContext(ioDispatcher) {
+        val file = profileRepository?.dictionarySettingsFile() ?: return@withContext
         file.parentFile?.mkdirs()
         file.writeText(json.encodeToString(ProfileDictionarySettings.serializer(), settings.normalized()))
     }

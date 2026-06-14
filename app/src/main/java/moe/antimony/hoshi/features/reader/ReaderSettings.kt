@@ -12,12 +12,17 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import moe.antimony.hoshi.R
@@ -350,19 +355,25 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
 
 private val Context.readerSettingsDataStore by preferencesDataStore(name = ReaderSettingsRepository.DataStoreName)
 
-fun Context.readerSettingsRepository(profileRepository: ProfileRepository? = null): ReaderSettingsRepository =
+fun Context.readerSettingsRepository(
+    profileRepository: ProfileRepository? = null,
+    ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+): ReaderSettingsRepository =
     ReaderSettingsRepository(
         dataStore = readerSettingsDataStore,
         legacySource = ReaderSettingsStore(this),
         profileRepository = profileRepository,
+        ioDispatcher = ioDispatcher,
     )
 
 class ReaderSettingsRepository(
     private val dataStore: DataStore<Preferences>,
     private val legacySource: ReaderSettingsLegacySource? = null,
     private val profileRepository: ProfileRepository? = null,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val profileSettingsVersion = MutableStateFlow(0)
+    private val profileSettingsLock = Mutex()
 
     val settings: Flow<ReaderSettings> =
         if (profileRepository == null) {
@@ -384,9 +395,14 @@ class ReaderSettingsRepository(
         migrateLegacySettingsIfNeeded()
         if (profileRepository != null) {
             val globalCurrent = dataStore.data.first().toReaderSettings()
-            val current = globalCurrent.withProfileAppearance(profileAppearanceSettingsOrMigrate(globalCurrent))
-            val updated = transform(current).withStatisticsTransitionFrom(current)
-            saveProfileAppearanceSettings(updated.toProfileAppearanceSettings())
+            val updated = profileSettingsLock.withLock {
+                val current = globalCurrent.withProfileAppearance(
+                    readProfileAppearanceSettingsOrMigrate(globalCurrent),
+                )
+                transform(current).withStatisticsTransitionFrom(current).also { settings ->
+                    saveProfileAppearanceSettings(settings.toProfileAppearanceSettings())
+                }
+            }
             dataStore.edit { preferences ->
                 preferences.writeGlobalReaderSettings(updated)
                 preferences[KEY_MIGRATED_FROM_SHARED_PREFERENCES] = true
@@ -529,21 +545,31 @@ class ReaderSettingsRepository(
         this[KEY_KEEP_SCREEN_ON_WHILE_READING] = settings.keepScreenOnWhileReading
     }
 
-    private fun profileAppearanceSettingsOrMigrate(globalSettings: ReaderSettings): ProfileReaderAppearanceSettings {
-        val repository = profileRepository ?: return globalSettings.toProfileAppearanceSettings()
-        val file = repository.readerSettingsFile()
-        if (file.isFile) {
-            return runCatching {
-                json.decodeFromString<ProfileReaderAppearanceSettings>(file.readText())
-            }.getOrDefault(globalSettings.toProfileAppearanceSettings())
+    private suspend fun profileAppearanceSettingsOrMigrate(globalSettings: ReaderSettings): ProfileReaderAppearanceSettings =
+        profileSettingsLock.withLock {
+            readProfileAppearanceSettingsOrMigrate(globalSettings)
         }
-        val migrated = globalSettings.toProfileAppearanceSettings()
-        saveProfileAppearanceSettings(migrated)
-        return migrated
+
+    private suspend fun readProfileAppearanceSettingsOrMigrate(globalSettings: ReaderSettings): ProfileReaderAppearanceSettings = withContext(ioDispatcher) {
+        val repository = profileRepository
+        if (repository == null) {
+            globalSettings.toProfileAppearanceSettings()
+        } else {
+            val file = repository.readerSettingsFile()
+            if (file.isFile) {
+                runCatching {
+                    json.decodeFromString<ProfileReaderAppearanceSettings>(file.readText())
+                }.getOrDefault(globalSettings.toProfileAppearanceSettings())
+            } else {
+                val migrated = globalSettings.toProfileAppearanceSettings()
+                saveProfileAppearanceSettings(migrated)
+                migrated
+            }
+        }
     }
 
-    private fun saveProfileAppearanceSettings(settings: ProfileReaderAppearanceSettings) {
-        val file = profileRepository?.readerSettingsFile() ?: return
+    private suspend fun saveProfileAppearanceSettings(settings: ProfileReaderAppearanceSettings) = withContext(ioDispatcher) {
+        val file = profileRepository?.readerSettingsFile() ?: return@withContext
         file.parentFile?.mkdirs()
         file.writeText(json.encodeToString(ProfileReaderAppearanceSettings.serializer(), settings))
     }

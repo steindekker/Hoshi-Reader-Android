@@ -174,7 +174,7 @@ class DictionaryRepositoryTest {
     }
 
     @Test
-    fun updateDictionariesPreservesEachProfileEnabledStateWhenDictionaryIsRenamed() {
+    fun updateDictionariesPreservesEachProfileEnabledStateWhenDictionaryIsRenamed() = kotlinx.coroutines.runBlocking {
         val filesDir = temporaryFolder.newFolder("profile-update-files")
         val profileRepository = ProfileRepository(filesDir)
         val storage = DictionaryStorageDataSource(filesDir, profileRepository = profileRepository)

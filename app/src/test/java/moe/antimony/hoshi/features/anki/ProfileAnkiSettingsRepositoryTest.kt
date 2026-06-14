@@ -8,7 +8,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import moe.antimony.hoshi.profiles.ProfileRepository
+import moe.antimony.hoshi.testing.CountingCoroutineDispatcher
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -16,6 +18,26 @@ import org.junit.rules.TemporaryFolder
 class ProfileAnkiSettingsRepositoryTest {
     @get:Rule
     val tempFolder = TemporaryFolder()
+
+    @Test
+    fun profileSettingsReadsAndWritesUseInjectedIoDispatcher() = runBlocking {
+        CountingCoroutineDispatcher().use { ioDispatcher ->
+            val profileRepository = ProfileRepository(
+                filesDir = tempFolder.newFolder("files"),
+                ioDispatcher = ioDispatcher,
+            )
+            val repository = repository(
+                profileRepository = profileRepository,
+                ioDispatcher = ioDispatcher,
+            )
+            val beforeProfileAccess = ioDispatcher.dispatchCount
+
+            repository.update { it.copy(selectedDeckName = "Japanese") }
+            assertEquals("Japanese", repository.settings.first().selectedDeckName)
+
+            assertTrue(ioDispatcher.dispatchCount >= beforeProfileAccess + 2)
+        }
+    }
 
     @Test
     fun settingsArePersistedPerActiveProfile() = runBlocking {
@@ -36,7 +58,10 @@ class ProfileAnkiSettingsRepositoryTest {
         assertEquals("English", repository.settings.first().selectedDeckName)
     }
 
-    private fun repository(profileRepository: ProfileRepository): AnkiSettingsRepository {
+    private fun repository(
+        profileRepository: ProfileRepository,
+        ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.IO,
+    ): AnkiSettingsRepository {
         val scope = CoroutineScope(Dispatchers.IO + Job())
         val dataStore = PreferenceDataStoreFactory.create(
             scope = scope,
@@ -45,6 +70,7 @@ class ProfileAnkiSettingsRepositoryTest {
         return DataStoreAnkiSettingsRepository(
             dataStore = dataStore,
             profileRepository = profileRepository,
+            ioDispatcher = ioDispatcher,
         ).also {
             Runtime.getRuntime().addShutdownHook(Thread { scope.cancel() })
         }

@@ -29,8 +29,9 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   metadata under app-specific files, exposes active profile state through
   `StateFlow`, and controls the effective content language for Reader,
   Dictionary search, Process Text lookup, Anki settings, and dictionary lookup
-  sessions. Creating a profile copies existing profile-owned files from the
-  current global active profile.
+  sessions. Profile metadata mutations are main-safe suspend APIs backed by the
+  injected IO dispatcher. Creating a profile copies existing profile-owned files
+  from the current global active profile.
 
 ## Storage And Data
 
@@ -66,6 +67,8 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
 - Reader Appearance settings are stored per active/effective profile in
   `Profiles/<profileId>/reader_settings.json`; Reader Behavior and statistics
   sync settings remain global DataStore settings.
+- Profile-scoped Reader Appearance, Dictionary, and Anki settings JSON reads and
+  writes use injected IO dispatchers and repository-owned serialization locks.
 - Frequency and pitch dictionaries are type-specific and are not treated as term
   fallback dictionaries.
 - Dictionary storage/config mutations share a Hilt singleton mutation

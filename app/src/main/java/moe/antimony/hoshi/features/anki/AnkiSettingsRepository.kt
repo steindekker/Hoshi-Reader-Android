@@ -6,10 +6,15 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import moe.antimony.hoshi.profiles.ProfileRepository
@@ -22,8 +27,10 @@ interface AnkiSettingsRepository {
 class DataStoreAnkiSettingsRepository(
     private val dataStore: DataStore<Preferences>,
     private val profileRepository: ProfileRepository? = null,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : AnkiSettingsRepository {
     private val profileSettingsVersion = MutableStateFlow(0)
+    private val profileSettingsLock = Mutex()
 
     override val settings: Flow<AnkiSettings> =
         if (profileRepository == null) {
@@ -42,26 +49,38 @@ class DataStoreAnkiSettingsRepository(
             }
         } else {
             dataStore.edit { preferences ->
-                val current = profileSettingsOrMigrate(preferences)
-                saveProfileSettings(transform(current))
+                profileSettingsLock.withLock {
+                    val current = readProfileSettingsOrMigrate(preferences.toAnkiSettings())
+                    saveProfileSettings(transform(current))
+                }
                 profileSettingsVersion.value += 1
             }
         }
     }
 
-    private fun profileSettingsOrMigrate(preferences: Preferences): AnkiSettings {
-        val repository = profileRepository ?: return preferences.toAnkiSettings()
-        val file = repository.ankiConfigFile()
-        if (file.isFile) {
-            return runCatching { json.decodeFromString<AnkiSettings>(file.readText()) }.getOrDefault(AnkiSettings())
+    private suspend fun profileSettingsOrMigrate(preferences: Preferences): AnkiSettings =
+        profileSettingsLock.withLock {
+            readProfileSettingsOrMigrate(preferences.toAnkiSettings())
         }
-        val migrated = preferences.toAnkiSettings()
-        saveProfileSettings(migrated)
-        return migrated
+
+    private suspend fun readProfileSettingsOrMigrate(fallbackSettings: AnkiSettings): AnkiSettings = withContext(ioDispatcher) {
+        val repository = profileRepository
+        if (repository == null) {
+            fallbackSettings
+        } else {
+            val file = repository.ankiConfigFile()
+            if (file.isFile) {
+                runCatching { json.decodeFromString<AnkiSettings>(file.readText()) }.getOrDefault(AnkiSettings())
+            } else {
+                val migrated = fallbackSettings
+                saveProfileSettings(migrated)
+                migrated
+            }
+        }
     }
 
-    private fun saveProfileSettings(settings: AnkiSettings) {
-        val file = profileRepository?.ankiConfigFile() ?: return
+    private suspend fun saveProfileSettings(settings: AnkiSettings) = withContext(ioDispatcher) {
+        val file = profileRepository?.ankiConfigFile() ?: return@withContext
         file.parentFile?.mkdirs()
         file.writeText(json.encodeToString(settings))
     }
@@ -82,8 +101,12 @@ class DataStoreAnkiSettingsRepository(
 
 private val Context.ankiDataStore by preferencesDataStore(name = "anki_settings")
 
-fun Context.ankiSettingsRepository(profileRepository: ProfileRepository? = null): AnkiSettingsRepository =
+fun Context.ankiSettingsRepository(
+    profileRepository: ProfileRepository? = null,
+    ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+): AnkiSettingsRepository =
     DataStoreAnkiSettingsRepository(
         dataStore = ankiDataStore,
         profileRepository = profileRepository,
+        ioDispatcher = ioDispatcher,
     )

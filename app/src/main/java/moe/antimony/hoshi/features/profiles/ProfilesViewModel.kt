@@ -1,9 +1,11 @@
 package moe.antimony.hoshi.features.profiles
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import moe.antimony.hoshi.profiles.ProfileRepository
 import moe.antimony.hoshi.profiles.ProfileState
 
@@ -14,22 +16,32 @@ internal class ProfilesViewModel @Inject constructor(
     val profileState: StateFlow<ProfileState> = profileRepository.state
 
     fun createProfile(name: String, dictionaryLanguageId: String) {
-        profileRepository.createProfile(name, dictionaryLanguageId)
+        viewModelScope.launch {
+            profileRepository.createProfile(name, dictionaryLanguageId)
+        }
     }
 
     fun renameProfile(profileId: String, name: String) {
-        profileRepository.renameProfile(profileId, name)
+        viewModelScope.launch {
+            profileRepository.renameProfile(profileId, name)
+        }
     }
 
     fun deleteProfile(profileId: String) {
-        profileRepository.deleteProfile(profileId)
+        viewModelScope.launch {
+            profileRepository.deleteProfile(profileId)
+        }
     }
 
     fun activateGlobal(profileId: String) {
-        profileRepository.activateGlobal(profileId)
+        viewModelScope.launch {
+            profileRepository.activateGlobal(profileId)
+        }
     }
 
     fun setPrimaryProfile(dictionaryLanguageId: String, profileId: String) {
-        profileRepository.setPrimaryProfile(dictionaryLanguageId, profileId)
+        viewModelScope.launch {
+            profileRepository.setPrimaryProfile(dictionaryLanguageId, profileId)
+        }
     }
 }

@@ -83,16 +83,18 @@ internal object HoshiAppModule {
     fun provideReaderSettingsRepository(
         @ApplicationContext context: Context,
         profileRepository: ProfileRepository,
+        @IoDispatcher ioDispatcher: CoroutineDispatcher,
     ): ReaderSettingsRepository =
-        context.readerSettingsRepository(profileRepository)
+        context.readerSettingsRepository(profileRepository, ioDispatcher)
 
     @Provides
     @Singleton
     fun provideDictionarySettingsRepository(
         @ApplicationContext context: Context,
         profileRepository: ProfileRepository,
+        @IoDispatcher ioDispatcher: CoroutineDispatcher,
     ): DictionarySettingsRepository =
-        context.dictionarySettingsRepository(profileRepository)
+        context.dictionarySettingsRepository(profileRepository, ioDispatcher)
 
     @Provides
     @Singleton
@@ -104,8 +106,9 @@ internal object HoshiAppModule {
     fun provideAnkiSettingsRepository(
         @ApplicationContext context: Context,
         profileRepository: ProfileRepository,
+        @IoDispatcher ioDispatcher: CoroutineDispatcher,
     ): AnkiSettingsRepository =
-        context.ankiSettingsRepository(profileRepository)
+        context.ankiSettingsRepository(profileRepository, ioDispatcher)
 
     @Provides
     @Singleton

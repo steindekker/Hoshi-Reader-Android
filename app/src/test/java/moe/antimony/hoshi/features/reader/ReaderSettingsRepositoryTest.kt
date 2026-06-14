@@ -15,10 +15,32 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import moe.antimony.hoshi.profiles.ProfileRepository
+import moe.antimony.hoshi.testing.CountingCoroutineDispatcher
 
 class ReaderSettingsRepositoryTest {
     @get:Rule
     val tempFolder = TemporaryFolder()
+
+    @Test
+    fun profileAppearanceReadsAndWritesUseInjectedIoDispatcher() = runBlocking {
+        CountingCoroutineDispatcher().use { ioDispatcher ->
+            val profileRepository = ProfileRepository(
+                filesDir = tempFolder.newFolder("files"),
+                ioDispatcher = ioDispatcher,
+            )
+            repository(
+                profileRepository = profileRepository,
+                ioDispatcher = ioDispatcher,
+            ).use { repository ->
+                val beforeProfileAccess = ioDispatcher.dispatchCount
+
+                repository.update { it.copy(fontSize = 28) }
+                assertEquals(28, repository.settings.first().fontSize)
+
+                assertTrue(ioDispatcher.dispatchCount >= beforeProfileAccess + 2)
+            }
+        }
+    }
 
     @Test
     fun emitsDefaultSettingsWhenThereIsNoLegacyStore() = runBlocking {
@@ -286,6 +308,7 @@ class ReaderSettingsRepositoryTest {
     private fun repository(
         legacySource: ReaderSettingsLegacySource? = null,
         profileRepository: ProfileRepository? = null,
+        ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.IO,
     ): RepositoryHandle {
         val scope = CoroutineScope(Dispatchers.IO + Job())
         val dataStore = PreferenceDataStoreFactory.create(
@@ -297,6 +320,7 @@ class ReaderSettingsRepositoryTest {
                 dataStore = dataStore,
                 legacySource = legacySource,
                 profileRepository = profileRepository,
+                ioDispatcher = ioDispatcher,
             ),
             scope = scope,
         )

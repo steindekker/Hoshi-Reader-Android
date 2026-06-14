@@ -5,22 +5,30 @@ import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import moe.antimony.hoshi.content.ContentLanguageProfile
 import moe.antimony.hoshi.di.FilesDir
+import moe.antimony.hoshi.di.IoDispatcher
 import moe.antimony.hoshi.epub.BookMetadata
 
 @Singleton
 class ProfileRepository internal constructor(
     private val filesDir: File,
     private val json: Json = defaultJson(),
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     @Inject
-    constructor(@FilesDir filesDir: File) : this(filesDir, defaultJson())
+    constructor(
+        @FilesDir filesDir: File,
+        @IoDispatcher ioDispatcher: CoroutineDispatcher,
+    ) : this(filesDir, defaultJson(), ioDispatcher)
 
     private val profilesDir: File = filesDir.resolve(ProfilesDirectoryName)
     private val indexFile: File = profilesDir.resolve(IndexFileName)
@@ -43,73 +51,83 @@ class ProfileRepository internal constructor(
     val profilesDirectory: File
         get() = profilesDir
 
-    fun createProfile(name: String, dictionaryLanguageId: String): HoshiProfile = synchronized(lock) {
-        validateDictionaryLanguage(dictionaryLanguageId)
-        val sourceProfileId = storedIndex.globalActiveProfileId
-        val trimmedName = name.trim().ifBlank {
-            ContentLanguageProfile.fromDictionaryLanguageId(dictionaryLanguageId)?.id?.replaceFirstChar {
-                if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString()
-            } ?: "Profile"
+    suspend fun createProfile(name: String, dictionaryLanguageId: String): HoshiProfile = withContext(ioDispatcher) {
+        synchronized(lock) {
+            validateDictionaryLanguage(dictionaryLanguageId)
+            val sourceProfileId = storedIndex.globalActiveProfileId
+            val trimmedName = name.trim().ifBlank {
+                ContentLanguageProfile.fromDictionaryLanguageId(dictionaryLanguageId)?.id?.replaceFirstChar {
+                    if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString()
+                } ?: "Profile"
+            }
+            val profile = HoshiProfile(
+                id = "profile-${UUID.randomUUID()}",
+                name = trimmedName,
+                dictionaryLanguageId = dictionaryLanguageId,
+            )
+            storedIndex = storedIndex.copy(profiles = storedIndex.profiles + profile).normalized()
+            copyProfileOwnedFiles(sourceProfileId = sourceProfileId, targetProfileId = profile.id)
+            persistIndexLocked()
+            publishLocked()
+            profile
         }
-        val profile = HoshiProfile(
-            id = "profile-${UUID.randomUUID()}",
-            name = trimmedName,
-            dictionaryLanguageId = dictionaryLanguageId,
-        )
-        storedIndex = storedIndex.copy(profiles = storedIndex.profiles + profile).normalized()
-        copyProfileOwnedFiles(sourceProfileId = sourceProfileId, targetProfileId = profile.id)
-        persistIndexLocked()
-        publishLocked()
-        profile
     }
 
-    fun renameProfile(profileId: String, name: String) = synchronized(lock) {
-        val trimmed = name.trim()
-        require(trimmed.isNotEmpty()) { "Profile name must not be blank." }
-        storedIndex = storedIndex.copy(
-            profiles = storedIndex.profiles.map { profile ->
-                if (profile.id == profileId) profile.copy(name = trimmed) else profile
-            },
-        ).normalized()
-        require(storedIndex.profiles.any { it.id == profileId }) { "Unknown profile: $profileId" }
-        persistIndexLocked()
-        publishLocked()
-    }
-
-    fun deleteProfile(profileId: String) = synchronized(lock) {
-        val profile = storedIndex.profiles.firstOrNull { it.id == profileId }
-            ?: error("Unknown profile: $profileId")
-        require(!profile.isDefault) { "Default profile cannot be deleted." }
-        storedIndex = storedIndex.copy(
-            profiles = storedIndex.profiles.filterNot { it.id == profileId },
-            globalActiveProfileId = if (storedIndex.globalActiveProfileId == profileId) DefaultProfileId else storedIndex.globalActiveProfileId,
-            primaryProfileIdsByLanguage = storedIndex.primaryProfileIdsByLanguage.filterValues { it != profileId },
-        ).normalized()
-        if (loadedProfileId == profileId) loadedProfileId = null
-        profileDir(profileId).deleteRecursively()
-        persistIndexLocked()
-        publishLocked()
-    }
-
-    fun setPrimaryProfile(dictionaryLanguageId: String, profileId: String) = synchronized(lock) {
-        validateDictionaryLanguage(dictionaryLanguageId)
-        val profile = requireProfileLocked(profileId)
-        require(profile.dictionaryLanguageId == dictionaryLanguageId) {
-            "Profile language ${profile.dictionaryLanguageId} does not match $dictionaryLanguageId."
+    suspend fun renameProfile(profileId: String, name: String): Unit = withContext(ioDispatcher) {
+        synchronized(lock) {
+            val trimmed = name.trim()
+            require(trimmed.isNotEmpty()) { "Profile name must not be blank." }
+            storedIndex = storedIndex.copy(
+                profiles = storedIndex.profiles.map { profile ->
+                    if (profile.id == profileId) profile.copy(name = trimmed) else profile
+                },
+            ).normalized()
+            require(storedIndex.profiles.any { it.id == profileId }) { "Unknown profile: $profileId" }
+            persistIndexLocked()
+            publishLocked()
         }
-        storedIndex = storedIndex.copy(
-            primaryProfileIdsByLanguage = storedIndex.primaryProfileIdsByLanguage + (dictionaryLanguageId to profileId),
-        ).normalized()
-        persistIndexLocked()
-        publishLocked()
     }
 
-    fun activateGlobal(profileId: String) = synchronized(lock) {
-        requireProfileLocked(profileId)
-        storedIndex = storedIndex.copy(globalActiveProfileId = profileId).normalized()
-        loadedProfileId = null
-        persistIndexLocked()
-        publishLocked()
+    suspend fun deleteProfile(profileId: String): Unit = withContext(ioDispatcher) {
+        synchronized(lock) {
+            val profile = storedIndex.profiles.firstOrNull { it.id == profileId }
+                ?: error("Unknown profile: $profileId")
+            require(!profile.isDefault) { "Default profile cannot be deleted." }
+            storedIndex = storedIndex.copy(
+                profiles = storedIndex.profiles.filterNot { it.id == profileId },
+                globalActiveProfileId = if (storedIndex.globalActiveProfileId == profileId) DefaultProfileId else storedIndex.globalActiveProfileId,
+                primaryProfileIdsByLanguage = storedIndex.primaryProfileIdsByLanguage.filterValues { it != profileId },
+            ).normalized()
+            if (loadedProfileId == profileId) loadedProfileId = null
+            profileDir(profileId).deleteRecursively()
+            persistIndexLocked()
+            publishLocked()
+        }
+    }
+
+    suspend fun setPrimaryProfile(dictionaryLanguageId: String, profileId: String): Unit = withContext(ioDispatcher) {
+        synchronized(lock) {
+            validateDictionaryLanguage(dictionaryLanguageId)
+            val profile = requireProfileLocked(profileId)
+            require(profile.dictionaryLanguageId == dictionaryLanguageId) {
+                "Profile language ${profile.dictionaryLanguageId} does not match $dictionaryLanguageId."
+            }
+            storedIndex = storedIndex.copy(
+                primaryProfileIdsByLanguage = storedIndex.primaryProfileIdsByLanguage + (dictionaryLanguageId to profileId),
+            ).normalized()
+            persistIndexLocked()
+            publishLocked()
+        }
+    }
+
+    suspend fun activateGlobal(profileId: String): Unit = withContext(ioDispatcher) {
+        synchronized(lock) {
+            requireProfileLocked(profileId)
+            storedIndex = storedIndex.copy(globalActiveProfileId = profileId).normalized()
+            loadedProfileId = null
+            persistIndexLocked()
+            publishLocked()
+        }
     }
 
     fun activateForBook(metadata: BookMetadata): HoshiProfile = synchronized(lock) {
@@ -142,63 +160,69 @@ class ProfileRepository internal constructor(
         dictionaryConfigFile(DefaultProfileId).takeIf(File::isFile)
     }
 
-    fun writeDictionaryBackupProfilePayload(destination: File) = synchronized(lock) {
-        destination.deleteRecursively()
-        destination.mkdirs()
-        val normalized = storedIndex.normalized()
-        destination.resolve(IndexFileName)
-            .writeText(json.encodeToString(StoredProfileIndex.serializer(), normalized))
-        normalized.profiles.forEach { profile ->
-            val targetProfileDir = safeProfileDir(destination, profile.id)
-            DictionaryBackupProfileFileNames.forEach { fileName ->
-                val source = profileDataFile(profile.id, fileName)
-                if (!source.isFile) return@forEach
-                targetProfileDir.mkdirs()
-                source.copyTo(targetProfileDir.resolve(fileName), overwrite = true)
-            }
-        }
-    }
-
-    fun prepareDictionaryBackupProfilesRestore(
-        restoredDictionariesDir: File,
-        destinationProfilesDir: File,
-    ) = synchronized(lock) {
-        destinationProfilesDir.deleteRecursively()
-        destinationProfilesDir.mkdirs()
-        val payloadDir = restoredDictionariesDir.resolve(DictionaryBackupProfilesDirectoryName)
-        val payloadIndexFile = payloadDir.resolve(IndexFileName)
-        val restoredIndex = if (payloadIndexFile.isFile) {
-            json.decodeFromString(StoredProfileIndex.serializer(), payloadIndexFile.readText()).normalized()
-        } else {
-            defaultStoredIndex().normalized()
-        }
-        destinationProfilesDir.resolve(IndexFileName)
-            .writeText(json.encodeToString(StoredProfileIndex.serializer(), restoredIndex))
-        if (payloadDir.isDirectory) {
-            restoredIndex.profiles.forEach { profile ->
-                val sourceProfileDir = safeProfileDir(payloadDir, profile.id)
-                val targetProfileDir = safeProfileDir(destinationProfilesDir, profile.id)
+    suspend fun writeDictionaryBackupProfilePayload(destination: File): Unit = withContext(ioDispatcher) {
+        synchronized(lock) {
+            destination.deleteRecursively()
+            destination.mkdirs()
+            val normalized = storedIndex.normalized()
+            destination.resolve(IndexFileName)
+                .writeText(json.encodeToString(StoredProfileIndex.serializer(), normalized))
+            normalized.profiles.forEach { profile ->
+                val targetProfileDir = safeProfileDir(destination, profile.id)
                 DictionaryBackupProfileFileNames.forEach { fileName ->
-                    val source = sourceProfileDir.resolve(fileName)
+                    val source = profileDataFile(profile.id, fileName)
                     if (!source.isFile) return@forEach
                     targetProfileDir.mkdirs()
                     source.copyTo(targetProfileDir.resolve(fileName), overwrite = true)
                 }
             }
         }
-        val legacyConfig = restoredDictionariesDir.resolve(LegacyDictionaryConfigFileName)
-        if (legacyConfig.isFile) {
-            val defaultProfileDir = safeProfileDir(destinationProfilesDir, DefaultProfileId)
-            defaultProfileDir.mkdirs()
-            legacyConfig.copyTo(defaultProfileDir.resolve(DictionaryConfigFileName), overwrite = true)
-        }
-        payloadDir.deleteRecursively()
     }
 
-    fun reloadProfilesFromDisk() = synchronized(lock) {
-        storedIndex = initializeIndex()
-        loadedProfileId = null
-        publishLocked()
+    suspend fun prepareDictionaryBackupProfilesRestore(
+        restoredDictionariesDir: File,
+        destinationProfilesDir: File,
+    ): Unit = withContext(ioDispatcher) {
+        synchronized(lock) {
+            destinationProfilesDir.deleteRecursively()
+            destinationProfilesDir.mkdirs()
+            val payloadDir = restoredDictionariesDir.resolve(DictionaryBackupProfilesDirectoryName)
+            val payloadIndexFile = payloadDir.resolve(IndexFileName)
+            val restoredIndex = if (payloadIndexFile.isFile) {
+                json.decodeFromString(StoredProfileIndex.serializer(), payloadIndexFile.readText()).normalized()
+            } else {
+                defaultStoredIndex().normalized()
+            }
+            destinationProfilesDir.resolve(IndexFileName)
+                .writeText(json.encodeToString(StoredProfileIndex.serializer(), restoredIndex))
+            if (payloadDir.isDirectory) {
+                restoredIndex.profiles.forEach { profile ->
+                    val sourceProfileDir = safeProfileDir(payloadDir, profile.id)
+                    val targetProfileDir = safeProfileDir(destinationProfilesDir, profile.id)
+                    DictionaryBackupProfileFileNames.forEach { fileName ->
+                        val source = sourceProfileDir.resolve(fileName)
+                        if (!source.isFile) return@forEach
+                        targetProfileDir.mkdirs()
+                        source.copyTo(targetProfileDir.resolve(fileName), overwrite = true)
+                    }
+                }
+            }
+            val legacyConfig = restoredDictionariesDir.resolve(LegacyDictionaryConfigFileName)
+            if (legacyConfig.isFile) {
+                val defaultProfileDir = safeProfileDir(destinationProfilesDir, DefaultProfileId)
+                defaultProfileDir.mkdirs()
+                legacyConfig.copyTo(defaultProfileDir.resolve(DictionaryConfigFileName), overwrite = true)
+            }
+            payloadDir.deleteRecursively()
+        }
+    }
+
+    suspend fun reloadProfilesFromDisk(): Unit = withContext(ioDispatcher) {
+        synchronized(lock) {
+            storedIndex = initializeIndex()
+            loadedProfileId = null
+            publishLocked()
+        }
     }
 
     private fun initializeIndex(): StoredProfileIndex {

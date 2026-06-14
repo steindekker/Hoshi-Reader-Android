@@ -11,7 +11,7 @@ class ProfileActivationService @Inject constructor(
     fun activateForBook(metadata: BookMetadata): HoshiProfile =
         profileRepository.activateForBook(metadata)
 
-    fun activateGlobal(profileId: String) {
+    suspend fun activateGlobal(profileId: String) {
         profileRepository.activateGlobal(profileId)
     }
 
