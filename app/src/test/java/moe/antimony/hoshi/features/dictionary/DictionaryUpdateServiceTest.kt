@@ -28,6 +28,8 @@ import moe.antimony.hoshi.dictionary.DictionaryType
 import moe.antimony.hoshi.dictionary.NativeDictionaryImportResult
 import moe.antimony.hoshi.features.anki.AnkiSettings
 import moe.antimony.hoshi.features.anki.AnkiSettingsRepository
+import moe.antimony.hoshi.features.anki.DataStoreAnkiSettingsRepository
+import moe.antimony.hoshi.profiles.ProfileRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -105,6 +107,76 @@ class DictionaryUpdateServiceTest {
             assertEquals(
                 "{single-glossary-${remoteIndex.title}-no-dictionary}",
                 ankiRepository.settings.first().fieldMappings["CleanDefinition"],
+            )
+        }
+    }
+
+    @Test
+    fun successfulProfileUpdateMigratesDictionaryTitleReferencesForEveryProfile() = runBlocking {
+        profileSettingsRepositories().use { settingsHandle ->
+            val filesDir = settingsHandle.filesDir
+            val profileRepository = settingsHandle.profileRepository
+            val storage = DictionaryStorageDataSource(filesDir, profileRepository = profileRepository)
+            val installed = updatableIndex("JMdict [2026-01-01]", "rev-2026")
+            val remoteIndex = installed.copy(
+                title = "JMdict [2099-01-01]",
+                revision = "rev-2099",
+                downloadUrl = "https://example.invalid/jmdict-2099.zip",
+            )
+            writeDictionary(storage.typeDirectory(DictionaryType.Term), installed.title, installed)
+            storage.saveConfigFromStorage()
+            settingsHandle.dictionaryRepository.update {
+                it.copy(collapsedDictionaries = setOf(installed.title, "Japanese only"))
+            }
+            settingsHandle.ankiRepository.update {
+                it.copy(fieldMappings = mapOf("MainDefinition" to "{single-glossary-${installed.title}}"))
+            }
+            val englishProfile = profileRepository.createProfile("English", "en")
+            profileRepository.activateGlobal(englishProfile.id)
+            settingsHandle.dictionaryRepository.update {
+                it.copy(collapsedDictionaries = setOf(installed.title, "English only"))
+            }
+            settingsHandle.ankiRepository.update {
+                it.copy(fieldMappings = mapOf("BriefDefinition" to "{single-glossary-${installed.title}-brief}"))
+            }
+            profileRepository.activateGlobal(ProfileRepository.DefaultProfileId)
+            val service = DictionaryUpdateService(
+                dictionaryRepository = DictionaryRepository(
+                    filesDir,
+                    storage,
+                    DictionaryImportDataSource(ImportingDictionaryNativeBridge()),
+                    DictionaryLookupQueryService(NoOpDictionaryNativeBridge),
+                    FakeDictionaryRemoteDataSource(
+                        indexes = mapOf(installed.indexUrl to remoteIndex),
+                        archives = mapOf(remoteIndex.downloadUrl to dictionaryArchive(remoteIndex)),
+                    ),
+                    profileRepository,
+                ),
+                dictionarySettingsRepository = settingsHandle.dictionaryRepository,
+                ankiSettingsRepository = settingsHandle.ankiRepository,
+                ioDispatcher = Dispatchers.Unconfined,
+                clock = FakeDictionaryUpdateClock(1_900_000_000_000L),
+                mutationCoordinator = DictionaryMutationCoordinator(),
+            )
+
+            service.updateDictionaries()
+
+            assertEquals(
+                setOf(remoteIndex.title, "Japanese only"),
+                settingsHandle.dictionaryRepository.settings.first().collapsedDictionaries,
+            )
+            assertEquals(
+                "{single-glossary-${remoteIndex.title}}",
+                settingsHandle.ankiRepository.settings.first().fieldMappings["MainDefinition"],
+            )
+            profileRepository.activateGlobal(englishProfile.id)
+            assertEquals(
+                setOf(remoteIndex.title, "English only"),
+                settingsHandle.dictionaryRepository.settings.first().collapsedDictionaries,
+            )
+            assertEquals(
+                "{single-glossary-${remoteIndex.title}-brief}",
+                settingsHandle.ankiRepository.settings.first().fieldMappings["BriefDefinition"],
             )
         }
     }
@@ -278,6 +350,47 @@ class DictionaryUpdateServiceTest {
             assertEquals(1, summary.failures.size)
             assertEquals(1_900_000_000_000L, settingsHandle.repository.settings.first().lastDictionaryUpdateEpochMillis)
             assertEquals(0L, coordinator.state.value.completedChangeVersion)
+        }
+    }
+
+    private fun profileSettingsRepositories(): ProfileSettingsHandle {
+        val scope = CoroutineScope(Dispatchers.IO + Job())
+        val filesDir = temporaryFolder.newFolder("profile-service-files")
+        val profileRepository = ProfileRepository(filesDir)
+        val dictionaryDataStore = PreferenceDataStoreFactory.create(
+            scope = scope,
+            produceFile = { temporaryFolder.newFile("profile-dictionary-update-service.preferences_pb") },
+        )
+        val ankiDataStore = PreferenceDataStoreFactory.create(
+            scope = scope,
+            produceFile = { temporaryFolder.newFile("profile-anki-update-service.preferences_pb") },
+        )
+        return ProfileSettingsHandle(
+            filesDir = filesDir,
+            profileRepository = profileRepository,
+            dictionaryRepository = DictionarySettingsRepository(
+                dataStore = dictionaryDataStore,
+                profileRepository = profileRepository,
+                ioDispatcher = Dispatchers.Unconfined,
+            ),
+            ankiRepository = DataStoreAnkiSettingsRepository(
+                dataStore = ankiDataStore,
+                profileRepository = profileRepository,
+                ioDispatcher = Dispatchers.Unconfined,
+            ),
+            scope = scope,
+        )
+    }
+
+    private class ProfileSettingsHandle(
+        val filesDir: File,
+        val profileRepository: ProfileRepository,
+        val dictionaryRepository: DictionarySettingsRepository,
+        val ankiRepository: DataStoreAnkiSettingsRepository,
+        private val scope: CoroutineScope,
+    ) : AutoCloseable {
+        override fun close() {
+            scope.cancel()
         }
     }
 

@@ -78,7 +78,13 @@ internal class DictionaryUpdateService(
 
     private suspend fun persistUpdateEffects(summary: DictionaryUpdateSummary) {
         if (summary.renamedDictionaries.isEmpty() && summary.successfulCount <= 0) return
-        dictionarySettingsRepository.update { current ->
+        val updateDictionarySettings: suspend ((DictionarySettings) -> DictionarySettings) -> Unit =
+            if (summary.renamedDictionaries.isEmpty()) {
+                dictionarySettingsRepository::update
+            } else {
+                dictionarySettingsRepository::updateAllProfiles
+            }
+        updateDictionarySettings { current ->
             val renamed = if (summary.renamedDictionaries.isEmpty()) {
                 current.collapsedDictionaries
             } else {
@@ -94,7 +100,7 @@ internal class DictionaryUpdateService(
             )
         }
         if (summary.renamedDictionaries.isNotEmpty()) {
-            ankiSettingsRepository.update { current ->
+            ankiSettingsRepository.updateAllProfiles { current ->
                 current.copy(
                     fieldMappings = current.fieldMappings.mapValues { (_, template) ->
                         template.renamedSingleGlossaryHandlebars(summary.renamedDictionaries)

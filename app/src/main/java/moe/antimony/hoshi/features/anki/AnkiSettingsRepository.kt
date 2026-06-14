@@ -22,6 +22,9 @@ import moe.antimony.hoshi.profiles.ProfileRepository
 interface AnkiSettingsRepository {
     val settings: Flow<AnkiSettings>
     suspend fun update(transform: (AnkiSettings) -> AnkiSettings)
+    suspend fun updateAllProfiles(transform: (AnkiSettings) -> AnkiSettings) {
+        update(transform)
+    }
 }
 
 class DataStoreAnkiSettingsRepository(
@@ -58,29 +61,62 @@ class DataStoreAnkiSettingsRepository(
         }
     }
 
+    override suspend fun updateAllProfiles(transform: (AnkiSettings) -> AnkiSettings) {
+        val repository = profileRepository
+        if (repository == null) {
+            update(transform)
+            return
+        }
+        dataStore.edit { preferences ->
+            profileSettingsLock.withLock {
+                val fallbackSettings = preferences.toAnkiSettings()
+                repository.state.value.profiles.forEach { profile ->
+                    val current = readProfileSettingsOrMigrate(fallbackSettings, profile.id)
+                    saveProfileSettings(transform(current), profile.id)
+                }
+            }
+            profileSettingsVersion.value += 1
+        }
+    }
+
     private suspend fun profileSettingsOrMigrate(preferences: Preferences): AnkiSettings =
         profileSettingsLock.withLock {
             readProfileSettingsOrMigrate(preferences.toAnkiSettings())
         }
 
-    private suspend fun readProfileSettingsOrMigrate(fallbackSettings: AnkiSettings): AnkiSettings = withContext(ioDispatcher) {
+    private suspend fun readProfileSettingsOrMigrate(
+        fallbackSettings: AnkiSettings,
+        profileId: String? = null,
+    ): AnkiSettings = withContext(ioDispatcher) {
         val repository = profileRepository
         if (repository == null) {
             fallbackSettings
         } else {
-            val file = repository.ankiConfigFile()
+            val file = if (profileId == null) {
+                repository.ankiConfigFile()
+            } else {
+                repository.ankiConfigFile(profileId)
+            }
             if (file.isFile) {
                 runCatching { json.decodeFromString<AnkiSettings>(file.readText()) }.getOrDefault(AnkiSettings())
             } else {
                 val migrated = fallbackSettings
-                saveProfileSettings(migrated)
+                saveProfileSettings(migrated, profileId)
                 migrated
             }
         }
     }
 
-    private suspend fun saveProfileSettings(settings: AnkiSettings) = withContext(ioDispatcher) {
-        val file = profileRepository?.ankiConfigFile() ?: return@withContext
+    private suspend fun saveProfileSettings(
+        settings: AnkiSettings,
+        profileId: String? = null,
+    ) = withContext(ioDispatcher) {
+        val repository = profileRepository ?: return@withContext
+        val file = if (profileId == null) {
+            repository.ankiConfigFile()
+        } else {
+            repository.ankiConfigFile(profileId)
+        }
         file.parentFile?.mkdirs()
         file.writeText(json.encodeToString(settings))
     }

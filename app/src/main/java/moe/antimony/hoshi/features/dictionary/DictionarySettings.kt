@@ -249,6 +249,35 @@ class DictionarySettingsRepository(
         }
     }
 
+    suspend fun updateAllProfiles(transform: (DictionarySettings) -> DictionarySettings) {
+        migrateLegacySettingsIfNeeded()
+        val repository = profileRepository
+        if (repository == null) {
+            update(transform)
+            return
+        }
+        val globalCurrent = dataStore.data.first().toDictionarySettings()
+        val activeProfileId = repository.currentEffectiveProfileId
+        var globalUpdated: DictionarySettings? = null
+        profileSettingsLock.withLock {
+            repository.state.value.profiles.forEach { profile ->
+                val current = globalCurrent.withProfileDictionarySettings(
+                    readProfileDictionarySettingsOrMigrate(globalCurrent, profile.id),
+                )
+                val updated = transform(current).normalized()
+                saveProfileDictionarySettings(updated.toProfileDictionarySettings(), profile.id)
+                if (profile.id == activeProfileId) {
+                    globalUpdated = updated
+                }
+            }
+        }
+        dataStore.edit { preferences ->
+            preferences.writeGlobalDictionarySettings(globalUpdated ?: transform(globalCurrent).normalized())
+            preferences[KEY_MIGRATED_FROM_SHARED_PREFERENCES] = true
+        }
+        profileSettingsVersion.value += 1
+    }
+
     private suspend fun migrateLegacySettingsIfNeeded() {
         dataStore.edit { preferences ->
             if (preferences[KEY_MIGRATED_FROM_SHARED_PREFERENCES] == true) return@edit
@@ -330,26 +359,41 @@ class DictionarySettingsRepository(
             readProfileDictionarySettingsOrMigrate(globalSettings)
         }
 
-    private suspend fun readProfileDictionarySettingsOrMigrate(globalSettings: DictionarySettings): ProfileDictionarySettings = withContext(ioDispatcher) {
+    private suspend fun readProfileDictionarySettingsOrMigrate(
+        globalSettings: DictionarySettings,
+        profileId: String? = null,
+    ): ProfileDictionarySettings = withContext(ioDispatcher) {
         val repository = profileRepository
         if (repository == null) {
             globalSettings.toProfileDictionarySettings()
         } else {
-            val file = repository.dictionarySettingsFile()
+            val file = if (profileId == null) {
+                repository.dictionarySettingsFile()
+            } else {
+                repository.dictionarySettingsFile(profileId)
+            }
             if (file.isFile) {
                 runCatching {
                     json.decodeFromString<ProfileDictionarySettings>(file.readText()).normalized()
                 }.getOrDefault(globalSettings.toProfileDictionarySettings())
             } else {
                 val migrated = globalSettings.toProfileDictionarySettings()
-                saveProfileDictionarySettings(migrated)
+                saveProfileDictionarySettings(migrated, profileId)
                 migrated
             }
         }
     }
 
-    private suspend fun saveProfileDictionarySettings(settings: ProfileDictionarySettings) = withContext(ioDispatcher) {
-        val file = profileRepository?.dictionarySettingsFile() ?: return@withContext
+    private suspend fun saveProfileDictionarySettings(
+        settings: ProfileDictionarySettings,
+        profileId: String? = null,
+    ) = withContext(ioDispatcher) {
+        val repository = profileRepository ?: return@withContext
+        val file = if (profileId == null) {
+            repository.dictionarySettingsFile()
+        } else {
+            repository.dictionarySettingsFile(profileId)
+        }
         file.parentFile?.mkdirs()
         file.writeText(json.encodeToString(ProfileDictionarySettings.serializer(), settings.normalized()))
     }
