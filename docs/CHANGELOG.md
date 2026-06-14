@@ -6,6 +6,10 @@ Historical release notes before v1.1.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 
 ## [Unreleased]
 
+### Added
+
+- Add a Behavior setting to open the last read book on app launch.
+
 ## [v1.2.0] - 2026-06-15
 
 ### Added

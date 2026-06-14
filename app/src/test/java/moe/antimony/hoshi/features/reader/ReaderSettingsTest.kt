@@ -36,6 +36,7 @@ class ReaderSettingsTest {
         assertEquals(20, settings.chapterSwipeDistance)
         assertTrue(settings.popupSwipeToDismiss)
         assertEquals(30, settings.popupSwipeThreshold)
+        assertFalse(settings.openLastReadBookOnLaunch)
     }
 
     @Test

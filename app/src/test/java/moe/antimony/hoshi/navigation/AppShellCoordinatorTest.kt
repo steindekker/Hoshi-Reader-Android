@@ -1,10 +1,12 @@
 package moe.antimony.hoshi.navigation
 
 import androidx.navigation3.runtime.NavKey
+import kotlinx.coroutines.runBlocking
 import moe.antimony.hoshi.epub.BookEntry
 import moe.antimony.hoshi.epub.BookMetadata
 import moe.antimony.hoshi.features.bookshelf.SasayakiMatchRequest
 import moe.antimony.hoshi.features.dictionary.DictionarySettings
+import moe.antimony.hoshi.features.reader.ReaderSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -13,62 +15,141 @@ import java.io.File
 
 class AppShellCoordinatorTest {
     @Test
-    fun dictionaryDefaultRouteAppliesOnceOnlyFromInitialBooksRoute() {
+    fun dictionaryDefaultRouteAppliesOnceOnlyFromInitialBooksRoute() = runBlocking {
         val stateHolder = AppLaunchRouteStateHolder()
         val backStack = mutableListOf<NavKey>(AppRoute.BooksRoute)
 
         assertEquals(
             AppRoute.DictionaryRoute,
             stateHolder.defaultRouteAfterSettingsLoad(
-                settings = DictionarySettings(dictionaryTabDefault = true),
+                readerSettings = ReaderSettings(openLastReadBookOnLaunch = false),
+                dictionarySettings = DictionarySettings(dictionaryTabDefault = true),
                 hasPendingImport = false,
                 isBooksTabSelected = true,
                 backStack = backStack,
+                recentBookIdProvider = { "book-a" },
             ),
         )
         assertNull(
             stateHolder.defaultRouteAfterSettingsLoad(
-                settings = DictionarySettings(dictionaryTabDefault = true),
+                readerSettings = ReaderSettings(openLastReadBookOnLaunch = false),
+                dictionarySettings = DictionarySettings(dictionaryTabDefault = true),
                 hasPendingImport = false,
                 isBooksTabSelected = true,
                 backStack = backStack,
+                recentBookIdProvider = { "book-a" },
             ),
         )
     }
 
     @Test
-    fun dictionaryDefaultRouteDoesNotOverridePendingImportOrNestedRoutes() {
+    fun openLastReadBookRouteTakesPriorityOverDictionaryDefaultRoute() = runBlocking {
+        val stateHolder = AppLaunchRouteStateHolder()
+
+        assertEquals(
+            AppRoute.ReaderRoute("book-a"),
+            stateHolder.defaultRouteAfterSettingsLoad(
+                readerSettings = ReaderSettings(openLastReadBookOnLaunch = true),
+                dictionarySettings = DictionarySettings(dictionaryTabDefault = true),
+                hasPendingImport = false,
+                isBooksTabSelected = true,
+                backStack = mutableListOf(AppRoute.BooksRoute),
+                recentBookIdProvider = { "book-a" },
+            ),
+        )
+    }
+
+    @Test
+    fun openLastReadBookRouteFallsBackToDictionaryDefaultWhenNoRecentBookExists() = runBlocking {
+        val stateHolder = AppLaunchRouteStateHolder()
+
+        assertEquals(
+            AppRoute.DictionaryRoute,
+            stateHolder.defaultRouteAfterSettingsLoad(
+                readerSettings = ReaderSettings(openLastReadBookOnLaunch = true),
+                dictionarySettings = DictionarySettings(dictionaryTabDefault = true),
+                hasPendingImport = false,
+                isBooksTabSelected = true,
+                backStack = mutableListOf(AppRoute.BooksRoute),
+                recentBookIdProvider = { null },
+            ),
+        )
+    }
+
+    @Test
+    fun launchDefaultRouteDoesNotQueryRecentBookWhenInitialRouteIsProtected() = runBlocking {
+        val pendingImportStateHolder = AppLaunchRouteStateHolder()
+        val nestedRouteStateHolder = AppLaunchRouteStateHolder()
+        var recentBookQueries = 0
+
+        assertNull(
+            pendingImportStateHolder.defaultRouteAfterSettingsLoad(
+                readerSettings = ReaderSettings(openLastReadBookOnLaunch = true),
+                dictionarySettings = DictionarySettings(dictionaryTabDefault = true),
+                hasPendingImport = true,
+                isBooksTabSelected = true,
+                backStack = mutableListOf(AppRoute.BooksRoute),
+                recentBookIdProvider = {
+                    recentBookQueries += 1
+                    "book-a"
+                },
+            ),
+        )
+        assertNull(
+            nestedRouteStateHolder.defaultRouteAfterSettingsLoad(
+                readerSettings = ReaderSettings(openLastReadBookOnLaunch = true),
+                dictionarySettings = DictionarySettings(dictionaryTabDefault = true),
+                hasPendingImport = false,
+                isBooksTabSelected = true,
+                backStack = mutableListOf(AppRoute.BooksRoute, AppRoute.ReaderRoute("book-a")),
+                recentBookIdProvider = {
+                    recentBookQueries += 1
+                    "book-a"
+                },
+            ),
+        )
+        assertEquals(0, recentBookQueries)
+    }
+
+    @Test
+    fun dictionaryDefaultRouteDoesNotOverridePendingImportOrNestedRoutes() = runBlocking {
         val pendingImportStateHolder = AppLaunchRouteStateHolder()
         val nestedRouteStateHolder = AppLaunchRouteStateHolder()
 
         assertNull(
             pendingImportStateHolder.defaultRouteAfterSettingsLoad(
-                settings = DictionarySettings(dictionaryTabDefault = true),
+                readerSettings = ReaderSettings(openLastReadBookOnLaunch = false),
+                dictionarySettings = DictionarySettings(dictionaryTabDefault = true),
                 hasPendingImport = true,
                 isBooksTabSelected = true,
                 backStack = mutableListOf(AppRoute.BooksRoute),
+                recentBookIdProvider = { "book-a" },
             ),
         )
         assertNull(
             nestedRouteStateHolder.defaultRouteAfterSettingsLoad(
-                settings = DictionarySettings(dictionaryTabDefault = true),
+                readerSettings = ReaderSettings(openLastReadBookOnLaunch = false),
+                dictionarySettings = DictionarySettings(dictionaryTabDefault = true),
                 hasPendingImport = false,
                 isBooksTabSelected = true,
                 backStack = mutableListOf(AppRoute.BooksRoute, AppRoute.ReaderRoute("book-a")),
+                recentBookIdProvider = { "book-a" },
             ),
         )
     }
 
     @Test
-    fun dictionaryDefaultRouteDoesNotOverrideRestoredNonBooksTab() {
+    fun dictionaryDefaultRouteDoesNotOverrideRestoredNonBooksTab() = runBlocking {
         val stateHolder = AppLaunchRouteStateHolder()
 
         assertNull(
             stateHolder.defaultRouteAfterSettingsLoad(
-                settings = DictionarySettings(dictionaryTabDefault = true),
+                readerSettings = ReaderSettings(openLastReadBookOnLaunch = true),
+                dictionarySettings = DictionarySettings(dictionaryTabDefault = true),
                 hasPendingImport = false,
                 isBooksTabSelected = false,
                 backStack = mutableListOf(AppRoute.BooksRoute),
+                recentBookIdProvider = { "book-a" },
             ),
         )
     }

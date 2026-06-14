@@ -217,6 +217,7 @@
     <string name="reader_behavior_reverse_volume_key_direction">反转音量键方向</string>
     <string name="reader_behavior_keep_screen_on">保持屏幕常亮</string>
     <string name="reader_behavior_lock_current_orientation">锁定当前屏幕方向</string>
+    <string name="reader_behavior_open_last_read_book_on_launch">启动时打开最近阅读</string>
     <string name="reader_behavior_auto_check_updates">自动检查更新</string>
     <string name="reader_statistics_pause">暂停统计</string>
     <string name="reader_statistics_start">开始统计</string>

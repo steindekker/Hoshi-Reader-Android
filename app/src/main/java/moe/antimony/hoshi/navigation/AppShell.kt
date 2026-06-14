@@ -31,6 +31,7 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.scene.Scene
 import androidx.navigation3.ui.NavDisplay
 import moe.antimony.hoshi.LocalHoshiUiDependencies
+import moe.antimony.hoshi.epub.BookSortOption
 import moe.antimony.hoshi.features.anki.AnkiView
 import moe.antimony.hoshi.features.bookshelf.BookshelfView
 import moe.antimony.hoshi.features.bookshelf.HoshiMainShell
@@ -139,11 +140,28 @@ fun AppShell(
     LaunchedEffect(dictionarySettingsRepository) {
         dictionarySettingsRepository.settings.collect { settings ->
             launchRouteStateHolder.defaultRouteAfterSettingsLoad(
-                settings = settings,
+                readerSettings = currentReaderSettings,
+                dictionarySettings = settings,
                 hasPendingImport = currentPendingImportUri != null,
                 isBooksTabSelected = selectedTab == MainTab.Books,
                 backStack = booksBackStack,
-            )?.let(::selectTopLevelRoute)
+                recentBookIdProvider = {
+                    runCatching {
+                        bookRepository.loadBookEntries(BookSortOption.Recent)
+                            .firstOrNull()
+                            ?.metadata
+                            ?.id
+                    }.getOrNull()
+                },
+            )?.let { route ->
+                when (route) {
+                    is AppRoute.ReaderRoute -> {
+                        selectedTab = MainTab.Books
+                        booksBackStack.openReaderRoute(route.bookId)
+                    }
+                    else -> selectTopLevelRoute(route)
+                }
+            }
         }
     }
 

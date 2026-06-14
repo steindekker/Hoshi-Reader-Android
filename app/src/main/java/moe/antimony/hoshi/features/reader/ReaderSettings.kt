@@ -82,6 +82,7 @@ data class ReaderSettings(
     val reverseVolumeKeyDirection: Boolean = false,
     val keepScreenOnWhileReading: Boolean = false,
     val lockCurrentOrientation: Boolean = false,
+    val openLastReadBookOnLaunch: Boolean = false,
 ) {
     val bottomOverlapPx: Int
         get() = if (verticalWriting) fontSize else 0
@@ -297,6 +298,7 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
         reverseVolumeKeyDirection = preferences.getBoolean("reverseVolumeKeyDirection", false),
         keepScreenOnWhileReading = preferences.getBoolean("keepScreenOnWhileReading", false),
         lockCurrentOrientation = preferences.getBoolean("lockCurrentOrientation", false),
+        openLastReadBookOnLaunch = preferences.getBoolean("openLastReadBookOnLaunch", false),
     )
 
     fun save(settings: ReaderSettings) {
@@ -352,6 +354,7 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
             .putBoolean("reverseVolumeKeyDirection", settings.reverseVolumeKeyDirection)
             .putBoolean("keepScreenOnWhileReading", settings.keepScreenOnWhileReading)
             .putBoolean("lockCurrentOrientation", settings.lockCurrentOrientation)
+            .putBoolean("openLastReadBookOnLaunch", settings.openLastReadBookOnLaunch)
             .apply()
     }
 }
@@ -483,6 +486,7 @@ class ReaderSettingsRepository(
             reverseVolumeKeyDirection = this[KEY_REVERSE_VOLUME_KEY_DIRECTION] ?: false,
             keepScreenOnWhileReading = this[KEY_KEEP_SCREEN_ON_WHILE_READING] ?: false,
             lockCurrentOrientation = this[KEY_LOCK_CURRENT_ORIENTATION] ?: false,
+            openLastReadBookOnLaunch = this[KEY_OPEN_LAST_READ_BOOK_ON_LAUNCH] ?: false,
         )
 
     private fun MutablePreferences.writeReaderSettings(settings: ReaderSettings) {
@@ -537,6 +541,7 @@ class ReaderSettingsRepository(
         this[KEY_REVERSE_VOLUME_KEY_DIRECTION] = settings.reverseVolumeKeyDirection
         this[KEY_KEEP_SCREEN_ON_WHILE_READING] = settings.keepScreenOnWhileReading
         this[KEY_LOCK_CURRENT_ORIENTATION] = settings.lockCurrentOrientation
+        this[KEY_OPEN_LAST_READ_BOOK_ON_LAUNCH] = settings.openLastReadBookOnLaunch
     }
 
     private fun MutablePreferences.writeGlobalReaderSettings(settings: ReaderSettings) {
@@ -549,6 +554,7 @@ class ReaderSettingsRepository(
         this[KEY_REVERSE_VOLUME_KEY_DIRECTION] = settings.reverseVolumeKeyDirection
         this[KEY_KEEP_SCREEN_ON_WHILE_READING] = settings.keepScreenOnWhileReading
         this[KEY_LOCK_CURRENT_ORIENTATION] = settings.lockCurrentOrientation
+        this[KEY_OPEN_LAST_READ_BOOK_ON_LAUNCH] = settings.openLastReadBookOnLaunch
     }
 
     private suspend fun profileAppearanceSettingsOrMigrate(globalSettings: ReaderSettings): ProfileReaderAppearanceSettings =
@@ -636,6 +642,7 @@ class ReaderSettingsRepository(
         private val KEY_REVERSE_VOLUME_KEY_DIRECTION = booleanPreferencesKey("reverseVolumeKeyDirection")
         private val KEY_KEEP_SCREEN_ON_WHILE_READING = booleanPreferencesKey("keepScreenOnWhileReading")
         private val KEY_LOCK_CURRENT_ORIENTATION = booleanPreferencesKey("lockCurrentOrientation")
+        private val KEY_OPEN_LAST_READ_BOOK_ON_LAUNCH = booleanPreferencesKey("openLastReadBookOnLaunch")
 
         private val json = Json {
             prettyPrint = true

@@ -2,30 +2,39 @@ package moe.antimony.hoshi.navigation
 
 import androidx.navigation3.runtime.NavKey
 import moe.antimony.hoshi.features.dictionary.DictionarySettings
+import moe.antimony.hoshi.features.reader.ReaderSettings
 
 internal class AppLaunchRouteStateHolder {
-    private var dictionaryDefaultRouteApplied = false
+    private var defaultRouteApplied = false
 
-    fun defaultRouteAfterSettingsLoad(
-        settings: DictionarySettings,
+    suspend fun defaultRouteAfterSettingsLoad(
+        readerSettings: ReaderSettings,
+        dictionarySettings: DictionarySettings,
         hasPendingImport: Boolean,
         isBooksTabSelected: Boolean,
         backStack: List<NavKey>,
+        recentBookIdProvider: suspend () -> String?,
     ): AppRoute? {
-        if (dictionaryDefaultRouteApplied) {
+        if (defaultRouteApplied) {
             return null
         }
-        dictionaryDefaultRouteApplied = true
-        return if (
-            settings.dictionaryTabDefault &&
-            !hasPendingImport &&
-            isBooksTabSelected &&
-            backStack.size == 1 &&
-            backStack.lastOrNull() == AppRoute.BooksRoute
+        defaultRouteApplied = true
+        if (
+            hasPendingImport ||
+            !isBooksTabSelected ||
+            backStack.size != 1 ||
+            backStack.lastOrNull() != AppRoute.BooksRoute
         ) {
-            AppRoute.DictionaryRoute
-        } else {
-            null
+            return null
         }
+        if (readerSettings.openLastReadBookOnLaunch) {
+            recentBookIdProvider()?.takeIf { it.isNotBlank() }?.let { bookId ->
+                return AppRoute.ReaderRoute(bookId)
+            }
+        }
+        if (dictionarySettings.dictionaryTabDefault) {
+            return AppRoute.DictionaryRoute
+        }
+        return null
     }
 }
