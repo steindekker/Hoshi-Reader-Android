@@ -14,6 +14,7 @@ clean without patching the vendored lib.
 """
 import concurrent.futures
 import functools
+import time
 
 from anki.collection import Collection
 from anki.sync import SyncAuth, SyncOutput
@@ -67,6 +68,18 @@ def endpoint_for(auth: SyncAuth, out: SyncOutput) -> SyncAuth:
     return auth
 
 
+def _await_media_sync(col: Collection, *, poll: float = 0.2) -> None:
+    """Block until the backend media sync finishes.
+
+    col.sync_media() only kicks the transfer off on a backend thread and returns
+    at once; without this wait the run (and the col.close() that follows) tears it
+    down mid-flight, so note text reaches AnkiWeb but the media it references never
+    does — the classic "[sound:…] plays nothing" on the review device.
+    media_sync_status() throws if the sync errored, surfacing the failure here."""
+    while col.media_sync_status().active:
+        time.sleep(poll)
+
+
 def _full_transfer(col: Collection, auth: SyncAuth, out: SyncOutput, *, upload: bool) -> None:
     col.close_for_full_sync()
     col.full_upload_or_download(auth=auth, server_usn=out.server_media_usn, upload=upload)
@@ -81,6 +94,7 @@ def pull(col: Collection, auth: SyncAuth) -> tuple[str, SyncAuth]:
     if action == "download":
         _full_transfer(col, auth, out, upload=False)
     col.sync_media(auth)
+    _await_media_sync(col)
     return action, auth
 
 
@@ -92,4 +106,5 @@ def push(col: Collection, auth: SyncAuth) -> tuple[str, SyncAuth]:
     if action == "upload":
         _full_transfer(col, auth, out, upload=True)
     col.sync_media(auth)
+    _await_media_sync(col)
     return action, auth

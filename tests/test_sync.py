@@ -1,6 +1,39 @@
+from types import SimpleNamespace
+
+import pytest
 from anki.sync import SyncAuth, SyncOutput
 
 from ankienrich import sync
+
+
+class _FakeCol:
+    """Returns each queued media_sync_status() in turn; raising entries are raised."""
+
+    def __init__(self, statuses):
+        self._statuses = list(statuses)
+        self.polls = 0
+
+    def media_sync_status(self):
+        self.polls += 1
+        s = self._statuses.pop(0)
+        if isinstance(s, Exception):
+            raise s
+        return SimpleNamespace(active=s)
+
+
+def test_await_media_sync_blocks_until_inactive():
+    # sync.sync_media() only kicks off the transfer; the wait must keep polling
+    # while it's active and return only once the backend reports it finished.
+    col = _FakeCol([True, True, False])
+    sync._await_media_sync(col, poll=0)
+    assert col.polls == 3
+
+
+def test_await_media_sync_propagates_backend_error():
+    # media_sync_status() throws if the sync failed; that must surface, not hang.
+    col = _FakeCol([True, RuntimeError("media sync failed")])
+    with pytest.raises(RuntimeError, match="media sync failed"):
+        sync._await_media_sync(col, poll=0)
 
 
 def test_endpoint_for_honors_redirect():
