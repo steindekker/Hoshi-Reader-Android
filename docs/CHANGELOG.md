@@ -7,7 +7,7 @@ The format follows a Keep a Changelog style, and release sections use Semantic V
 
 ### Added
 
-- Add Profiles for Japanese and English dictionary sessions, including a separate active-profile selector, per-language default profiles, creation from the current active profile, automatic profile preview for per-book overrides, profile-scoped dictionary configuration and update enablement preservation, profile-aware dictionary backup restore that stays readable by single-profile restores while preserving non-dictionary profile settings, dictionary lookup, collapse, behavior, custom CSS, Anki settings, Reader Appearance settings, per-book profile overrides, language-appropriate dictionary search input hints, and dictionary setting controls.
+- Add Profiles for Japanese and English dictionary sessions, including a separate active-profile selector, per-language default profiles, creation from the current active profile, automatic profile preview for per-book overrides, profile-scoped dictionary configuration and update enablement preservation, profile-aware dictionary backup restore that stays readable by single-profile restores while preserving non-dictionary profile settings, dictionary lookup, profile-change search result resets, collapse, behavior, custom CSS, Anki settings, Reader Appearance settings, per-book profile overrides, language-appropriate dictionary search input hints, and dictionary setting controls.
 - Show English dictionary transcriptions in lookup popups and expose them to Anki templates via `{phonetic-transcriptions}` while keeping Japanese pitch accent rendering separate.
 - Add recommended wty English, Simple English, English-Japanese, and Leipzig English frequency dictionary downloads for English profiles.
 

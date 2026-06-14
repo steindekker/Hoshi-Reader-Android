@@ -305,6 +305,12 @@ fun DictionarySearchView(
         rootIframeAtTop = true
         searchViewModel.runLookup()
     }
+    LaunchedEffect(profileState.effectiveProfile.id) {
+        childHistories = emptyMap()
+        rootIframeAtTop = true
+        pullDistancePx = 0f
+        searchViewModel.onEffectiveProfileChanged(profileState.effectiveProfile.id)
+    }
     val lookupPopup = { selection: moe.antimony.hoshi.features.reader.ReaderSelectionData ->
         searchViewModel.createPopup(
             selection = selection,
