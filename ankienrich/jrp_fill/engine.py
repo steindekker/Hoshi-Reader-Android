@@ -74,13 +74,17 @@ def apply_to_fixpoint(col, note_type: str, field: str,
 
     A single splice pass isn't a fixpoint: `generate` can emit a bare kanji that
     splice re-fills next pass, so one apply leaves multi-pass cases behind. Loop
-    until stable. After a regenerate pass the rest is splice-converged (we don't
-    re-strip accepted markup every pass). Returns total notes written."""
+    until stable. A regenerate pass is its OWN fixpoint (the generator is
+    idempotent on its own output) and must NOT be followed by splice passes:
+    splice would treat a token the rebuild intentionally left bare (a depitched
+    suffix) as an empty gap and re-pitch it, reverting the overwrite. Returns
+    total notes written."""
     total = 0
     for _ in range(max_passes):
         plan = build_plan(col, note_type, field, generate, regenerate=regenerate)
         if not plan:
             break
         total += apply_plan(col, plan, field)
-        regenerate = False
+        if regenerate:
+            break
     return total

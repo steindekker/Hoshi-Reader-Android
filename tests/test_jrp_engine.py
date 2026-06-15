@@ -70,6 +70,21 @@ def test_apply_to_fixpoint_converges_multipass(tmp_path):
     col.close()
 
 
+def test_regenerate_not_undone_by_splice_repitch(tmp_path):
+    # A regenerate pass may DEPITCH a token (render it bare) — e.g. a suffix the
+    # current generator no longer pitches. The follow-up splice pass must not treat
+    # that bared token as an empty gap and re-pitch it, reverting the rebuild.
+    col, m = _make_col(tmp_path)
+    nid = _add(col, m, "猫達", "{猫;1}{達;1}")          # stale: suffix 達 wrongly pitched
+    # context-dependent: depitches 達 in the whole sentence, but pitches it alone
+    gen = lambda t: {"猫達": "{猫;1}達", "達": "{達;1}", "猫": "{猫;1}"}.get(t, t)
+    engine.apply_to_fixpoint(col, "jidoujisho Kinomoto", "Sentence", gen, regenerate=True)
+    assert col.get_note(nid)["Sentence"] == "{猫;1}達"   # depitch persists, not reverted
+    assert engine.build_plan(col, "jidoujisho Kinomoto", "Sentence",
+                             gen, regenerate=True) == []
+    col.close()
+
+
 def test_guard_rejects_surface_changing_fill(tmp_path):
     col, m = _make_col(tmp_path)
     _add(col, m, "異端", "異端である")
