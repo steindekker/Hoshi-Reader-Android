@@ -36,3 +36,17 @@ def test_overwrite_fans_out(monkeypatch):
     assert captured["overwrite_pitch"] and captured["overwrite_cloze"]
     assert captured["overwrite_sentences"] and captured["overwrite_defs"]
     assert captured["overwrite_examples"]
+
+
+def test_dry_run_flag_is_accepted_and_does_not_apply(monkeypatch):
+    applied = []
+
+    class FakeCol:
+        def close(self): pass
+
+    monkeypatch.setattr(cli.collection, "open_working", lambda: FakeCol())
+    monkeypatch.setattr(cli.sync, "login", lambda col: None)
+    monkeypatch.setattr(cli.sync, "pull", lambda col, auth: ("none", auth))
+    monkeypatch.setattr(cli.template, "apply", lambda col: applied.append(True))
+    assert cli.main(["template", "--dry-run"]) == 0
+    assert applied == []

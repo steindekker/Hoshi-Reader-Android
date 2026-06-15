@@ -9,9 +9,10 @@ anki-enrich = "ankienrich.cli:main"
 [dependency-groups]
 dev = ["pytest>=8", "anki>=24.11"]
 jrp = ["sudachipy>=0.6.8", "sudachidict-full>=20240409"]
+wizard = ["questionary>=2"]
 
 [tool.uv]
-default-groups = ["dev", "jrp"]
+default-groups = ["dev", "jrp", "wizard"]
 
 [build-system]
 requires = ["hatchling"]

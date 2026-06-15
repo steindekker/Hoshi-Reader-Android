@@ -115,6 +115,8 @@ def main(argv=None) -> int:
     ap.add_argument("--overwrite-defs", action="store_true")
     ap.add_argument("--overwrite-examples", action="store_true")
     ap.add_argument("--overwrite-cloze", action="store_true")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="preview only (the default); bare `--dry-run` opens the wizard")
     args = ap.parse_args(argv)
 
     col = collection.open_working()
