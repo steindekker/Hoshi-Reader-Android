@@ -89,6 +89,24 @@ def _lemma_reading(lemma: str) -> str:
     ms = _tok().tokenize(lemma, C)
     return hira("".join(m.reading_form() or m.surface() for m in ms))
 
+# Honorific-PERSON nouns: referent-honorific ご-words that keep their own accent
+# (ご子息[2,3]), so 美化語平板化 does NOT apply. Unlike the transparent keigo the dict
+# omits, these are accented-but-unlisted, so the heiban fallback must skip them.
+_PERSON_HON = frozenset({
+    "両親", "家族", "夫婦", "夫妻", "主人", "子息", "令息", "令嬢", "令室", "夫人",
+    "母堂", "尊父", "兄弟", "姉妹", "親戚", "親族", "一族", "長男", "長女", "次男",
+    "次女", "息女", "友人",
+})
+
+@lru_cache(maxsize=4096)
+def _surface_reading(surface: str) -> str:
+    """Re-tokenize a bare surface in isolation -> hira reading. Isolating the stem
+    fixes Sudachi's context-dependent mis-reads (香 reads かおり inside お香 but こう
+    alone), so the honorific stem lookup uses the right reading."""
+    _, C = _modes()
+    ms = _tok().tokenize(surface, C)
+    return hira("".join(m.reading_form() or m.surface() for m in ms))
+
 def _dict_reading(lemma: str, acc: AccentIndex) -> tuple[str, list[int]] | None:
     """If the dict knows exactly one reading for this word, return it. Lets the
     dict correct a reading Sudachi got wrong (綾: Sudachi りょう, dict only あや)
@@ -302,7 +320,20 @@ def _nominal_merge(ms, i: int, acc: AccentIndex) -> tuple[Unit, int] | None:
         if pos:
             return Unit(surf, surf, read, read, True, False, tuple(pos)), j - i
         if any(ms[k].part_of_speech()[0] == "接頭辞" for k in range(i, j)):
-            return Unit(surf, surf, read, read, True, False, ()), j - i
+            rd, accents = read, ()
+            pre = ms[i]
+            # honorific お/ご compound the dict omits = transparent 美化語 -> 平板 (0),
+            # but only when the stem is itself a known dict word (so we trust the
+            # reading and skip novel compounds / 〜ちゃん diminutives), and not a
+            # person-honorific (those keep their own accent).
+            if (pre.part_of_speech()[0] == "接頭辞" and pre.surface() in _PREFIX):
+                stem = surf[len(pre.surface()):]
+                sr = _surface_reading(stem) if stem else ""
+                if (stem and stem not in _PERSON_HON
+                        and (acc.lookup(stem, sr) is not None or acc.readings_for(stem))):
+                    rd = hira(pre.reading_form() or pre.surface()) + sr
+                    accents = (0,)
+            return Unit(surf, surf, rd, rd, True, False, accents), j - i
         j -= 1
     return None
 

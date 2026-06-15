@@ -227,6 +227,32 @@ def test_honorific_prefix_merge():
     assert "{お[話|はなし];0}" in g("お話をする")          # not the split はなし[3]
     assert "{お[出|で]まし;0}" in g("お出ましか")          # noun, no 用言 marking
 
+def test_honorific_heiban_on_dict_miss():
+    # A honorific お/ご compound the accent dict OMITS is, by the dict's own logic,
+    # a transparent 美化語 -> 平板 (0). The lexical exceptions (おやつ, おばあさん...)
+    # are already dict headwords, so they never reach this branch.
+    from ankienrich.jrp_fill.accent import AccentIndex
+    from ankienrich.jrp_fill.tokenize import units
+    from ankienrich.jrp_fill.emit import emit_sentence
+    from ankienrich import markup
+    acc = AccentIndex.load(IDX)
+    g = lambda s: emit_sentence(units(s, acc))
+    # transparent 美化語 (お+和語, ご+漢語 keigo) -> heiban, reading from the dict stem
+    assert "{お[相子|あいこ];0}" in g("これでお相子だ")
+    assert "{お[酒|さけ];0}" in g("お酒を飲む")
+    assert "{ご[連絡|れんらく];0}" in g("ご連絡ください")
+    # stem isolation corrects Sudachi's contextual mis-read: お香 こう (not かおり)
+    assert "{お[香|こう];0}" in g("お香を焚く")
+    # GUARD 1: stem not a dict word (〜ちゃん diminutive) -> stays furigana-only
+    out = g("おばあちゃんがいる")
+    assert "おばあちゃん" in out and "{おばあ" not in out and "ちゃん;" not in out
+    # GUARD 2: person-honorific (closed class) is accented, not heiban -> furigana-only
+    out2 = g("ご両親によろしく")
+    assert markup.jrp_surface(out2) == "ご両親によろしく"
+    assert "ご[両親|りょうしん]" in out2 and "{ご[両親" not in out2
+    # non-honorific 接頭辞 compounds are untouched (still furigana-only on a miss)
+    assert "{大" not in g("大事件が起きた")
+
 def test_nominal_compound_merge():
     from ankienrich.jrp_fill.accent import AccentIndex
     from ankienrich.jrp_fill.tokenize import units
