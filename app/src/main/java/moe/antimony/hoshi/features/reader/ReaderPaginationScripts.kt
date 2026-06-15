@@ -63,7 +63,6 @@ internal object ReaderPaginationScripts {
             "window.hoshiReader.jumpToFragment(${fragment.javaScriptStringLiteral()});"
         } ?: "window.hoshiReader.restoreProgress($initialProgress);"
         val restoreScripts = readerRestoreScripts(
-            sasayakiCuesJson = sasayakiCuesJson,
             highlightsJson = highlightsJson,
             initialRestoreScript = initialRestoreScript,
         )
@@ -126,11 +125,9 @@ private object SourceTreeReaderPaginationAssets {
 }
 
 private fun readerRestoreScripts(
-    sasayakiCuesJson: String?,
     highlightsJson: String?,
     initialRestoreScript: String,
 ): String = listOfNotNull(
-    sasayakiCuesJson?.let(ReaderPaginationScripts::applySasayakiCuesInvocation),
     highlightsJson?.let { "window.hoshiHighlights.applyHighlights($it);" },
     initialRestoreScript,
 ).joinToString(separator = "\n")

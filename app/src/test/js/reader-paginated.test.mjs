@@ -402,6 +402,10 @@ function loadReader(body, sourceUrl = readerPaginatedUrl, options = {}) {
             callback();
             return 0;
         },
+        requestAnimationFrame(callback) {
+            callback();
+            return 0;
+        },
         window,
     });
     return { reader: window.hoshiReader, document, head };
@@ -660,6 +664,68 @@ test('Sasayaki highlight applies active DOM state without CSS Highlight API', ()
         assert.equal(wrapper.classList.contains('hoshi-sasayaki-active'), true);
         assert.equal(wrapper.textContent, '蒸し暑い');
         assert.equal(cssHighlightSetCount, 0);
+    }
+});
+
+test('non e-ink Sasayaki chapter load keeps iOS-style wrappers without e-ink geometry', () => {
+    for (const sourceUrl of [readerPaginatedUrl, readerContinuousUrl]) {
+        const body = new TestElement('body');
+        body.appendChild(new TestText('蒸し暑い'));
+        const { reader } = loadReader(body, sourceUrl);
+        reader.isEInkMode = () => false;
+
+        reader.applySasayakiCues([{ id: 'cue', start: 0, length: 4 }]);
+
+        const wrappers = reader.cueWrappers.get('cue') ?? [];
+        assert.equal(wrappers.length, 1);
+        assert.equal(wrappers[0].classList.contains('hoshi-sasayaki-cue'), true);
+        assert.equal(wrappers[0].textContent, '蒸し暑い');
+        assert.equal(reader.cueGeometryRanges.size, 0);
+    }
+});
+
+test('e-ink Sasayaki chapter load keeps geometry available for id-only highlights', () => {
+    for (const sourceUrl of [readerPaginatedUrl, readerContinuousUrl]) {
+        const body = new TestElement('body');
+        body.appendChild(new TestText('蒸し暑い'));
+        const { reader } = loadReader(body, sourceUrl);
+        let overlayRendered = 0;
+        reader.isEInkMode = () => true;
+        reader.renderSasayakiOverlay = () => {
+            overlayRendered += 1;
+        };
+
+        reader.applySasayakiCues([{ id: 'cue', start: 0, length: 4 }]);
+        const result = reader.highlightSasayakiCue('cue', false);
+
+        assert.equal(result, null);
+        assert.equal(reader.cueWrappers.size, 0);
+        assert.equal((reader.cueGeometryRanges.get('cue') ?? []).length, 1);
+        assert.equal(reader.activeCueId, 'cue');
+        assert.equal(overlayRendered, 2);
+    }
+});
+
+test('active non e-ink Sasayaki cue can refresh into e-ink overlay', () => {
+    for (const sourceUrl of [readerPaginatedUrl, readerContinuousUrl]) {
+        const body = new TestElement('body');
+        body.appendChild(new TestText('蒸し暑い'));
+        const { reader } = loadReader(body, sourceUrl);
+        let eInkMode = false;
+        let overlayRendered = 0;
+        reader.isEInkMode = () => eInkMode;
+        reader.renderSasayakiOverlay = () => {
+            overlayRendered += 1;
+        };
+
+        reader.applySasayakiCues([{ id: 'cue', start: 0, length: 4 }]);
+        reader.highlightSasayakiCue('cue', false);
+        eInkMode = true;
+        reader.refreshSasayakiCuePresentation();
+
+        assert.equal(reader.activeCueId, 'cue');
+        assert.equal((reader.cueGeometryRanges.get('cue') ?? []).length, 1);
+        assert.equal(overlayRendered, 1);
     }
 });
 

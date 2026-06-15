@@ -10,6 +10,10 @@ Historical release notes before v1.1.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 
 - Add a Behavior setting to open the last read book on app launch.
 
+### Fixed
+
+- Speed up opening Reader chapters with large Sasayaki subtitle matches.
+
 ## [v1.2.0] - 2026-06-15
 
 ### Added

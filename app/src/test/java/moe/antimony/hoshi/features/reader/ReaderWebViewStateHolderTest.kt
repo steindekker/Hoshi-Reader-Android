@@ -125,6 +125,45 @@ class ReaderWebViewStateHolderTest {
     }
 
     @Test
+    fun restoreCompletionActionKeepsReaderRestoringUntilWebViewIsVisible() {
+        var restoreCompletedCount = 0
+
+        val afterVisible = readerRestoreCompletionAfterVisibleAction(
+            chapterFragment = null,
+            evaluateProgress = { error("Progress should not be evaluated without a fragment") },
+            onSaveProgress = { error("Progress should not be saved without a fragment") },
+            onRestoreCompleted = { restoreCompletedCount += 1 },
+        )
+
+        assertEquals(0, restoreCompletedCount)
+
+        afterVisible()
+
+        assertEquals(1, restoreCompletedCount)
+    }
+
+    @Test
+    fun fragmentRestoreCompletionEvaluatesProgressOnlyAfterWebViewIsVisible() {
+        val events = mutableListOf<String>()
+
+        val afterVisible = readerRestoreCompletionAfterVisibleAction(
+            chapterFragment = "chapter-anchor",
+            evaluateProgress = { callback ->
+                events += "evaluate"
+                callback("\"0.42\"")
+            },
+            onSaveProgress = { progress -> events += "save $progress" },
+            onRestoreCompleted = { events += "restored" },
+        )
+
+        assertTrue(events.isEmpty())
+
+        afterVisible()
+
+        assertEquals(listOf("evaluate", "save 0.42", "restored"), events)
+    }
+
+    @Test
     fun readerNavigationInputIsIgnoredWhileWebViewIsRestoring() {
         val holder = stateHolder(initialIndex = 2)
 

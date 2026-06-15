@@ -230,6 +230,19 @@ class ReaderPaginationScriptsTest {
     }
 
     @Test
+    fun loadScriptDefersSasayakiCueApplicationUntilAfterRestore() {
+        val script = ReaderPaginationScripts.shellScript(
+            sasayakiCuesJson = """[{"id":"cue","start":0,"length":1}]""",
+        )
+        val restoreBlock = script.substringAfter("Promise.all(imagePromises).then(function()")
+            .substringAfter("window.hoshiReader.buildNodeOffsets();")
+            .substringBefore("});")
+
+        assertFalse(restoreBlock.contains("applySasayakiCues"))
+        assertTrue(restoreBlock.contains("window.hoshiReader.restoreProgress(0.0)"))
+    }
+
+    @Test
     fun characterBasedProgressCountsEveryNodeBeforeViewportLikeIos() {
         val progress = readerProgressFromVisibleNodeLayouts(
             listOf(

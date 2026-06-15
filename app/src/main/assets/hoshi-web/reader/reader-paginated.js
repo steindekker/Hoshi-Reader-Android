@@ -204,7 +204,9 @@ window.hoshiReader = {
      this.resetSasayakiCues();
      var cueRanges = this.collectSasayakiCueRanges(cues);
      this.rememberSasayakiCueSources(cueRanges);
-     this.cueGeometryRanges = this.buildSasayakiGeometryRanges(cueRanges);
+     if (this.isEInkMode()) {
+       this.cueGeometryRanges = this.buildSasayakiGeometryRanges(cueRanges);
+     }
      this.prepareSasayakiInlineTargets(cueRanges);
      this.buildNodeOffsets();
      if (activeCueId && this.hasSasayakiCueTarget(activeCueId)) {
@@ -295,13 +297,26 @@ window.hoshiReader = {
     return geometryRanges;
   },
   ensureSasayakiCueGeometry: function(cue) {
-    if (!cue || typeof cue === 'string') return;
-    var existing = this.cueGeometryRanges.get(cue.id);
+    if (!cue) return;
+    var cueId = typeof cue === 'string' ? cue : cue.id;
+    if (!cueId) return;
+    var existing = this.cueGeometryRanges.get(cueId);
     if (existing && existing.length) return;
+    if (typeof cue === 'string') {
+      var targets = this.sasayakiInlineTargetsForCue(cueId);
+      var targetRanges = [];
+      for (var i = 0; i < targets.length; i++) {
+        var targetRange = document.createRange();
+        targetRange.selectNodeContents(targets[i]);
+        targetRanges.push(targetRange);
+      }
+      if (targetRanges.length) this.cueGeometryRanges.set(cueId, targetRanges);
+      return;
+    }
      var cueRanges = this.collectSasayakiCueRanges([cue]);
      this.rememberSasayakiCueSources(cueRanges);
-     var geometryRanges = this.buildSasayakiGeometryRanges(cueRanges).get(cue.id) || [];
-     if (geometryRanges.length) this.cueGeometryRanges.set(cue.id, geometryRanges);
+     var geometryRanges = this.buildSasayakiGeometryRanges(cueRanges).get(cueId) || [];
+     if (geometryRanges.length) this.cueGeometryRanges.set(cueId, geometryRanges);
    },
   sasayakiOverlayRects: function(cueId) {
     var ranges = this.cueGeometryRanges.get(cueId) || [];
@@ -347,6 +362,7 @@ window.hoshiReader = {
     }
     this.clearInlineSasayakiCue(this.activeCueId);
     if (this.isEInkMode()) {
+      this.ensureSasayakiCueGeometry(this.activeCueId);
       this.renderSasayakiOverlay();
      } else {
        this.clearSasayakiOverlay();
