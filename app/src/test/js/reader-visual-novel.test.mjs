@@ -251,6 +251,30 @@ class TestElement extends TestNode {
         return querySelectorAll(this, selector);
     }
 
+    getClientRects() {
+        return [this.getBoundingClientRect()];
+    }
+
+    getBoundingClientRect() {
+        const layout = this.ownerDocument?._vnLayout;
+        const capacity = layout?.charactersPerScreen ?? 800;
+        if (
+            this.classList.contains('hoshi-vn-stage') ||
+            this.classList.contains('hoshi-vn-screen') ||
+            this.classList.contains('hoshi-vn-content')
+        ) {
+            if (!layout?.charactersPerScreen) {
+                return { x: 0, y: 0, left: 0, right: 800, top: 0, bottom: 800, width: 800, height: 800 };
+            }
+            const extent = capacity * 24;
+            if (layout?.writingMode && layout.writingMode.startsWith('vertical')) {
+                return { x: 0, y: 0, left: 0, right: extent, top: 0, bottom: 24, width: extent, height: 24 };
+            }
+            return { x: 0, y: 0, left: 0, right: 24, top: 0, bottom: extent, width: 24, height: extent };
+        }
+        return { x: 0, y: 0, left: 0, right: 24, top: 0, bottom: 24, width: 24, height: 24 };
+    }
+
     normalize() {
         const normalized = [];
         this.childNodes.forEach((child) => {
@@ -307,7 +331,8 @@ class TestFragment extends TestNode {
 }
 
 class TestRange {
-    constructor() {
+    constructor(document) {
+        this.document = document;
         this.node = null;
         this.startNode = null;
         this.startOffset = 0;
@@ -371,9 +396,29 @@ class TestRange {
     }
 
     getClientRects() {
+        const layoutRect = this.layoutRect();
+        if (layoutRect) return [layoutRect];
         return this.startNode?.rects ?? this.node?.rects ?? [
             { x: 12, y: 24, left: 12, right: 32, top: 24, bottom: 48, width: 20, height: 24 },
         ];
+    }
+
+    layoutRect() {
+        const layout = this.document?._vnLayout;
+        const capacity = layout?.charactersPerScreen;
+        const node = this.startNode?.nodeType === 3 ? this.startNode : this.node?.nodeType === 3 ? this.node : null;
+        if (!capacity || !node) return null;
+        const content = closestElement(node, '.hoshi-vn-content');
+        if (!content) return null;
+        const start = textOffsetWithin(content, node) + this.startOffset;
+        const end = textOffsetWithin(content, this.endNode === node ? node : this.startNode) + this.endOffset;
+        const safeEnd = Math.max(start, end);
+        if (layout.writingMode && layout.writingMode.startsWith('vertical')) {
+            const right = (capacity - start) * 24;
+            const left = (capacity - safeEnd) * 24;
+            return { x: left, y: 0, left, right, top: 0, bottom: 24, width: right - left, height: 24 };
+        }
+        return { x: 0, y: start * 24, left: 0, right: 24, top: start * 24, bottom: safeEnd * 24, width: 24, height: (safeEnd - start) * 24 };
     }
 
     getBoundingClientRect() {
@@ -389,6 +434,33 @@ class TestRange {
     }
 
     detach() {}
+}
+
+function closestElement(node, selector) {
+    let current = node?.parentElement;
+    while (current) {
+        if (matchesSelector(current, selector)) return current;
+        current = current.parentElement;
+    }
+    return null;
+}
+
+function textOffsetWithin(root, target) {
+    let offset = 0;
+    let found = false;
+    const visit = (node) => {
+        if (found) return;
+        if (node === target) {
+            found = true;
+            return;
+        }
+        if (node.nodeType === 3) {
+            offset += node.textContent.length;
+        }
+        node.childNodes?.forEach(visit);
+    };
+    visit(root);
+    return offset;
 }
 
 function matchesSelector(node, selector) {
@@ -441,15 +513,24 @@ function findElementById(root, id) {
     return result;
 }
 
-function buildDocument(body) {
+function assignOwnerDocument(node, document) {
+    node.ownerDocument = document;
+    node.childNodes?.forEach((child) => assignOwnerDocument(child, document));
+}
+
+function buildDocument(body, options = {}) {
     const head = new TestElement('head');
     const documentElement = new TestElement('html');
     documentElement.appendChild(head);
     documentElement.appendChild(body);
-    return {
+    const document = {
         body,
         head,
         documentElement,
+        _vnLayout: {
+            charactersPerScreen: options.charactersPerScreen,
+            writingMode: options.vnWritingMode ?? 'horizontal-tb',
+        },
         fonts: { ready: Promise.resolve() },
         readyState: 'loading',
         baseURI: 'https://example.invalid/chapter.xhtml',
@@ -457,13 +538,17 @@ function buildDocument(body) {
             return new TestFragment();
         },
         createTextNode(text) {
-            return new TestText(text);
+            const node = new TestText(text);
+            node.ownerDocument = document;
+            return node;
         },
         createElement(tagName) {
-            return new TestElement(tagName);
+            const element = new TestElement(tagName);
+            element.ownerDocument = document;
+            return element;
         },
         createRange() {
-            return new TestRange();
+            return new TestRange(document);
         },
         createTreeWalker(root, _whatToShow, filter) {
             const nodes = [];
@@ -495,10 +580,12 @@ function buildDocument(body) {
         },
         addEventListener() {},
     };
+    assignOwnerDocument(documentElement, document);
+    return document;
 }
 
 function loadReader(body, options = {}) {
-    const document = buildDocument(body);
+    const document = buildDocument(body, options);
     const restoreMessages = [];
     const imageMessages = [];
     const sasayakiHighlights = [];
@@ -669,6 +756,61 @@ test('block mode splits a chapter wrapper into child block screens', async () =>
 
     assert.equal(reader.paginate('forward'), 'scrolled');
     assert.equal(currentScreen(reader).textContent, '第二段落。');
+});
+
+test('block mode splits oversized text blocks to keep every part reachable', async () => {
+    const body = bodyWith(p('一二三四五六七八九十。', { id: 'long' }), p('次段落。'));
+    const { reader } = await initializeReader(body, {
+        mode: 'block',
+        revealSpeed: 0,
+        charactersPerScreen: 4,
+    });
+
+    assert.equal(currentScreen(reader).textContent, '一二三四');
+    assert.equal(reader.calculateProgress(), 4 / reader.totalChapterChars);
+    assert.equal(reader.screenIndexForFragment('long'), 0);
+
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '五六七八');
+
+    await reader.restoreProgress(6 / reader.totalChapterChars);
+    assert.equal(currentScreen(reader).textContent, '五六七八');
+
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '九十。');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '次段落。');
+});
+
+test('block mode splits oversized vertical writing blocks against the VN content bounds', async () => {
+    const body = bodyWith(p('一二三四五六'));
+    const { reader } = await initializeReader(body, {
+        mode: 'block',
+        revealSpeed: 0,
+        bodyWritingMode: 'vertical-rl',
+        vnWritingMode: 'vertical-rl',
+        charactersPerScreen: 3,
+    });
+
+    assert.equal(currentScreen(reader).textContent, '一二三');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '四五六');
+});
+
+test('sentence mode splits an oversized sentence after applying sentence grouping', async () => {
+    const body = bodyWith(p('一二三四五六'), p('次。'));
+    const { reader } = await initializeReader(body, {
+        mode: 'sentences',
+        sentencesPerScreen: 1,
+        revealSpeed: 0,
+        charactersPerScreen: 3,
+    });
+
+    assert.equal(currentScreen(reader).textContent, '一二三');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '四五六');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '次。');
 });
 
 test('sentence mode groups sentences by configured count', async () => {
@@ -937,6 +1079,27 @@ test('visual novel Sasayaki reveal jumps to a later screen and returns progress'
     assert.equal(currentScreen(reader).textContent, '二三。');
     assert.equal(currentScreen(reader).querySelectorAll('[data-hoshi-visual-novel-unrevealed]').length, 0);
     assert.equal(sasayakiWrappers(reader)[0].textContent, '二三');
+    assert.equal(sasayakiWrappers(reader)[0].classList.contains('hoshi-sasayaki-active'), true);
+});
+
+test('visual novel Sasayaki reveal jumps to the visible split screen inside an oversized block', async () => {
+    const cue = { id: 'cue', start: 8, length: 2 };
+    const { reader } = await initializeReader(
+        bodyWith(p('一二三四五六七八九十。'), p('次段落。')),
+        {
+            mode: 'block',
+            revealSpeed: 10,
+            charactersPerScreen: 4,
+        },
+    );
+
+    reader.applySasayakiCues([cue]);
+    const result = reader.highlightSasayakiCue(cue, true);
+
+    assert.equal(result, 10 / reader.totalChapterChars);
+    assert.equal(currentScreen(reader).textContent, '九十。');
+    assert.equal(currentScreen(reader).querySelectorAll('[data-hoshi-visual-novel-unrevealed]').length, 0);
+    assert.equal(sasayakiWrappers(reader)[0].textContent, '九十');
     assert.equal(sasayakiWrappers(reader)[0].classList.contains('hoshi-sasayaki-active'), true);
 });
 
