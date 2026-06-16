@@ -9,7 +9,7 @@
 import argparse
 import sys
 
-from . import collection, dedupe as _dedupe, pipeline, sync, template
+from . import collection, dedupe as _dedupe, pipeline, sync, template, wizard
 
 # tiny ANSI helpers — no deps, plain text when stdout is not a TTY
 _TTY = sys.stdout.isatty()
@@ -104,18 +104,28 @@ def _render_dedupe(res: dict, apply: bool) -> None:
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(prog="anki-enrich",
-                                 description="Post-sync Anki enrichment.")
-    ap.add_argument("command", nargs="?", default="run", choices=["run", "dedupe", "template"])
-    ap.add_argument("--apply", action="store_true", help="write + push (else dry run)")
-    ap.add_argument("--overwrite", action="store_true",
-                    help="re-assert pitch, sentences, defs, examples AND cloze on every card")
-    ap.add_argument("--overwrite-pitch", action="store_true")
-    ap.add_argument("--overwrite-sentences", action="store_true")
-    ap.add_argument("--overwrite-defs", action="store_true")
-    ap.add_argument("--overwrite-examples", action="store_true")
-    ap.add_argument("--overwrite-cloze", action="store_true")
-    args = ap.parse_args(argv)
+    if argv is None:
+        argv = sys.argv[1:]
+    if wizard.should_run_wizard(argv, sys.stdin.isatty() and sys.stdout.isatty()):
+        args = wizard.run(dry_run="--dry-run" in argv)
+        if args is None:
+            return 0
+    else:
+        ap = argparse.ArgumentParser(prog="anki-enrich",
+                                     description="Post-sync Anki enrichment.")
+        ap.add_argument("command", nargs="?", default="run",
+                        choices=["run", "dedupe", "template"])
+        ap.add_argument("--apply", action="store_true", help="write + push (else dry run)")
+        ap.add_argument("--overwrite", action="store_true",
+                        help="re-assert pitch, sentences, defs, examples AND cloze on every card")
+        ap.add_argument("--overwrite-pitch", action="store_true")
+        ap.add_argument("--overwrite-sentences", action="store_true")
+        ap.add_argument("--overwrite-defs", action="store_true")
+        ap.add_argument("--overwrite-examples", action="store_true")
+        ap.add_argument("--overwrite-cloze", action="store_true")
+        ap.add_argument("--dry-run", action="store_true",
+                        help="preview only (the default); bare `--dry-run` opens the wizard")
+        args = ap.parse_args(argv)
 
     col = collection.open_working()
     try:
