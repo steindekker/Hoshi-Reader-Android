@@ -37,15 +37,24 @@ def test_saito_pairs_diamond_jp_with_70pct_en():
     assert exs[1] == {"jp": "犬も好き", "en": "", "plain": "犬も好き"}   # term absent -> no highlight
 
 
-def test_yourei_concats_spans_highlights_red_drops_anchor():
+def test_yourei_keeps_only_headword_sentence_drops_anchor():
+    # passage = 3 sentences; headword 自然 sits in the middle one -> only that is kept
     sc = [{"tag": "div", "content": [{"tag": "ul", "content": [
         {"tag": "li", "content": [{"tag": "span", "content": [
-            {"tag": "span", "content": "とても"},
+            {"tag": "span", "content": "前の文。とても"},
             {"tag": "span", "style": {"color": "red", "fontWeight": "bold"}, "content": "自然"},
-            {"tag": "span", "content": "だ。"},
+            {"tag": "span", "content": "だ。次の文。"},
             {"tag": "a", "href": "x", "content": "出典本"}]}]}]}]}]
     exs = parse.yourei(sc)
     assert exs == [{"jp": 'とても<b class="aa-ex-kw">自然</b>だ。', "en": "", "plain": "とても自然だ。"}]
+
+
+def test_yourei_single_sentence_passes_through():
+    sc = [{"tag": "ul", "content": [{"tag": "li", "content": [{"tag": "span", "content": [
+        {"tag": "span", "content": "これは"},
+        {"tag": "span", "style": {"color": "red"}, "content": "猫"},
+        {"tag": "span", "content": "だ"}]}]}]}]
+    assert parse.yourei(sc) == [{"jp": 'これは<b class="aa-ex-kw">猫</b>だ', "en": "", "plain": "これは猫だ"}]
 
 
 def test_tatoeba_token_regex():

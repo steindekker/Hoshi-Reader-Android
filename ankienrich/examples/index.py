@@ -23,10 +23,12 @@ def _by_reading(rows, reading):
 def select(conn, term: str, reading: str,
            sources=None, cap=None) -> list[dict]:
     """Up to `cap` examples for one card: walk `sources` in priority order, prefer
-    reading-matching rows, dedupe across sources by normalized JP. Returns dicts
-    with jp/en/source/label keys, source order preserved within each dict."""
+    reading-matching rows, dedupe across sources by normalized JP, skip any example
+    longer than EXAMPLE_MAX_LEN. Returns dicts with jp/en/source/label keys, source
+    order preserved within each dict."""
     sources = sources or config.EXAMPLE_SOURCES
     cap = cap or config.EXAMPLE_CAP
+    maxlen = config.EXAMPLE_MAX_LEN
     rows = conn.execute(
         "SELECT term, reading, dict_id, ord, jp, en, plain FROM examples WHERE term=?",
         (term,)).fetchall()
@@ -34,6 +36,8 @@ def select(conn, term: str, reading: str,
     for src in sources:
         src_rows = sorted((r for r in rows if r["dict_id"] == src), key=lambda r: r["ord"])
         for r in _by_reading(src_rows, reading):
+            if maxlen and len(r["plain"]) > maxlen:
+                continue
             key = parse.norm(r["plain"])
             if not key or key in seen:
                 continue

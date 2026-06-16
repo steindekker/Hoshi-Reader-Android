@@ -35,11 +35,15 @@ NO_HIT_DROP_THRESHOLD = 20
 # Example-sentence enrichment. Up to EXAMPLE_CAP sentences per card, filled in
 # EXAMPLE_SOURCES priority order with cross-source dedupe. Jitendex leads (ships
 # furigana + EN but ~1 example/word); Tatoeba tops up the thin words (same corpus,
-# plain JP + EN); 斎藤 / 用例.jp backfill what Tatoeba misses.
+# plain JP + EN); 斎藤 / 用例.jp backfill what Tatoeba misses. 用例.jp passages are
+# multi-sentence literary excerpts → parse.yourei keeps only the headword's sentence;
+# EXAMPLE_MAX_LEN then drops any residual over-long example (any source) so cards
+# never carry a paragraph.
 EXAMPLES = "Examples"
 EXAMPLE_SOURCES = ["jitendex", "tatoeba", "saito", "yourei"]
 EXAMPLE_CAP = 3
 EXAMPLE_BUILD_CAP = 12  # max stored per (dict, term, reading); ≥ CAP for dedupe headroom
+EXAMPLE_MAX_LEN = 60    # skip examples whose plain JP exceeds this many chars
 EX_LABELS = {"jitendex": "Jitendex", "tatoeba": "Tatoeba", "saito": "斎藤", "yourei": "用例.jp"}
 EXAMPLES_TAG = "ankienrich::examples"
 NO_EXAMPLE_TAG = "ankienrich::no-example"
