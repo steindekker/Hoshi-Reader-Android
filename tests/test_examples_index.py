@@ -44,6 +44,19 @@ def test_select_priority_order_and_cap(tmp_path):
     conn.close()
 
 
+def test_select_skips_examples_over_max_len(tmp_path):
+    db = str(tmp_path / "examples.sqlite")
+    long_jp = "あ" * (config.EXAMPLE_MAX_LEN + 1)
+    _make_db(db, [
+        _row("猫", "ねこ", "jitendex", 0, long_jp, en="too long"),
+        _row("猫", "ねこ", "tatoeba", 0, "猫がいる。"),
+    ])
+    conn = index.open_index(db)
+    got = [e["jp"] for e in index.select(conn, "猫", "ねこ")]
+    assert got == ["<jp>猫がいる。</jp>"]   # over-length jitendex row skipped
+    conn.close()
+
+
 def test_select_dedupes_across_sources(tmp_path):
     db = str(tmp_path / "examples.sqlite")
     # same sentence in jitendex (with furigana) and tatoeba -> shown once

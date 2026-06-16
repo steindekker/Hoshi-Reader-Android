@@ -218,7 +218,7 @@
 .aa-ex-jp { display: block; font-size: 15.5px;
   font-family: "Hiragino Mincho ProN", "Noto Serif CJK JP", serif; }
 .aa-ex-jp ruby rt { font-size: .55em; opacity: .8; font-weight: 400; }
-.aa-ex-kw { font-weight: 700; color: var(--accent); }
+.aa-ex-kw { font-weight: 700; }
 .aa-ex-en { display: block; font-size: 12.5px; line-height: 1.5; color: #666; margin-top: 1px; }
 .nightMode .aa-ex-en { color: #aaa; }
 

@@ -4,8 +4,10 @@ No anki/sqlite imports. Each source encodes examples differently:
   jitendex  data.content 'example-sentence' box: -a (JP, ruby + 'example-keyword'
             highlight) / -b (EN). Tatoeba-sourced, ~1/word.
   saito     <ul> of paired <li>: listStyleType '◆' = JP, next fontSize 70% = EN.
-  yourei    <li> list of literary passages; headword = red-bold span; trailing
-            <a> = book attribution (dropped). JP only.
+  yourei    <li> list of literary passages (multi-sentence); headword = red-bold
+            span, trailing <a> = book attribution (dropped). Only the single
+            sentence containing the headword is kept (passages are paragraph-long).
+            JP only.
 jp is rendered HTML (ruby kept where present, keyword wrapped in <b class=aa-ex-kw>);
 plain is the bare base text (rt dropped) used for dedupe."""
 import html
@@ -132,12 +134,27 @@ def saito(sc, keyword: str) -> list[dict]:
     return out
 
 
+_SENT_END = "。！？!?"
+
+
+def _sentence_at(text: str, offset: int) -> str:
+    """The sentence of `text` (split on 。！？) covering char `offset`, trimmed."""
+    start, pos = 0, 0
+    for ch in text:
+        pos += 1
+        if ch in _SENT_END:
+            if start <= offset < pos:
+                return text[start:pos].strip()
+            start = pos
+    return text[start:].strip()
+
+
 def _yourei_li(li) -> dict | None:
-    """One 用例.jp passage: concat span text, highlight the red-bold headword, drop <a>."""
-    parts, plain = [], []
+    """One 用例.jp passage -> the single sentence around the red-bold headword (<a> dropped)."""
+    segs = []  # (text, is_keyword)
     for span in _children(li):
         if isinstance(span, str):
-            parts.append(_esc(span)); plain.append(span)
+            segs.append((span, False))
             continue
         if not isinstance(span, dict):
             continue
@@ -145,17 +162,20 @@ def _yourei_li(li) -> dict | None:
             if not isinstance(s, dict) or s.get("tag") == "a":
                 continue  # <a> = book attribution link
             txt = _plain(s.get("content"))
-            if not txt:
-                continue
-            if _style(s, "color") == "red":
-                parts.append(f'<b class="aa-ex-kw">{_esc(txt)}</b>')
-            else:
-                parts.append(_esc(txt))
-            plain.append(txt)
-    joined = "".join(plain).strip()
-    if not joined:
+            if txt:
+                segs.append((txt, _style(s, "color") == "red"))
+    full = "".join(t for t, _ in segs)
+    kw_off, keyword, pos = -1, "", 0
+    for txt, is_kw in segs:
+        if is_kw and not keyword:
+            kw_off, keyword = pos, txt
+        pos += len(txt)
+    if not keyword:
         return None
-    return {"jp": "".join(parts), "en": "", "plain": joined}
+    sent = _sentence_at(full, kw_off)
+    if not sent:
+        return None
+    return {"jp": highlight(sent, keyword), "en": "", "plain": sent}
 
 
 def yourei(sc) -> list[dict]:
