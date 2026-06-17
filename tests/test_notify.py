@@ -56,19 +56,26 @@ def _apply_res():
 def test_format_report_dry_run():
     out = notify.format_report(_dry_res(), apply=False, pull_action="none")
     assert "dry run" in out
-    assert "1234" in out and "scanned" in out
-    assert "sentence" in out and "5" in out
+    assert "1,234 cards scanned" in out          # thousands separator
+    assert "sentence" in out and "<b>5</b>" in out
 
 
-def test_format_report_apply_has_verdict_and_push():
+def test_format_report_apply_has_verdict_and_sync():
     out = notify.format_report(
         _apply_res(), apply=True, pull_action="normal", push_action="normal")
-    assert "applied" in out
-    assert "12" in out  # 9 + 3 audio filled
-    assert "push" in out
+    assert "applied + pushed" in out
+    assert "<b>12</b>" in out  # 9 + 3 audio filled
+    assert "uploaded changes" in out  # push action rendered in sync footer
 
 
-def test_format_report_skipped_step_renders_dash():
+def test_format_report_drops_zero_detail():
+    # defs written with 0 dropped -> no trailing "0 dropped" noise
+    out = notify.format_report(
+        _apply_res(), apply=True, pull_action="normal", push_action="normal")
+    assert "dropped" not in out
+
+
+def test_format_report_skipped_step_shows_reason():
     res = _dry_res()
     res["steps"]["audio"] = {"skipped": "entries.db not found"}
     out = notify.format_report(res, apply=False, pull_action="none")
@@ -79,5 +86,5 @@ def test_format_report_failure_names_pass_and_escapes():
     out = notify.format_report(
         None, apply=True, pull_action=None,
         error=("defs", RuntimeError("missing <db>")))
-    assert "FAILED at defs" in out
+    assert "failed at defs" in out
     assert "RuntimeError: missing &lt;db&gt;" in out  # HTML-escaped

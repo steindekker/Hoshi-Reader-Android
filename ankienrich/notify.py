@@ -38,9 +38,23 @@ _SYNC_TEXT = {
 }
 
 
-def _row(label: str, value, detail: str = "") -> str:
-    line = f"{label:<9}{str(value):>5}"
-    return f"{line}   {detail}" if detail else line
+# Per-pass glyphs. One emoji a line — enough to scan on a phone, not a parade.
+_EMOJI = {"audio": "🔊", "pitch": "📈", "sentence": "📝",
+          "defs": "📖", "examples": "💬", "cloze": "🧩"}
+
+
+def _detail(*items) -> str:
+    """Join "<n> <noun>" fragments, dropping zero counts so lines stay quiet."""
+    return " · ".join(f"{n} {noun}" for n, noun in items if n)
+
+
+def _line(label: str, n, detail: str = "") -> str:
+    tail = f"<i> · {detail}</i>" if detail else ""
+    return f"{_EMOJI[label]} <b>{n}</b> {label}{tail}"
+
+
+def _skipped(label: str, reason: str) -> str:
+    return f"{_EMOJI[label]} <i>{label} skipped · {html.escape(reason)}</i>"
 
 
 def format_report(res, *, apply, pull_action, push_action=None, error=None) -> str:
@@ -48,46 +62,51 @@ def format_report(res, *, apply, pull_action, push_action=None, error=None) -> s
     if error is not None:
         step, exc = error
         body = f"{type(exc).__name__}: {exc}" if isinstance(exc, BaseException) else str(exc)
-        return (f"<b>anki-enrich — ❌ FAILED at {html.escape(step)}</b>\n"
+        return (f"❌ <b>anki-enrich</b> · failed at {html.escape(step)}\n"
                 f"<pre>{html.escape(body)}</pre>")
 
     s = res["steps"]
-    rows = [_row("scanned", res["scanned"], "cards")]
-    rows.append(_row("sync", "", f"pull — {_SYNC_TEXT['pull'].get(pull_action, pull_action)}"))
-    if apply and push_action is not None:
-        rows.append(_row("sync", "", f"push — {_SYNC_TEXT['push'].get(push_action, push_action)}"))
+    verdict = "applied + pushed" if apply else "dry run"
+    lines = [f"{'✅' if apply else '👀'} <b>anki-enrich</b> · {verdict}",
+             f"<i>{res['scanned']:,} cards scanned</i>", ""]
 
     a = s["audio"]
     if "skipped" in a:
-        rows.append(_row("audio", "—", f"skipped: {a['skipped']}"))
+        lines.append(_skipped("audio", a["skipped"]))
     elif apply:
         filled, upgraded = sum(a["filled"].values()), sum(a["upgraded"].values())
-        rows.append(_row("audio", filled, f"{upgraded} upgraded"))
+        lines.append(_line("audio", filled, _detail((upgraded, "upgraded"))))
     else:
-        rows.append(_row("audio", a["will_fill"], f"{a['will_upgrade']} to upgrade · {a['none']} no match"))
+        lines.append(_line("audio", a["will_fill"],
+                           _detail((a["will_upgrade"], "to upgrade"), (a["none"], "no match"))))
 
     p = s["pitch"]
-    rows.append(_row("pitch", p["filled"], f"{p['not_found']} not in dict · {p['skipped']} no reading"))
-    rows.append(_row("sentence", s["sentences"]["filled"], "JRP markup"))
+    lines.append(_line("pitch", p["filled"],
+                       _detail((p["not_found"], "not in dict"), (p["skipped"], "no reading"))))
+    lines.append(_line("sentence", s["sentences"]["filled"]))
 
     e = s["enrich"]
     if "skipped" in e:
-        rows.append(_row("defs", "—", f"skipped: {e['skipped']}"))
+        lines.append(_skipped("defs", e["skipped"]))
     elif apply:
-        rows.append(_row("defs", e["written"], f"{e['dropped']} dropped"))
+        lines.append(_line("defs", e["written"], _detail((e["dropped"], "dropped"))))
     else:
-        rows.append(_row("defs", e["to_write"], f"{e['nohit']} no-hit"))
+        lines.append(_line("defs", e["to_write"], _detail((e["nohit"], "no-hit"))))
 
     x = s["examples"]
     if "skipped" in x:
-        rows.append(_row("examples", "—", f"skipped: {x['skipped']}"))
+        lines.append(_skipped("examples", x["skipped"]))
     elif apply:
-        rows.append(_row("examples", x["written"], f"{x['none_tagged']} no-example"))
+        lines.append(_line("examples", x["written"], _detail((x["none_tagged"], "none"))))
     else:
-        rows.append(_row("examples", x["to_write"], f"{x['none']} no-example"))
+        lines.append(_line("examples", x["to_write"], _detail((x["none"], "none"))))
 
     c = s["cloze"]
-    rows.append(_row("cloze", c["filled"], f"{c['skipped']} unlocatable"))
+    lines.append(_line("cloze", c["filled"], _detail((c["skipped"], "unlocatable"))))
 
-    verdict = "✓ applied + pushed" if apply else "dry run — pass --apply to write"
-    return f"<b>anki-enrich — {verdict}</b>\n<pre>{html.escape(chr(10).join(rows))}</pre>"
+    pull = _SYNC_TEXT["pull"].get(pull_action, pull_action)
+    sync = pull
+    if apply and push_action is not None:
+        sync = f"{pull} → {_SYNC_TEXT['push'].get(push_action, push_action)}"
+    lines += ["", f"<i>🔄 {sync}</i>"]
+    return "\n".join(lines)
