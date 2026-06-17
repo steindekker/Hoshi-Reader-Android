@@ -9,7 +9,6 @@ from urllib.parse import urlparse
 
 from . import collection, config, massif, images, sync, runlock
 from .audio import enrich as audio_enrich
-from .examples import index as ex_index
 
 
 def target_deck(col) -> str:
