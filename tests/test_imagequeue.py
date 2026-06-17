@@ -114,3 +114,30 @@ def test_skip_swaps_needs_image_for_no_image(kcol, monkeypatch):
     note = kcol.get_note(nid)
     assert config.NEEDS_IMAGE_TAG not in note.tags
     assert config.NO_IMAGE_TAG in note.tags
+
+
+def test_queue_image_rows_numbered_then_skip_then_end():
+    rows = imagequeue.queue_image_rows([object(), object()])
+    assert rows[0] == ("1", "qpick:0")
+    assert rows[1] == ("2", "qpick:1")
+    assert rows[-2] == ("⏭ スキップ", "qskip")
+    assert rows[-1] == ("■ 終了", "qend")
+
+
+def test_queue_session_transitions_and_summary():
+    c = imagequeue.Candidate(1, "a", "あ", "ctx")
+    d = imagequeue.Candidate(2, "b", "い", "ctx")
+    q = imagequeue.QueueSession(cards=[c, d])
+    assert not q.done and q.current is c
+    q.record_image()                      # imaged the first card
+    assert q.current is d and q.imaged == 1
+    q.record_skip()                       # skipped the second
+    assert q.done and q.skipped == 1
+    assert q.current is None
+    assert imagequeue.summary_text(q) == "完了（imaged 1・skipped 1）"
+
+
+def test_queue_session_advance_does_not_count():
+    q = imagequeue.QueueSession(cards=[imagequeue.Candidate(1, "a", "あ", "")])
+    q.advance()                           # auto-skip (browser down): index only
+    assert q.done and q.imaged == 0 and q.skipped == 0

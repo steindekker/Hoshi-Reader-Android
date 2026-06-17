@@ -128,3 +128,43 @@ def skip(nid: int) -> dict:
             return {"status": "ok", "nid": nid}
         finally:
             col.close()
+
+
+@dataclass
+class QueueSession:
+    cards: list[Candidate]
+    index: int = 0
+    imaged: int = 0
+    skipped: int = 0
+    candidates: list = field(default_factory=list)   # current card's image hits
+
+    @property
+    def done(self) -> bool:
+        return self.index >= len(self.cards)
+
+    @property
+    def current(self) -> Candidate | None:
+        return None if self.done else self.cards[self.index]
+
+    def advance(self) -> None:
+        """Move past the current card without counting it (auto-skip / gone)."""
+        self.index += 1
+
+    def record_image(self) -> None:
+        self.imaged += 1
+        self.index += 1
+
+    def record_skip(self) -> None:
+        self.skipped += 1
+        self.index += 1
+
+
+def queue_image_rows(cands) -> list[tuple[str, str]]:
+    rows = [(str(i + 1), f"qpick:{i}") for i in range(len(cands))]
+    rows.append(("⏭ スキップ", "qskip"))
+    rows.append(("■ 終了", "qend"))
+    return rows
+
+
+def summary_text(q: QueueSession) -> str:
+    return f"完了（imaged {q.imaged}・skipped {q.skipped}）"
