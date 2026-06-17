@@ -10,6 +10,15 @@ from .defs import build as def_build, enrich
 from .examples import build as ex_build
 
 
+class PipelineError(Exception):
+    """A named enrichment pass raised. Carries the pass name for reporting."""
+
+    def __init__(self, step: str, original: BaseException):
+        super().__init__(f"{step}: {original}")
+        self.step = step
+        self.original = original
+
+
 def _step_audio(col, apply: bool) -> dict:
     addons = os.environ.get("ANKI_ADDONS_DIR", os.path.expanduser(
         "~/.local/share/Anki2/addons21"))
@@ -83,11 +92,19 @@ def run(col, *, apply=False, overwrite_pitch=False, overwrite_cloze=False,
     if apply:
         out["backup"] = collection.backup(col)
 
-    out["steps"]["audio"] = _step_audio(col, apply)
-    out["steps"]["pitch"] = (pitch.backfill_pitch(col, overwrite=overwrite_pitch) if apply
-                             else pitch.build_pitch_plan(col, overwrite=overwrite_pitch)["counts"])
-    out["steps"]["sentences"] = _step_sentences(col, apply, overwrite_sentences)
-    out["steps"]["enrich"] = _step_enrich(col, apply, def_index, overwrite_defs)
-    out["steps"]["examples"] = _step_examples(col, apply, overwrite_examples)
-    out["steps"]["cloze"] = cloze.run(col, apply=apply, overwrite=overwrite_cloze)
+    steps = [
+        ("audio", "audio", lambda: _step_audio(col, apply)),
+        ("pitch", "pitch", lambda: (
+            pitch.backfill_pitch(col, overwrite=overwrite_pitch) if apply
+            else pitch.build_pitch_plan(col, overwrite=overwrite_pitch)["counts"])),
+        ("sentences", "sentence", lambda: _step_sentences(col, apply, overwrite_sentences)),
+        ("enrich", "defs", lambda: _step_enrich(col, apply, def_index, overwrite_defs)),
+        ("examples", "examples", lambda: _step_examples(col, apply, overwrite_examples)),
+        ("cloze", "cloze", lambda: cloze.run(col, apply=apply, overwrite=overwrite_cloze)),
+    ]
+    for key, name, fn in steps:
+        try:
+            out["steps"][key] = fn()
+        except Exception as exc:
+            raise PipelineError(name, exc) from exc
     return out
