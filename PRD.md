@@ -13,6 +13,14 @@ Default run is a **dry-run**: it prints what each pass would change and how many
 cards it would touch. `--apply` backs up the collection, writes in place, then
 pushes to AnkiWeb.
 
+### Status reports
+
+`--notify` sends the run's result to a personal Telegram chat — per-pass counts, the
+newly-defined terms, the sync outcome, or a failure naming the pass that broke. Meant
+for an unattended nightly run so the outcome is visible from a phone. `anki-enrich-bot`
+is a companion listener that triggers a run on demand via `/run` (responding only to
+the configured chat); a lock keeps a manual run from colliding with the nightly one.
+
 ### Enrichment
 
 1. **Term audio** — fill where missing; replace jpod audio with a higher-quality
@@ -35,6 +43,7 @@ Set the card template to the one in the repo.
 ## Config
 
 - AnkiWeb username / password (env)
+- Telegram bot token / chat id (env) — for `--notify` and `anki-enrich-bot`
 - Target note type name
 - Field mapping: Term · Term Furigana · Sentence · Sentence Furigana ·
   Term Audio · Definition · Pitch · Cloze Start · Cloze Inside · Cloze End
