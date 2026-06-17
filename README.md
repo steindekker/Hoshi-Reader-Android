@@ -43,7 +43,7 @@ export TELEGRAM_CHAT_ID=...      # your own chat id; the bot ignores everyone el
 | --- | --- | --- |
 | `ANKIWEB_USERNAME` / `ANKIWEB_PASSWORD` | yes | AnkiWeb login for pull/push |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | for `--notify` / the bot | where run reports go and which chat may drive the bot |
-| `ANKI_ADDONS_DIR` | no | override the add-ons dir (default `~/.local/share/Anki2/addons21`) used to find `local-audio-yomichan` |
+| `ANKI_ADDONS_DIR` | no | build-time only: where `audio/build.py` looks for the `local-audio-yomichan` add-on when building `var/audio.sqlite` (default `~/.local/share/Anki2/addons21`). Unused at runtime/deploy. |
 
 The tool keeps its own collection at `var/collection.anki2` (never the desktop
 profile). On first run it builds `var/defs.sqlite` from `dicts/` and, if the J→E

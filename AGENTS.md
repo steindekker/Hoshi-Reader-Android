@@ -35,6 +35,8 @@ over.
 - Example sentences build `var/examples.sqlite` from J→E dicts in `dicts/`
   (jitendex/saito/yourei) + the Tatoeba dump in `dicts/tatoeba/`; absent those the
   step is skipped. Fills the `Examples` field (an expandable 例文 block, ≤3, deduped).
-- Term-audio enrichment reads recordings from the `local-audio-yomichan` add-on
-  (its `entries.db` + `*_files/`); without it installed, the audio step is
+- Term-audio enrichment builds `var/audio.sqlite` from the `local-audio-yomichan`
+  add-on (its `entries.db` + `*_files/`) on first run — like `defs.sqlite`/
+  `examples.sqlite`. The runtime reads only `var/audio.sqlite` (clip bytes embedded),
+  so the add-on is a build-time-only input; without it installed the build is
   skipped, not failed.
