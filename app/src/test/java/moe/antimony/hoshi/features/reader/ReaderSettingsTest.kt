@@ -625,6 +625,7 @@ class ReaderSettingsTest {
         assertEquals(100, segmentedControlWidthDp(listOf("縦", "横")))
         assertEquals(120, segmentedControlWidthDp(listOf("Top", "Bottom")))
         assertEquals(180, segmentedControlWidthDp(listOf("Paginated", "Continuous")))
+        assertEquals(180, segmentedControlWidthDp(listOf("Block", "Sentences")))
     }
 
     @Test

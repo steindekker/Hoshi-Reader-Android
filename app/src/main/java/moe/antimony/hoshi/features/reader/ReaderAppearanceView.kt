@@ -958,7 +958,7 @@ internal fun segmentedControlWidthDp(optionCount: Int): Int =
 internal fun segmentedControlWidthDp(options: List<String>): Int =
     when {
         options.size > 2 -> options.size * 82
-        options.any { it.length >= 10 } -> 180
+        options.any { it.length >= 8 } -> 180
         options.any { it.length >= 6 } -> 120
         else -> 100
     }
