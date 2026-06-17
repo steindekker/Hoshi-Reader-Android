@@ -60,6 +60,14 @@ LOCAL_AUDIO_ADDON_ID = "1045800357"
 SAMPLE_N = 5
 
 
+# Single-word mining (Telegram bot).
+MINED_TAG = "ankienrich::mined"
+MINE_SENTENCE_N = 5
+MASSIF_URL = "https://massif.la/ja/search"
+MASSIF_TIMEOUT = 5  # seconds
+MINE_DECK = ""      # "" = derive the modal deck of existing NOTETYPE cards
+
+
 def ankiweb_credentials() -> tuple[str, str]:
     """(username, password) from env. Raises if unset."""
     user = os.environ.get("ANKIWEB_USERNAME")
