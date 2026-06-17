@@ -9,7 +9,7 @@
 import argparse
 import sys
 
-from . import collection, dedupe as _dedupe, pipeline, sync, template, wizard
+from . import collection, dedupe as _dedupe, notify, pipeline, runlock, sync, template, wizard
 
 # tiny ANSI helpers — no deps, plain text when stdout is not a TTY
 _TTY = sys.stdout.isatty()
@@ -103,33 +103,20 @@ def _render_dedupe(res: dict, apply: bool) -> None:
     print()
 
 
-def main(argv=None) -> int:
-    if argv is None:
-        argv = sys.argv[1:]
-    if wizard.should_run_wizard(argv, sys.stdin.isatty() and sys.stdout.isatty()):
-        args = wizard.run(dry_run="--dry-run" in argv)
-        if args is None:
-            return 0
-    else:
-        ap = argparse.ArgumentParser(prog="anki-enrich",
-                                     description="Post-sync Anki enrichment.")
-        ap.add_argument("command", nargs="?", default="run",
-                        choices=["run", "dedupe", "template"])
-        ap.add_argument("--apply", action="store_true", help="write + push (else dry run)")
-        ap.add_argument("--overwrite", action="store_true",
-                        help="re-assert pitch, sentences, defs, examples AND cloze on every card")
-        ap.add_argument("--overwrite-pitch", action="store_true")
-        ap.add_argument("--overwrite-sentences", action="store_true")
-        ap.add_argument("--overwrite-defs", action="store_true")
-        ap.add_argument("--overwrite-examples", action="store_true")
-        ap.add_argument("--overwrite-cloze", action="store_true")
-        ap.add_argument("--dry-run", action="store_true",
-                        help="preview only (the default); bare `--dry-run` opens the wizard")
-        args = ap.parse_args(argv)
+def _safe_notify(text: str) -> None:
+    try:
+        notify.send_message(text)
+    except Exception as exc:  # noqa: BLE001 — never mask the underlying failure
+        print(_red(f"telegram notify failed: {exc}"), file=sys.stderr)
 
+
+def _run(args) -> int:
     col = collection.open_working()
+    notify_on = getattr(args, "notify", False)
+    phase, pull_action = "sync/login", None
     try:
         auth = sync.login(col)
+        phase = "sync/pull"
         pull_action, auth = sync.pull(col, auth)
         _sync_line("pull", pull_action)
         if args.command == "dedupe":
@@ -158,13 +145,74 @@ def main(argv=None) -> int:
                 overwrite_defs=args.overwrite_defs or args.overwrite,
                 overwrite_examples=args.overwrite_examples or args.overwrite,
                 overwrite_cloze=args.overwrite_cloze or args.overwrite)
+            push_action = None
             if args.apply:
+                phase = "sync/push"
                 push_action, auth = sync.push(col, auth)
                 _sync_line("push", push_action)
             _render(res, args.apply)
+            if notify_on:
+                # _safe_notify: a send failure must not flip the exit status of
+                # an already-completed apply.
+                _safe_notify(notify.format_report(
+                    res, apply=args.apply, pull_action=pull_action,
+                    push_action=push_action))
+    except pipeline.PipelineError as exc:
+        if notify_on:
+            _safe_notify(notify.format_report(
+                None, apply=args.apply, pull_action=pull_action,
+                error=(exc.step, exc.original)))
+        raise
+    except Exception as exc:
+        if notify_on:
+            _safe_notify(notify.format_report(
+                None, apply=getattr(args, "apply", False), pull_action=pull_action,
+                error=(phase, exc)))
+        raise
     finally:
         col.close()
     return 0
+
+
+def main(argv=None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    if wizard.should_run_wizard(argv, sys.stdin.isatty() and sys.stdout.isatty()):
+        args = wizard.run(dry_run="--dry-run" in argv)
+        if args is None:
+            return 0
+        args.notify = "--notify" in argv
+    else:
+        ap = argparse.ArgumentParser(prog="anki-enrich",
+                                     description="Post-sync Anki enrichment.")
+        ap.add_argument("command", nargs="?", default="run",
+                        choices=["run", "dedupe", "template"])
+        ap.add_argument("--apply", action="store_true", help="write + push (else dry run)")
+        ap.add_argument("--overwrite", action="store_true",
+                        help="re-assert pitch, sentences, defs, examples AND cloze on every card")
+        ap.add_argument("--overwrite-pitch", action="store_true")
+        ap.add_argument("--overwrite-sentences", action="store_true")
+        ap.add_argument("--overwrite-defs", action="store_true")
+        ap.add_argument("--overwrite-examples", action="store_true")
+        ap.add_argument("--overwrite-cloze", action="store_true")
+        ap.add_argument("--dry-run", action="store_true",
+                        help="preview only (the default); bare `--dry-run` opens the wizard")
+        ap.add_argument("--notify", action="store_true",
+                        help="send the run result to Telegram (needs TELEGRAM_* env)")
+        args = ap.parse_args(argv)
+
+    if getattr(args, "apply", False):
+        try:
+            with runlock.acquire():
+                return _run(args)
+        except runlock.Busy:
+            msg = "⏳ a run is already in progress, skipping"
+            if getattr(args, "notify", False):
+                notify.send_message(msg)
+            else:
+                print("\n  " + _dim(msg) + "\n")
+            return 0
+    return _run(args)
 
 
 if __name__ == "__main__":
