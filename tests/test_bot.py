@@ -1,38 +1,90 @@
 from ankienrich import bot
 
 
-def test_spawn_argv_apply():
-    assert bot._spawn_argv(overwrite=False) == [
-        "anki-enrich", "--apply", "--notify"]
-
-
-def test_spawn_argv_overwrite():
-    assert bot._spawn_argv(overwrite=True) == [
-        "anki-enrich", "--apply", "--overwrite", "--notify"]
-
-
 def test_authorized():
     assert bot._authorized(42, 42)
     assert not bot._authorized(99, 42)
 
 
-def test_run_keyboard_has_three_actions():
-    kb = bot._run_keyboard()
+# --- argv_for: maps a set of selected fields to the spawn command -----------
+
+def test_argv_for_empty_is_fill_missing():
+    assert bot.argv_for(set()) == ["anki-enrich", "--apply", "--notify"]
+
+
+def test_argv_for_single_field():
+    assert bot.argv_for({"defs"}) == [
+        "anki-enrich", "--apply", "--overwrite-defs", "--notify"]
+
+
+def test_argv_for_sentence_uses_plural_flag():
+    # field name is "sentence" but the CLI flag is --overwrite-sentences
+    assert bot.argv_for({"sentence"}) == [
+        "anki-enrich", "--apply", "--overwrite-sentences", "--notify"]
+
+
+def test_argv_for_orders_flags_canonically_regardless_of_set_order():
+    assert bot.argv_for({"cloze", "pitch"}) == [
+        "anki-enrich", "--apply",
+        "--overwrite-pitch", "--overwrite-cloze", "--notify"]
+
+
+def test_argv_for_all_fields():
+    assert bot.argv_for(set(bot.OVERWRITE_FIELDS)) == [
+        "anki-enrich", "--apply",
+        "--overwrite-pitch", "--overwrite-sentences", "--overwrite-defs",
+        "--overwrite-examples", "--overwrite-cloze", "--notify"]
+
+
+# --- toggled / select_all_toggle: pure set transitions ----------------------
+
+def test_toggled_adds_when_absent():
+    assert bot.toggled(set(), "pitch") == {"pitch"}
+
+
+def test_toggled_removes_when_present():
+    assert bot.toggled({"pitch", "defs"}, "pitch") == {"defs"}
+
+
+def test_select_all_toggle_selects_all_from_partial():
+    assert bot.select_all_toggle({"pitch"}) == set(bot.OVERWRITE_FIELDS)
+
+
+def test_select_all_toggle_clears_when_all_selected():
+    assert bot.select_all_toggle(set(bot.OVERWRITE_FIELDS)) == set()
+
+
+# --- keyboard_for: reflects selection, exposes the right callbacks ----------
+
+def test_keyboard_for_marks_selected_fields():
+    kb = bot.keyboard_for({"defs"})
+    labels = {b.text: b.callback_data for row in kb.keyboard for b in row}
+    assert labels["✅ Defs"] == "toggle:defs"
+    assert labels["⬜ Pitch"] == "toggle:pitch"
+
+
+def test_keyboard_for_has_all_apply_cancel_and_one_toggle_per_field():
+    kb = bot.keyboard_for(set())
     datas = [b.callback_data for row in kb.keyboard for b in row]
-    assert datas == ["run:apply", "run:overwrite", "run:cancel"]
+    assert "all" in datas
+    assert "apply" in datas
+    assert "cancel" in datas
+    assert sum(d.startswith("toggle:") for d in datas) == len(bot.OVERWRITE_FIELDS)
 
 
-def test_dispatch_spawns_on_apply(monkeypatch):
-    spawned = {}
-    monkeypatch.setattr(bot.subprocess, "Popen",
-                        lambda argv, **kw: spawned.setdefault("argv", argv))
-    bot._dispatch("run:overwrite")
-    assert spawned["argv"] == ["anki-enrich", "--apply", "--overwrite", "--notify"]
+def test_keyboard_all_button_label_flips_when_all_selected():
+    partial = [b.text for row in bot.keyboard_for({"pitch"}).keyboard for b in row]
+    full = [b.text for row in bot.keyboard_for(set(bot.OVERWRITE_FIELDS)).keyboard for b in row]
+    assert "Overwrite all" in partial
+    assert "Clear all" in full
 
 
-def test_dispatch_cancel_does_not_spawn(monkeypatch):
-    spawned = []
-    monkeypatch.setattr(bot.subprocess, "Popen",
-                        lambda argv, **kw: spawned.append(argv))
-    assert bot._dispatch("run:cancel") is None
-    assert spawned == []
+# --- confirmation_text ------------------------------------------------------
+
+def test_confirmation_text_empty():
+    assert bot.confirmation_text(set()) == "▶️ Run started (fill missing)"
+
+
+def test_confirmation_text_lists_fields_in_canonical_order():
+    assert bot.confirmation_text({"cloze", "pitch"}) == \
+        "▶️ Run started — overwriting: pitch, cloze"
