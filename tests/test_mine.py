@@ -168,3 +168,43 @@ def test_commit_refuses_duplicate(monkeypatch):
     f = enrich_one.Fields("箸","はし","箸[はし]","","m","s","",None,None)
     res = mine.commit(f, None)
     assert res["status"] == "duplicate"
+
+
+def test_candidate_rows_label_and_payload():
+    from ankienrich.enrich_one import Candidate
+    rows = mine.candidate_rows([Candidate("かど", "corner"), Candidate("つの", "horn")])
+    assert rows[0] == ("かど — corner", "cand:0")
+    assert rows[1] == ("つの — horn", "cand:1")
+
+
+def test_sentence_rows_number_and_payload():
+    rows = mine.sentence_rows(["AAA", "BBB"])
+    assert rows[0][1] == "sent:0" and "AAA" in rows[0][0]
+    assert rows[-1] == ("⏭ Skip sentence", "sent:skip")
+
+
+def test_image_rows_number_and_skip():
+    from ankienrich.images import ImageCandidate
+    cands = [ImageCandidate("t1","f1","",""), ImageCandidate("t2","f2","","")]
+    rows = mine.image_rows(cands)
+    assert rows[0] == ("1", "img:0") and rows[-1] == ("⏭ Skip image", "img:skip")
+
+
+def test_preview_text_includes_reading_meaning():
+    from ankienrich.enrich_one import Fields
+    f = Fields("箸","はし","箸[はし]","<svg/>","chopsticks","JMdict","",None,b"x")
+    txt = mine.preview_text(f)
+    assert "はし" in txt and "chopsticks" in txt and "JMdict" in txt
+
+
+def test_confirm_text_image_flag():
+    from ankienrich.enrich_one import Fields
+    f = Fields("箸","はし","箸[はし]","","chopsticks","JMdict","",None,None)
+    assert "yes" in mine.confirm_text(f, None, has_image=True)
+    assert "—" in mine.confirm_text(f, None, has_image=False)
+
+
+def test_session_defaults():
+    s = mine.Session(chat_id=1)
+    assert s.state == "idle" and s.candidates == [] and s.fields is None
+    assert s.image_candidates == [] and s.image is None

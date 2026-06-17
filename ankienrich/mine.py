@@ -3,8 +3,10 @@ sync it. The conversation flow lives here as pure helpers + a Session dataclass;
 bot.py is the thin Telegram glue."""
 from __future__ import annotations
 
+import re as _re
 import requests
 from collections import Counter
+from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
 from . import collection, config, massif, images, sync, runlock
@@ -151,3 +153,65 @@ def commit(fields, sentence_fields, *, deck: str | None = None, image=None) -> d
                     "pull": pull_action, "push": push_action}
         finally:
             col.close()
+
+
+# ---------------------------------------------------------------------------
+# Pure UI helpers (no Telegram imports; testable standalone)
+# ---------------------------------------------------------------------------
+
+_TAGS = _re.compile(r"<[^>]+>")
+
+
+def _plain(s: str, limit: int) -> str:
+    return _TAGS.sub("", s).strip()[:limit]
+
+
+def candidate_rows(cands) -> list[tuple[str, str]]:
+    """(button label, callback_data) per candidate reading."""
+    return [(f"{c.reading} — {c.gloss}", f"cand:{i}") for i, c in enumerate(cands)]
+
+
+def sentence_rows(sentences) -> list[tuple[str, str]]:
+    rows = [(f"{i+1}. {_plain(s, 50)}", f"sent:{i}") for i, s in enumerate(sentences)]
+    rows.append(("⏭ Skip sentence", "sent:skip"))
+    return rows
+
+
+def image_rows(cands) -> list[tuple[str, str]]:
+    rows = [(f"{i+1}", f"img:{i}") for i in range(len(cands))]
+    rows.append(("⏭ Skip image", "img:skip"))
+    return rows
+
+
+def preview_text(fields) -> str:
+    lines = [f"📖 {fields.term}（{fields.reading}）", "", _plain(fields.meaning, 300)]
+    if fields.definition_source:
+        lines.append(f"— {fields.definition_source}")
+    lines.append("🔊 audio: " + ("yes" if fields.audio_clip else "—"))
+    lines.append("📈 pitch: " + ("yes" if fields.pitch_svg else "—"))
+    return "\n".join(lines)
+
+
+def _cloze_preview(sf) -> str:
+    return f"{sf.cloze_before}【{sf.cloze_inside}】{sf.cloze_after}"
+
+
+def confirm_text(fields, sentence_fields, has_image: bool = False) -> str:
+    parts = [f"Add 「{fields.term}」（{fields.reading}）?"]
+    parts.append("例: " + _cloze_preview(sentence_fields) if sentence_fields is not None
+                 else "(no sentence)")
+    parts.append("🖼 image: " + ("yes" if has_image else "—"))
+    return "\n".join(parts)
+
+
+@dataclass
+class Session:
+    chat_id: int
+    state: str = "idle"               # idle|candidates|preview|sentence|image|confirm
+    term: str = ""
+    candidates: list = field(default_factory=list)
+    fields: object | None = None
+    sentences: list = field(default_factory=list)
+    sentence_fields: object | None = None
+    image_candidates: list = field(default_factory=list)
+    image: tuple | None = None        # (bytes, ext) once downloaded
