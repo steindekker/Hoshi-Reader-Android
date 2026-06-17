@@ -15,27 +15,50 @@ REAL_M = (
 )
 
 
-def test_browser_reused_until_disconnected(monkeypatch):
-    launched = []
+def _stub_blocking(monkeypatch, calls):
+    # Replace the Playwright search with a fast fake; it still runs on the worker
+    # thread via the real executor, so this also exercises submit/result plumbing.
+    def _fake(term, timeout_ms):
+        calls.append(term)
+        return [images.ImageCandidate(f"t{term}", f"f{term}", "", "")]
+    monkeypatch.setattr(images, "_search_blocking", _fake)
 
-    class _FakeBrowser:
-        def __init__(self): self._up = True
-        def is_connected(self): return self._up
 
-    class _FakePW:
-        class chromium:
-            @staticmethod
-            def launch(**_kw):
-                b = _FakeBrowser(); launched.append(b); return b
+def test_prefetch_is_consumed_by_search(monkeypatch):
+    calls = []
+    _stub_blocking(monkeypatch, calls)
+    images._PREFETCH.clear()
+    images.prefetch("林檎")
+    res = images.search_images("林檎", limit=6)
+    assert [c.full_url for c in res] == ["f林檎"]
+    assert calls == ["林檎"]                 # ran exactly once (prefetch reused)
+    assert "林檎" not in images._PREFETCH    # consumed
 
-    monkeypatch.setattr(images, "_PW", _FakePW())   # pretend driver already started
-    monkeypatch.setattr(images, "_BROWSER", None)
-    b1 = images._browser()
-    b2 = images._browser()
-    assert b1 is b2 and len(launched) == 1          # reused, launched once
-    b1._up = False                                  # simulate a crash
-    b3 = images._browser()
-    assert b3 is not b1 and len(launched) == 2       # relaunched
+
+def test_prefetch_dedupes_same_term(monkeypatch):
+    calls = []
+    _stub_blocking(monkeypatch, calls)
+    images._PREFETCH.clear()
+    images.prefetch("A")
+    images.prefetch("A")                     # in flight -> no-op
+    images.search_images("A")
+    assert calls == ["A"]
+
+
+def test_search_without_prefetch_runs_now(monkeypatch):
+    calls = []
+    _stub_blocking(monkeypatch, calls)
+    images._PREFETCH.clear()
+    res = images.search_images("X", limit=1)
+    assert calls == ["X"] and len(res) == 1
+
+
+def test_search_respects_limit(monkeypatch):
+    monkeypatch.setattr(images, "_search_blocking",
+                        lambda term, timeout_ms: [images.ImageCandidate(str(i), str(i), "", "")
+                                                  for i in range(10)])
+    images._PREFETCH.clear()
+    assert len(images.search_images("Y", limit=3)) == 3
 
 
 def test_safesearch_is_off():

@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import atexit
+import concurrent.futures
 import json
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -38,8 +39,9 @@ _USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
 
 # Resource types to drop while rendering: we only need the DOM the page-JS builds,
-# not the pixels (jidoujisho's `blockNetworkImage: true`). Keeps scripts/XHR alive.
-_BLOCKED_RESOURCES = {"image", "media", "font"}
+# not the pixels (jidoujisho's `blockNetworkImage: true`) nor styling (we read
+# `a.iusc` attributes, never lay the page out). Keeps scripts/XHR alive.
+_BLOCKED_RESOURCES = {"image", "media", "font", "stylesheet"}
 
 
 @dataclass(frozen=True)
@@ -83,30 +85,115 @@ def _block_media(route) -> None:
         route.continue_()
 
 
-# A warm, reused browser. Launching Chromium + the Playwright driver is the bulk
-# of a search's latency (~2 s); the long-lived bot is single-threaded, so we keep
-# one browser alive and open a cheap fresh context per search. Only the first
-# search after start (or after a crash) pays the cold start.
-_PW = None
-_BROWSER = None
+# --- Warm browser on a single dedicated worker thread --------------------------
+#
+# All Playwright work runs on ONE worker thread (a 1-slot executor): the sync API
+# is thread-bound, so this keeps the browser/page on a consistent thread while the
+# telebot main thread only submits jobs and reads futures. The browser + one page
+# are kept warm, so launching Chromium + the driver (the ~2 s bulk of a search) is
+# paid once. `prefetch` lets the bot start a search while the user is still picking
+# a sentence, so the result is usually ready by the image step.
+_EXECUTOR = None        # the single worker thread; created lazily
+_PW = None              # } worker-thread-owned: only touched inside tasks that
+_BROWSER = None         # } run on _EXECUTOR, never from the main thread.
+_PAGE = None
+_PREFETCH: dict[str, concurrent.futures.Future] = {}  # term -> in-flight search
 
 
-def _browser():
-    """The shared headless-Chromium browser, launched once and relaunched if it
-    has died. Must only be called from one thread (the bot runs single-threaded)."""
-    global _PW, _BROWSER
-    if _BROWSER is not None and _BROWSER.is_connected():
-        return _BROWSER
+def _executor() -> concurrent.futures.ThreadPoolExecutor:
+    global _EXECUTOR
+    if _EXECUTOR is None:
+        _EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="img-search")
+    return _EXECUTOR
+
+
+def _page():
+    """A warm page on the worker thread; (re)builds browser+context+page if dead.
+    The SafeSearch cookie and the resource-blocking route are set up once here."""
+    global _PW, _BROWSER, _PAGE
+    if _PAGE is not None and _BROWSER is not None and _BROWSER.is_connected():
+        return _PAGE
     from playwright.sync_api import sync_playwright
     if _PW is None:
         _PW = sync_playwright().start()
     _BROWSER = _PW.chromium.launch(headless=True)
-    return _BROWSER
+    ctx = _BROWSER.new_context(user_agent=_USER_AGENT)
+    ctx.add_cookies([_SAFESEARCH_COOKIE])          # SafeSearch off
+    _PAGE = ctx.new_page()
+    _PAGE.route("**/*", _block_media)
+    return _PAGE
+
+
+def _reset() -> None:
+    """Drop the (possibly dead) browser+page so the next search rebuilds. Keeps the
+    driver (`_PW`) alive — only the browser needs relaunching."""
+    global _BROWSER, _PAGE
+    try:
+        if _BROWSER is not None:
+            _BROWSER.close()
+    except Exception:
+        pass
+    _BROWSER = _PAGE = None
+
+
+def _search_blocking(term: str, timeout_ms: int) -> list[ImageCandidate]:
+    """The actual search. Runs ONLY on the worker thread. Returns all candidates
+    (callers slice). [] on no-results/timeout; self-heals the page on a crash."""
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+    try:
+        page = _page()
+        page.goto(SEARCH_URL.format(q=quote(term)), wait_until="domcontentloaded")
+        try:
+            page.wait_for_selector("a.iusc", timeout=timeout_ms)
+        except PlaywrightTimeoutError:
+            return []
+        m_attrs = page.eval_on_selector_all(
+            "a.iusc", "els => els.map(e => e.getAttribute('m')).filter(Boolean)")
+        return parse_iusc(m_attrs)
+    except Exception:
+        _reset()
+        return []
+
+
+def prefetch(term: str, *, timeout_ms: int = 8000) -> None:
+    """Kick off a search for `term` in the background so `search_images(term)`
+    later returns (near-)instantly. No-op if one is already in flight."""
+    if term in _PREFETCH:
+        return
+    if len(_PREFETCH) > 8:          # bound abandoned-flow leakage (single user)
+        _PREFETCH.clear()
+    _PREFETCH[term] = _executor().submit(_search_blocking, term, timeout_ms)
+
+
+def search_images(term: str, limit: int = 12, *, timeout_ms: int = 8000) -> list[ImageCandidate]:
+    """Up to `limit` Bing image candidates for `term`. Consumes a `prefetch`ed
+    result if one is in flight (waiting only for the remainder), else runs now.
+    Returns [] if the grid never appears. Requires the `images` dep group and
+    `playwright install chromium`."""
+    fut = _PREFETCH.pop(term, None)
+    if fut is None:
+        fut = _executor().submit(_search_blocking, term, timeout_ms)
+    return fut.result()[:limit]
 
 
 def shutdown() -> None:
-    """Tear down the warm browser + driver. Best-effort, for clean process exit."""
-    global _PW, _BROWSER
+    """Tear down the worker browser + driver. Best-effort, for clean process exit."""
+    global _EXECUTOR
+    ex = _EXECUTOR
+    if ex is None:
+        return
+    try:
+        ex.submit(_teardown).result(timeout=5)
+    except Exception:
+        pass
+    ex.shutdown(wait=False)
+    _EXECUTOR = None
+    _PREFETCH.clear()
+
+
+def _teardown() -> None:           # runs on the worker thread
+    global _PW, _BROWSER, _PAGE
     try:
         if _BROWSER is not None:
             _BROWSER.close()
@@ -114,37 +201,7 @@ def shutdown() -> None:
             _PW.stop()
     except Exception:
         pass
-    finally:
-        _BROWSER = _PW = None
+    _PW = _BROWSER = _PAGE = None
 
 
 atexit.register(shutdown)
-
-
-def search_images(term: str, limit: int = 12, *, timeout_ms: int = 8000) -> list[ImageCandidate]:
-    """Search Bing Images for `term`, returning up to `limit` candidates.
-
-    Renders the JS-built results grid in a warm headless Chromium (see `_browser`)
-    and reads the `a.iusc` `m`-attribute payloads. Returns [] if the grid never
-    appears (no results, or a slow/blocked load past `timeout_ms`). Requires the
-    `images` dependency group and `playwright install chromium`."""
-    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
-
-    url = SEARCH_URL.format(q=quote(term))
-    context = _browser().new_context(user_agent=_USER_AGENT)
-    context.add_cookies([_SAFESEARCH_COOKIE])  # SafeSearch off
-    try:
-        page = context.new_page()
-        page.route("**/*", _block_media)
-        page.goto(url, wait_until="domcontentloaded")
-        try:
-            page.wait_for_selector("a.iusc", timeout=timeout_ms)
-        except PlaywrightTimeoutError:
-            return []
-        m_attrs = page.eval_on_selector_all(
-            "a.iusc",
-            "els => els.map(e => e.getAttribute('m')).filter(Boolean)",
-        )
-    finally:
-        context.close()
-    return parse_iusc(m_attrs)[:limit]

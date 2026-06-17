@@ -97,9 +97,19 @@ def sentence_options(term: str, *, ex_conn, n: int = config.MINE_SENTENCE_N) -> 
     return _local_sentences(ex_conn, term, n)
 
 
+def prefetch_images(term: str) -> None:
+    """Start the image search early (e.g. at preview) so the candidates are ready
+    by the image step. Never raises — best effort."""
+    try:
+        images.prefetch(term)
+    except Exception:
+        pass
+
+
 def image_candidates(term: str, n: int = config.MINE_IMAGE_N):
     """Up to n Bing image candidates for `term`. Never raises: a missing browser,
-    Playwright import error, or any search failure yields []."""
+    Playwright import error, or any search failure yields []. Consumes a
+    prefetch()ed search if one is in flight."""
     try:
         return images.search_images(term, limit=n)
     except Exception:
