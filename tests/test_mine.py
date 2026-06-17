@@ -201,6 +201,36 @@ def test_image_rows_number_and_skip():
     assert rows[0] == ("1", "img:0") and rows[-1] == ("⏭ スキップ", "img:skip")
 
 
+def _png_bytes(size=(60, 60), color=(10, 20, 30)):
+    from PIL import Image
+    import io
+    buf = io.BytesIO(); Image.new("RGB", size, color).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_numbered_thumbnails_one_jpeg_per_candidate(monkeypatch):
+    from PIL import Image
+    import io
+    from ankienrich.images import ImageCandidate
+    monkeypatch.setattr(mine, "_fetch_thumb", lambda url, **k: _png_bytes())
+    cands = [ImageCandidate("t1","f1","",""), ImageCandidate("t2","f2","","")]
+    out = mine.numbered_thumbnails(cands)
+    assert out is not None and len(out) == 2
+    assert all(Image.open(io.BytesIO(b)).format == "JPEG" for b in out)
+
+
+def test_numbered_thumbnails_none_when_any_fetch_fails(monkeypatch):
+    # A partial set would misalign numbers, so the whole step bails to fallback.
+    from ankienrich.images import ImageCandidate
+    calls = {"n": 0}
+    def _fetch(url, **k):
+        calls["n"] += 1
+        return _png_bytes() if calls["n"] == 1 else None
+    monkeypatch.setattr(mine, "_fetch_thumb", _fetch)
+    cands = [ImageCandidate("t1","f1","",""), ImageCandidate("t2","f2","","")]
+    assert mine.numbered_thumbnails(cands) is None
+
+
 def test_preview_text_header_carries_pitch_and_freq():
     from ankienrich.enrich_one import Fields
     f = Fields("林檎", "りんご", "林檎[りんご]", "<svg/>",

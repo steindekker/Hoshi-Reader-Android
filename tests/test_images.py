@@ -61,6 +61,25 @@ def test_search_respects_limit(monkeypatch):
     assert len(images.search_images("Y", limit=3)) == 3
 
 
+def test_number_badge_returns_same_size_jpeg_and_changes_corner():
+    from PIL import Image
+    import io
+    base = Image.new("RGB", (200, 150), (120, 120, 120))
+    buf = io.BytesIO(); base.save(buf, format="PNG")
+    out = images.number_badge(buf.getvalue(), 3)
+    im = Image.open(io.BytesIO(out))
+    assert im.format == "JPEG"
+    assert im.size == (200, 150)
+    im = im.convert("RGB")
+    def close(p, c, tol=12):
+        return all(abs(a - b) <= tol for a, b in zip(p, c))
+    # a dark badge pixel exists in the top-left region (the black circle); the far
+    # corner stays ~unchanged (tolerant: JPEG is lossy).
+    tl = [im.getpixel((x, y)) for x in range(40) for y in range(40)]
+    assert any(sum(p) < 120 for p in tl)
+    assert close(im.getpixel((199, 149)), (120, 120, 120))
+
+
 def test_warm_launches_browser_in_background(monkeypatch):
     launched = []
     monkeypatch.setattr(images, "_browser", lambda: launched.append(1))

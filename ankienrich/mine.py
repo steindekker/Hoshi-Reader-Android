@@ -138,6 +138,35 @@ def image_candidates(term: str, n: int = config.MINE_IMAGE_N):
         return []
 
 
+def _fetch_thumb(url: str, *, timeout: int = config.IMAGE_DL_TIMEOUT):
+    """Download a picker thumbnail's bytes, or None on any failure."""
+    try:
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (anki-enrich)"},
+                            timeout=timeout)
+        resp.raise_for_status()
+        return resp.content
+    except requests.RequestException:
+        return None
+
+
+def numbered_thumbnails(cands) -> list[bytes] | None:
+    """Each candidate's thumbnail with its 1-based number burned into the corner,
+    so the album grid maps unambiguously to the numbered picker buttons. Returns
+    None if it can't run end-to-end (Pillow missing, or any thumbnail fails to
+    fetch/encode) — a partial set would misalign the numbers, so the caller falls
+    back to plain URL thumbnails + captions."""
+    try:
+        out = []
+        for i, c in enumerate(cands, 1):
+            raw = _fetch_thumb(c.thumb_url)
+            if raw is None:
+                return None
+            out.append(images.number_badge(raw, i))
+        return out
+    except Exception:
+        return None
+
+
 def _ext_from_url(url: str) -> str:
     parts = urlparse(url).path.rsplit(".", 1)
     ext = parts[1].lower() if len(parts) == 2 else ""

@@ -213,8 +213,15 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
             _enter_confirm(chat_id_)
             return
         s.state = "image"
-        media = [telebot.types.InputMediaPhoto(c.thumb_url, caption=str(i + 1))
-                 for i, c in enumerate(s.image_candidates)]
+        # Prefer thumbnails with the number burned into the corner (self-labelling
+        # grid); fall back to plain URL thumbnails + per-photo captions if Pillow
+        # is absent or any thumbnail couldn't be fetched.
+        numbered = mine.numbered_thumbnails(s.image_candidates)
+        if numbered is not None:
+            media = [telebot.types.InputMediaPhoto(b) for b in numbered]
+        else:
+            media = [telebot.types.InputMediaPhoto(c.thumb_url, caption=str(i + 1))
+                     for i, c in enumerate(s.image_candidates)]
         try:
             bot.send_media_group(chat_id_, media)
         except Exception:

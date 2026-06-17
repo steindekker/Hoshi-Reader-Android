@@ -175,6 +175,31 @@ def _search_blocking(term: str, timeout_ms: int) -> list[ImageCandidate]:
                 pass
 
 
+def number_badge(img_bytes: bytes, n: int) -> bytes:
+    """Return `img_bytes` (any format Pillow reads) with `n` drawn in a circular
+    badge in the top-left corner, re-encoded as JPEG. Lets the Telegram media-group
+    grid be self-labelling so a number maps unambiguously to its picker button.
+    Requires Pillow (the `images` dep group); raises if it's missing."""
+    import io
+    from PIL import Image, ImageDraw, ImageFont
+    im = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+    w, h = im.size
+    draw = ImageDraw.Draw(im)
+    r = max(13, min(w, h) // 7)             # badge radius scales with the thumb
+    pad = max(3, r // 3)
+    cx, cy = pad + r, pad + r
+    draw.ellipse((pad, pad, pad + 2 * r, pad + 2 * r),
+                 fill=(0, 0, 0), outline=(255, 255, 255), width=max(2, r // 7))
+    label = str(n)
+    font = ImageFont.load_default(size=int(r * 1.3))   # Pillow ≥10.1 sizes the default
+    l, t, rt, b = draw.textbbox((0, 0), label, font=font)
+    draw.text((cx - (rt - l) / 2 - l, cy - (b - t) / 2 - t),
+              label, fill=(255, 255, 255), font=font)
+    out = io.BytesIO()
+    im.save(out, format="JPEG", quality=85)
+    return out.getvalue()
+
+
 def _warm() -> None:               # runs on the worker thread
     try:
         _browser()
