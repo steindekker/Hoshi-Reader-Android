@@ -135,6 +135,7 @@ def test_queue_session_transitions_and_summary():
     assert q.done and q.skipped == 1
     assert q.current is None
     assert imagequeue.summary_text(q) == "完了（imaged 1・skipped 1）"
+    assert imagequeue.summary_text(q, ended=True) == "終了しました（imaged 1・skipped 1）"
 
 
 def test_queue_session_advance_does_not_count():

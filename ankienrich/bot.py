@@ -302,10 +302,10 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
         bot.send_message(chat_id_, "画像を選んでください：",
                          reply_markup=_inline(imagequeue.queue_image_rows(cands)))
 
-    def _finish_queue(chat_id_):
+    def _finish_queue(chat_id_, *, ended=False):
         q = _QUEUES.pop(chat_id_, None)
         if q is not None:
-            bot.send_message(chat_id_, imagequeue.summary_text(q))
+            bot.send_message(chat_id_, imagequeue.summary_text(q, ended=ended))
 
     @bot.message_handler(func=lambda m: m.text == config.IMAGE_BUTTON)
     def _image_queue(m):
@@ -360,7 +360,7 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
                 return
             if data == "qend":
                 bot.answer_callback_query(c.id)
-                _finish_queue(c.message.chat.id)
+                _finish_queue(c.message.chat.id, ended=True)
                 return
             card = q.current
             if data == "qskip":

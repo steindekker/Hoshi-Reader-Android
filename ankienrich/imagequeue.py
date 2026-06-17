@@ -166,5 +166,8 @@ def queue_image_rows(cands) -> list[tuple[str, str]]:
     return rows
 
 
-def summary_text(q: QueueSession) -> str:
-    return f"完了（imaged {q.imaged}・skipped {q.skipped}）"
+def summary_text(q: QueueSession, *, ended: bool = False) -> str:
+    """Tally line. `ended` distinguishes an explicit 終了 tap from running the
+    queue to its natural end."""
+    head = "終了しました" if ended else "完了"
+    return f"{head}（imaged {q.imaged}・skipped {q.skipped}）"
