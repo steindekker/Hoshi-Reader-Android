@@ -1,3 +1,4 @@
+import os
 import re as _re
 import sqlite3
 
@@ -178,6 +179,9 @@ def test_run_backfill_writes_sound_and_copies_media(col, laudio):
     assert n[config.TERM_AUDIO].startswith("[sound:") and n[config.TERM_AUDIO].endswith(".opus]")
     fname = _re.search(r"\[sound:([^\]]+)\]", n[config.TERM_AUDIO]).group(1)
     assert c.media.have(fname)
+    # the bytes written into media are the nhk16 clip blob, not some other clip
+    with open(os.path.join(c.media.dir(), fname), "rb") as fh:
+        assert fh.read() == b"OggS-nhk"
     assert c.get_note(ids["empty_none"])[config.TERM_AUDIO] == ""
     assert c.get_note(ids["filled"])[config.TERM_AUDIO] == "[sound:cat.mp3]"
 

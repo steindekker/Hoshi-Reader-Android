@@ -109,7 +109,9 @@ def read_clip(conn, pick: Pick) -> bytes | None:
 
 
 def _media_name(pick: Pick) -> str:
-    """Stable, collision-resistant media filename for a pick."""
+    """Deterministic media filename for a pick. basename can collide across clips
+    (notably forvo, keyed <speaker>/<file>); Anki's write_data renames on content
+    conflict, so each card still gets its own bytes."""
     return f"la_{pick.source}_{os.path.basename(pick.file)}"
 
 

@@ -44,8 +44,7 @@ rsync -az --delete \
 
 # --- Push build artifacts (always; rsync delta makes reruns cheap) ----------
 say "Syncing sqlite build artifacts"
-artifacts=(var/defs.sqlite var/examples.sqlite)
-[[ -f var/audio.sqlite ]] && artifacts+=(var/audio.sqlite)
+artifacts=(var/defs.sqlite var/examples.sqlite var/audio.sqlite)
 [[ -f var/dict_styles.css ]] && artifacts+=(var/dict_styles.css)
 rsync -az "${artifacts[@]}" "$REMOTE:$DEST/data/"
 

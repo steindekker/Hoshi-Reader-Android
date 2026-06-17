@@ -36,8 +36,9 @@ First deploy without a seeded collection still works: the first enrichment run
 opens a fresh `data/collection.anki2` and full-downloads from AnkiWeb (~900 MB).
 Term audio ships as the prebuilt `audio.sqlite` artifact (built locally from the
 local-audio-yomichan add-on, like `defs.sqlite`/`examples.sqlite` are built from
-`dicts/`); the add-on is only needed on the build machine. Absent the artifact, the
-audio step self-skips rather than failing.
+`dicts/`); the add-on is only needed on the build machine. `push.sh`'s preflight
+requires the built artifact, so the box always ships with audio — the runtime would
+self-skip a missing store rather than fail, but the deploy never leaves it out.
 
 ## Refresh dictionaries
 Rebuild the dicts locally, then just rerun the deploy — it re-pushes the sqlite
