@@ -197,7 +197,7 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
             except Exception:
                 pass
         kb = _inline([("📝 例文を選ぶ", "go:sentence"),
-                      ("⏭ 例文をスキップ", "go:skip"),
+                      ("⏭ スキップ", "go:skip"),
                       ("✖ キャンセル", "go:cancel")])
         bot.send_message(chat_id_, mine.preview_text(s.fields), reply_markup=kb)
         # Start the sentence + image searches now so each is ready by its step

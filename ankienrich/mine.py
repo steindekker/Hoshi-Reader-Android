@@ -316,13 +316,13 @@ def candidate_rows(cands) -> list[tuple[str, str]]:
 
 def sentence_rows(sentences) -> list[tuple[str, str]]:
     rows = [(f"{i+1}. {_plain(s, 50)}", f"sent:{i}") for i, s in enumerate(sentences)]
-    rows.append(("⏭ 例文をスキップ", "sent:skip"))
+    rows.append(("⏭ スキップ", "sent:skip"))
     return rows
 
 
 def image_rows(cands) -> list[tuple[str, str]]:
     rows = [(f"{i+1}", f"img:{i}") for i in range(len(cands))]
-    rows.append(("⏭ 画像をスキップ", "img:skip"))
+    rows.append(("⏭ スキップ", "img:skip"))
     return rows
 
 

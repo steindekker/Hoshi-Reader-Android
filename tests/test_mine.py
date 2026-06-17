@@ -191,14 +191,14 @@ def test_candidate_rows_label_and_payload():
 def test_sentence_rows_number_and_payload():
     rows = mine.sentence_rows(["AAA", "BBB"])
     assert rows[0][1] == "sent:0" and "AAA" in rows[0][0]
-    assert rows[-1] == ("⏭ 例文をスキップ", "sent:skip")
+    assert rows[-1] == ("⏭ スキップ", "sent:skip")
 
 
 def test_image_rows_number_and_skip():
     from ankienrich.images import ImageCandidate
     cands = [ImageCandidate("t1","f1","",""), ImageCandidate("t2","f2","","")]
     rows = mine.image_rows(cands)
-    assert rows[0] == ("1", "img:0") and rows[-1] == ("⏭ 画像をスキップ", "img:skip")
+    assert rows[0] == ("1", "img:0") and rows[-1] == ("⏭ スキップ", "img:skip")
 
 
 def test_preview_text_header_carries_pitch_and_freq():
