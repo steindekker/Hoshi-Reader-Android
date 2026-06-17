@@ -589,6 +589,9 @@ class ReaderSettingsTest {
         assertTrue(css.contains(".hoshi-vn-content"))
         assertTrue(css.contains("max-width: 100% !important;"))
         assertTrue(css.contains("max-height: 100% !important;"))
+        assertTrue(css.contains(".hoshi-vn-content svg"))
+        assertTrue(css.contains("width: var(--hoshi-image-max-width, 88vw) !important;"))
+        assertTrue(css.contains("height: var(--hoshi-image-max-height, calc(var(--page-height, 100vh) - 28px)) !important;"))
     }
 
     @Test

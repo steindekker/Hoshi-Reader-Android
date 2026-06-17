@@ -246,6 +246,10 @@ internal object ReaderContentStyles {
                     max-height: 100% !important;
                     overflow: hidden !important;
                 }
+                .hoshi-vn-content svg {
+                    width: var(--hoshi-image-max-width, ${settings.imageMaxWidthFallbackCss}) !important;
+                    height: var(--hoshi-image-max-height, ${settings.imageMaxHeightFallbackCss}) !important;
+                }
                 """.trimIndent()
             }
             ReaderViewMode.Paginated -> {
