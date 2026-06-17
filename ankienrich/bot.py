@@ -9,11 +9,20 @@ import subprocess
 
 import telebot
 
+from . import enrich_one, mine, runlock
+from .audio import index as audio_index
+from .defs import index as defs_index
+from .examples import index as ex_index
+from .jrp_fill import make_generator
+from .jrp_fill.accent import AccentIndex
+
 # Persistent reply-keyboard buttons, so a run is one tap and never a typed command.
 RUN_BUTTON = "▶️ Run"
 HELP_BUTTON = "❓ Help"
 
-HELP_TEXT = "Tap ▶️ Run to pick fields to overwrite, then Apply."
+HELP_TEXT = ("Tap ▶️ Run to pick fields to overwrite, then Apply.\n"
+             "Or just send a word to add a card "
+             "(preview → sentence → image → add+sync).")
 
 # Fields the pipeline can re-assert (overwrite), in canonical display/flag order.
 # Audio has no overwrite flag, so it is not offered here. Note "sentence" maps to
@@ -100,6 +109,27 @@ def _config() -> tuple[str, int]:
     return token, int(chat)
 
 
+# --- Single-word mining: in-memory per-chat sessions + lazily-opened indexes ---
+_SESSIONS: dict[int, mine.Session] = {}
+
+
+def _inline(rows):
+    """Inline keyboard, one button per (label, callback_data) row."""
+    kb = telebot.types.InlineKeyboardMarkup()
+    for label, payload in rows:
+        kb.add(telebot.types.InlineKeyboardButton(label, callback_data=payload))
+    return kb
+
+
+def _indexes():
+    """(defs_conn, ex_conn, audio_conn, acc, generate), opened once (read-only)."""
+    if not hasattr(_indexes, "_cache"):
+        _indexes._cache = (defs_index.open_index(), ex_index.open_index(),
+                           audio_index.open_index(), AccentIndex.load(),
+                           make_generator())
+    return _indexes._cache
+
+
 def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
     bot = telebot.TeleBot(token, parse_mode="HTML")
 
@@ -136,10 +166,148 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
             return
         _show_home(m)
 
+    # --- Mining flow: free-text word → preview → sentence → image → add+sync ----
+
+    def _enter_preview(chat_id_, cand_idx):
+        s = _SESSIONS[chat_id_]
+        reading = s.candidates[cand_idx].reading
+        defs_conn, ex_conn, audio_conn, acc, _gen = _indexes()
+        s.fields = enrich_one.build_fields(
+            s.term, reading, defs_conn=defs_conn, ex_conn=ex_conn,
+            audio_conn=audio_conn, acc=acc)
+        s.state = "preview"
+        if s.fields.audio_clip:
+            try:
+                bot.send_voice(chat_id_, s.fields.audio_clip)
+            except Exception:
+                pass
+        kb = _inline([("📝 Pick sentence", "go:sentence"),
+                      ("⏭ Skip sentence", "go:skip"),
+                      ("✖ Cancel", "go:cancel")])
+        bot.send_message(chat_id_, mine.preview_text(s.fields), reply_markup=kb)
+
+    def _enter_image(chat_id_):
+        s = _SESSIONS[chat_id_]
+        s.image_candidates = mine.image_candidates(s.term)
+        if not s.image_candidates:
+            bot.send_message(chat_id_, "No images found — skipping image.")
+            _enter_confirm(chat_id_)
+            return
+        s.state = "image"
+        media = [telebot.types.InputMediaPhoto(c.thumb_url, caption=str(i + 1))
+                 for i, c in enumerate(s.image_candidates)]
+        try:
+            bot.send_media_group(chat_id_, media)
+        except Exception:
+            pass  # thumbnails are a nicety; numbered buttons still drive the pick
+        bot.send_message(chat_id_, "Pick an image:",
+                         reply_markup=_inline(mine.image_rows(s.image_candidates)))
+
+    def _enter_confirm(chat_id_):
+        s = _SESSIONS[chat_id_]
+        s.state = "confirm"
+        kb = _inline([("✅ Apply", "go:apply"), ("✖ Cancel", "go:cancel")])
+        bot.send_message(chat_id_, mine.confirm_text(s.fields, s.sentence_fields,
+                                                     has_image=s.image is not None),
+                         reply_markup=kb)
+
+    def _apply_mine(chat_id_):
+        s = _SESSIONS.pop(chat_id_, None)
+        if not s:
+            return
+        try:
+            res = mine.commit(s.fields, s.sentence_fields, image=s.image)
+        except runlock.Busy:
+            bot.send_message(chat_id_, "⏳ A run is in progress — try again shortly.")
+            return
+        except Exception as e:
+            bot.send_message(chat_id_, f"⚠️ Sync/add failed: {e}")
+            return
+        if res["status"] == "duplicate":
+            bot.send_message(chat_id_, "Already in the deck — nothing added.")
+        else:
+            bot.send_message(chat_id_,
+                             f"✅ Added 「{s.term}」to {res['deck']} & synced.")
+
+    @bot.message_handler(func=lambda m: bool(m.text) and not m.text.startswith("/")
+                         and m.text not in (RUN_BUTTON, HELP_BUTTON))
+    def _word(m):
+        if not _authorized(m.chat.id, chat_id):
+            return
+        term = m.text.strip()
+        defs_conn, ex_conn, audio_conn, acc, gen = _indexes()
+        cands = enrich_one.candidates(defs_conn, term)
+        if not cands:
+            bot.send_message(m.chat.id, f"「{term}」not found — nothing to add.")
+            return
+        s = mine.Session(chat_id=m.chat.id, term=term, candidates=cands)
+        _SESSIONS[m.chat.id] = s
+        if len(cands) == 1:
+            _enter_preview(m.chat.id, 0)
+        else:
+            s.state = "candidates"
+            bot.send_message(m.chat.id, f"「{term}」— pick a reading:",
+                             reply_markup=_inline(mine.candidate_rows(cands)))
+
     @bot.callback_query_handler(func=lambda c: True)
     def _cb(c):
         if not _authorized(c.message.chat.id, chat_id):
             return
+
+        # Mining-flow prefixes (cand:/go:/sent:/img:) — distinct from the run-menu's
+        # bare apply/cancel/all/toggle:. Each branch answers + returns so it never
+        # falls through to the run-menu logic below.
+        data = c.data
+        s = _SESSIONS.get(c.message.chat.id)
+        if data.startswith("cand:"):
+            _enter_preview(c.message.chat.id, int(data.split(":")[1]))
+            bot.answer_callback_query(c.id)
+            return
+        if data == "go:cancel":
+            _SESSIONS.pop(c.message.chat.id, None)
+            bot.answer_callback_query(c.id, "Cancelled")
+            return
+        if data == "go:sentence" and s:
+            _, ex_conn, *_ = _indexes()
+            s.sentences = mine.sentence_options(s.term, ex_conn=ex_conn)
+            s.state = "sentence"
+            bot.send_message(c.message.chat.id, "Pick a sentence:",
+                             reply_markup=_inline(mine.sentence_rows(s.sentences)))
+            bot.answer_callback_query(c.id)
+            return
+        if data == "go:skip" and s:
+            s.sentence_fields = None
+            _enter_image(c.message.chat.id)
+            bot.answer_callback_query(c.id)
+            return
+        if data.startswith("sent:") and s:
+            *_, acc, gen = _indexes()
+            if data == "sent:skip":
+                s.sentence_fields = None
+            else:
+                plain = s.sentences[int(data.split(":")[1])]
+                s.sentence_fields = enrich_one.fields_for_sentence(
+                    s.term, s.fields.reading, plain, generate=gen, acc=acc)
+            _enter_image(c.message.chat.id)
+            bot.answer_callback_query(c.id)
+            return
+        if data.startswith("img:") and s:
+            if data == "img:skip":
+                s.image = None
+            else:
+                cand = s.image_candidates[int(data.split(":")[1])]
+                s.image = mine.download_image(cand.full_url)
+                if s.image is None:
+                    bot.send_message(c.message.chat.id,
+                                     "Couldn't fetch that image — skipping.")
+            _enter_confirm(c.message.chat.id)
+            bot.answer_callback_query(c.id)
+            return
+        if data == "go:apply" and s:
+            bot.answer_callback_query(c.id, "Adding…")
+            _apply_mine(c.message.chat.id)
+            return
+
         mid = c.message.message_id
 
         if c.data == "cancel":

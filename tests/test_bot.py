@@ -102,3 +102,14 @@ def test_confirmation_text_empty():
 def test_confirmation_text_lists_fields_in_canonical_order():
     assert bot.confirmation_text({"cloze", "pitch"}) == \
         "▶️ Run started — overwriting: pitch, cloze"
+
+
+# --- _inline: builds an inline keyboard, one button per (label, payload) row --
+
+def test_inline_builds_one_button_per_row():
+    import ankienrich.bot as bot
+    kb = bot._inline([("A", "x:0"), ("B", "x:1")])
+    # InlineKeyboardMarkup.keyboard is a list of rows
+    flat = [b for row in kb.keyboard for b in row]
+    assert [b.text for b in flat] == ["A", "B"]
+    assert [b.callback_data for b in flat] == ["x:0", "x:1"]
