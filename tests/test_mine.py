@@ -51,10 +51,11 @@ def test_target_deck_is_modal_deck(tmp_path):
 
 def test_existing_note_matches_term_and_reading(tmp_path):
     col = _col(tmp_path)
-    _add(col, "箸", "はし", "言葉文章")
-    assert mine.existing_note(col, "箸", "はし") is not None
+    n = _add(col, "箸", "はし", "言葉文章")
+    assert mine.existing_note(col, "箸", "はし") == n.id
     assert mine.existing_note(col, "箸", "ちょう") is None
     assert mine.existing_note(col, "未知", "みち") is None
+    assert mine.existing_note(col, 'bad"quote', "x") is None  # no SearchError
     col.close()
 
 

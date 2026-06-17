@@ -23,9 +23,10 @@ def target_deck(col) -> str:
     return col.decks.name(counts.most_common(1)[0][0])
 
 
-def existing_note(col, term: str, reading: str):
+def existing_note(col, term: str, reading: str) -> int | None:
     """nid of an existing Kinomoto note with this exact term+reading, or None."""
-    q = f'note:"{config.NOTETYPE}" "{config.TERM}:{term}"'
+    escaped = term.replace('"', '\\"')  # term is arbitrary Telegram text
+    q = f'note:"{config.NOTETYPE}" "{config.TERM}:{escaped}"'
     for nid in col.find_notes(q):
         n = col.get_note(nid)
         if n[config.TERM].strip() == term and n[config.READING].strip() == reading:
