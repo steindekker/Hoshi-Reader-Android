@@ -208,3 +208,30 @@ def test_session_defaults():
     s = mine.Session(chat_id=1)
     assert s.state == "idle" and s.candidates == [] and s.fields is None
     assert s.image_candidates == [] and s.image is None
+
+
+def test_candidates_sorted_by_frequency(tmp_path):
+    import sqlite3
+    from ankienrich import enrich_one
+    # tiny defs.sqlite: one term, two readings
+    dbf = tmp_path / "defs.sqlite"
+    dc = sqlite3.connect(dbf)
+    dc.row_factory = sqlite3.Row
+    dc.execute("CREATE TABLE defs (term TEXT, reading TEXT, dict_id TEXT, "
+               "kind TEXT, sense_ord INTEGER, html TEXT)")
+    dc.executemany("INSERT INTO defs VALUES (?,?,?,?,?,?)", [
+        ("方", "ほう", "jmdict", "je", 1, "direction"),
+        ("方", "かた", "jmdict", "je", 1, "person"),
+    ])
+    dc.commit()
+    # freq.sqlite: かた is rarer (higher rank number) than ほう
+    fbf = tmp_path / "freq.sqlite"
+    fc = sqlite3.connect(fbf)
+    fc.execute("CREATE TABLE freq (key TEXT PRIMARY KEY, value INT, display TEXT)")
+    fc.executemany("INSERT INTO freq VALUES (?,?,?)",
+                   [("ほう", 100, "100"), ("かた", 5000, "5000")])
+    fc.commit()
+    from ankienrich.freq import index as freq_index
+    cands = enrich_one.candidates(dc, "方", freq_conn=freq_index.open_index(str(fbf)))
+    assert [c.reading for c in cands] == ["ほう", "かた"]   # rank ascending
+    assert cands[0].freq == 100
