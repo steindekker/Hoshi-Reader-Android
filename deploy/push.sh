@@ -3,12 +3,12 @@
 # (re)build the bot image, refresh the systemd timer. Run from anywhere; creds
 # are read from the environment (direnv exports them in the project dir).
 #
-#   ./deploy/push.sh            # deploy to default REMOTE/DEST
-#   REMOTE=<host> DEST=/opt/anki-enrich ./deploy/push.sh
+#   ./deploy/push.sh            # uses DEPLOY_REMOTE / DEPLOY_DEST from the env
+#   DEPLOY_REMOTE=<host> ./deploy/push.sh
 set -euo pipefail
 
-REMOTE="${REMOTE:-<host>}"
-DEST="${DEST:-/opt/anki-enrich}"
+REMOTE="${DEPLOY_REMOTE:?set DEPLOY_REMOTE to the box SSH alias, e.g. in .envrc}"
+DEST="${DEPLOY_DEST:-/opt/anki-enrich}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 

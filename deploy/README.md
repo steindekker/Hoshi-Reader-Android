@@ -8,15 +8,15 @@ corpus. The collection bootstraps itself from AnkiWeb on first run.
 - **On the box:** Docker Engine + the compose plugin (`docker compose version`),
   and systemd ≥ 252 (the timer pins `04:00 Europe/Amsterdam` via a timezone
   suffix in `OnCalendar`; Debian 12 / Ubuntu 24.04 and newer are fine).
-- **Locally:** an SSH alias for the box (default `<host>`), the four creds in
-  your environment (direnv loads them in the project dir), and the prebuilt
-  `var/defs.sqlite` + `var/examples.sqlite`.
+- **Locally:** `DEPLOY_REMOTE` set to the box's SSH alias (kept in `.envrc`),
+  the four creds in your environment (direnv loads them in the project dir),
+  and the prebuilt `var/defs.sqlite` + `var/examples.sqlite`.
 
 ## Deploy
 
 ```bash
-./deploy/push.sh                                   # → <host>:/opt/anki-enrich
-REMOTE=<host> DEST=/opt/anki-enrich ./deploy/push.sh   # override host/path
+./deploy/push.sh                                  # → $DEPLOY_REMOTE:/opt/anki-enrich
+DEPLOY_REMOTE=<host> DEPLOY_DEST=/srv/ae ./deploy/push.sh   # override host/path
 ```
 
 The script is **rerunnable** — run it again any time the code changes. Each run:
