@@ -108,3 +108,54 @@ def test_card_tags_with_and_without_examples():
     assert config.EXAMPLES_TAG in mine.card_tags(f)
     f2 = enrich_one.Fields("a", "a", "a", "", "m", "s", "", None, None)
     assert config.NO_EXAMPLE_TAG in mine.card_tags(f2)
+
+
+def test_sentence_options_uses_massif(monkeypatch):
+    monkeypatch.setattr(mine.massif, "top_sentences", lambda term, n=5: ["S1", "S2"])
+    assert mine.sentence_options("箸", ex_conn=object()) == ["S1", "S2"]
+
+def test_sentence_options_falls_back_to_local(monkeypatch):
+    monkeypatch.setattr(mine.massif, "top_sentences", lambda term, n=5: [])
+    monkeypatch.setattr(mine, "_local_sentences", lambda conn, term, n: ["L1"])
+    assert mine.sentence_options("箸", ex_conn=object()) == ["L1"]
+
+def test_image_candidates_caps_and_swallows_errors(monkeypatch):
+    from ankienrich.images import ImageCandidate
+    monkeypatch.setattr(mine.images, "search_images",
+                        lambda term, limit=6: [ImageCandidate("t","f","","")])
+    assert len(mine.image_candidates("箸")) == 1
+    def _boom(*a, **k): raise RuntimeError("no browser")
+    monkeypatch.setattr(mine.images, "search_images", _boom)
+    assert mine.image_candidates("箸") == []
+
+def test_download_image_returns_bytes_and_ext(monkeypatch):
+    class _R:
+        status_code = 200
+        headers = {"Content-Type": "image/jpeg"}
+        content = b"JPEG"
+        def raise_for_status(self): pass
+    monkeypatch.setattr(mine.requests, "get", lambda u, **k: _R())
+    assert mine.download_image("http://x/y/pic.png") == (b"JPEG", "png")
+
+def test_download_image_none_on_failure(monkeypatch):
+    def _boom(*a, **k): raise mine.requests.RequestException("down")
+    monkeypatch.setattr(mine.requests, "get", _boom)
+    assert mine.download_image("http://x/pic.jpg") is None
+
+def test_download_image_none_on_non_image(monkeypatch):
+    class _R:
+        headers = {"Content-Type": "text/html"}
+        def raise_for_status(self): pass
+    monkeypatch.setattr(mine.requests, "get", lambda u, **k: _R())
+    assert mine.download_image("http://x/pic.jpg") is None
+
+def test_commit_refuses_duplicate(monkeypatch):
+    class _Col:
+        def close(self): pass
+    monkeypatch.setattr(mine.collection, "open_working", lambda: _Col())
+    monkeypatch.setattr(mine.sync, "login", lambda col: "auth")
+    monkeypatch.setattr(mine.sync, "pull", lambda col, a: ("none", a))
+    monkeypatch.setattr(mine, "existing_note", lambda col, t, r: 123)
+    f = enrich_one.Fields("箸","はし","箸[はし]","","m","s","",None,None)
+    res = mine.commit(f, None)
+    assert res["status"] == "duplicate"

@@ -3,10 +3,13 @@ sync it. The conversation flow lives here as pure helpers + a Session dataclass;
 bot.py is the thin Telegram glue."""
 from __future__ import annotations
 
+import requests
 from collections import Counter
+from urllib.parse import urlparse
 
-from . import collection, config
+from . import collection, config, massif, images, sync, runlock
 from .audio import enrich as audio_enrich
+from .examples import index as ex_index
 
 
 def target_deck(col) -> str:
@@ -75,3 +78,69 @@ def card_tags(fields) -> list[str]:
     tags = [config.MINED_TAG, config.ENRICHED_TAG]
     tags.append(config.EXAMPLES_TAG if fields.examples else config.NO_EXAMPLE_TAG)
     return tags
+
+
+def _local_sentences(ex_conn, term: str, n: int) -> list[str]:
+    """Fallback plain sentences from examples.sqlite (across readings)."""
+    rows = ex_conn.execute(
+        "SELECT DISTINCT plain FROM examples WHERE term=? AND plain<>'' LIMIT ?",
+        (term, n)).fetchall()
+    return [r[0] for r in rows]
+
+
+def sentence_options(term: str, *, ex_conn, n: int = config.MINE_SENTENCE_N) -> list[str]:
+    """Top-n candidate sentences: Massif first, local examples.sqlite on failure."""
+    hits = massif.top_sentences(term, n=n)
+    if hits:
+        return hits
+    return _local_sentences(ex_conn, term, n)
+
+
+def image_candidates(term: str, n: int = config.MINE_IMAGE_N):
+    """Up to n Bing image candidates for `term`. Never raises: a missing browser,
+    Playwright import error, or any search failure yields []."""
+    try:
+        return images.search_images(term, limit=n)
+    except Exception:
+        return []
+
+
+def _ext_from_url(url: str) -> str:
+    parts = urlparse(url).path.rsplit(".", 1)
+    ext = parts[1].lower() if len(parts) == 2 else ""
+    return ext if ext in {"jpg", "jpeg", "png", "webp", "gif"} else "jpg"
+
+
+def download_image(url: str, *, timeout: int = config.IMAGE_DL_TIMEOUT):
+    """Download the chosen image. Returns (bytes, ext) or None on any failure /
+    non-image content."""
+    try:
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (anki-enrich)"},
+                            timeout=timeout)
+        resp.raise_for_status()
+        if not resp.headers.get("Content-Type", "").startswith("image/"):
+            return None
+        return resp.content, _ext_from_url(url)
+    except requests.RequestException:
+        return None
+
+
+def commit(fields, sentence_fields, *, deck: str | None = None, image=None) -> dict:
+    """Pull → dup-check → backup → add → push, under the run lock. Returns a status
+    dict. Raises runlock.Busy if a run holds the lock."""
+    with runlock.acquire():
+        col = collection.open_working()
+        try:
+            auth = sync.login(col)
+            pull_action, auth = sync.pull(col, auth)
+            if existing_note(col, fields.term, fields.reading) is not None:
+                return {"status": "duplicate"}
+            collection.backup(col)
+            deck = deck or target_deck(col)
+            nid = create_card(col, fields, sentence_fields, deck=deck,
+                              tags=card_tags(fields), image=image)
+            push_action, auth = sync.push(col, auth)
+            return {"status": "ok", "nid": nid, "deck": deck,
+                    "pull": pull_action, "push": push_action}
+        finally:
+            col.close()
