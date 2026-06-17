@@ -121,6 +121,7 @@ def enrich_notes(col, conn, styles_path=None, *, overwrite=False):
     apply_dict_styles(col, styles_path)
     fld = {f["name"] for f in col.models.by_name(config.NOTETYPE)["flds"]}
     written = 0
+    first_enriched_nids = []
     nohit_nids, terms = [], []
     for nid in _in_scope_nids(col):
         note = col.get_note(nid)
@@ -143,6 +144,7 @@ def enrich_notes(col, conn, styles_path=None, *, overwrite=False):
             note[config.EXPANDED_MEANING] = ""
         if first_time:
             note.add_tag(config.ENRICHED_TAG)
+            first_enriched_nids.append(nid)
         col.update_note(note)
         written += 1
         terms.append(term)
@@ -158,4 +160,5 @@ def enrich_notes(col, conn, styles_path=None, *, overwrite=False):
                 note.add_tag(config.NO_DEF_TAG)
                 col.update_note(note)
     return {"written": written, "dropped": dropped,
-            "nohit_tagged": 0 if dropped else len(nohit_nids), "terms": terms}
+            "nohit_tagged": 0 if dropped else len(nohit_nids), "terms": terms,
+            "first_enriched_nids": first_enriched_nids}

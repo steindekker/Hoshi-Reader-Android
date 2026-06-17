@@ -2,7 +2,7 @@
 -> examples -> cloze. Dedupe is destructive and lives in its own command, not here.
 
 Dry-run unless apply=True; a verified backup is taken before any write."""
-from . import audio, cloze, config, collection, pitch
+from . import audio, cloze, config, collection, imagequeue, pitch
 from .audio import build as audio_build, index as audio_index
 from .defs import build as def_build, enrich
 from .examples import build as ex_build
@@ -102,4 +102,9 @@ def run(col, *, apply=False, overwrite_pitch=False, overwrite_cloze=False,
             out["steps"][key] = fn()
         except Exception as exc:
             raise PipelineError(name, exc) from exc
+
+    enrich_res = out["steps"].get("enrich", {})
+    nids = enrich_res.get("first_enriched_nids")
+    if apply and nids:
+        enrich_res["flagged_images"] = imagequeue.flag_new(col, nids)
     return out

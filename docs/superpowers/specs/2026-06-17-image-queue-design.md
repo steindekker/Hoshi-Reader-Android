@@ -70,11 +70,15 @@ Out:
     carries neither `needs-image` nor `no-image`, add `ankienrich::needs-image`.
     Returns count flagged. Called by the pipeline with the nids the defs pass
     first-enriched this run.
+  - `open_queue() -> list[Candidate]` — `runlock` → `open_working` → login → pull →
+    `candidates(col)` → `col.close()`. The single OPEN pull, encapsulated here so
+    `bot.py` stays thin (mirrors `mine.commit` owning its own open/pull/close). Raises
+    `runlock.Busy` if a run holds the lock.
   - `candidates(col) -> list[Candidate]` — notes matching
     `{notetype} tag:ankienrich::needs-image`, ordered by nid (creation order).
     `Candidate` (frozen dataclass): `nid`, `term`, `reading`, `context` (a short
     plain-text snippet from `Sentence` or `Meaning` so the user knows what they are
-    imaging).
+    imaging). Takes an already-open `col`; used by `open_queue` and tests.
   - `set_image(nid, image) -> dict` — `runlock` → `open_working` → login → pull →
     re-load note by nid (skip with status if it vanished remotely) → `media.write_data`
     + `Image = <img src="FNAME">` → remove `needs-image` → `update_note` → push.
@@ -97,13 +101,33 @@ Out:
   line of wiring; no reordering of existing steps.
 
 - **`ankienrich/bot.py`** (changed) — gains:
-  - the `🖼 画像` reply-keyboard button + handler that opens the queue;
+  - the `🖼 画像` reply-keyboard button (added to `home_keyboard`) + a
+    `message_handler` matching `m.text == IMAGE_BUTTON` that opens the queue;
   - a queue conversation, kept in a **separate** in-memory dict from the mining
     `_SESSIONS`, with its own callback prefix (`q…`) so it never collides with the
     mining `img:` flow;
-  - reuse of `mine.image_candidates` / `mine.image_rows` / `mine.download_image` and
-    `images.prefetch` (prefetch the *next* card while the user decides on the
-    current one — same trick as `_enter_preview`).
+  - reuse of `mine.image_candidates` / `mine.image_rows` / `mine.numbered_thumbnails`
+    / `mine.download_image` and `images.prefetch` (prefetch the *next* card while the
+    user decides on the current one — same trick as `_enter_preview`). The picker
+    presentation is the exact `_enter_image` grid: a `numbered_thumbnails`
+    media-group with the URL-thumbnail + caption fallback when Pillow is absent,
+    then numbered `image_rows` buttons.
+
+### Bot wiring notes (existing handlers the queue must not break)
+
+`bot.py` registers **one** catch-all callback handler
+(`@bot.callback_query_handler(func=lambda c: True)`) which immediately looks up the
+mining `_SESSIONS` and runs generic cancel/expired handling. Two consequences the
+implementer must honour:
+
+- **The `_word` miner handler guard must exclude the new button.** Today it fires on
+  any non-`/` text that isn't `RUN_BUTTON`/`HELP_BUTTON`; `IMAGE_BUTTON` must be
+  added to that exclusion list, or tapping 🖼 画像 gets mined as a word.
+- **`q…` callbacks must be dispatched *inside* the existing catch-all handler,
+  before the mining-session lookup** (a second `callback_query_handler` would never
+  fire — telebot dispatches to the first matching handler). Branch on
+  `data.startswith("q")` at the top of the handler and return, mirroring how the
+  `is_mining` prefixes are special-cased.
 
 ## Conversation flow
 
@@ -112,7 +136,7 @@ limitation as the mining flow; acceptable). Distinct from `_SESSIONS`.
 
 ```
 (idle) ── tap 🖼 画像 ──▶ OPEN
-OPEN: runlock → open → pull → imagequeue.candidates(col) → close/release.
+OPEN: imagequeue.open_queue()  (runlock → open → pull → candidates → close).
    ├ 0 candidates ▶ "画像が必要な新しいカードはありません" → end
    └ ≥1           ▶ store [(nid,term,reading,context)], index 0 ▶ CARD
 CARD i/N: prefetch next term's images; show "i/N 「term」(reading) — context"
@@ -140,8 +164,9 @@ status and the bot just advances with a note.
   most one of the two at a time (`set_image`/`skip`/`flag_new` keep them mutually
   exclusive).
 - `Image` field — `config.IMAGE` ("Image"), written as `<img src="FNAME">` with the
-  chosen bytes stored in `col.media` under a deterministic name (reuse mining's
-  `mined_{term}.{ext}` idiom or a queue-specific name).
+  chosen bytes stored in `col.media` under a **nid-based** name (`q_{nid}.{ext}`) so
+  two cards sharing a `Term`, or a future re-image, never collide on one media file
+  (unlike mining's `mined_{term}.{ext}`, where each add is a fresh unique term).
 
 Back-catalog: every card carries `ankienrich::enriched` already, so `first_time`
 is never true for it → never flagged → never queued. Exactly the "only newly-added"
@@ -191,7 +216,8 @@ brief OPEN pull and each individual mutation take it.
   the right count.
 - `imagequeue.candidates` — temp collection with a mix of tagged/untagged/imaged
   notes; asserts only `needs-image` notes returned, ordered by nid, with term/reading/
-  context populated.
+  context populated. (`open_queue`'s sync/runlock wrapper is monkeypatched in its own
+  thin test; the selection logic is covered here.)
 - `imagequeue.set_image` — temp collection: writes `Image` with the media file,
   removes `needs-image`; "gone" status when the nid is absent. (`sync`/`runlock`
   monkeypatched — no live network.)

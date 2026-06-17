@@ -1,4 +1,4 @@
-from ankienrich import bot
+from ankienrich import bot, config
 
 
 def test_authorized():
@@ -84,7 +84,8 @@ def test_keyboard_all_button_label_flips_when_all_selected():
 def test_home_keyboard_offers_run_and_help_buttons():
     kb = bot.home_keyboard()
     labels = [b["text"] for row in kb.keyboard for b in row]
-    assert labels == [bot.RUN_BUTTON, bot.HELP_BUTTON]
+    assert bot.RUN_BUTTON in labels
+    assert bot.HELP_BUTTON in labels
 
 
 def test_home_keyboard_is_persistent_and_resized():
@@ -113,3 +114,17 @@ def test_inline_builds_one_button_per_row():
     flat = [b for row in kb.keyboard for b in row]
     assert [b.text for b in flat] == ["A", "B"]
     assert [b.callback_data for b in flat] == ["x:0", "x:1"]
+
+
+def test_home_keyboard_includes_image_button():
+    kb = bot.home_keyboard()
+    labels = [b["text"] for row in kb.keyboard for b in row]
+    assert config.IMAGE_BUTTON in labels
+
+
+def test_word_guard_excludes_image_button():
+    # the miner must not treat a tap on the image button as a word to mine
+    assert bot._is_word_text(config.IMAGE_BUTTON) is False
+    assert bot._is_word_text(bot.RUN_BUTTON) is False
+    assert bot._is_word_text("迷惑") is True
+    assert bot._is_word_text("/start") is False
