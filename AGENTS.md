@@ -45,10 +45,17 @@ over.
 
 `uv run anki-enrich-bot` (needs `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`). Tap ▶️ Run
 to fire the enrichment suite, or **just send a word** to mine a new card: the bot
-previews dict/pitch/audio, lets you pick a Massif example sentence (local
-`examples.sqlite` fallback) and a Bing image (or skip either), then writes a
-`jidoujisho Kinomoto` card tagged `ankienrich::mined` and syncs — one add at a time
-under the same run-lock as the nightly job. 0-hit words are refused.
+previews the formatted definition (dict HTML → Telegram HTML via `mine.tg_html`)
+with pitch + JPDB frequency folded into the header, plays the term audio, lets you
+pick a Massif example sentence (local `examples.sqlite` fallback) and a Bing image
+(or skip either), then writes a `jidoujisho Kinomoto` card tagged `ankienrich::mined`
+and syncs — one add at a time under the same run-lock as the nightly job. The
+reading picker for multi-reading words is ordered by frequency. 0-hit words are refused.
+
+Word frequency comes from a JPDB Yomitan frequency dict extracted to `dicts/jpdb/`;
+first run builds `var/freq.sqlite` (skipped if absent — the preview/picker just omit
+the rank, like the other build-time inputs). The mined card's `Frequency` field is
+filled from it.
 
 Both searches are **prefetched at the preview step** (`bot.py` `_enter_preview` →
 `mine.prefetch_sentences` + `mine.prefetch_images`): the Massif fetch

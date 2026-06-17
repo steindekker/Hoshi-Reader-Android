@@ -103,6 +103,16 @@ def test_create_card_with_image_writes_field_and_media(tmp_path):
     col.close()
 
 
+def test_create_card_writes_frequency_when_present(tmp_path):
+    col = _col(tmp_path)
+    fields = enrich_one.Fields("箸", "はし", "箸[はし]", "", "chopsticks",
+                               "JMdict", "", None, None, accents=(), freq=42)
+    nid = mine.create_card(col, fields, None, deck="言葉文章", tags=[config.MINED_TAG])
+    n = col.get_note(nid)
+    assert n[config.FREQUENCY] == "42"
+    col.close()
+
+
 def test_card_tags_with_and_without_examples():
     f = enrich_one.Fields("a", "a", "a", "", "m", "s", "<div/>", None, None)
     assert config.EXAMPLES_TAG in mine.card_tags(f)
@@ -172,8 +182,9 @@ def test_commit_refuses_duplicate(monkeypatch):
 
 def test_candidate_rows_label_and_payload():
     from ankienrich.enrich_one import Candidate
-    rows = mine.candidate_rows([Candidate("かど", "corner"), Candidate("つの", "horn")])
-    assert rows[0] == ("かど — corner", "cand:0")
+    rows = mine.candidate_rows([Candidate("かど", "corner", 800),
+                                Candidate("つの", "horn", None)])
+    assert rows[0] == ("かど — corner  #800", "cand:0")
     assert rows[1] == ("つの — horn", "cand:1")
 
 
@@ -190,11 +201,24 @@ def test_image_rows_number_and_skip():
     assert rows[0] == ("1", "img:0") and rows[-1] == ("⏭ Skip image", "img:skip")
 
 
-def test_preview_text_includes_reading_meaning():
+def test_preview_text_header_carries_pitch_and_freq():
     from ankienrich.enrich_one import Fields
-    f = Fields("箸","はし","箸[はし]","<svg/>","chopsticks","JMdict","",None,b"x")
+    f = Fields("林檎", "りんご", "林檎[りんご]", "<svg/>",
+               '<div><span style="font-weight:bold">林檎</span></div><div>果実</div>',
+               "三省堂", "", None, b"x", accents=(0,), freq=1234)
     txt = mine.preview_text(f)
-    assert "はし" in txt and "chopsticks" in txt and "JMdict" in txt
+    assert txt.startswith("📖 林檎（りんご [0]） #1234")
+    assert "<b>林檎</b>" in txt and "果実" in txt
+    assert "三省堂" in txt
+    assert "audio:" not in txt and "pitch:" not in txt
+
+
+def test_preview_text_without_pitch_or_freq():
+    from ankienrich.enrich_one import Fields
+    f = Fields("箸", "はし", "箸[はし]", "", "chopsticks", "JMdict", "", None, None)
+    txt = mine.preview_text(f)
+    assert txt.startswith("📖 箸（はし）")
+    assert "#" not in txt
 
 
 def test_confirm_text_image_flag():
@@ -208,3 +232,68 @@ def test_session_defaults():
     s = mine.Session(chat_id=1)
     assert s.state == "idle" and s.candidates == [] and s.fields is None
     assert s.image_candidates == [] and s.image is None
+
+
+def test_tg_html_blocks_become_lines_and_bold_maps():
+    html = ('<div><span style="font-weight:bold">林檎</span></div>'
+            '<div>バラ科の落葉高木</div><div>②その果実</div>')
+    out = mine.tg_html(html)
+    assert out == "<b>林檎</b>\nバラ科の落葉高木\n②その果実"
+
+
+def test_tg_html_escapes_and_strips_unknown_tags():
+    out = mine.tg_html('<span class="x">a &amp; b < c</span>')
+    assert out == "a &amp; b &lt; c"   # text escaped, span dropped
+
+
+def test_tg_html_caps_length_and_stays_balanced():
+    long = "<div>" + "あ" * 5000 + "</div>"
+    out = mine.tg_html(long, cap=100)
+    assert out.endswith("…")
+    assert len(out) < 200
+    assert out.count("<b>") == out.count("</b>")   # never a dangling tag
+
+
+def test_tg_html_nested_bold_collapses_to_one_pair():
+    # Nested bold sources must not emit nested <b> (Telegram wants flat balance).
+    out = mine.tg_html('<b>a<span style="font-weight:bold">b</span>c</b>')
+    assert out == "<b>abc</b>"
+
+
+def test_tg_html_unclosed_bold_is_auto_closed():
+    out = mine.tg_html("<b>hello world")
+    assert out == "<b>hello world</b>"
+    assert out.count("<b>") == out.count("</b>")
+
+
+def test_pitch_text_single_multiple_and_empty():
+    assert mine.pitch_text("りんご", (0,)) == "りんご [0]"
+    assert mine.pitch_text("たまご", (0, 2)) == "たまご [0] / [2]"
+    assert mine.pitch_text("りんご", ()) == ""
+
+
+def test_candidates_sorted_by_frequency(tmp_path):
+    import sqlite3
+    from ankienrich import enrich_one
+    # tiny defs.sqlite: one term, two readings
+    dbf = tmp_path / "defs.sqlite"
+    dc = sqlite3.connect(dbf)
+    dc.row_factory = sqlite3.Row
+    dc.execute("CREATE TABLE defs (term TEXT, reading TEXT, dict_id TEXT, "
+               "kind TEXT, sense_ord INTEGER, html TEXT)")
+    dc.executemany("INSERT INTO defs VALUES (?,?,?,?,?,?)", [
+        ("方", "ほう", "jmdict", "je", 1, "direction"),
+        ("方", "かた", "jmdict", "je", 1, "person"),
+    ])
+    dc.commit()
+    # freq.sqlite: かた is rarer (higher rank number) than ほう
+    fbf = tmp_path / "freq.sqlite"
+    fc = sqlite3.connect(fbf)
+    fc.execute("CREATE TABLE freq (key TEXT PRIMARY KEY, value INT, display TEXT)")
+    fc.executemany("INSERT INTO freq VALUES (?,?,?)",
+                   [("ほう", 100, "100"), ("かた", 5000, "5000")])
+    fc.commit()
+    from ankienrich.freq import index as freq_index
+    cands = enrich_one.candidates(dc, "方", freq_conn=freq_index.open_index(str(fbf)))
+    assert [c.reading for c in cands] == ["ほう", "かた"]   # rank ascending
+    assert cands[0].freq == 100

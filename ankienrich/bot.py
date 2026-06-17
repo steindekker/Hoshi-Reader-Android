@@ -13,6 +13,7 @@ from . import enrich_one, mine, runlock
 from .audio import index as audio_index
 from .defs import index as defs_index
 from .examples import index as ex_index
+from .freq import build as freq_build, index as freq_index
 from .jrp_fill import make_generator
 from .jrp_fill.accent import AccentIndex
 
@@ -122,11 +123,15 @@ def _inline(rows):
 
 
 def _indexes():
-    """(defs_conn, ex_conn, audio_conn, acc, generate), opened once (read-only)."""
+    """(defs_conn, ex_conn, audio_conn, acc, generate, freq_conn), opened once
+    (read-only). freq_conn is None when no JPDB source was available to build it."""
     if not hasattr(_indexes, "_cache"):
+        freq_conn = None
+        if freq_build.ensure() != "no-source":
+            freq_conn = freq_index.open_index()
         _indexes._cache = (defs_index.open_index(), ex_index.open_index(),
                            audio_index.open_index(), AccentIndex.load(),
-                           make_generator())
+                           make_generator(), freq_conn)
     return _indexes._cache
 
 
@@ -173,10 +178,10 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
     def _enter_preview(chat_id_, cand_idx):
         s = _SESSIONS[chat_id_]
         reading = s.candidates[cand_idx].reading
-        defs_conn, ex_conn, audio_conn, acc, _gen = _indexes()
+        defs_conn, ex_conn, audio_conn, acc, _gen, freq_conn = _indexes()
         s.fields = enrich_one.build_fields(
             s.term, reading, defs_conn=defs_conn, ex_conn=ex_conn,
-            audio_conn=audio_conn, acc=acc)
+            audio_conn=audio_conn, acc=acc, freq_conn=freq_conn)
         s.state = "preview"
         if s.fields.audio_clip:
             try:
@@ -244,8 +249,8 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
         if not _authorized(m.chat.id, chat_id):
             return
         term = m.text.strip()
-        defs_conn, ex_conn, audio_conn, acc, gen = _indexes()
-        cands = enrich_one.candidates(defs_conn, term)
+        defs_conn, ex_conn, audio_conn, acc, gen, freq_conn = _indexes()
+        cands = enrich_one.candidates(defs_conn, term, freq_conn=freq_conn)
         if not cands:
             bot.send_message(m.chat.id, f"「{term}」not found — nothing to add.")
             return
@@ -302,7 +307,7 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
             bot.answer_callback_query(c.id)
             return
         if data.startswith("sent:") and s:
-            *_, acc, gen = _indexes()
+            _d, _e, _a, acc, gen, _f = _indexes()
             if data == "sent:skip":
                 s.sentence_fields = None
             else:

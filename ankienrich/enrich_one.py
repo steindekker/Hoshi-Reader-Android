@@ -24,6 +24,7 @@ _TAG = re.compile(r"<[^>]+>")
 class Candidate:
     reading: str
     gloss: str  # short plain-text gloss for the picker button/label
+    freq: int | None = None   # JPDB rank, or None when unknown
 
 
 def term_furigana(term: str, reading: str) -> str:
@@ -40,16 +41,23 @@ def _plain_gloss(rows) -> str:
     return text[:40]
 
 
-def candidates(defs_conn, term: str) -> list[Candidate]:
-    """Distinct readings for `term` across the dict index, each with a 1-line gloss.
-    Empty list = unknown word (caller refuses)."""
+def candidates(defs_conn, term: str, *, freq_conn=None) -> list[Candidate]:
+    """Distinct readings for `term` across the dict index, each with a 1-line gloss
+    and (when `freq_conn` is given) a JPDB rank. Sorted most-frequent first;
+    unknown-rank readings sort last. Empty list = unknown word (caller refuses)."""
     jj, je = defs_index.lookup(defs_conn, term)
     by_reading: dict[str, list] = {}
     for r in (*je, *jj):  # prefer JE gloss for the label
         by_reading.setdefault(r["reading"], []).append(r)
     out = []
     for reading, rows in by_reading.items():
-        out.append(Candidate(reading=reading, gloss=_plain_gloss(rows)))
+        freq = None
+        if freq_conn is not None:
+            from .freq import index as freq_index
+            hit = freq_index.lookup(freq_conn, term, reading)
+            freq = hit[0] if hit else None
+        out.append(Candidate(reading=reading, gloss=_plain_gloss(rows), freq=freq))
+    out.sort(key=lambda c: (c.freq is None, c.freq or 0))
     return out
 
 
@@ -64,6 +72,8 @@ class Fields:
     examples: str
     audio_pick: audio_enrich.Pick | None
     audio_clip: bytes | None
+    accents: tuple[int, ...] = ()     # downstep positions (0 = heiban)
+    freq: int | None = None           # JPDB rank, or None
 
     @property
     def has_definition(self) -> bool:
@@ -102,7 +112,7 @@ def fields_for_sentence(term: str, reading: str, plain_sentence: str, *,
 
 
 def build_fields(term: str, reading: str, *, defs_conn, ex_conn, audio_conn,
-                 acc) -> Fields:
+                 acc, freq_conn=None) -> Fields:
     """Compute every card field derivable from (term, reading). Pure read."""
     meaning, source, _kind = defs_enrich.definition_for(defs_conn, term, reading)
     examples = ex_enrich.examples_for(ex_conn, term, reading)
@@ -115,7 +125,14 @@ def build_fields(term: str, reading: str, *, defs_conn, ex_conn, audio_conn,
     if clip is None:
         pick = None
 
+    freq = None
+    if freq_conn is not None:
+        from .freq import index as freq_index
+        hit = freq_index.lookup(freq_conn, term, reading)
+        freq = hit[0] if hit else None
+
     return Fields(
         term=term, reading=reading, furigana=term_furigana(term, reading),
         pitch_svg=pitch, meaning=meaning, definition_source=source,
-        examples=examples, audio_pick=pick, audio_clip=clip)
+        examples=examples, audio_pick=pick, audio_clip=clip,
+        accents=tuple(accents or ()), freq=freq)
