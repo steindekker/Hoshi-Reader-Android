@@ -187,8 +187,9 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
                       ("⏭ Skip sentence", "go:skip"),
                       ("✖ Cancel", "go:cancel")])
         bot.send_message(chat_id_, mine.preview_text(s.fields), reply_markup=kb)
-        # Start the image search now so it's ready by the image step (overlaps the
-        # time the user spends reading the preview + picking a sentence).
+        # Start the sentence + image searches now so each is ready by its step
+        # (overlaps the time the user spends reading the preview).
+        mine.prefetch_sentences(s.term)
         mine.prefetch_images(s.term)
 
     def _enter_image(chat_id_):

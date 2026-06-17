@@ -1,4 +1,4 @@
-from ankienrich import massif
+from ankienrich import config, massif
 
 _FIXTURE = '''
 <div id="results-list"><ul>
@@ -37,3 +37,43 @@ def test_parse_tolerates_extra_li_attributes():
     body = ('<li class="text-japanese" data-id="9">'
             '<div>これは<em>例</em>です。</div></li>')
     assert massif.parse(body, n=5) == ["これは例です。"]
+
+
+class _Resp:
+    def __init__(self, text):
+        self.text = text
+    def raise_for_status(self):
+        pass
+
+
+def test_prefetch_is_consumed_by_top_sentences(monkeypatch):
+    calls = []
+    def _get(*a, **k):
+        calls.append(k.get("params"))
+        return _Resp(_FIXTURE)
+    monkeypatch.setattr(massif.requests, "get", _get)
+    try:
+        massif.prefetch("勉強")
+        out = massif.top_sentences("勉強", n=config.MINE_SENTENCE_N)
+        assert out == ["いろいろと勉強になりました。",
+                       "勉強させていただき、ありがとうございました",
+                       "とっても勉強になりました。"]
+        # Exactly one network fetch: the prefetch; top_sentences reused it.
+        assert len(calls) == 1
+    finally:
+        massif.shutdown()
+
+
+def test_top_sentences_refetches_after_prefetch_consumed(monkeypatch):
+    calls = []
+    def _get(*a, **k):
+        calls.append(1)
+        return _Resp(_FIXTURE)
+    monkeypatch.setattr(massif.requests, "get", _get)
+    try:
+        massif.prefetch("勉強")
+        massif.top_sentences("勉強", n=config.MINE_SENTENCE_N)   # consumes prefetch
+        massif.top_sentences("勉強", n=config.MINE_SENTENCE_N)   # no prefetch → fetches
+        assert len(calls) == 2
+    finally:
+        massif.shutdown()

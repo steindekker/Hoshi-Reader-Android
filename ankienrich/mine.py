@@ -97,6 +97,15 @@ def sentence_options(term: str, *, ex_conn, n: int = config.MINE_SENTENCE_N) -> 
     return _local_sentences(ex_conn, term, n)
 
 
+def prefetch_sentences(term: str) -> None:
+    """Start the Massif sentence fetch early (e.g. at preview) so the list is ready
+    by the sentence step. Never raises — best effort."""
+    try:
+        massif.prefetch(term)
+    except Exception:
+        pass
+
+
 def prefetch_images(term: str) -> None:
     """Start the image search early (e.g. at preview) so the candidates are ready
     by the image step. Never raises — best effort."""

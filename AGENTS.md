@@ -50,6 +50,12 @@ previews dict/pitch/audio, lets you pick a Massif example sentence (local
 `jidoujisho Kinomoto` card tagged `ankienrich::mined` and syncs — one add at a time
 under the same run-lock as the nightly job. 0-hit words are refused.
 
+Both searches are **prefetched at the preview step** (`bot.py` `_enter_preview` →
+`mine.prefetch_sentences` + `mine.prefetch_images`): the Massif fetch
+(`massif.prefetch`, a lightweight 1-slot executor) and the Bing search
+(`images.prefetch`, a warm Chromium on its own worker thread) run in the
+background while the user reads the card, so each pick is usually instant.
+
 The image step uses headless Chromium via `ankienrich/images.py` (the `images`
 dep group). The bot `Dockerfile` installs the browser
 (`playwright install --with-deps chromium`, ~400 MB, cached after the deps layer);
