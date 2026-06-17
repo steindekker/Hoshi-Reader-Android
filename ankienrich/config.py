@@ -62,6 +62,8 @@ SAMPLE_N = 5
 
 # Single-word mining (Telegram bot).
 MINED_TAG = "ankienrich::mined"
+NEEDS_IMAGE_TAG = "ankienrich::needs-image"   # image-queue selector; set at first enrich
+NO_IMAGE_TAG = "ankienrich::no-image"         # permanent skip from the image queue
 MINE_SENTENCE_N = 5
 MASSIF_URL = "https://massif.la/ja/search"
 MASSIF_TIMEOUT = 5  # seconds
@@ -70,6 +72,7 @@ IMAGE = "Image"            # Kinomoto field
 FREQUENCY = "Frequency"    # Kinomoto field; filled by the mining flow from JPDB
 MINE_IMAGE_N = 6           # thumbnails offered in the image picker
 IMAGE_DL_TIMEOUT = 8       # seconds to download the chosen image
+IMAGE_BUTTON = "🖼 画像"   # persistent reply-keyboard button that opens the image queue
 
 
 def ankiweb_credentials() -> tuple[str, str]:
