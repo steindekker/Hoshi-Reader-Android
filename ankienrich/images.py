@@ -21,7 +21,14 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from urllib.parse import quote
 
-SEARCH_URL = "https://www.bing.com/images/search?q={q}&form=HDRSC2"
+# adlt=off disables SafeSearch (single-user tool — unfiltered results wanted). The
+# URL param alone is unreliable; Bing also reads it from the SRCHHPGUSR cookie set
+# on the browser context (see _SAFESEARCH_COOKIE).
+SEARCH_URL = "https://www.bing.com/images/search?q={q}&form=HDRSC2&adlt=off"
+
+# SafeSearch-off cookie Bing actually honours (the URL param is advisory).
+_SAFESEARCH_COOKIE = {"name": "SRCHHPGUSR", "value": "ADLT=OFF",
+                      "domain": ".bing.com", "path": "/"}
 
 # A real desktop UA is REQUIRED: headless Chromium's default `HeadlessChrome` UA
 # makes Bing serve an unrelated default feed (a query for 林檎 came back as Swedish
@@ -90,6 +97,7 @@ def search_images(term: str, limit: int = 12, *, timeout_ms: int = 8000) -> list
         browser = p.chromium.launch(headless=True)
         try:
             context = browser.new_context(user_agent=_USER_AGENT)
+            context.add_cookies([_SAFESEARCH_COOKIE])  # SafeSearch off
             page = context.new_page()
             page.route("**/*", _block_media)
             page.goto(url, wait_until="domcontentloaded")

@@ -15,6 +15,13 @@ REAL_M = (
 )
 
 
+def test_safesearch_is_off():
+    # SafeSearch disabled via both the URL param and the cookie Bing honours.
+    assert "adlt=off" in images.SEARCH_URL
+    assert images._SAFESEARCH_COOKIE["value"] == "ADLT=OFF"
+    assert images._SAFESEARCH_COOKIE["domain"] == ".bing.com"
+
+
 def test_parse_iusc_maps_one_payload():
     [c] = images.parse_iusc([REAL_M])
     assert c.thumb_url == "https://ts1.mm.bing.net/th?id=OIP.o72MmeQMDCc&pid=15.1"
