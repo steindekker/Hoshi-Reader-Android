@@ -210,6 +210,32 @@ def test_session_defaults():
     assert s.image_candidates == [] and s.image is None
 
 
+def test_tg_html_blocks_become_lines_and_bold_maps():
+    html = ('<div><span style="font-weight:bold">林檎</span></div>'
+            '<div>バラ科の落葉高木</div><div>②その果実</div>')
+    out = mine.tg_html(html)
+    assert out == "<b>林檎</b>\nバラ科の落葉高木\n②その果実"
+
+
+def test_tg_html_escapes_and_strips_unknown_tags():
+    out = mine.tg_html('<span class="x">a &amp; b < c</span>')
+    assert out == "a &amp; b &lt; c"   # text escaped, span dropped
+
+
+def test_tg_html_caps_length_and_stays_balanced():
+    long = "<div>" + "あ" * 5000 + "</div>"
+    out = mine.tg_html(long, cap=100)
+    assert out.endswith("…")
+    assert len(out) < 200
+    assert out.count("<b>") == out.count("</b>")   # never a dangling tag
+
+
+def test_pitch_text_single_multiple_and_empty():
+    assert mine.pitch_text("りんご", (0,)) == "りんご [0]"
+    assert mine.pitch_text("たまご", (0, 2)) == "たまご [0] / [2]"
+    assert mine.pitch_text("りんご", ()) == ""
+
+
 def test_candidates_sorted_by_frequency(tmp_path):
     import sqlite3
     from ankienrich import enrich_one

@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import re as _re
 import requests
+from html import escape as _escape
+from html.parser import HTMLParser
 from collections import Counter
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
@@ -183,6 +185,110 @@ _TAGS = _re.compile(r"<[^>]+>")
 
 def _plain(s: str, limit: int) -> str:
     return _TAGS.sub("", s).strip()[:limit]
+
+
+# Block-level tags whose boundaries become newlines in the text preview.
+_BLOCK = {"div", "p", "br", "li", "tr", "table", "h1", "h2", "h3"}
+
+
+def _is_bold(attrs) -> bool:
+    for name, val in attrs:
+        if name == "style" and val and "font-weight" in val and (
+                "bold" in val or "700" in val or "600" in val):
+            return True
+    return False
+
+
+class _TgHtml(HTMLParser):
+    """Convert structured-content dict HTML into Telegram's HTML subset: block
+    boundaries -> newlines, bold spans -> <b>, all other tags dropped, text
+    escaped. Caps visible length and always emits balanced bold so the result is
+    valid Telegram HTML (an unbalanced/half tag makes send_message fail)."""
+
+    def __init__(self, cap: int):
+        super().__init__(convert_charrefs=True)
+        self.cap = cap
+        self.parts: list[str] = []
+        self.stack: list[bool] = []   # per open element: did it open bold?
+        self.bold = 0                 # current emitted <b> nesting
+        self.vis = 0                  # visible chars emitted
+        self.done = False
+
+    def _nl(self):
+        if self.parts and not self.parts[-1].endswith("\n"):
+            self.parts.append("\n")
+
+    def _open_bold(self):
+        self.bold += 1
+        if self.bold == 1:
+            self.parts.append("<b>")
+
+    def _close_bold(self):
+        if self.bold > 0:
+            self.bold -= 1
+            if self.bold == 0:
+                self.parts.append("</b>")
+
+    def handle_starttag(self, tag, attrs):
+        if self.done:
+            return
+        if tag in _BLOCK:
+            self._nl()
+        bold = tag in ("b", "strong") or _is_bold(attrs)
+        if bold:
+            self._open_bold()
+        if tag != "br":                      # void element: no matching endtag
+            self.stack.append(bold)
+
+    def handle_startendtag(self, tag, attrs):
+        if tag in _BLOCK:
+            self._nl()
+
+    def handle_endtag(self, tag):
+        if self.done:
+            return
+        bold = self.stack.pop() if self.stack else False
+        if bold:
+            self._close_bold()
+        if tag in _BLOCK:
+            self._nl()
+
+    def handle_data(self, data):
+        if self.done:
+            return
+        room = self.cap - self.vis
+        if len(data) > room:
+            data, self.done = data[:room], True
+        self.vis += len(data)
+        self.parts.append(_escape(data, quote=False))
+        if self.done:
+            while self.bold > 0:
+                self._close_bold()
+            self.parts.append("…")
+
+    def result(self) -> str:
+        while self.bold > 0:
+            self._close_bold()
+        s = "".join(self.parts)
+        s = _re.sub(r"[ \t]*\n[ \t]*", "\n", s)
+        s = _re.sub(r"\n{3,}", "\n\n", s)
+        return s.strip()
+
+
+def tg_html(html: str, cap: int = 800) -> str:
+    """Dict HTML -> Telegram-safe HTML (see _TgHtml)."""
+    p = _TgHtml(cap)
+    p.feed(html or "")
+    p.close()
+    return p.result()
+
+
+def pitch_text(reading: str, accents) -> str:
+    """`reading [n]`, or `reading [a] / [b]` for multiple accepted accents; '' if
+    none."""
+    if not accents:
+        return ""
+    return reading + " " + " / ".join(f"[{a}]" for a in accents)
 
 
 def candidate_rows(cands) -> list[tuple[str, str]]:
