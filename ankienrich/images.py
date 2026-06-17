@@ -39,9 +39,13 @@ _USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
 
 # Resource types to drop while rendering: we only need the DOM the page-JS builds,
-# not the pixels (jidoujisho's `blockNetworkImage: true`) nor styling (we read
-# `a.iusc` attributes, never lay the page out). Keeps scripts/XHR alive.
-_BLOCKED_RESOURCES = {"image", "media", "font", "stylesheet"}
+# not the pixels (jidoujisho's `blockNetworkImage: true`). Keeps scripts/XHR alive.
+# (Stylesheets are NOT blocked — measured slower + fewer grid items without them.)
+_BLOCKED_RESOURCES = {"image", "media", "font"}
+
+# Wait for at least this many grid items before reading (or until the grace cap),
+# so a fast read can't catch a half-rendered grid with one item.
+_RESULT_FLOOR = 12
 
 
 @dataclass(frozen=True)
@@ -148,6 +152,15 @@ def _search_blocking(term: str, timeout_ms: int) -> list[ImageCandidate]:
             page.wait_for_selector("a.iusc", timeout=timeout_ms)
         except PlaywrightTimeoutError:
             return []
+        # The grid streams in; reading at the first `a.iusc` can catch a single
+        # item. Wait for a healthy batch (returns early once present); a short cap
+        # so niche terms with few results don't wait the whole grace period.
+        try:
+            page.wait_for_function(
+                "n => document.querySelectorAll('a.iusc').length >= n",
+                arg=_RESULT_FLOOR, timeout=1500)
+        except PlaywrightTimeoutError:
+            pass
         m_attrs = page.eval_on_selector_all(
             "a.iusc", "els => els.map(e => e.getAttribute('m')).filter(Boolean)")
         return parse_iusc(m_attrs)
