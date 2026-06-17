@@ -272,6 +272,14 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
         if is_mining and not s:        # stale keyboard after restart/cancel/new word
             bot.answer_callback_query(c.id, "Session expired — send the word again")
             return
+        if s and ":" in data and data.split(":")[1].isdigit():
+            # bounds-guard an indexed pick against the CURRENT session's list — a
+            # button from a session replaced by a newer word could be out of range.
+            _lists = {"cand": s.candidates, "sent": s.sentences, "img": s.image_candidates}
+            lst = _lists.get(data.split(":")[0])
+            if lst is not None and int(data.split(":")[1]) >= len(lst):
+                bot.answer_callback_query(c.id, "That option expired — send the word again")
+                return
         if data.startswith("cand:"):
             _enter_preview(c.message.chat.id, int(data.split(":")[1]))
             bot.answer_callback_query(c.id)
