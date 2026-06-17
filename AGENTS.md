@@ -51,8 +51,8 @@ previews dict/pitch/audio, lets you pick a Massif example sentence (local
 under the same run-lock as the nightly job. 0-hit words are refused.
 
 The image step uses headless Chromium via `ankienrich/images.py` (the `images`
-dep group). **Deploy:** the Hetzner bot Docker image must add
-`uv run playwright install --with-deps chromium` for the image step to work there;
+dep group). The bot `Dockerfile` installs the browser
+(`playwright install --with-deps chromium`, ~400 MB, cached after the deps layer);
 without a browser the step degrades to "no images → skip" (see
 `docs/image-search-handoff.md`). Follow-up: a preview-time duplicate warning (today
 a duplicate is only caught at Apply, after pull).
