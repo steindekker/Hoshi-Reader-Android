@@ -79,6 +79,20 @@ def test_keyboard_all_button_label_flips_when_all_selected():
     assert "Clear all" in full
 
 
+# --- home_keyboard: persistent reply keyboard so no command needs typing -----
+
+def test_home_keyboard_offers_run_and_help_buttons():
+    kb = bot.home_keyboard()
+    labels = [b["text"] for row in kb.keyboard for b in row]
+    assert labels == [bot.RUN_BUTTON, bot.HELP_BUTTON]
+
+
+def test_home_keyboard_is_persistent_and_resized():
+    kb = bot.home_keyboard()
+    assert kb.resize_keyboard
+    assert kb.is_persistent
+
+
 # --- confirmation_text ------------------------------------------------------
 
 def test_confirmation_text_empty():

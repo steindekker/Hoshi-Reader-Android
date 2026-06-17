@@ -1,5 +1,5 @@
-"""Telegram command listener. Thin: /run shows a toggle keyboard to pick which
-fields to overwrite, then Apply shells out to
+"""Telegram command listener. Thin: a persistent ▶️ Run button (or /run) shows a
+toggle keyboard to pick which fields to overwrite, then Apply shells out to
 `anki-enrich --apply [--overwrite-*...] --notify`, which sends the report itself
 — the bot never blocks on a run and never re-implements the pipeline."""
 from __future__ import annotations
@@ -8,6 +8,12 @@ import os
 import subprocess
 
 import telebot
+
+# Persistent reply-keyboard buttons, so a run is one tap and never a typed command.
+RUN_BUTTON = "▶️ Run"
+HELP_BUTTON = "❓ Help"
+
+HELP_TEXT = "Tap ▶️ Run to pick fields to overwrite, then Apply."
 
 # Fields the pipeline can re-assert (overwrite), in canonical display/flag order.
 # Audio has no overwrite flag, so it is not offered here. Note "sentence" maps to
@@ -68,6 +74,14 @@ def keyboard_for(fields: set[str]) -> telebot.types.InlineKeyboardMarkup:
     return kb
 
 
+def home_keyboard() -> telebot.types.ReplyKeyboardMarkup:
+    """Persistent reply keyboard sitting above the input — tap instead of typing."""
+    kb = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, is_persistent=True)
+    kb.add(telebot.types.KeyboardButton(RUN_BUTTON),
+           telebot.types.KeyboardButton(HELP_BUTTON))
+    return kb
+
+
 def _authorized(chat_id: int, expected: int) -> bool:
     return chat_id == expected
 
@@ -89,20 +103,38 @@ def _config() -> tuple[str, int]:
 def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
     bot = telebot.TeleBot(token, parse_mode="HTML")
 
+    def _show_home(m):
+        bot.send_message(m.chat.id, HELP_TEXT, reply_markup=home_keyboard())
+
+    def _open_run_menu(m):
+        sent = bot.reply_to(
+            m, "Run enrichment now? Tap fields to overwrite, then Apply.",
+            reply_markup=keyboard_for(set()))
+        _SELECTED[sent.message_id] = set()
+
     @bot.message_handler(commands=["start", "help"])
     def _help(m):
         if not _authorized(m.chat.id, chat_id):
             return
-        bot.reply_to(m, "Commands:\n/run — pick fields to overwrite, then Apply")
+        _show_home(m)
 
     @bot.message_handler(commands=["run"])
     def _run(m):
         if not _authorized(m.chat.id, chat_id):
             return
-        sent = bot.reply_to(
-            m, "Run enrichment now? Tap fields to overwrite, then Apply.",
-            reply_markup=keyboard_for(set()))
-        _SELECTED[sent.message_id] = set()
+        _open_run_menu(m)
+
+    @bot.message_handler(func=lambda m: m.text == RUN_BUTTON)
+    def _run_button(m):
+        if not _authorized(m.chat.id, chat_id):
+            return
+        _open_run_menu(m)
+
+    @bot.message_handler(func=lambda m: m.text == HELP_BUTTON)
+    def _help_button(m):
+        if not _authorized(m.chat.id, chat_id):
+            return
+        _show_home(m)
 
     @bot.callback_query_handler(func=lambda c: True)
     def _cb(c):
