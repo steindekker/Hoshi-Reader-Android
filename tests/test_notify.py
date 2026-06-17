@@ -38,7 +38,7 @@ def _dry_res():
         "audio": {"will_fill": 12, "will_upgrade": 3, "none": 4},
         "pitch": {"filled": 8, "not_found": 2, "skipped": 1},
         "sentences": {"filled": 5},
-        "enrich": {"to_write": 10, "nohit": 1},
+        "enrich": {"to_write": 10, "nohit": 1, "terms": ["猫", "犬"]},
         "examples": {"to_write": 7, "none": 2},
         "cloze": {"filled": 4, "skipped": 1}}}
 
@@ -48,16 +48,39 @@ def _apply_res():
         "audio": {"filled": {"nhk": 9, "forvo": 3}, "upgraded": {"nhk": 3}},
         "pitch": {"filled": 8, "not_found": 2, "skipped": 1},
         "sentences": {"filled": 5},
-        "enrich": {"written": 10, "dropped": 0},
+        "enrich": {"written": 10, "dropped": 0, "terms": ["猫", "犬"]},
         "examples": {"written": 7, "none_tagged": 2},
         "cloze": {"filled": 4, "skipped": 1}}}
 
 
 def test_format_report_dry_run():
     out = notify.format_report(_dry_res(), apply=False, pull_action="none")
+    assert out.startswith("<b>anki-enrich</b>")  # plain bold title, no eyes
+    assert "👀" not in out
     assert "dry run" in out
     assert "1,234 cards scanned" in out          # thousands separator
     assert "sentence" in out and "<b>5</b>" in out
+
+
+def test_format_report_lists_new_terms():
+    out = notify.format_report(_dry_res(), apply=False, pull_action="none")
+    assert "猫、犬" in out  # new (defined) terms, inline
+
+
+def test_format_report_caps_term_list():
+    res = _dry_res()
+    res["steps"]["enrich"]["terms"] = [f"語{i}" for i in range(25)]
+    out = notify.format_report(res, apply=False, pull_action="none")
+    assert "語0" in out and "語19" in out
+    assert "語20" not in out
+    assert "＋5" in out  # overflow indicator
+
+
+def test_format_report_omits_term_line_when_empty():
+    res = _dry_res()
+    res["steps"]["enrich"]["terms"] = []
+    out = notify.format_report(res, apply=False, pull_action="none")
+    assert "🆕" not in out
 
 
 def test_format_report_apply_has_verdict_and_sync():
