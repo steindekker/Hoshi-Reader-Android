@@ -4,57 +4,42 @@ The box runs the Telegram `bot` (on-demand `/run`) and a nightly systemd timer.
 It needs only the code + ~1.4 GB of prebuilt sqlite — never the 4.2 GB `dicts/`
 corpus. The collection bootstraps itself from AnkiWeb on first run.
 
-## Prerequisites on the box
-- Docker Engine + the compose plugin (`docker compose version`).
-- systemd ≥ 252 (the timer pins `04:00 Europe/Amsterdam` via a timezone suffix
-  in `OnCalendar`; Debian 12 / Ubuntu 24.04 and newer are fine).
-- A directory `/opt/anki-enrich` (the paths below assume it).
+## Prerequisites
+- **On the box:** Docker Engine + the compose plugin (`docker compose version`),
+  and systemd ≥ 252 (the timer pins `04:00 Europe/Amsterdam` via a timezone
+  suffix in `OnCalendar`; Debian 12 / Ubuntu 24.04 and newer are fine).
+- **Locally:** an SSH alias for the box (default `<host>`), the four creds in
+  your environment (direnv loads them in the project dir), and the prebuilt
+  `var/defs.sqlite` + `var/examples.sqlite`.
 
-## First deploy
-1. **Get the code:**
-   ```bash
-   sudo git clone <repo-url> /opt/anki-enrich
-   cd /opt/anki-enrich
-   ```
-2. **Ship the prebuilt sqlite** (run on your local machine, where they were built):
-   ```bash
-   rsync -avP var/defs.sqlite var/examples.sqlite \
-     <box>:/opt/anki-enrich/data/
-   ```
-   These land in the bind-mounted volume (`./data` → `/app/var`). Because they
-   exist, the build step is skipped on first run.
-3. **Create `.env`** from the template and fill in all four values:
-   ```bash
-   cp .env.example .env && $EDITOR .env
-   ```
-4. **Start the bot:**
-   ```bash
-   docker compose up -d --build
-   ```
-   First enrichment run (manual `/run` or the nightly timer) opens a fresh
-   `data/collection.anki2` and full-downloads the collection + media from
-   AnkiWeb (~900 MB). The audio step self-skips (no desktop add-on present).
-5. **Install the nightly timer:**
-   ```bash
-   sudo cp deploy/anki-enrich.service deploy/anki-enrich.timer /etc/systemd/system/
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now anki-enrich.timer
-   systemctl list-timers anki-enrich.timer   # confirm next fire
-   ```
+## Deploy
 
-## Redeploy (new code)
 ```bash
-cd /opt/anki-enrich
-git pull
-docker compose up -d --build
+./deploy/push.sh                                   # → <host>:/opt/anki-enrich
+REMOTE=<host> DEST=/opt/anki-enrich ./deploy/push.sh   # override host/path
 ```
-The timer keeps using the freshly built image automatically (it runs `compose run`).
+
+The script is **rerunnable** — run it again any time the code changes. Each run:
+1. Checks Docker is present on the box.
+2. rsyncs the code (mirrored with `--delete`, but the box's `data/` is excluded
+   so the collection is never touched).
+3. Pushes `defs.sqlite` / `examples.sqlite` (rsync delta → near-free if unchanged).
+4. **Seeds** `collection.anki2` + media only on the *first* deploy; on later runs
+   it leaves the box's live, AnkiWeb-synced collection alone.
+5. Writes `/opt/anki-enrich/.env` (mode 600) from your local creds — secrets are
+   never committed to the repo.
+6. `docker compose up -d --build` (rebuilds + restarts the bot).
+7. Installs/refreshes the systemd units and enables the nightly timer.
+
+First deploy without a seeded collection still works: the first enrichment run
+opens a fresh `data/collection.anki2` and full-downloads from AnkiWeb (~900 MB).
+The audio step self-skips (no desktop add-on present).
 
 ## Refresh dictionaries
-Only when you rebuild the dicts locally — re-push the sqlite and restart:
+Rebuild the dicts locally, then just rerun the deploy — it re-pushes the sqlite
+and restarts the bot:
 ```bash
-rsync -avP var/defs.sqlite var/examples.sqlite <box>:/opt/anki-enrich/data/
-ssh <box> 'cd /opt/anki-enrich && docker compose restart bot'
+./deploy/push.sh
 ```
 
 ## Operating
