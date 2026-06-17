@@ -53,6 +53,11 @@ def _compute(conn, term, reading):
     return meaning, source, kind
 
 
+def definition_for(conn, term, reading):
+    """Public single-note definition lookup: (meaning, source, kind)."""
+    return _compute(conn, term, reading)
+
+
 def _in_scope_nids(col):
     return col.find_notes(notetype_search())
 

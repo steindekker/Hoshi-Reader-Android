@@ -290,3 +290,9 @@ def test_run_repitch_replaces_and_keeps_old_media(repitch_col, repitch_audio):
     assert c.get_note(ids["mp3_nodict"])[config.TERM_AUDIO] == "[sound:old3.mp3]"
     assert c.get_note(ids["opus_already"])[config.TERM_AUDIO] == "[sound:la_nhk16_x.opus]"
     assert audio.run_repitch(c, repitch_audio)["replaced"] == {}
+
+
+def test_media_name_is_public():
+    from ankienrich.audio import enrich
+    pick = enrich.Pick("nhk16", "123.opus")
+    assert enrich.media_name(pick) == "la_nhk16_123.opus"

@@ -23,6 +23,11 @@ def _compute(conn, term, reading) -> str:
     return render.render_block(index.select(conn, term, reading))
 
 
+def examples_for(conn, term, reading) -> str:
+    """Public single-note examples block (HTML), '' when none."""
+    return _compute(conn, term, reading)
+
+
 def _will_write(note, new_html, fld, overwrite) -> bool:
     if config.EXAMPLES_TAG not in note.tags:
         return True

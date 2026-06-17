@@ -109,7 +109,7 @@ def read_clip(conn, pick: Pick) -> bytes | None:
     return row[0] if row else None
 
 
-def _media_name(pick: Pick) -> str:
+def media_name(pick: Pick) -> str:
     """Deterministic media filename for a pick. basename can collide across clips
     (notably forvo, keyed <speaker>/<file>); Anki's write_data renames on content
     conflict, so each card still gets its own bytes."""
@@ -180,7 +180,7 @@ def run_backfill(col, conn) -> dict:
             if _SOUND.search(note[config.TERM_AUDIO] or ""):
                 continue  # already has audio (race / re-run)
             data = read_clip(conn, pick)
-            fname = col.media.write_data(_media_name(pick), data)
+            fname = col.media.write_data(media_name(pick), data)
             note[config.TERM_AUDIO] = f"[sound:{fname}]"
             col.update_note(note)
             filled[pick.source] += 1
@@ -258,7 +258,7 @@ def run_repitch(col, conn) -> dict:
         try:
             note = col.get_note(nid)
             data = read_clip(conn, pick)
-            fname = col.media.write_data(_media_name(pick), data)
+            fname = col.media.write_data(media_name(pick), data)
             newval = f"[sound:{fname}]"
             if (note[config.TERM_AUDIO] or "").strip() == newval:
                 continue  # already this exact recording

@@ -155,3 +155,12 @@ def test_overwrite_reasserts_changed_block(tmp_path, kcol):
     assert enrich.enrich_notes(kcol, conn, overwrite=True)["written"] == 1
     assert "J1" in kcol.get_note(nid)[config.EXAMPLES]
     conn.close()
+
+
+def test_examples_for_returns_block(tmp_path):
+    from ankienrich.examples import index, enrich
+    db = str(tmp_path / "examples.sqlite")
+    _make_db(db, [_row("愛", "あい", "tatoeba", 0, "愛は強い")])
+    conn = index.open_index(db)
+    html = enrich.examples_for(conn, "愛", "あい")
+    assert "愛は強い" in html

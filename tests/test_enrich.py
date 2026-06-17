@@ -194,3 +194,16 @@ def test_enrich_notes_tags_when_nohit_at_or_above_threshold(kcol, tmp_path, monk
     assert config.NO_DEF_TAG in n.tags
     assert kcol.find_notes("nid:%d" % nid) != []   # preserved, not dropped
     conn.close()
+
+
+def test_definition_for_returns_meaning_source_kind(tmp_path):
+    from ankienrich.defs import index, enrich
+    db = str(tmp_path / "defs.sqlite")
+    conn = sqlite3.connect(db); conn.row_factory = sqlite3.Row
+    conn.execute("CREATE TABLE defs (term TEXT, reading TEXT, dict_id TEXT, "
+                 "kind TEXT, sense_ord INTEGER, html TEXT)")
+    conn.execute("INSERT INTO defs VALUES ('愛','あい','jmdict','je',0,'love')")
+    conn.commit()
+    meaning, source, kind = enrich.definition_for(conn, "愛", "あい")
+    assert "love" in meaning
+    assert kind == "english"
