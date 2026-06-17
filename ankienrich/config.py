@@ -66,6 +66,9 @@ MINE_SENTENCE_N = 5
 MASSIF_URL = "https://massif.la/ja/search"
 MASSIF_TIMEOUT = 5  # seconds
 MINE_DECK = ""      # "" = derive the modal deck of existing NOTETYPE cards
+IMAGE = "Image"            # Kinomoto field
+MINE_IMAGE_N = 6           # thumbnails offered in the image picker
+IMAGE_DL_TIMEOUT = 8       # seconds to download the chosen image
 
 
 def ankiweb_credentials() -> tuple[str, str]:
