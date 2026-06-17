@@ -16,6 +16,7 @@ Usage:
 """
 from __future__ import annotations
 
+import atexit
 import json
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -82,33 +83,68 @@ def _block_media(route) -> None:
         route.continue_()
 
 
+# A warm, reused browser. Launching Chromium + the Playwright driver is the bulk
+# of a search's latency (~2 s); the long-lived bot is single-threaded, so we keep
+# one browser alive and open a cheap fresh context per search. Only the first
+# search after start (or after a crash) pays the cold start.
+_PW = None
+_BROWSER = None
+
+
+def _browser():
+    """The shared headless-Chromium browser, launched once and relaunched if it
+    has died. Must only be called from one thread (the bot runs single-threaded)."""
+    global _PW, _BROWSER
+    if _BROWSER is not None and _BROWSER.is_connected():
+        return _BROWSER
+    from playwright.sync_api import sync_playwright
+    if _PW is None:
+        _PW = sync_playwright().start()
+    _BROWSER = _PW.chromium.launch(headless=True)
+    return _BROWSER
+
+
+def shutdown() -> None:
+    """Tear down the warm browser + driver. Best-effort, for clean process exit."""
+    global _PW, _BROWSER
+    try:
+        if _BROWSER is not None:
+            _BROWSER.close()
+        if _PW is not None:
+            _PW.stop()
+    except Exception:
+        pass
+    finally:
+        _BROWSER = _PW = None
+
+
+atexit.register(shutdown)
+
+
 def search_images(term: str, limit: int = 12, *, timeout_ms: int = 8000) -> list[ImageCandidate]:
     """Search Bing Images for `term`, returning up to `limit` candidates.
 
-    Renders the JS-built results grid in headless Chromium and reads the
-    `a.iusc` `m`-attribute payloads. Returns [] if the grid never appears
-    (no results, or a slow/blocked load past `timeout_ms`). Requires the
+    Renders the JS-built results grid in a warm headless Chromium (see `_browser`)
+    and reads the `a.iusc` `m`-attribute payloads. Returns [] if the grid never
+    appears (no results, or a slow/blocked load past `timeout_ms`). Requires the
     `images` dependency group and `playwright install chromium`."""
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
-    from playwright.sync_api import sync_playwright
 
     url = SEARCH_URL.format(q=quote(term))
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+    context = _browser().new_context(user_agent=_USER_AGENT)
+    context.add_cookies([_SAFESEARCH_COOKIE])  # SafeSearch off
+    try:
+        page = context.new_page()
+        page.route("**/*", _block_media)
+        page.goto(url, wait_until="domcontentloaded")
         try:
-            context = browser.new_context(user_agent=_USER_AGENT)
-            context.add_cookies([_SAFESEARCH_COOKIE])  # SafeSearch off
-            page = context.new_page()
-            page.route("**/*", _block_media)
-            page.goto(url, wait_until="domcontentloaded")
-            try:
-                page.wait_for_selector("a.iusc", timeout=timeout_ms)
-            except PlaywrightTimeoutError:
-                return []
-            m_attrs = page.eval_on_selector_all(
-                "a.iusc",
-                "els => els.map(e => e.getAttribute('m')).filter(Boolean)",
-            )
-        finally:
-            browser.close()
+            page.wait_for_selector("a.iusc", timeout=timeout_ms)
+        except PlaywrightTimeoutError:
+            return []
+        m_attrs = page.eval_on_selector_all(
+            "a.iusc",
+            "els => els.map(e => e.getAttribute('m')).filter(Boolean)",
+        )
+    finally:
+        context.close()
     return parse_iusc(m_attrs)[:limit]

@@ -15,6 +15,29 @@ REAL_M = (
 )
 
 
+def test_browser_reused_until_disconnected(monkeypatch):
+    launched = []
+
+    class _FakeBrowser:
+        def __init__(self): self._up = True
+        def is_connected(self): return self._up
+
+    class _FakePW:
+        class chromium:
+            @staticmethod
+            def launch(**_kw):
+                b = _FakeBrowser(); launched.append(b); return b
+
+    monkeypatch.setattr(images, "_PW", _FakePW())   # pretend driver already started
+    monkeypatch.setattr(images, "_BROWSER", None)
+    b1 = images._browser()
+    b2 = images._browser()
+    assert b1 is b2 and len(launched) == 1          # reused, launched once
+    b1._up = False                                  # simulate a crash
+    b3 = images._browser()
+    assert b3 is not b1 and len(launched) == 2       # relaunched
+
+
 def test_safesearch_is_off():
     # SafeSearch disabled via both the URL param and the cookie Bing honours.
     assert "adlt=off" in images.SEARCH_URL
