@@ -1,0 +1,13 @@
+# Single long-lived service: the Telegram bot. The nightly enrichment run is a
+# one-off `docker compose run --rm bot anki-enrich --apply --notify`, driven by
+# a host systemd timer (see deploy/). It reuses THIS service's image, env, and
+# volume, so var/run.lock coordinates it against a manual /run.
+services:
+  bot:
+    build: .
+    image: anki-enrich
+    env_file: .env
+    volumes:
+      - ./data:/app/var
+    restart: unless-stopped
+    command: anki-enrich-bot

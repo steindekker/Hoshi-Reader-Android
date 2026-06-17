@@ -25,3 +25,5 @@ poc/ankialign/data/
 
 # direnv local env (creds)
 .envrc
+# real env file (holds secrets, never commit)
+.env
