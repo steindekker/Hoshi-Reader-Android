@@ -1,12 +1,10 @@
-"""Telegram transport + run-report formatting. Stdlib only (urllib): the report
-is a single POST, so the nightly path carries no third-party dependency."""
+"""Telegram transport + run-report formatting."""
 from __future__ import annotations
 
 import html
-import json
 import os
-import urllib.error
-import urllib.request
+
+import requests
 
 _API = "https://api.telegram.org"
 
@@ -23,23 +21,18 @@ def _credentials() -> tuple[str, str]:
 def send_message(text: str) -> None:
     token, chat = _credentials()
     payload = {"chat_id": chat, "text": text, "parse_mode": "HTML"}
-    req = urllib.request.Request(
-        f"{_API}/bot{token}/sendMessage",
-        data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json"})
     try:
-        urllib.request.urlopen(req, timeout=30).close()
-    except urllib.error.HTTPError as e:
+        resp = requests.post(
+            f"{_API}/bot{token}/sendMessage", json=payload, timeout=30)
+        resp.raise_for_status()
+    except requests.HTTPError as e:
         # Telegram returns a 4xx with a JSON body explaining why (bad token,
         # "chat not found", …); surface that instead of an opaque HTTP status.
-        raise RuntimeError(f"Telegram API error {e.code}: {_describe(e)}") from e
-
-
-def _describe(err: urllib.error.HTTPError) -> str:
-    try:
-        return json.loads(err.read()).get("description") or err.reason
-    except (ValueError, OSError):
-        return err.reason
+        try:
+            desc = e.response.json().get("description") or str(e)
+        except Exception:
+            desc = str(e)
+        raise RuntimeError(f"Telegram API error: {desc}") from e
 
 
 # AnkiWeb sync action code -> human text (mirrors the CLI's sync wording).

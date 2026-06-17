@@ -1,44 +1,47 @@
-import json
-
 import pytest
 
 from ankienrich import notify
 
 
 def test_send_message_posts_expected_payload(monkeypatch):
+    import ankienrich.notify as _notify
     sent = {}
 
-    class FakeResp:
-        def close(self): pass
+    class _Resp:
+        status_code = 200
+        def raise_for_status(self): pass
 
-    def fake_urlopen(req, timeout=None):
-        sent["url"] = req.full_url
-        sent["body"] = json.loads(req.data.decode())
-        return FakeResp()
+    def _post(url, **kw):
+        sent["url"] = url
+        sent["json"] = kw.get("json")
+        return _Resp()
 
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "TOK")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "42")
-    monkeypatch.setattr(notify.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(_notify.requests, "post", _post)
 
     notify.send_message("hello")
 
     assert sent["url"] == "https://api.telegram.org/botTOK/sendMessage"
-    assert sent["body"] == {"chat_id": "42", "text": "hello", "parse_mode": "HTML"}
+    assert sent["json"] == {"chat_id": "42", "text": "hello", "parse_mode": "HTML"}
 
 
 def test_send_message_surfaces_telegram_error(monkeypatch):
-    import io
-    import urllib.error
+    import ankienrich.notify as _notify
+    import requests as req_lib
 
-    def fake_urlopen(req, timeout=None):
-        raise urllib.error.HTTPError(
-            req.full_url, 400, "Bad Request", {},
-            io.BytesIO(json.dumps(
-                {"ok": False, "description": "Bad Request: chat not found"}).encode()))
+    class _ErrResp:
+        status_code = 400
+        def json(self):
+            return {"ok": False, "description": "Bad Request: chat not found"}
+
+    def _post(url, **kw):
+        resp = _ErrResp()
+        raise req_lib.HTTPError(response=resp)
 
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "TOK")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "42")
-    monkeypatch.setattr(notify.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(_notify.requests, "post", _post)
 
     with pytest.raises(RuntimeError, match="chat not found"):
         notify.send_message("hello")
@@ -49,6 +52,27 @@ def test_send_message_requires_env(monkeypatch):
     monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
     with pytest.raises(RuntimeError):
         notify.send_message("hello")
+
+
+def test_send_message_posts_via_requests(monkeypatch):
+    import ankienrich.notify as notify
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "T")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "42")
+    calls = {}
+    class _Resp:
+        status_code = 200
+        def raise_for_status(self): pass
+    def _post(url, **kw):
+        calls["url"] = url
+        calls["json"] = kw.get("json")
+        calls["timeout"] = kw.get("timeout")
+        return _Resp()
+    monkeypatch.setattr(notify.requests, "post", _post)
+    notify.send_message("hi")
+    assert calls["url"].endswith("/botT/sendMessage")
+    assert calls["json"]["chat_id"] == "42"
+    assert calls["json"]["text"] == "hi"
+    assert calls["timeout"] is not None
 
 
 def _dry_res():

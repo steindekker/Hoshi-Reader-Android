@@ -169,6 +169,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "jaconv" },
+    { name = "requests" },
     { name = "tinycss2" },
 ]
 
@@ -191,6 +192,7 @@ wizard = [
 [package.metadata]
 requires-dist = [
     { name = "jaconv", specifier = ">=0.3" },
+    { name = "requests", specifier = ">=2" },
     { name = "tinycss2", specifier = ">=1.2" },
 ]
 

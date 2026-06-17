@@ -5,6 +5,7 @@ requires-python = ">=3.11"
 dependencies = [
     "jaconv>=0.3",      # katakana->hiragana (kana.hira, audio reading match)
     "tinycss2>=1.2",    # robust dict-styles.css scoping in defs/build.py
+    "requests>=2",      # single HTTP client (massif scraper + telegram notify)
 ]
 
 [project.scripts]
