@@ -63,7 +63,7 @@ def _step_enrich(col, apply: bool, def_index: str, overwrite: bool) -> dict:
         if apply:
             return enrich.enrich_notes(col, conn, overwrite=overwrite)
         plan = enrich.build_plan(col, conn, overwrite=overwrite)
-        return {"to_write": plan["to_write"], **plan["counts"]}
+        return {"to_write": plan["to_write"], "terms": plan["terms"], **plan["counts"]}
     finally:
         conn.close()
 

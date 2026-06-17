@@ -103,6 +103,7 @@ def test_build_plan_classifies(kcol, tmp_path):
     assert plan["counts"] == {"enrich": 1, "english": 1, "nohit": 1}
     assert len(plan["nohit_nids"]) == 1
     assert plan["samples"]                       # at least one before/after sample
+    assert set(plan["terms"]) == {"迷惑", "駐車場"}  # written terms, not the no-hit
     conn.close()
 
 
@@ -120,10 +121,12 @@ def test_enrich_notes_writes_stashes_and_is_idempotent(kcol, tmp_path):
     assert n[config.DEFINITION_SOURCE] == "三省堂"
     assert config.ENRICHED_TAG in n.tags
     assert res["written"] == 1
+    assert res["terms"] == ["迷惑"]
 
     # idempotent: re-run writes nothing and does not re-stash
     res2 = enrich.enrich_notes(kcol, conn)
     assert res2["written"] == 0
+    assert res2["terms"] == []
     assert kcol.get_note(nid)[config.ORIGINAL_MEANING] == "OLD CLUTTER"
     conn.close()
 

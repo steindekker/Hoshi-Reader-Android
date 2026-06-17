@@ -63,7 +63,7 @@ def _will_write(note, meaning, source, fld, overwrite) -> bool:
 
 def build_plan(col, conn, *, overwrite=False):
     counts = {"enrich": 0, "english": 0, "nohit": 0}
-    nohit_nids, samples, errors = [], [], []
+    nohit_nids, samples, errors, terms = [], [], [], []
     to_write = 0
     fld = {f["name"] for f in col.models.by_name(config.NOTETYPE)["flds"]}
     for nid in _in_scope_nids(col):
@@ -83,10 +83,11 @@ def build_plan(col, conn, *, overwrite=False):
             continue
         if _will_write(note, meaning, source, fld, overwrite):
             to_write += 1
+            terms.append(term)
         if len(samples) < config.SAMPLE_N:
             samples.append((term, note[config.DEFINITION], meaning, source))
     return {"counts": counts, "to_write": to_write, "nohit_nids": nohit_nids,
-            "samples": samples, "errors": errors}
+            "samples": samples, "errors": errors, "terms": terms}
 
 
 def enrich_notes(col, conn, styles_path=None, *, overwrite=False):
@@ -106,7 +107,7 @@ def enrich_notes(col, conn, styles_path=None, *, overwrite=False):
     apply_dict_styles(col, styles_path)
     fld = {f["name"] for f in col.models.by_name(config.NOTETYPE)["flds"]}
     written = 0
-    nohit_nids = []
+    nohit_nids, terms = [], []
     for nid in _in_scope_nids(col):
         note = col.get_note(nid)
         term = note[config.TERM].strip() if config.TERM in fld else ""
@@ -130,6 +131,7 @@ def enrich_notes(col, conn, styles_path=None, *, overwrite=False):
             note.add_tag(config.ENRICHED_TAG)
         col.update_note(note)
         written += 1
+        terms.append(term)
 
     dropped = 0
     if nohit_nids and len(nohit_nids) < config.NO_HIT_DROP_THRESHOLD:
@@ -142,4 +144,4 @@ def enrich_notes(col, conn, styles_path=None, *, overwrite=False):
                 note.add_tag(config.NO_DEF_TAG)
                 col.update_note(note)
     return {"written": written, "dropped": dropped,
-            "nohit_tagged": 0 if dropped else len(nohit_nids)}
+            "nohit_tagged": 0 if dropped else len(nohit_nids), "terms": terms}

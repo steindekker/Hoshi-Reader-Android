@@ -42,6 +42,9 @@ _SYNC_TEXT = {
 _EMOJI = {"audio": "🔊", "pitch": "📈", "sentence": "📝",
           "defs": "📖", "examples": "💬", "cloze": "🧩"}
 
+# Newly-defined terms listed inline; cap so a first bulk run can't flood the chat.
+_TERM_CAP = 20
+
 
 def _detail(*items) -> str:
     """Join "<n> <noun>" fragments, dropping zero counts so lines stay quiet."""
@@ -67,7 +70,7 @@ def format_report(res, *, apply, pull_action, push_action=None, error=None) -> s
 
     s = res["steps"]
     verdict = "applied + pushed" if apply else "dry run"
-    lines = [f"{'✅' if apply else '👀'} <b>anki-enrich</b> · {verdict}",
+    lines = [f"<b>anki-enrich</b> · {verdict}",
              f"<i>{res['scanned']:,} cards scanned</i>", ""]
 
     a = s["audio"]
@@ -103,6 +106,13 @@ def format_report(res, *, apply, pull_action, push_action=None, error=None) -> s
 
     c = s["cloze"]
     lines.append(_line("cloze", c["filled"], _detail((c["skipped"], "unlocatable"))))
+
+    terms = s.get("enrich", {}).get("terms") or []
+    if terms:
+        shown = "、".join(html.escape(t) for t in terms[:_TERM_CAP])
+        if len(terms) > _TERM_CAP:
+            shown += f" ＋{len(terms) - _TERM_CAP}"
+        lines += ["", f"🆕 <i>{shown}</i>"]
 
     pull = _SYNC_TEXT["pull"].get(pull_action, pull_action)
     sync = pull
