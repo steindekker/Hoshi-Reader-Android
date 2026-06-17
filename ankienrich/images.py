@@ -100,7 +100,6 @@ def _block_media(route) -> None:
 _EXECUTOR = None        # the single worker thread; created lazily
 _PW = None              # } worker-thread-owned: only touched inside tasks that
 _BROWSER = None         # } run on _EXECUTOR, never from the main thread.
-_PAGE = None
 _PREFETCH: dict[str, concurrent.futures.Future] = {}  # term -> in-flight search
 
 
@@ -112,41 +111,42 @@ def _executor() -> concurrent.futures.ThreadPoolExecutor:
     return _EXECUTOR
 
 
-def _page():
-    """A warm page on the worker thread; (re)builds browser+context+page if dead.
-    The SafeSearch cookie and the resource-blocking route are set up once here."""
-    global _PW, _BROWSER, _PAGE
-    if _PAGE is not None and _BROWSER is not None and _BROWSER.is_connected():
-        return _PAGE
+def _browser():
+    """The warm browser on the worker thread; relaunched if it has died. The
+    browser launch is the costly part — kept warm; each search gets a FRESH
+    context+page (reusing a page races Bing's SPA → partial result grids)."""
+    global _PW, _BROWSER
+    if _BROWSER is not None and _BROWSER.is_connected():
+        return _BROWSER
     from playwright.sync_api import sync_playwright
     if _PW is None:
         _PW = sync_playwright().start()
     _BROWSER = _PW.chromium.launch(headless=True)
-    ctx = _BROWSER.new_context(user_agent=_USER_AGENT)
-    ctx.add_cookies([_SAFESEARCH_COOKIE])          # SafeSearch off
-    _PAGE = ctx.new_page()
-    _PAGE.route("**/*", _block_media)
-    return _PAGE
+    return _BROWSER
 
 
 def _reset() -> None:
-    """Drop the (possibly dead) browser+page so the next search rebuilds. Keeps the
+    """Drop the (possibly dead) browser so the next search relaunches it. Keeps the
     driver (`_PW`) alive — only the browser needs relaunching."""
-    global _BROWSER, _PAGE
+    global _BROWSER
     try:
         if _BROWSER is not None:
             _BROWSER.close()
     except Exception:
         pass
-    _BROWSER = _PAGE = None
+    _BROWSER = None
 
 
 def _search_blocking(term: str, timeout_ms: int) -> list[ImageCandidate]:
     """The actual search. Runs ONLY on the worker thread. Returns all candidates
-    (callers slice). [] on no-results/timeout; self-heals the page on a crash."""
+    (callers slice). [] on no-results/timeout; self-heals the browser on a crash."""
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+    context = None
     try:
-        page = _page()
+        context = _browser().new_context(user_agent=_USER_AGENT)
+        context.add_cookies([_SAFESEARCH_COOKIE])      # SafeSearch off
+        page = context.new_page()
+        page.route("**/*", _block_media)
         page.goto(SEARCH_URL.format(q=quote(term)), wait_until="domcontentloaded")
         try:
             page.wait_for_selector("a.iusc", timeout=timeout_ms)
@@ -167,6 +167,12 @@ def _search_blocking(term: str, timeout_ms: int) -> list[ImageCandidate]:
     except Exception:
         _reset()
         return []
+    finally:
+        if context is not None:
+            try:
+                context.close()
+            except Exception:
+                pass
 
 
 def prefetch(term: str, *, timeout_ms: int = 8000) -> None:
@@ -206,7 +212,7 @@ def shutdown() -> None:
 
 
 def _teardown() -> None:           # runs on the worker thread
-    global _PW, _BROWSER, _PAGE
+    global _PW, _BROWSER
     try:
         if _BROWSER is not None:
             _BROWSER.close()
@@ -214,7 +220,7 @@ def _teardown() -> None:           # runs on the worker thread
             _PW.stop()
     except Exception:
         pass
-    _PW = _BROWSER = _PAGE = None
+    _PW = _BROWSER = None
 
 
 atexit.register(shutdown)
