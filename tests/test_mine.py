@@ -254,6 +254,18 @@ def test_tg_html_caps_length_and_stays_balanced():
     assert out.count("<b>") == out.count("</b>")   # never a dangling tag
 
 
+def test_tg_html_nested_bold_collapses_to_one_pair():
+    # Nested bold sources must not emit nested <b> (Telegram wants flat balance).
+    out = mine.tg_html('<b>a<span style="font-weight:bold">b</span>c</b>')
+    assert out == "<b>abc</b>"
+
+
+def test_tg_html_unclosed_bold_is_auto_closed():
+    out = mine.tg_html("<b>hello world")
+    assert out == "<b>hello world</b>"
+    assert out.count("<b>") == out.count("</b>")
+
+
 def test_pitch_text_single_multiple_and_empty():
     assert mine.pitch_text("りんご", (0,)) == "りんご [0]"
     assert mine.pitch_text("たまご", (0, 2)) == "たまご [0] / [2]"
