@@ -6,7 +6,9 @@ import re
 
 # matches an Anki furigana segment: base[reading]
 _RUBY = re.compile(r"([^\s\[\]<>]+)\[([^\]]+)\]")
-_HAS_KANJI = re.compile(r"[㐀-鿿豈-﫿々\U00020000-\U0002A6DF\U0002A700-\U0002CEAF\U0002CEB0-\U0002EBEF]")
+# Kanji character class (CJK ideograph ranges + 々). Single source of truth;
+# re-exported by ankienrich.jrp_fill.kana.
+KANJI_RE = re.compile(r"[㐀-鿿豈-﫿々\U00020000-\U0002A6DF\U0002A700-\U0002CEAF\U0002CEB0-\U0002EBEF]")
 
 
 def _anki_surface(s: str) -> str:
@@ -38,4 +40,4 @@ def jrp_surface(s: str) -> str:
 def jrp_reading(s: str) -> str:
     """Kana reading, or '' when bare kanji remains (no clean reading available)."""
     r = _anki_reading(jrp_to_furigana(s))
-    return "" if _HAS_KANJI.search(r) else r
+    return "" if KANJI_RE.search(r) else r

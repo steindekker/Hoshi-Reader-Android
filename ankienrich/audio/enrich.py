@@ -18,6 +18,8 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 
+import jaconv
+
 from .. import config
 
 # Reading-keyed, accent-authoritative dictionaries (tried first, in this order).
@@ -32,7 +34,6 @@ SOURCE_LABELS = {"nhk16": "NHK", "shinmeikai8": "Shinmeikai",
 
 _TAG = re.compile(r"<[^>]+>")
 _SOUND = re.compile(r"\[sound:[^\]]+\]")
-_KATA_TO_HIRA = {cp: cp - 0x60 for cp in range(0x30A1, 0x30F7)}
 
 
 def _clean(s: str) -> str:
@@ -40,7 +41,7 @@ def _clean(s: str) -> str:
 
 
 def _to_hira(s: str) -> str:
-    return s.translate(_KATA_TO_HIRA)
+    return jaconv.kata2hira(s)
 
 
 @dataclass

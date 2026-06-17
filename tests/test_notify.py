@@ -26,6 +26,24 @@ def test_send_message_posts_expected_payload(monkeypatch):
     assert sent["body"] == {"chat_id": "42", "text": "hello", "parse_mode": "HTML"}
 
 
+def test_send_message_surfaces_telegram_error(monkeypatch):
+    import io
+    import urllib.error
+
+    def fake_urlopen(req, timeout=None):
+        raise urllib.error.HTTPError(
+            req.full_url, 400, "Bad Request", {},
+            io.BytesIO(json.dumps(
+                {"ok": False, "description": "Bad Request: chat not found"}).encode()))
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "TOK")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "42")
+    monkeypatch.setattr(notify.urllib.request, "urlopen", fake_urlopen)
+
+    with pytest.raises(RuntimeError, match="chat not found"):
+        notify.send_message("hello")
+
+
 def test_send_message_requires_env(monkeypatch):
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
     monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)

@@ -1,9 +1,10 @@
 """Build the definition index (defs.sqlite) + scoped dict_styles.css from the
 user's Yomitan dictionary folders."""
 import json
-import re
 import sqlite3
 from pathlib import Path
+
+import tinycss2
 
 from ankienrich import config
 from ankienrich.defs import render
@@ -82,13 +83,42 @@ def _index_je(conn, dicts_dir):
 
 
 def _scope_css(css, selector):
-    """Prefix every selector list with `selector ` (skip @-rules)."""
-    def repl(m):
-        sels = m.group(1)
-        if sels.strip().startswith("@"):
-            return m.group(0)
-        return ", ".join(f"{selector} {s.strip()}" for s in sels.split(",") if s.strip()) + " {"
-    return re.sub(r"([^{}]+)\{", repl, css)
+    """Prefix every selector with `selector ` so dict styles stay inside their
+    container. Selector lists split on top-level commas only (commas inside
+    :not()/[…] are preserved); @-rule blocks (e.g. @media) are scoped recursively,
+    statement at-rules (@import/@charset) pass through untouched."""
+    return _scope_rules(tinycss2.parse_stylesheet(css, skip_comments=True), selector)
+
+
+def _scope_rules(rules, selector):
+    out = []
+    for rule in rules:
+        if rule.type == "qualified-rule":
+            sels = ", ".join(f"{selector} {tinycss2.serialize(g).strip()}"
+                             for g in _selector_groups(rule.prelude))
+            out.append(f"{sels} {{{tinycss2.serialize(rule.content)}}}")
+        elif rule.type == "at-rule":
+            prelude = tinycss2.serialize(rule.prelude).strip()
+            if rule.content is None:  # statement at-rule, e.g. @import url(...);
+                out.append(f"@{rule.lower_at_keyword} {prelude};")
+            else:                     # block at-rule, e.g. @media: scope its body
+                inner = _scope_rules(
+                    tinycss2.parse_stylesheet(tinycss2.serialize(rule.content)), selector)
+                out.append(f"@{rule.lower_at_keyword} {prelude} {{\n{inner}\n}}")
+    return "\n".join(out)
+
+
+def _selector_groups(prelude):
+    """Split a selector-list prelude into groups on top-level comma tokens."""
+    group, groups = [], []
+    for tok in prelude:
+        if tok.type == "literal" and tok.value == ",":
+            groups.append(group)
+            group = []
+        else:
+            group.append(tok)
+    groups.append(group)
+    return [g for g in groups if tinycss2.serialize(g).strip()]
 
 
 def _build_styles(dicts_dir, styles_path):

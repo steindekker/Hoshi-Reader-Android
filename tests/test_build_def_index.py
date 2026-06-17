@@ -56,3 +56,19 @@ def test_build_scopes_dict_styles(tmp_path):
     css = styles_out.read_text(encoding="utf-8")
     assert '.aa-jj[data-dict="daijisen"] [data-sc-content="extra"]' in css
     assert "color: red" in css
+
+
+def test_scope_css_handles_commas_media_and_comments():
+    scoped = b._scope_css(
+        '/* note { brace } */\n'
+        ':not(a, b) span, .x { color: red }\n'
+        '@media (max-width: 600px) { .y { color: blue } }\n'
+        '@import url("x.css");',
+        ".S")
+    # comma inside :not() is NOT a selector boundary; the top-level comma is
+    assert ".S :not(a, b) span, .S .x" in scoped
+    # @media body scoped recursively; the @media prelude itself is untouched
+    assert "@media (max-width: 600px)" in scoped
+    assert ".S .y" in scoped
+    # statement at-rule passes through; comment with a stray brace doesn't break it
+    assert '@import url("x.css");' in scoped

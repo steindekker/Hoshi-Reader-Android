@@ -2,6 +2,10 @@
 name = "ankienrich"
 version = "0.1.0"
 requires-python = ">=3.11"
+dependencies = [
+    "jaconv>=0.3",      # katakana->hiragana (kana.hira, audio reading match)
+    "tinycss2>=1.2",    # robust dict-styles.css scoping in defs/build.py
+]
 
 [project.scripts]
 anki-enrich = "ankienrich.cli:main"

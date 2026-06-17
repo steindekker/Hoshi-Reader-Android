@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import json
 import os
+import urllib.error
 import urllib.request
 
 _API = "https://api.telegram.org"
@@ -26,7 +27,19 @@ def send_message(text: str) -> None:
         f"{_API}/bot{token}/sendMessage",
         data=json.dumps(payload).encode(),
         headers={"Content-Type": "application/json"})
-    urllib.request.urlopen(req, timeout=30).close()
+    try:
+        urllib.request.urlopen(req, timeout=30).close()
+    except urllib.error.HTTPError as e:
+        # Telegram returns a 4xx with a JSON body explaining why (bad token,
+        # "chat not found", …); surface that instead of an opaque HTTP status.
+        raise RuntimeError(f"Telegram API error {e.code}: {_describe(e)}") from e
+
+
+def _describe(err: urllib.error.HTTPError) -> str:
+    try:
+        return json.loads(err.read()).get("description") or err.reason
+    except (ValueError, OSError):
+        return err.reason
 
 
 # AnkiWeb sync action code -> human text (mirrors the CLI's sync wording).
