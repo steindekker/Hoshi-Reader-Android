@@ -1,5 +1,9 @@
 # Anki Enrich
 
+<p align="center">
+  <img src="assets/bot-avatar.png" alt="anki-enrich-bot avatar — 言霊 (kotodama)" width="320">
+</p>
+
 A personal CLI that keeps a single Anki collection consistent. It pulls the
 latest collection from AnkiWeb, runs a set of enrichment passes, and pushes back
 without opening the Anki desktop app.
