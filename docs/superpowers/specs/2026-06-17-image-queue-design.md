@@ -34,10 +34,11 @@ In:
 - Pick → download the chosen image → write the existing note's `Image` field and
   clear the queue tag, under `runlock` (pull → write → push), mirroring `mine.commit`.
 - Skip → swap the queue tag for a permanent `ankienrich::no-image` tag.
-- A pipeline change that **flags** new cards for the queue: when the defs pass
-  enriches a card for the **first time** and it has an empty `Image`, the card is
-  tagged `ankienrich::needs-image`. This is what defines "newly-added, not yet
-  processed" and excludes the already-enriched back-catalog.
+- A **structural** selector that defines the queue without waiting on the nightly
+  pass: imageless cards that aren't `no-image` and aren't the processed back-catalog
+  (so a card added from another app shows up the same day). A pipeline change still
+  **flags** first-enriched imageless cards `ankienrich::needs-image` as a durability
+  backstop (keeps them queued after they gain `enriched`).
 - Reuse of `images.py` / `mine.image_candidates` / `mine.download_image` /
   `images.warm`/`prefetch` as-is.
 
@@ -54,8 +55,8 @@ Out:
 |---|---|
 | Where does image-picking live? | **Bot-only on-demand queue.** Not a nightly pass; picking requires the user in the loop. |
 | Trigger | A dedicated persistent **`🖼 画像`** button beside `▶️ 実行`. Tap → pull → build queue → walk one card at a time. |
-| Which cards are offered? | **Only newly-added cards**, defined as "not yet processed by anki-enrich." |
-| How is "newly-added" encoded? | **Pipeline flags it.** On the *first* enrichment of a card (`defs/enrich.py` `first_time`), if `Image` is empty, tag `ankienrich::needs-image`. The queue offers tagged cards. Robust to nightly timing; the bulk-cleaned back-catalog is never flagged. Workflow: image the day after mining. |
+| Which cards are offered? | **Newly-added imageless cards**, defined structurally so a card added from another app shows up the *same day* — no nightly pass required. |
+| How is "newly-added" encoded? | **Structural selector, not a tag wait.** The queue offers imageless cards that are *not* `no-image` and *not* part of the processed back-catalog: `Image:` empty `-tag:no-image (-tag:enriched OR tag:needs-image)`. A fresh external add is imageless + not-yet-enriched → shown immediately. The bulk-cleaned back-catalog is `enriched` (and unflagged) → excluded. `needs-image` is a **durability backstop**: the defs pass still flags first-enriched imageless cards (`defs/enrich.py` `first_time`), so a card you *skip today* stays in the queue after tonight's pass enriches it (which would otherwise drop it from the not-`enriched` clause). |
 | Skip behaviour | Skipping adds `ankienrich::no-image` (permanent exclusion), mirroring `NO_EXAMPLE_TAG`. Re-imaging later means untagging by hand. |
 | Image search term | The note's `Term` field (same as mining). |
 | Sync timing | Per card: `runlock` → pull → write `Image` (or swap tags) → push. Same pattern and rationale as `mine.commit`. |
@@ -74,11 +75,12 @@ Out:
     `candidates(col)` → `col.close()`. The single OPEN pull, encapsulated here so
     `bot.py` stays thin (mirrors `mine.commit` owning its own open/pull/close). Raises
     `runlock.Busy` if a run holds the lock.
-  - `candidates(col) -> list[Candidate]` — notes matching
-    `{notetype} tag:ankienrich::needs-image`, ordered by nid (creation order).
-    `Candidate` (frozen dataclass): `nid`, `term`, `reading`, `context` (a short
-    plain-text snippet from `Sentence` or `Meaning` so the user knows what they are
-    imaging). Takes an already-open `col`; used by `open_queue` and tests.
+  - `candidates(col) -> list[Candidate]` — notes matching the structural selector
+    `{notetype} "Image:" -tag:no-image (-tag:enriched OR tag:needs-image)`, ordered
+    by nid (creation order). `Candidate` (frozen dataclass): `nid`, `term`, `reading`,
+    `context` (a short hint: the `Sentence` field JRP-surfaced via `markup.jrp_surface`,
+    falling back to plain `Meaning`). Takes an already-open `col`; used by `open_queue`
+    and tests.
   - `set_image(nid, image) -> dict` — `runlock` → `open_working` → login → pull →
     re-load note by nid (skip with status if it vanished remotely) → `media.write_data`
     + `Image = <img src="FNAME">` → remove `needs-image` → `update_note` → push.
@@ -158,8 +160,9 @@ status and the bot just advances with a note.
 ## Tag / field model
 
 - `ankienrich::needs-image` — added by `imagequeue.flag_new` on a card's first
-  enrichment when `Image` is empty. The queue's selector. Removed when an image is
-  written.
+  enrichment when `Image` is empty. **Durability backstop**, not the primary selector:
+  it keeps an already-`enriched` card in the queue (the structural selector's
+  not-`enriched` clause would otherwise drop it). Removed when an image is written.
 - `ankienrich::no-image` — added on skip; permanent exclusion. A card can carry at
   most one of the two at a time (`set_image`/`skip`/`flag_new` keep them mutually
   exclusive).
@@ -168,9 +171,10 @@ status and the bot just advances with a note.
   two cards sharing a `Term`, or a future re-image, never collide on one media file
   (unlike mining's `mined_{term}.{ext}`, where each add is a fresh unique term).
 
-Back-catalog: every card carries `ankienrich::enriched` already, so `first_time`
-is never true for it → never flagged → never queued. Exactly the "only newly-added"
-intent.
+Back-catalog: every card carries `ankienrich::enriched` already and is unflagged, so
+the selector's `(-tag:enriched OR tag:needs-image)` clause excludes it. Measured on
+the live collection: 5,136 imageless cards are back-catalog (excluded) vs 19 new/
+external imageless cards (offered) — clean structural separation.
 
 ## Config additions
 

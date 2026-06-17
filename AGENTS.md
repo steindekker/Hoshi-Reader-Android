@@ -52,10 +52,13 @@ pick a Massif example sentence (local `examples.sqlite` fallback) and a Bing ima
 and syncs — one add at a time under the same run-lock as the nightly job. The
 reading picker for multi-reading words is ordered by frequency. 0-hit words are refused.
 
-Tap **🖼 画像** to walk newly-added imageless cards (those the defs pass tagged
-`ankienrich::needs-image` on first enrichment) and fill each `Image` field with a
-picked Bing image; skipping tags `ankienrich::no-image` (permanent). Same per-card
-runlock'd pull→write→push as mining. See `ankienrich/imagequeue.py`.
+Tap **🖼 画像** to walk newly-added imageless cards and fill each `Image` field with
+a picked Bing image. The queue selects structurally — imageless, not `no-image`, and
+not the processed back-catalog (`-tag:enriched OR tag:needs-image`) — so a card added
+from another app shows up the **same day**, no nightly pass needed. Skipping tags
+`ankienrich::no-image` (permanent); the defs pass still flags first-enriched imageless
+cards `ankienrich::needs-image` as a durability backstop. Same per-card runlock'd
+pull→write→push as mining. See `ankienrich/imagequeue.py`.
 
 Word frequency comes from a JPDB Yomitan frequency dict extracted to `dicts/jpdb/`;
 first run builds `var/freq.sqlite` (skipped if absent — the preview/picker just omit

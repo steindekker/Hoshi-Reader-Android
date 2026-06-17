@@ -6,7 +6,7 @@ from __future__ import annotations
 import re as _re
 from dataclasses import dataclass, field
 
-from . import collection, config, runlock, sync
+from . import collection, config, markup, runlock, sync
 
 _TAGS = _re.compile(r"<[^>]+>")
 
@@ -15,6 +15,15 @@ def _plain(html: str, limit: int = 60) -> str:
     """Tags stripped, whitespace collapsed, truncated — a glanceable context line."""
     text = " ".join(_TAGS.sub(" ", html or "").split())
     return text[:limit]
+
+
+def _context(sentence: str, meaning: str, limit: int = 60) -> str:
+    """Prefer the example Sentence (JRP-marked → surface, e.g. {[一|ひと]つ;2} → 一つ),
+    else the Meaning (plain HTML). Without the JRP strip the Sentence hint is
+    unreadable."""
+    if sentence.strip():
+        return _plain(markup.jrp_surface(sentence), limit)
+    return _plain(meaning, limit)
 
 
 @dataclass(frozen=True)
@@ -48,10 +57,19 @@ def flag_new(col, nids) -> int:
 
 
 def candidates(col) -> list[Candidate]:
-    """Flagged notes, oldest first (nid == creation timestamp). Context is a short
-    plain-text snippet from Sentence, falling back to Meaning."""
+    """Imageless cards that want an image, oldest first (nid == creation timestamp).
+
+    Selects structurally rather than waiting for a tag: an imageless card is offered
+    unless it's a user-skip (no-image) or part of the already-processed back-catalog
+    (enriched but never flagged). A card added from another app today is imageless
+    and not-yet-enriched, so it shows up immediately — no nightly pass required. The
+    needs-image flag is a durability backstop: it keeps a card in the queue after the
+    nightly defs pass enriches it (and stamps the flag), so skipping a day is safe.
+    Context is a short plain-text snippet from Sentence, falling back to Meaning."""
     flds = _fields(col)
-    q = f'{collection.notetype_search()} tag:{config.NEEDS_IMAGE_TAG}'
+    q = (f'{collection.notetype_search()} "{config.IMAGE}:" '
+         f'-tag:{config.NO_IMAGE_TAG} '
+         f'(-tag:{config.ENRICHED_TAG} OR tag:{config.NEEDS_IMAGE_TAG})')
     out = []
     for nid in sorted(col.find_notes(q)):
         note = col.get_note(nid)
@@ -61,7 +79,7 @@ def candidates(col) -> list[Candidate]:
             nid=nid,
             term=note[config.TERM].strip() if config.TERM in flds else "",
             reading=note[config.READING].strip() if config.READING in flds else "",
-            context=_plain(sentence or meaning),
+            context=_context(sentence, meaning),
         ))
     return out
 

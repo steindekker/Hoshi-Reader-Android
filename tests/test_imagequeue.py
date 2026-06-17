@@ -63,16 +63,36 @@ def test_flag_new_tags_only_imageless_unflagged(kcol):
     assert config.NEEDS_IMAGE_TAG not in kcol.get_note(c).tags
 
 
-def test_candidates_returns_flagged_in_nid_order_with_context(kcol):
-    a = _add(kcol, "迷惑", "めいわく", sentence="迷惑をかける", tags=[config.NEEDS_IMAGE_TAG])
-    _add(kcol, "箸", "はし")  # untagged: excluded
-    b = _add(kcol, "橋", "はし", meaning="a bridge", tags=[config.NEEDS_IMAGE_TAG])
+def test_candidates_union_selector_shows_new_and_flagged(kcol):
+    # new external card today: imageless, not yet enriched -> shown immediately
+    a = _add(kcol, "迷惑", "めいわく", sentence="迷惑をかける")
+    # enriched + flagged (the day-after backstop) -> still shown
+    b = _add(kcol, "橋", "はし", meaning="a bridge",
+             tags=[config.ENRICHED_TAG, config.NEEDS_IMAGE_TAG])
     out = imagequeue.candidates(kcol)
     assert [c.nid for c in out] == sorted([a, b])
     by_nid = {c.nid: c for c in out}
     assert by_nid[a].term == "迷惑" and by_nid[a].reading == "めいわく"
     assert "迷惑をかける" in by_nid[a].context        # from Sentence
     assert "a bridge" in by_nid[b].context           # falls back to Meaning
+
+
+def test_candidates_excludes_backcatalog_imaged_and_skipped(kcol):
+    keep = _add(kcol, "迷惑", "めいわく")                                  # new -> shown
+    _add(kcol, "箸", "はし", tags=[config.ENRICHED_TAG])                  # back-catalog -> excluded
+    _add(kcol, "本", "ほん", image='<img src="x.jpg">')                   # already imaged -> excluded
+    _add(kcol, "皿", "さら", tags=[config.NO_IMAGE_TAG])                  # user-skipped -> excluded
+    out = imagequeue.candidates(kcol)
+    assert [c.nid for c in out] == [keep]
+
+
+def test_context_strips_jrp_markup_from_sentence():
+    ctx = imagequeue._context("{[一|ひと]つ;2}の{[負傷者|ふしょうしゃ];2}", "")
+    assert ctx == "一つの負傷者"
+
+
+def test_context_falls_back_to_meaning_and_keeps_spaces():
+    assert imagequeue._context("", "<b>a</b> bridge") == "a bridge"
 
 
 import contextlib
