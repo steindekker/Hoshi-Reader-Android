@@ -4,7 +4,9 @@
 
 **Goal:** Let the Telegram bot turn a single Japanese word into a fully-enriched `jidoujisho Kinomoto` card (dict/pitch/audio + a chosen Massif sentence) and sync it to AnkiWeb.
 
-**Architecture:** A shared single-note path (`enrich_one.build_fields`) reuses each enrichment pass's per-`(Term,Reading)` lookup to produce a card's fields — used for both the in-chat preview and the committed note. `mine.py` adds card creation + a pure conversation state machine; `bot.py` stays thin glue. Massif is the `Sentence` source over `requests`, with the local `examples.sqlite` as fallback. Images are deferred (Phase 2 hook).
+**Architecture:** A shared single-note path (`enrich_one.build_fields`) reuses each enrichment pass's per-`(Term,Reading)` lookup to produce a card's fields — used for both the in-chat preview and the committed note. `mine.py` adds card creation + a pure conversation state machine; `bot.py` stays thin glue. Massif is the `Sentence` source over `requests`, with the local `examples.sqlite` as fallback. The `Image` field is filled via a web-image pick that reuses the merged `ankienrich/images.py`.
+
+> **IMAGE INTEGRATION (added 2026-06-17, after Task 6):** the image step — originally Phase 2 — is now IN SCOPE because `ankienrich/images.py` was merged from `main`. Tasks 7–11 are amended by the **"Image integration addendum"** at the end of this document. Apply each task's base spec AND its addendum delta together. Tasks 1–6 are unaffected (already complete).
 
 **Tech Stack:** Python ≥3.11, `anki` lib, `requests` (promoted to a direct dep), `pyTelegramBotAPI`, `sudachipy` (via the existing JRP generator), `pytest`.
 
@@ -1316,3 +1318,214 @@ git commit -m "docs: document single-word mining; drop completed plan"
 - **Spec coverage:** disambiguation (T4 `candidates`, T10 candidate keyboard), shared single-note path (T5/T6, used by preview in T10 and commit in T7/T8), Massif + fallback (T2, T8 `sentence_options`), deck+tag (T7), immediate sync under runlock (T8 `commit`), 0-hit refuse (T10 `_word`), `requests`+notify migration (T1). All covered.
 - **Type consistency:** `Fields`/`SentenceFields`/`Candidate`/`Session` field names are identical across tasks; `build_fields`/`fields_for_sentence`/`create_card`/`commit`/`sentence_options` signatures match their callers in T10.
 - **Known soft spots flagged inline:** exact `jrp_to_furigana` spacing (T6 note), `_inline` closure-vs-module scope for testability (T10 step 7), Massif markup pinned by an embedded fixture rather than a live capture (T2).
+
+---
+
+# Image integration addendum (2026-06-17)
+
+`ankienrich/images.py` (merged from `main`) provides:
+```python
+search_images(term, limit=12, *, timeout_ms=8000) -> list[ImageCandidate]
+# ImageCandidate(thumb_url, full_url, title, source_page); [] on timeout/no-results.
+```
+It ONLY searches. This addendum adds: capped/safe wrapping, downloading the chosen
+`full_url`, a Telegram image-picker step, and writing the `Image` field. The
+`Image` field format (verified against a real card) is `<img src="FILENAME.jpg">`.
+
+Config constants to add in Task 7 (alongside the others, in `ankienrich/config.py`):
+```python
+IMAGE = "Image"            # Kinomoto field
+MINE_IMAGE_N = 6           # thumbnails offered in the picker
+IMAGE_DL_TIMEOUT = 8       # seconds to download the chosen full_url
+```
+
+## Task 7 delta — `create_card` gains an optional image
+
+Add `IMAGE`, `MINE_IMAGE_N`, `IMAGE_DL_TIMEOUT` to config in Step 1.
+
+`create_card` signature becomes:
+```python
+def create_card(col, fields, sentence_fields, *, deck: str, tags, image=None) -> int:
+```
+where `image` is `tuple[bytes, str] | None` = `(data, ext)`. After the audio block,
+before `add_note`:
+```python
+    if image is not None:
+        data, ext = image
+        fname = col.media.write_data(f"mined_{fields.term}.{ext}", data)
+        n[config.IMAGE] = f'<img src="{fname}">'
+```
+Add a test asserting the Image field + media write:
+```python
+def test_create_card_with_image_writes_field_and_media(tmp_path):
+    col = _col(tmp_path)
+    fields = enrich_one.Fields("箸","はし","箸[はし]","","chopsticks","JMdict","",None,None)
+    nid = mine.create_card(col, fields, None, deck="言葉文章",
+                           tags=[config.MINED_TAG], image=(b"JPEGDATA", "jpg"))
+    n = col.get_note(nid)
+    assert n["Image"].startswith('<img src="') and n["Image"].endswith('">')
+    assert "mined_箸" in n["Image"]
+```
+The existing `test_create_card_without_sentence_leaves_those_fields_empty` should
+also assert `n["Image"] == ""` (default image=None path).
+
+## Task 8 delta — image helpers + `commit` threads the image
+
+Add to `ankienrich/mine.py` (imports: `from . import images` and `from urllib.parse import urlparse`):
+```python
+def image_candidates(term: str, n: int = config.MINE_IMAGE_N):
+    """Up to n Bing image candidates for `term`. Never raises: a missing browser,
+    Playwright import error, or any search failure yields []."""
+    try:
+        return images.search_images(term, limit=n)
+    except Exception:
+        return []
+
+
+def _ext_from_url(url: str) -> str:
+    suffix = urlparse(url).path.rsplit(".", 1)
+    ext = suffix[1].lower() if len(suffix) == 2 else ""
+    return ext if ext in {"jpg", "jpeg", "png", "webp", "gif"} else "jpg"
+
+
+def download_image(url: str, *, timeout: int = config.IMAGE_DL_TIMEOUT):
+    """Download the chosen image. Returns (bytes, ext) or None on any failure /
+    non-image content."""
+    try:
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (anki-enrich)"},
+                            timeout=timeout)
+        resp.raise_for_status()
+        if not resp.headers.get("Content-Type", "").startswith("image/"):
+            return None
+        return resp.content, _ext_from_url(url)
+    except requests.RequestException:
+        return None
+```
+(`requests` is already imported in mine.py for nothing yet — add `import requests` at top.)
+
+`commit` signature becomes `commit(fields, sentence_fields, *, deck=None, image=None)`
+and passes `image=image` to `create_card(...)`.
+
+Tests to add in `tests/test_mine.py`:
+```python
+def test_image_candidates_caps_and_swallows_errors(monkeypatch):
+    from ankienrich.images import ImageCandidate
+    monkeypatch.setattr(mine.images, "search_images",
+                        lambda term, limit=6: [ImageCandidate("t","f","","")] )
+    assert len(mine.image_candidates("箸")) == 1
+    def _boom(*a, **k): raise RuntimeError("no browser")
+    monkeypatch.setattr(mine.images, "search_images", _boom)
+    assert mine.image_candidates("箸") == []
+
+def test_download_image_returns_bytes_and_ext(monkeypatch):
+    class _R:
+        status_code = 200
+        headers = {"Content-Type": "image/jpeg"}
+        content = b"JPEG"
+        def raise_for_status(self): pass
+    monkeypatch.setattr(mine.requests, "get", lambda u, **k: _R())
+    assert mine.download_image("http://x/y/pic.png") == (b"JPEG", "png")
+
+def test_download_image_none_on_failure(monkeypatch):
+    def _boom(*a, **k): raise mine.requests.RequestException("down")
+    monkeypatch.setattr(mine.requests, "get", _boom)
+    assert mine.download_image("http://x/pic.jpg") is None
+
+def test_download_image_none_on_non_image(monkeypatch):
+    class _R:
+        headers = {"Content-Type": "text/html"}
+        def raise_for_status(self): pass
+    monkeypatch.setattr(mine.requests, "get", lambda u, **k: _R())
+    assert mine.download_image("http://x/pic.jpg") is None
+```
+Update the existing `test_commit_refuses_duplicate` (and any commit test) only if it
+positionally passes args — `image` is keyword-only with a default, so existing calls
+are unaffected.
+
+## Task 9 delta — Session + image rows
+
+`Session` gains two fields:
+```python
+    image_candidates: list = field(default_factory=list)
+    image: tuple | None = None        # (bytes, ext) once downloaded
+```
+Add a pure UI helper + test:
+```python
+def image_rows(cands) -> list[tuple[str, str]]:
+    rows = [(f"{i+1}", f"img:{i}") for i in range(len(cands))]
+    rows.append(("⏭ Skip image", "img:skip"))
+    return rows
+```
+```python
+def test_image_rows_number_and_skip():
+    from ankienrich.images import ImageCandidate
+    cands = [ImageCandidate("t1","f1","",""), ImageCandidate("t2","f2","","")]
+    rows = mine.image_rows(cands)
+    assert rows[0] == ("1", "img:0") and rows[-1] == ("⏭ Skip image", "img:skip")
+```
+`confirm_text` should mention whether an image is attached, e.g. append
+`"🖼 image: yes"` when `session.image is not None` — but `confirm_text(fields, sentence_fields)`
+doesn't take the session; instead add the image line in the bot's confirm step, OR
+extend `confirm_text(fields, sentence_fields, has_image=False)`. Choose the latter:
+```python
+def confirm_text(fields, sentence_fields, has_image: bool = False) -> str:
+    parts = [f"Add 「{fields.term}」（{fields.reading}）?"]
+    parts.append("例: " + _cloze_preview(sentence_fields) if sentence_fields is not None
+                 else "(no sentence)")
+    parts.append("🖼 image: " + ("yes" if has_image else "—"))
+    return "\n".join(parts)
+```
+Update the Task 9 `confirm_text` test accordingly if present (it asserts text only).
+
+## Task 10 delta — bot image-picker step
+
+Insert an IMAGE state between the sentence step and confirm. After the sentence
+callback resolves (`go:skip`, `sent:n`, `sent:skip`) call `_enter_image(chat_id)`
+instead of `_enter_confirm(chat_id)`:
+```python
+def _enter_image(chat_id_):
+    s = _SESSIONS[chat_id_]
+    s.image_candidates = mine.image_candidates(s.term)
+    if not s.image_candidates:
+        bot.send_message(chat_id_, "No images found — skipping image.")
+        _enter_confirm(chat_id_); return
+    s.state = "image"
+    media = [telebot.types.InputMediaPhoto(c.thumb_url, caption=str(i + 1))
+             for i, c in enumerate(s.image_candidates)]
+    try:
+        bot.send_media_group(chat_id_, media)
+    except Exception:
+        pass  # thumbnails are a nicety; the numbered buttons still drive the pick
+    bot.send_message(chat_id_, "Pick an image:",
+                     reply_markup=_inline(mine.image_rows(s.image_candidates)))
+```
+Add to the callback router:
+```python
+if data.startswith("img:") and s:
+    if data == "img:skip":
+        s.image = None
+    else:
+        cand = s.image_candidates[int(data.split(":")[1])]
+        s.image = mine.download_image(cand.full_url)
+        if s.image is None:
+            bot.send_message(c.message.chat.id, "Couldn't fetch that image — skipping.")
+    _enter_confirm(c.message.chat.id); bot.answer_callback_query(c.id); return
+```
+`_enter_confirm` passes the image flag:
+```python
+def _enter_confirm(chat_id_):
+    s = _SESSIONS[chat_id_]; s.state = "confirm"
+    kb = _inline([("✅ Apply", "go:apply"), ("✖ Cancel", "go:cancel")])
+    bot.send_message(chat_id_, mine.confirm_text(s.fields, s.sentence_fields,
+                                                 has_image=s.image is not None),
+                     reply_markup=kb)
+```
+`_apply_mine` passes the image to commit: `mine.commit(s.fields, s.sentence_fields, image=s.image)`.
+
+## Task 11 delta — docs + deploy note
+
+In `CLAUDE.md` mention the image step (Bing search, pick or skip). Add a NOTE that
+the deployed bot needs Chromium: `uv run playwright install --with-deps chromium`
+in the Hetzner Docker image (see `docs/image-search-handoff.md`) — flag as a
+follow-up, do NOT modify the Dockerfile in this branch unless asked. Do not delete
+`docs/image-search-handoff.md`.

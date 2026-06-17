@@ -28,18 +28,21 @@ In:
 - Reuse of existing per-`(Term,Reading)` enrichment logic via a shared
   single-note path (preview == committed value).
 - Massif as the `Sentence` source, with local `examples.sqlite` fallback.
+- A web-image pick for the `Image` field, reusing the merged `ankienrich/images.py`
+  (headless-Chromium Bing search). The module only *searches*; this feature adds the
+  Telegram picker, the download of the chosen image, and writing the `Image` field.
 - Immediate sync per add, under the existing `runlock`.
 
 Out:
-- Images (Phase 2).
 - Editing/re-enriching an existing card from the bot (dedupe is its own command).
 - Any change to the batch pipeline's behaviour.
+- Building/altering `images.py` itself (merged from `main`); we only consume its API.
 
 ## Decisions (resolved during brainstorming)
 
 | Question | Decision |
 |---|---|
-| Image step | Phase 2. Stub hook between sentence pick and confirm. |
+| Image step | **In scope.** After the sentence step: search via `images.search_images`, show thumbnail candidates in Telegram, user taps one or skips; download the chosen `full_url` and write the `Image` field. Search/download failure → skip the image (never dead-ends). |
 | Ambiguous word | Show candidate entries (reading + 1-line gloss), user taps one. |
 | Filling non-interactive fields | Shared single-note `enrich_one.build_fields` used for **both** preview and commit. |
 | Sentence source | Massif top-N; fall back to local `examples.sqlite` on failure/empty. |
@@ -68,12 +71,19 @@ Out:
 
 - **`ankienrich/mine.py`** — orchestration. The conversation state machine expressed
   as **pure functions** (mirroring today's `argv_for`/`toggled`/`keyboard_for` in
-  `bot.py`), plus `create_card(col, fields, deck, tags)` which addNotes into the
-  target deck. No telebot imports → unit-testable.
+  `bot.py`), plus `create_card(col, fields, deck, tags, image)` which addNotes into the
+  target deck, and the image helpers `image_candidates(term)` (wraps
+  `images.search_images`, capped, never raises) and `download_image(url)` (GET via
+  `requests`, bytes or None). No telebot imports → unit-testable.
+
+- **`ankienrich/images.py`** — *merged from `main`, consumed as-is.*
+  `search_images(term, limit) -> list[ImageCandidate]` (headless-Chromium Bing).
+  Returns `[]` on timeout/no-results. `mine` wraps it so a missing browser or import
+  error also degrades to `[]`.
 
 - **`bot.py`** — gains a catch-all text handler (any non-button/non-command message =
-  a word to mine) and callback handlers for the candidate / sentence / confirm
-  keyboards. Holds per-chat conversation state in memory (keyed by chat id).
+  a word to mine) and callback handlers for the candidate / sentence / **image** /
+  confirm keyboards. Holds per-chat conversation state in memory (keyed by chat id).
 
 ### Refactor of existing passes
 
@@ -118,10 +128,16 @@ PREVIEW:
 [Pick sentence] ▶ SENTENCE
 [Skip sentence] ▶ CONFIRM   (no Sentence/SentenceFurigana/cloze)
 SENTENCE: massif.top_sentences(term, MINE_SENTENCE_N) → fallback examples.sqlite.
-   Show ≤5 numbered + [Skip]. tap ▶ chosen Sentence → fields_for_sentence(...)
-   ▶ (image hook: Phase 2 no-op) ▶ CONFIRM
+   Show ≤5 numbered + [Skip]. tap ▶ chosen Sentence → fields_for_sentence(...) ▶ IMAGE
+[Skip sentence] also ▶ IMAGE
+IMAGE: images.search_images(term, MINE_IMAGE_N). 
+   ├ no candidates (empty / browser unavailable) ▶ note + CONFIRM (no image)
+   └ else show thumbnail grid + numbered buttons + [Skip]
+        ├ tap n ▶ download full_url (requests) → image bytes in session ▶ CONFIRM
+        │         (download fails ▶ "couldn't fetch image" ▶ CONFIRM, no image)
+        └ [Skip] ▶ CONFIRM (no image)
 CONFIRM: final card summary. Buttons: [✅ Apply] [Cancel]
-[✅ Apply] ▶ create_card under runlock: pull → addNote(deck, tags) → push
+[✅ Apply] ▶ create_card under runlock: pull → addNote(deck, tags, image) → push
           ▶ "✅ added & synced"   (on sync error: report, card stays local)
 ```
 
@@ -134,6 +150,8 @@ A `jidoujisho Kinomoto` note:
   yields), `Examples` (local 例文 block).
 - If a sentence was picked: `Sentence`, `SentenceFurigana`,
   `Cloze Before/Inside/After`.
+- If an image was picked: `Image` = `<img src="FNAME">`, where FNAME is the chosen
+  image's bytes written into `col.media` under a deterministic name.
 - Target deck: modal deck of existing `NOTETYPE` notes (overridable via a config
   constant). Tag: `ankienrich::mined`.
 
@@ -150,15 +168,24 @@ words/day) so per-add sync cost is negligible.
 MINED_TAG = "ankienrich::mined"
 MINE_SENTENCE_N = 5
 MASSIF_TIMEOUT = 5  # seconds
+IMAGE = "Image"            # Kinomoto field
+MINE_IMAGE_N = 6           # thumbnails to offer in the picker
+IMAGE_DL_TIMEOUT = 8       # seconds to download the chosen full_url
 # target deck: derive as modal deck of NOTETYPE notes; optional override constant.
 ```
 
 `requests>=2` added to `[project.dependencies]` (already transitive via
-`pyTelegramBotAPI`).
+`pyTelegramBotAPI`). The `images` group (`playwright`) and the headless-Chromium
+browser are required at runtime for the image step; without them the step degrades
+to "no candidates → skip". **Deploy:** the Hetzner bot Docker image must add
+`uv run playwright install --with-deps chromium` (~400 MB) — see
+`docs/image-search-handoff.md`. Flagged as an explicit deploy decision, not done here.
 
 ## Error handling
 
 - Massif failure / empty → silent fallback to local `examples.sqlite` sentences.
+- Image search failure / empty / Playwright-or-browser missing → skip the image
+  step (card created without an `Image`). Image *download* failure → same.
 - Sync push failure → report the error to the chat; the note stays in the local
   collection and the next push (manual or nightly) retries.
 - Dict-miss on the word → refuse (0-hit path); nothing to add.
@@ -172,14 +199,19 @@ MASSIF_TIMEOUT = 5  # seconds
 - `massif.top_sentences` — parser tested against a saved HTML fixture; **no live
   network in CI**. A separate test asserts empty-list-on-error.
 - `mine` — state-machine transition functions (pure) tested directly; `create_card`
-  tested against a temp collection asserting field assembly, the dedupe guard,
-  target deck, and `ankienrich::mined` tag.
+  tested against a temp collection asserting field assembly (incl. `Image` when an
+  image is supplied + the media write), the dedupe guard, target deck, and
+  `ankienrich::mined` tag.
+- `mine.image_candidates` / `download_image` — `search_images` and `requests.get`
+  monkeypatched (no live browser/network in CI); assert cap, empty-on-failure,
+  bytes-on-success, None-on-download-failure.
 - `notify` — existing tests must still pass after the `requests` migration (add a
   `requests`-mocked send test if not already covered).
 
 ## Out of scope / follow-ups
 
-- **Phase 2 image step** — web image search (jidoujisho-style), Telegram picker,
-  embedding into the note. Own brainstorm + spec.
 - Editing/re-enriching an existing card from the bot.
 - Massif response caching (only if rate-limiting becomes an issue).
+- Warm-browser reuse for `search_images` (handoff doc notes the option) if the
+  per-call Chromium launch latency becomes annoying.
+- Actually adding Chromium to the Hetzner Docker image + pushing `main`.
