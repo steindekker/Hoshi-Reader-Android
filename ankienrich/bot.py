@@ -9,7 +9,7 @@ import subprocess
 
 import telebot
 
-from . import enrich_one, mine, runlock
+from . import config, enrich_one, imagequeue, mine, runlock
 from .audio import index as audio_index
 from .defs import index as defs_index
 from .examples import index as ex_index
@@ -97,6 +97,7 @@ def home_keyboard() -> telebot.types.ReplyKeyboardMarkup:
     kb = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, is_persistent=True)
     kb.add(telebot.types.KeyboardButton(RUN_BUTTON),
            telebot.types.KeyboardButton(HELP_BUTTON))
+    kb.add(telebot.types.KeyboardButton(config.IMAGE_BUTTON))
     return kb
 
 
@@ -121,6 +122,10 @@ def _config() -> tuple[str, int]:
 # --- Single-word mining: in-memory per-chat sessions + lazily-opened indexes ---
 _SESSIONS: dict[int, mine.Session] = {}
 
+# Image-queue conversations, separate from the mining _SESSIONS so the two flows
+# never collide. In-memory: a restart drops an in-progress queue (acceptable).
+_QUEUES: dict[int, imagequeue.QueueSession] = {}
+
 
 def _inline(rows):
     """Inline keyboard, one button per (label, callback_data) row."""
@@ -128,6 +133,12 @@ def _inline(rows):
     for label, payload in rows:
         kb.add(telebot.types.InlineKeyboardButton(label, callback_data=payload))
     return kb
+
+
+def _is_word_text(text: str | None) -> bool:
+    """True for a free-text word to mine — not a slash command, not a button tap."""
+    return bool(text) and not text.startswith("/") and text not in (
+        RUN_BUTTON, HELP_BUTTON, config.IMAGE_BUTTON)
 
 
 def _indexes():
@@ -258,8 +269,60 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
             bot.send_message(chat_id_,
                              f"✅ 「{s.term}」を {res['deck']} に追加して同期しました。")
 
-    @bot.message_handler(func=lambda m: bool(m.text) and not m.text.startswith("/")
-                         and m.text not in (RUN_BUTTON, HELP_BUTTON))
+    def _show_card(chat_id_):
+        q = _QUEUES.get(chat_id_)
+        if q is None or q.done:
+            _finish_queue(chat_id_)
+            return
+        card = q.current
+        nxt = q.cards[q.index + 1] if q.index + 1 < len(q.cards) else None
+        if nxt:
+            mine.prefetch_images(nxt.term)        # warm the next card while user decides
+        cands = mine.image_candidates(card.term)
+        if not cands:
+            # browser down / no hits: auto-skip WITHOUT tagging no-image (re-offer later)
+            bot.send_message(chat_id_,
+                             f"{q.index + 1}/{len(q.cards)} 「{card.term}」— 画像なし、スキップします。")
+            q.advance()
+            _show_card(chat_id_)
+            return
+        q.candidates = cands
+        bot.send_message(chat_id_,
+                         f"{q.index + 1}/{len(q.cards)} 「{card.term}」（{card.reading}）— {card.context}")
+        numbered = mine.numbered_thumbnails(cands)
+        if numbered is not None:
+            media = [telebot.types.InputMediaPhoto(b) for b in numbered]
+        else:
+            media = [telebot.types.InputMediaPhoto(c.thumb_url, caption=str(i + 1))
+                     for i, c in enumerate(cands)]
+        try:
+            bot.send_media_group(chat_id_, media)
+        except Exception:
+            pass
+        bot.send_message(chat_id_, "画像を選んでください：",
+                         reply_markup=_inline(imagequeue.queue_image_rows(cands)))
+
+    def _finish_queue(chat_id_):
+        q = _QUEUES.pop(chat_id_, None)
+        if q is not None:
+            bot.send_message(chat_id_, imagequeue.summary_text(q))
+
+    @bot.message_handler(func=lambda m: m.text == config.IMAGE_BUTTON)
+    def _image_queue(m):
+        if not _authorized(m.chat.id, chat_id):
+            return
+        try:
+            cards = imagequeue.open_queue()
+        except runlock.Busy:
+            bot.send_message(m.chat.id, "⏳ 実行中です — 少し後にもう一度お試しください。")
+            return
+        if not cards:
+            bot.send_message(m.chat.id, "画像が必要な新しいカードはありません。")
+            return
+        _QUEUES[m.chat.id] = imagequeue.QueueSession(cards=cards)
+        _show_card(m.chat.id)
+
+    @bot.message_handler(func=lambda m: _is_word_text(m.text))
     def _word(m):
         if not _authorized(m.chat.id, chat_id):
             return
@@ -287,6 +350,61 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
         # bare apply/cancel/all/toggle:. Each branch answers + returns so it never
         # falls through to the run-menu logic below.
         data = c.data
+
+        # Image-queue callbacks: qpick:/qskip/qend — dispatch before the mining lookup.
+        if data.startswith("q"):
+            q = _QUEUES.get(c.message.chat.id)
+            if q is None or q.done:
+                _QUEUES.pop(c.message.chat.id, None)
+                bot.answer_callback_query(c.id, "セッションが切れました")
+                return
+            if data == "qend":
+                bot.answer_callback_query(c.id)
+                _finish_queue(c.message.chat.id)
+                return
+            card = q.current
+            if data == "qskip":
+                try:
+                    imagequeue.skip(card.nid)
+                except runlock.Busy:
+                    bot.answer_callback_query(c.id, "実行中です — 後でもう一度")
+                    return
+                q.record_skip()
+                bot.answer_callback_query(c.id, "スキップしました")
+                _show_card(c.message.chat.id)
+                return
+            if data.startswith("qpick:"):
+                i = int(data.split(":")[1])
+                if i >= len(q.candidates):
+                    bot.answer_callback_query(c.id, "選択肢が無効になりました")
+                    return
+                bot.answer_callback_query(c.id, "取得中…")
+                image = mine.download_image(q.candidates[i].full_url)
+                if image is None:
+                    bot.send_message(c.message.chat.id,
+                                     "画像を取得できませんでした — もう一度選んでください。")
+                    return
+                try:
+                    res = imagequeue.set_image(card.nid, image)
+                except runlock.Busy:
+                    bot.send_message(c.message.chat.id,
+                                     "⏳ 実行中です — 少し後にもう一度お試しください。")
+                    return
+                except Exception as e:
+                    bot.send_message(c.message.chat.id, f"⚠️ 同期に失敗しました: {e}")
+                    q.advance()
+                    _show_card(c.message.chat.id)
+                    return
+                if res["status"] == "gone":
+                    bot.send_message(c.message.chat.id,
+                                     "このカードは見つかりませんでした — スキップします。")
+                    q.advance()
+                else:
+                    q.record_image()
+                _show_card(c.message.chat.id)
+                return
+            return
+
         s = _SESSIONS.get(c.message.chat.id)
         is_mining = data.startswith(("cand:", "go:", "sent:", "img:"))
         if data == "go:cancel":
