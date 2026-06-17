@@ -53,6 +53,8 @@ def create_card(col, fields, sentence_fields, *, deck: str, tags, image=None) ->
     n[config.PITCH] = fields.pitch_svg
     n[config.DEFINITION] = fields.meaning
     n[config.DEFINITION_SOURCE] = fields.definition_source
+    if getattr(fields, "freq", None) is not None:
+        n[config.FREQUENCY] = str(fields.freq)
     n[config.EXAMPLES] = fields.examples
     if fields.audio_clip and fields.audio_pick:
         fname = col.media.write_data(
@@ -292,8 +294,15 @@ def pitch_text(reading: str, accents) -> str:
 
 
 def candidate_rows(cands) -> list[tuple[str, str]]:
-    """(button label, callback_data) per candidate reading."""
-    return [(f"{c.reading} — {c.gloss}", f"cand:{i}") for i, c in enumerate(cands)]
+    """(button label, callback_data) per candidate reading; shows JPDB rank when
+    known so the most-frequent reading (already sorted first) is obvious."""
+    rows = []
+    for i, c in enumerate(cands):
+        label = f"{c.reading} — {c.gloss}"
+        if getattr(c, "freq", None) is not None:
+            label += f"  #{c.freq}"
+        rows.append((label, f"cand:{i}"))
+    return rows
 
 
 def sentence_rows(sentences) -> list[tuple[str, str]]:
@@ -309,11 +318,18 @@ def image_rows(cands) -> list[tuple[str, str]]:
 
 
 def preview_text(fields) -> str:
-    lines = [f"📖 {fields.term}（{fields.reading}）", "", _plain(fields.meaning, 300)]
+    """Header line carries reading+pitch+freq; body is the formatted definition.
+    No audio/pitch yes-no lines: audio is evident from the voice clip already sent,
+    and pitch now shows the accent inline."""
+    head = pitch_text(fields.reading, fields.accents) or fields.reading
+    line = f"📖 {fields.term}（{head}）"
+    if fields.freq is not None:
+        line += f" #{fields.freq}"
+    lines = [line]
+    if fields.meaning:
+        lines += ["", tg_html(fields.meaning)]
     if fields.definition_source:
         lines.append(f"— {fields.definition_source}")
-    lines.append("🔊 audio: " + ("yes" if fields.audio_clip else "—"))
-    lines.append("📈 pitch: " + ("yes" if fields.pitch_svg else "—"))
     return "\n".join(lines)
 
 

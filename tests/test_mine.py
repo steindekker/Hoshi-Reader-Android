@@ -103,6 +103,16 @@ def test_create_card_with_image_writes_field_and_media(tmp_path):
     col.close()
 
 
+def test_create_card_writes_frequency_when_present(tmp_path):
+    col = _col(tmp_path)
+    fields = enrich_one.Fields("箸", "はし", "箸[はし]", "", "chopsticks",
+                               "JMdict", "", None, None, accents=(), freq=42)
+    nid = mine.create_card(col, fields, None, deck="言葉文章", tags=[config.MINED_TAG])
+    n = col.get_note(nid)
+    assert n[config.FREQUENCY] == "42"
+    col.close()
+
+
 def test_card_tags_with_and_without_examples():
     f = enrich_one.Fields("a", "a", "a", "", "m", "s", "<div/>", None, None)
     assert config.EXAMPLES_TAG in mine.card_tags(f)
@@ -172,8 +182,9 @@ def test_commit_refuses_duplicate(monkeypatch):
 
 def test_candidate_rows_label_and_payload():
     from ankienrich.enrich_one import Candidate
-    rows = mine.candidate_rows([Candidate("かど", "corner"), Candidate("つの", "horn")])
-    assert rows[0] == ("かど — corner", "cand:0")
+    rows = mine.candidate_rows([Candidate("かど", "corner", 800),
+                                Candidate("つの", "horn", None)])
+    assert rows[0] == ("かど — corner  #800", "cand:0")
     assert rows[1] == ("つの — horn", "cand:1")
 
 
@@ -190,11 +201,24 @@ def test_image_rows_number_and_skip():
     assert rows[0] == ("1", "img:0") and rows[-1] == ("⏭ Skip image", "img:skip")
 
 
-def test_preview_text_includes_reading_meaning():
+def test_preview_text_header_carries_pitch_and_freq():
     from ankienrich.enrich_one import Fields
-    f = Fields("箸","はし","箸[はし]","<svg/>","chopsticks","JMdict","",None,b"x")
+    f = Fields("林檎", "りんご", "林檎[りんご]", "<svg/>",
+               '<div><span style="font-weight:bold">林檎</span></div><div>果実</div>',
+               "三省堂", "", None, b"x", accents=(0,), freq=1234)
     txt = mine.preview_text(f)
-    assert "はし" in txt and "chopsticks" in txt and "JMdict" in txt
+    assert txt.startswith("📖 林檎（りんご [0]） #1234")
+    assert "<b>林檎</b>" in txt and "果実" in txt
+    assert "三省堂" in txt
+    assert "audio:" not in txt and "pitch:" not in txt
+
+
+def test_preview_text_without_pitch_or_freq():
+    from ankienrich.enrich_one import Fields
+    f = Fields("箸", "はし", "箸[はし]", "", "chopsticks", "JMdict", "", None, None)
+    txt = mine.preview_text(f)
+    assert txt.startswith("📖 箸（はし）")
+    assert "#" not in txt
 
 
 def test_confirm_text_image_flag():
