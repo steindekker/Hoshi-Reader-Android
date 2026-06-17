@@ -191,14 +191,14 @@ def test_candidate_rows_label_and_payload():
 def test_sentence_rows_number_and_payload():
     rows = mine.sentence_rows(["AAA", "BBB"])
     assert rows[0][1] == "sent:0" and "AAA" in rows[0][0]
-    assert rows[-1] == ("⏭ Skip sentence", "sent:skip")
+    assert rows[-1] == ("⏭ 例文をスキップ", "sent:skip")
 
 
 def test_image_rows_number_and_skip():
     from ankienrich.images import ImageCandidate
     cands = [ImageCandidate("t1","f1","",""), ImageCandidate("t2","f2","","")]
     rows = mine.image_rows(cands)
-    assert rows[0] == ("1", "img:0") and rows[-1] == ("⏭ Skip image", "img:skip")
+    assert rows[0] == ("1", "img:0") and rows[-1] == ("⏭ 画像をスキップ", "img:skip")
 
 
 def test_preview_text_header_carries_pitch_and_freq():
@@ -221,11 +221,15 @@ def test_preview_text_without_pitch_or_freq():
     assert "#" not in txt
 
 
-def test_confirm_text_image_flag():
+def test_confirm_text_compact_marks():
     from ankienrich.enrich_one import Fields
     f = Fields("箸","はし","箸[はし]","","chopsticks","JMdict","",None,None)
-    assert "yes" in mine.confirm_text(f, None, has_image=True)
-    assert "—" in mine.confirm_text(f, None, has_image=False)
+    sf = object()  # any non-None stands in for picked sentence fields
+    assert "箸" in mine.confirm_text(f, sf, has_image=True)
+    assert mine.confirm_text(f, sf, has_image=True).endswith("例文 ✓ ・ 画像 ✓")
+    assert mine.confirm_text(f, None, has_image=False).endswith("例文 — ・ 画像 —")
+    # no raw cloze sentence dump anymore
+    assert "【" not in mine.confirm_text(f, sf, has_image=True)
 
 
 def test_session_defaults():

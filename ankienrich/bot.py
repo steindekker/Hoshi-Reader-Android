@@ -18,16 +18,17 @@ from .jrp_fill import make_generator
 from .jrp_fill.accent import AccentIndex
 
 # Persistent reply-keyboard buttons, so a run is one tap and never a typed command.
-RUN_BUTTON = "▶️ Run"
-HELP_BUTTON = "❓ Help"
+RUN_BUTTON = "▶️ 実行"
+HELP_BUTTON = "❓ ヘルプ"
 
-HELP_TEXT = ("Tap ▶️ Run to pick fields to overwrite, then Apply.\n"
-             "Or just send a word to add a card "
-             "(preview → sentence → image → add+sync).")
+HELP_TEXT = ("▶️ 実行 をタップして上書きする項目を選び、「適用」を押してください。\n"
+             "または単語を送ると新しいカードを作成します"
+             "（プレビュー → 例文 → 画像 → 追加・同期）。")
 
 # Fields the pipeline can re-assert (overwrite), in canonical display/flag order.
 # Audio has no overwrite flag, so it is not offered here. Note "sentence" maps to
-# the plural CLI flag.
+# the plural CLI flag. The keys are internal (callback data + CLI flags); display
+# labels live in FIELD_LABELS.
 OVERWRITE_FIELDS = ["pitch", "sentence", "defs", "examples", "cloze"]
 OVERWRITE_FLAGS = {
     "pitch": "--overwrite-pitch",
@@ -35,6 +36,13 @@ OVERWRITE_FLAGS = {
     "defs": "--overwrite-defs",
     "examples": "--overwrite-examples",
     "cloze": "--overwrite-cloze",
+}
+FIELD_LABELS = {
+    "pitch": "ピッチ",
+    "sentence": "例文",
+    "defs": "定義",
+    "examples": "用例",
+    "cloze": "穴埋め",
 }
 
 # Live /run selections, keyed by the keyboard's message id. In-memory: a restart
@@ -61,9 +69,9 @@ def select_all_toggle(fields: set[str]) -> set[str]:
 
 def confirmation_text(fields: set[str]) -> str:
     if not fields:
-        return "▶️ Run started (fill missing)"
-    ordered = [f for f in OVERWRITE_FIELDS if f in fields]
-    return "▶️ Run started — overwriting: " + ", ".join(ordered)
+        return "▶️ 実行を開始しました（未入力のみ補完）"
+    ordered = [FIELD_LABELS[f] for f in OVERWRITE_FIELDS if f in fields]
+    return "▶️ 実行を開始しました — 上書き: " + "、".join(ordered)
 
 
 def keyboard_for(fields: set[str]) -> telebot.types.InlineKeyboardMarkup:
@@ -72,15 +80,15 @@ def keyboard_for(fields: set[str]) -> telebot.types.InlineKeyboardMarkup:
 
     def field_btn(name: str):
         mark = "✅" if name in fields else "⬜"
-        return btn(f"{mark} {name.title()}", callback_data=f"toggle:{name}")
+        return btn(f"{mark} {FIELD_LABELS[name]}", callback_data=f"toggle:{name}")
 
     kb.add(field_btn("pitch"), field_btn("sentence"))
     kb.add(field_btn("defs"), field_btn("examples"))
     kb.add(field_btn("cloze"))
-    all_label = "Clear all" if fields == set(OVERWRITE_FIELDS) else "Overwrite all"
+    all_label = "全て解除" if fields == set(OVERWRITE_FIELDS) else "全て上書き"
     kb.add(btn(all_label, callback_data="all"))
-    kb.add(btn("▶️ Apply", callback_data="apply"),
-           btn("Cancel", callback_data="cancel"))
+    kb.add(btn("▶️ 適用", callback_data="apply"),
+           btn("キャンセル", callback_data="cancel"))
     return kb
 
 
@@ -145,7 +153,7 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
 
     def _open_run_menu(m):
         sent = bot.reply_to(
-            m, "Run enrichment now? Tap fields to overwrite, then Apply.",
+            m, "今すぐエンリッチを実行しますか？上書きする項目を選んで「適用」を押してください。",
             reply_markup=keyboard_for(set()))
         _SELECTED[sent.message_id] = set()
 
@@ -188,9 +196,9 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
                 bot.send_voice(chat_id_, s.fields.audio_clip)
             except Exception:
                 pass
-        kb = _inline([("📝 Pick sentence", "go:sentence"),
-                      ("⏭ Skip sentence", "go:skip"),
-                      ("✖ Cancel", "go:cancel")])
+        kb = _inline([("📝 例文を選ぶ", "go:sentence"),
+                      ("⏭ 例文をスキップ", "go:skip"),
+                      ("✖ キャンセル", "go:cancel")])
         bot.send_message(chat_id_, mine.preview_text(s.fields), reply_markup=kb)
         # Start the sentence + image searches now so each is ready by its step
         # (overlaps the time the user spends reading the preview).
@@ -201,7 +209,7 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
         s = _SESSIONS[chat_id_]
         s.image_candidates = mine.image_candidates(s.term)
         if not s.image_candidates:
-            bot.send_message(chat_id_, "No images found — skipping image.")
+            bot.send_message(chat_id_, "画像が見つかりません — スキップします。")
             _enter_confirm(chat_id_)
             return
         s.state = "image"
@@ -211,13 +219,13 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
             bot.send_media_group(chat_id_, media)
         except Exception:
             pass  # thumbnails are a nicety; numbered buttons still drive the pick
-        bot.send_message(chat_id_, "Pick an image:",
+        bot.send_message(chat_id_, "画像を選んでください：",
                          reply_markup=_inline(mine.image_rows(s.image_candidates)))
 
     def _enter_confirm(chat_id_):
         s = _SESSIONS[chat_id_]
         s.state = "confirm"
-        kb = _inline([("✅ Apply", "go:apply"), ("✖ Cancel", "go:cancel")])
+        kb = _inline([("✅ 追加", "go:apply"), ("✖ キャンセル", "go:cancel")])
         bot.send_message(chat_id_, mine.confirm_text(s.fields, s.sentence_fields,
                                                      has_image=s.image is not None),
                          reply_markup=kb)
@@ -230,18 +238,18 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
             res = mine.commit(s.fields, s.sentence_fields, image=s.image)
         except runlock.Busy:
             # transient: keep the session so the user can just tap Apply again.
-            bot.send_message(chat_id_, "⏳ A run is in progress — try again shortly.")
+            bot.send_message(chat_id_, "⏳ 実行中です — 少し後にもう一度お試しください。")
             return
         except Exception as e:
             _SESSIONS.pop(chat_id_, None)
-            bot.send_message(chat_id_, f"⚠️ Sync/add failed: {e}")
+            bot.send_message(chat_id_, f"⚠️ 同期・追加に失敗しました: {e}")
             return
         _SESSIONS.pop(chat_id_, None)
         if res["status"] == "duplicate":
-            bot.send_message(chat_id_, "Already in the deck — nothing added.")
+            bot.send_message(chat_id_, "既にデッキにあります — 追加しませんでした。")
         else:
             bot.send_message(chat_id_,
-                             f"✅ Added 「{s.term}」to {res['deck']} & synced.")
+                             f"✅ 「{s.term}」を {res['deck']} に追加して同期しました。")
 
     @bot.message_handler(func=lambda m: bool(m.text) and not m.text.startswith("/")
                          and m.text not in (RUN_BUTTON, HELP_BUTTON))
@@ -252,7 +260,7 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
         defs_conn, ex_conn, audio_conn, acc, gen, freq_conn = _indexes()
         cands = enrich_one.candidates(defs_conn, term, freq_conn=freq_conn)
         if not cands:
-            bot.send_message(m.chat.id, f"「{term}」not found — nothing to add.")
+            bot.send_message(m.chat.id, f"「{term}」が見つかりません — 追加できません。")
             return
         s = mine.Session(chat_id=m.chat.id, term=term, candidates=cands)
         _SESSIONS[m.chat.id] = s
@@ -260,7 +268,7 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
             _enter_preview(m.chat.id, 0)
         else:
             s.state = "candidates"
-            bot.send_message(m.chat.id, f"「{term}」— pick a reading:",
+            bot.send_message(m.chat.id, f"「{term}」— 読みを選んでください：",
                              reply_markup=_inline(mine.candidate_rows(cands)))
 
     @bot.callback_query_handler(func=lambda c: True)
@@ -276,10 +284,10 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
         is_mining = data.startswith(("cand:", "go:", "sent:", "img:"))
         if data == "go:cancel":
             _SESSIONS.pop(c.message.chat.id, None)
-            bot.answer_callback_query(c.id, "Cancelled")
+            bot.answer_callback_query(c.id, "キャンセルしました")
             return
         if is_mining and not s:        # stale keyboard after restart/cancel/new word
-            bot.answer_callback_query(c.id, "Session expired — send the word again")
+            bot.answer_callback_query(c.id, "セッションが切れました — もう一度単語を送ってください")
             return
         if s and ":" in data and data.split(":")[1].isdigit():
             # bounds-guard an indexed pick against the CURRENT session's list — a
@@ -287,7 +295,7 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
             _lists = {"cand": s.candidates, "sent": s.sentences, "img": s.image_candidates}
             lst = _lists.get(data.split(":")[0])
             if lst is not None and int(data.split(":")[1]) >= len(lst):
-                bot.answer_callback_query(c.id, "That option expired — send the word again")
+                bot.answer_callback_query(c.id, "選択肢が無効になりました — もう一度単語を送ってください")
                 return
         if data.startswith("cand:"):
             _enter_preview(c.message.chat.id, int(data.split(":")[1]))
@@ -297,7 +305,7 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
             _, ex_conn, *_ = _indexes()
             s.sentences = mine.sentence_options(s.term, ex_conn=ex_conn)
             s.state = "sentence"
-            bot.send_message(c.message.chat.id, "Pick a sentence:",
+            bot.send_message(c.message.chat.id, "例文を選んでください：",
                              reply_markup=_inline(mine.sentence_rows(s.sentences)))
             bot.answer_callback_query(c.id)
             return
@@ -325,12 +333,12 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
                 s.image = mine.download_image(cand.full_url)
                 if s.image is None:
                     bot.send_message(c.message.chat.id,
-                                     "Couldn't fetch that image — skipping.")
+                                     "画像を取得できませんでした — スキップします。")
             _enter_confirm(c.message.chat.id)
             bot.answer_callback_query(c.id)
             return
         if data == "go:apply" and s:
-            bot.answer_callback_query(c.id, "Adding…")
+            bot.answer_callback_query(c.id, "追加中…")
             _apply_mine(c.message.chat.id)
             return
 
@@ -338,18 +346,18 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
 
         if c.data == "cancel":
             _SELECTED.pop(mid, None)
-            bot.answer_callback_query(c.id, "Cancelled")
-            bot.edit_message_text("🚫 Cancelled", c.message.chat.id, mid)
+            bot.answer_callback_query(c.id, "キャンセルしました")
+            bot.edit_message_text("🚫 キャンセルしました", c.message.chat.id, mid)
             return
 
         if mid not in _SELECTED:
-            bot.answer_callback_query(c.id, "Menu expired — send /run again")
+            bot.answer_callback_query(c.id, "メニューが切れました — もう一度 /run を送ってください")
             return
 
         if c.data == "apply":
             fields = _SELECTED.pop(mid)
             _spawn(fields)
-            bot.answer_callback_query(c.id, "Started")
+            bot.answer_callback_query(c.id, "開始しました")
             bot.edit_message_text(confirmation_text(fields), c.message.chat.id, mid)
             return
 

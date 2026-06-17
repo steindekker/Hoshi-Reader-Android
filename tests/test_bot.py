@@ -59,8 +59,8 @@ def test_select_all_toggle_clears_when_all_selected():
 def test_keyboard_for_marks_selected_fields():
     kb = bot.keyboard_for({"defs"})
     labels = {b.text: b.callback_data for row in kb.keyboard for b in row}
-    assert labels["✅ Defs"] == "toggle:defs"
-    assert labels["⬜ Pitch"] == "toggle:pitch"
+    assert labels[f"✅ {bot.FIELD_LABELS['defs']}"] == "toggle:defs"
+    assert labels[f"⬜ {bot.FIELD_LABELS['pitch']}"] == "toggle:pitch"
 
 
 def test_keyboard_for_has_all_apply_cancel_and_one_toggle_per_field():
@@ -75,8 +75,8 @@ def test_keyboard_for_has_all_apply_cancel_and_one_toggle_per_field():
 def test_keyboard_all_button_label_flips_when_all_selected():
     partial = [b.text for row in bot.keyboard_for({"pitch"}).keyboard for b in row]
     full = [b.text for row in bot.keyboard_for(set(bot.OVERWRITE_FIELDS)).keyboard for b in row]
-    assert "Overwrite all" in partial
-    assert "Clear all" in full
+    assert "全て上書き" in partial
+    assert "全て解除" in full
 
 
 # --- home_keyboard: persistent reply keyboard so no command needs typing -----
@@ -96,12 +96,12 @@ def test_home_keyboard_is_persistent_and_resized():
 # --- confirmation_text ------------------------------------------------------
 
 def test_confirmation_text_empty():
-    assert bot.confirmation_text(set()) == "▶️ Run started (fill missing)"
+    assert bot.confirmation_text(set()) == "▶️ 実行を開始しました（未入力のみ補完）"
 
 
 def test_confirmation_text_lists_fields_in_canonical_order():
     assert bot.confirmation_text({"cloze", "pitch"}) == \
-        "▶️ Run started — overwriting: pitch, cloze"
+        "▶️ 実行を開始しました — 上書き: ピッチ、穴埋め"
 
 
 # --- _inline: builds an inline keyboard, one button per (label, payload) row --

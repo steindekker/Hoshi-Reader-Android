@@ -316,13 +316,13 @@ def candidate_rows(cands) -> list[tuple[str, str]]:
 
 def sentence_rows(sentences) -> list[tuple[str, str]]:
     rows = [(f"{i+1}. {_plain(s, 50)}", f"sent:{i}") for i, s in enumerate(sentences)]
-    rows.append(("⏭ Skip sentence", "sent:skip"))
+    rows.append(("⏭ 例文をスキップ", "sent:skip"))
     return rows
 
 
 def image_rows(cands) -> list[tuple[str, str]]:
     rows = [(f"{i+1}", f"img:{i}") for i in range(len(cands))]
-    rows.append(("⏭ Skip image", "img:skip"))
+    rows.append(("⏭ 画像をスキップ", "img:skip"))
     return rows
 
 
@@ -342,16 +342,13 @@ def preview_text(fields) -> str:
     return "\n".join(lines)
 
 
-def _cloze_preview(sf) -> str:
-    return f"{sf.cloze_before}【{sf.cloze_inside}】{sf.cloze_after}"
-
-
 def confirm_text(fields, sentence_fields, has_image: bool = False) -> str:
-    parts = [f"Add 「{fields.term}」（{fields.reading}）?"]
-    parts.append("例: " + _cloze_preview(sentence_fields) if sentence_fields is not None
-                 else "(no sentence)")
-    parts.append("🖼 image: " + ("yes" if has_image else "—"))
-    return "\n".join(parts)
+    """Final yes/no. By now the sentence + image were already picked on-screen, so
+    just confirm the card with compact ✓/— marks instead of re-dumping them."""
+    sent_mark = "✓" if sentence_fields is not None else "—"
+    img_mark = "✓" if has_image else "—"
+    return (f"「{fields.term}」（{fields.reading}）を追加しますか？\n"
+            f"例文 {sent_mark} ・ 画像 {img_mark}")
 
 
 @dataclass
