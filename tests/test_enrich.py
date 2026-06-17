@@ -207,3 +207,15 @@ def test_definition_for_returns_meaning_source_kind(tmp_path):
     meaning, source, kind = enrich.definition_for(conn, "愛", "あい")
     assert "love" in meaning
     assert kind == "english"
+
+
+def test_enrich_notes_reports_first_enriched_nids(kcol, tmp_path):
+    db = str(tmp_path / "defs.sqlite"); _make_db(db)
+    nid = _add_kino(kcol, "迷惑", "めいわく")     # has J-J → gets enriched first time
+    conn = index.open_index(db)
+    res = enrich.enrich_notes(kcol, conn)
+    assert res["first_enriched_nids"] == [nid]
+    # idempotent: a re-run enriches nothing new
+    res2 = enrich.enrich_notes(kcol, conn)
+    assert res2["first_enriched_nids"] == []
+    conn.close()
