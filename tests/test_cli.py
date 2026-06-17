@@ -139,7 +139,7 @@ def test_notify_sends_failure_and_skips_push(monkeypatch):
     monkeypatch.setattr(cli.sync, "push", lambda col, auth: pushed.append(True) or ("none", auth))
     with pytest.raises(cli.pipeline.PipelineError):
         cli.main(["--apply", "--notify"])
-    assert sent and "FAILED at defs" in sent[0]
+    assert sent and "failed at defs" in sent[0]
     assert pushed == [], "must not push after a failed run"
 
 
