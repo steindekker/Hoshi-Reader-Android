@@ -53,7 +53,7 @@ def candidates(defs_conn, term: str) -> list[Candidate]:
     return out
 
 
-@dataclass
+@dataclass(frozen=True)
 class Fields:
     term: str
     reading: str
@@ -62,7 +62,7 @@ class Fields:
     meaning: str
     definition_source: str
     examples: str
-    audio_pick: object | None
+    audio_pick: audio_enrich.Pick | None
     audio_clip: bytes | None
 
     @property
