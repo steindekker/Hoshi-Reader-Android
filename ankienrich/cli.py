@@ -30,6 +30,10 @@ def _num(n) -> str:
     return _bold(_cyan(f"{n:>5}")) if n else _dim(f"{n:>5}")
 
 
+# Newly-enriched terms listed inline; beyond this just show the count.
+_TERM_CAP = 50
+
+
 def _row(label: str, big: str, detail: str = "") -> str:
     line = f"  {label.ljust(9)}{big}"
     return f"{line}   {_dim(detail)}" if detail else line
@@ -86,6 +90,13 @@ def _render(res: dict, apply: bool) -> None:
         print(_row("examples", _num(x["to_write"]), f"{x['none']} no-example"))
     c = s["cloze"]
     print(_row("cloze", _num(c["filled"]), f"{c['skipped']} unlocatable"))
+    terms = e.get("terms") or []
+    if terms:
+        print()
+        if len(terms) > _TERM_CAP:
+            print(_row("new", _num(len(terms)), "terms (too many to list)"))
+        else:
+            print(_row("new", _bold(_cyan(str(len(terms)))), "、".join(terms)))
     print()
     print("  " + (_green("✓ applied + pushed.") if apply
                   else _dim("dry run — pass --apply to write.")))

@@ -1,4 +1,5 @@
 """Anki-facing definition enrichment: index lookup + note rewriting."""
+import unicodedata
 from pathlib import Path
 
 from ankienrich import config, paths
@@ -33,13 +34,21 @@ def apply_dict_styles(col, styles_path=None) -> None:
     col.models.update_dict(m)
 
 
+def _store_norm(text: str) -> str:
+    """Mirror Anki's field normalization (NFC, no carriage returns) so a value
+    we compute round-trips equal to what Anki actually stores. Without this the
+    overwrite idempotency check never converges and re-asserts the same notes
+    on every run."""
+    return unicodedata.normalize("NFC", text).replace("\r", "")
+
+
 def _compute(conn, term, reading):
     """Return (new_meaning, source, kind) for one note. kind in enrich/english/nohit."""
     jj_rows, je_rows = index.lookup(conn, term)
     jj = render.choose_jj(jj_rows, reading, config.JJ_CHAIN)
     je = render.numbered_glosses(je_rows, reading, config.GLOSS_CAP)
-    meaning = render.assemble_meaning(jj, je)
-    source = render.source_label(jj, bool(je), config.DICT_LABELS)
+    meaning = _store_norm(render.assemble_meaning(jj, je))
+    source = _store_norm(render.source_label(jj, bool(je), config.DICT_LABELS))
     kind = "enrich" if jj else ("english" if je else "nohit")
     return meaning, source, kind
 
