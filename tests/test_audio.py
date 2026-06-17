@@ -30,14 +30,16 @@ def _new_notetype(col, name, fields):
     return col.models.by_name(name)
 
 
-def _entries_db(path, rows):
-    """rows: (expression, reading, source, speaker, file)"""
+def _audio_db(path, rows, clips=()):
+    """rows: (expression, reading, source, speaker, file).
+    clips: (source, file, data) — embedded blobs. Mirrors audio.sqlite."""
     con = sqlite3.connect(path)
-    con.execute("CREATE TABLE entries (id integer PRIMARY KEY, expression text, "
-                "reading text, source text, speaker text, display text, file text)")
-    con.executemany(
-        "INSERT INTO entries (expression, reading, source, speaker, file) VALUES (?,?,?,?,?)",
-        rows)
+    con.execute("CREATE TABLE entries (expression text, reading text, "
+                "source text, speaker text, file text)")
+    con.execute("CREATE TABLE clips (source text, file text, data blob, "
+                "PRIMARY KEY (source, file))")
+    con.executemany("INSERT INTO entries VALUES (?,?,?,?,?)", rows)
+    con.executemany("INSERT INTO clips VALUES (?,?,?)", clips)
     con.commit()
     return con
 
@@ -45,7 +47,7 @@ def _entries_db(path, rows):
 # --- lookup chain ---------------------------------------------------------------
 
 def test_lookup_prefers_nhk16_then_shinmeikai(tmp_path):
-    con = _entries_db(str(tmp_path / "e.db"), [
+    con = _audio_db(str(tmp_path / "a.db"), [
         ("橋", "はし", "nhk16", None, "audio/n.opus"),
         ("橋", "はし", "shinmeikai8", None, "media/s.opus"),
         ("橋", "はし", "jpod", None, "media/j.opus"),
@@ -55,7 +57,7 @@ def test_lookup_prefers_nhk16_then_shinmeikai(tmp_path):
 
 
 def test_lookup_falls_to_shinmeikai_when_no_nhk(tmp_path):
-    con = _entries_db(str(tmp_path / "e.db"), [
+    con = _audio_db(str(tmp_path / "a.db"), [
         ("端", "はし", "shinmeikai8", None, "media/s.opus"),
         ("端", "はし", "jpod", None, "media/j.opus"),
     ])
@@ -63,7 +65,7 @@ def test_lookup_falls_to_shinmeikai_when_no_nhk(tmp_path):
 
 
 def test_forvo_beats_jpod_and_prefers_strawberrybrown(tmp_path):
-    con = _entries_db(str(tmp_path / "e.db"), [
+    con = _audio_db(str(tmp_path / "a.db"), [
         ("筋トレ", None, "forvo", "skent", "skent/a.opus"),
         ("筋トレ", None, "forvo", "strawberrybrown", "strawberrybrown/b.opus"),
         ("筋トレ", "きんとれ", "jpod", None, "media/j.opus"),
@@ -74,7 +76,7 @@ def test_forvo_beats_jpod_and_prefers_strawberrybrown(tmp_path):
 
 def test_never_falls_to_forvo_when_dict_hits(tmp_path):
     # dict hit must win even though forvo also has the term (homograph safety)
-    con = _entries_db(str(tmp_path / "e.db"), [
+    con = _audio_db(str(tmp_path / "a.db"), [
         ("箸", "はし", "nhk16", None, "audio/n.opus"),
         ("箸", None, "forvo", "strawberrybrown", "strawberrybrown/x.opus"),
     ])
@@ -82,19 +84,19 @@ def test_never_falls_to_forvo_when_dict_hits(tmp_path):
 
 
 def test_jpod_is_last_resort(tmp_path):
-    con = _entries_db(str(tmp_path / "e.db"), [
+    con = _audio_db(str(tmp_path / "a.db"), [
         ("難語", "なんご", "jpod", None, "media/j.opus"),
     ])
     assert audio.lookup(con, "難語", "なんご") == audio.Pick("jpod", "media/j.opus")
 
 
 def test_lookup_none_when_absent(tmp_path):
-    con = _entries_db(str(tmp_path / "e.db"), [])
+    con = _audio_db(str(tmp_path / "a.db"), [])
     assert audio.lookup(con, "存在しない", "x") is None
 
 
 def test_lookup_strips_html_and_normalizes_katakana(tmp_path):
-    con = _entries_db(str(tmp_path / "e.db"), [
+    con = _audio_db(str(tmp_path / "a.db"), [
         ("食べる", "たべる", "nhk16", None, "audio/n.opus"),
     ])
     # Term wrapped in markup, Reading in katakana
@@ -102,25 +104,11 @@ def test_lookup_strips_html_and_normalizes_katakana(tmp_path):
 
 
 def test_empty_reading_skips_dicts_uses_forvo(tmp_path):
-    con = _entries_db(str(tmp_path / "e.db"), [
+    con = _audio_db(str(tmp_path / "a.db"), [
         ("謎", "なぞ", "nhk16", None, "audio/n.opus"),   # would match only with reading
         ("謎", None, "forvo", "skent", "skent/n.opus"),
     ])
     assert audio.lookup(con, "謎", "") == audio.Pick("forvo", "skent/n.opus", "skent")
-
-
-def test_source_file_path(tmp_path):
-    p = audio.source_file_path("/uf", audio.Pick("nhk16", "audio/x.opus"))
-    assert p == "/uf/nhk16_files/audio/x.opus"
-
-
-def test_locate(tmp_path):
-    base = tmp_path / config.LOCAL_AUDIO_ADDON_ID / "user_files"
-    base.mkdir(parents=True)
-    assert audio.locate(str(tmp_path)) is None       # no entries.db yet
-    (base / "entries.db").write_text("")
-    db, uf = audio.locate(str(tmp_path))
-    assert db.endswith("entries.db") and uf.endswith("user_files")
 
 
 # --- collection-level pass ------------------------------------------------------
@@ -153,18 +141,15 @@ def col(tmp_path):
 
 @pytest.fixture
 def laudio(tmp_path):
-    uf = tmp_path / "uf"
     rows = [
         ("橋", "はし", "nhk16", None, "audio/n.opus"),
         ("筋トレ", None, "forvo", "strawberrybrown", "strawberrybrown/b.opus"),
     ]
-    con = _entries_db(str(tmp_path / "e.db"), rows)
-    # create the referenced media files
-    for src, rel in [("nhk16", "audio/n.opus"), ("forvo", "strawberrybrown/b.opus")]:
-        f = uf / f"{src}_files" / rel
-        f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_bytes(b"OggS-fake-opus")
-    return con, str(uf)
+    clips = [
+        ("nhk16", "audio/n.opus", b"OggS-nhk"),
+        ("forvo", "strawberrybrown/b.opus", b"OggS-forvo"),
+    ]
+    return _audio_db(str(tmp_path / "a.sqlite"), rows, clips)
 
 
 def test_select_targets_only_empty(col, laudio):
@@ -173,57 +158,49 @@ def test_select_targets_only_empty(col, laudio):
     assert ids["empty_nhk"] in targets
     assert ids["empty_forvo"] in targets
     assert ids["empty_none"] in targets
-    assert ids["filled"] not in targets       # already has audio
+    assert ids["filled"] not in targets
 
 
 def test_plan_backfill_classifies(col, laudio):
     c, ids = col
-    con, uf = laudio
-    plan = audio.plan_backfill(c, con, uf)
+    plan = audio.plan_backfill(c, laudio)
     assert plan["by_source"] == {"nhk16": 1, "forvo": 1}
     assert plan["filled"] == 2
-    assert plan["nothing"] == 1               # 造語
+    assert plan["nothing"] == 1
     assert plan["missing_file"] == 0
 
 
 def test_run_backfill_writes_sound_and_copies_media(col, laudio):
     c, ids = col
-    con, uf = laudio
-    res = audio.run_backfill(c, con, uf)
+    res = audio.run_backfill(c, laudio)
     assert res["filled"] == {"nhk16": 1, "forvo": 1}
     n = c.get_note(ids["empty_nhk"])
     assert n[config.TERM_AUDIO].startswith("[sound:") and n[config.TERM_AUDIO].endswith(".opus]")
-    # media actually copied into the collection
     fname = _re.search(r"\[sound:([^\]]+)\]", n[config.TERM_AUDIO]).group(1)
     assert c.media.have(fname)
-    # untouched: no match, already filled
     assert c.get_note(ids["empty_none"])[config.TERM_AUDIO] == ""
     assert c.get_note(ids["filled"])[config.TERM_AUDIO] == "[sound:cat.mp3]"
 
 
 def test_run_backfill_is_rerun_safe(col, laudio):
     c, ids = col
-    con, uf = laudio
-    audio.run_backfill(c, con, uf)
-    res2 = audio.run_backfill(c, con, uf)   # nothing left empty (except 造語)
-    assert res2["filled"] == {}
+    audio.run_backfill(c, laudio)
+    assert audio.run_backfill(c, laudio)["filled"] == {}
 
 
 def test_run_backfill_one_bad_card_does_not_strand_batch(col, laudio, monkeypatch):
     c, ids = col
-    con, uf = laudio
-    real_add = c.media.add_file
+    real_write = c.media.write_data
     calls = {"n": 0}
 
-    def flaky_add(path):
+    def flaky_write(name, data):
         calls["n"] += 1
-        if calls["n"] == 1:          # first card errors
+        if calls["n"] == 1:
             raise RuntimeError("simulated media failure")
-        return real_add(path)
+        return real_write(name, data)
 
-    monkeypatch.setattr(c.media, "add_file", flaky_add)
-    res = audio.run_backfill(c, con, uf)
-    # one card errored, the other still got filled (batch not stranded)
+    monkeypatch.setattr(c.media, "write_data", flaky_write)
+    res = audio.run_backfill(c, laudio)
     assert len(res["errors"]) == 1
     assert sum(res["filled"].values()) == 1
 
@@ -231,7 +208,7 @@ def test_run_backfill_one_bad_card_does_not_strand_batch(col, laudio, monkeypatc
 # --- re-pitch (replace mined audio with dictionary) -----------------------------
 
 def test_lookup_dict_only_returns_dictionaries(tmp_path):
-    con = _entries_db(str(tmp_path / "e.db"), [
+    con = _audio_db(str(tmp_path / "a.db"), [
         ("橋", "はし", "shinmeikai8", None, "media/s.opus"),
         ("筋トレ", None, "forvo", "strawberrybrown", "x.opus"),
         ("難語", "なんご", "jpod", None, "media/j.opus"),
@@ -271,47 +248,41 @@ def repitch_col(tmp_path):
 
 @pytest.fixture
 def repitch_audio(tmp_path):
-    con = _entries_db(str(tmp_path / "re.db"), [
+    rows = [
         ("橋", "はし", "nhk16", None, "audio/h.opus"),
         ("食べる", "たべる", "shinmeikai8", None, "media/t.opus"),
-        ("猫", "ねこ", "nhk16", None, "audio/c.opus"),  # exists, but opus card excluded anyway
-    ])
-    uf = tmp_path / "uf"
-    for src, rel in [("nhk16", "audio/h.opus"), ("shinmeikai8", "media/t.opus"),
-                     ("nhk16", "audio/c.opus")]:
-        f = uf / f"{src}_files" / rel
-        f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_bytes(b"OggS-fake")
-    return con, str(uf)
+        ("猫", "ねこ", "nhk16", None, "audio/c.opus"),
+    ]
+    clips = [
+        ("nhk16", "audio/h.opus", b"OggS-h"),
+        ("shinmeikai8", "media/t.opus", b"OggS-t"),
+        ("nhk16", "audio/c.opus", b"OggS-c"),
+    ]
+    return _audio_db(str(tmp_path / "rp.sqlite"), rows, clips)
 
 
 def test_select_repitch_targets_nonopus(repitch_col, repitch_audio):
     c, ids = repitch_col
     t = set(audio.select_repitch_targets(c))
     assert ids["mp3_dict"] in t and ids["ogg_dict"] in t and ids["mp3_nodict"] in t
-    assert ids["opus_already"] not in t   # already opus
-    assert ids["empty"] not in t          # no audio
+    assert ids["opus_already"] not in t
+    assert ids["empty"] not in t
 
 
 def test_plan_repitch_only_dict_hits(repitch_col, repitch_audio):
     c, ids = repitch_col
-    con, uf = repitch_audio
-    plan = audio.plan_repitch(c, con, uf)
+    plan = audio.plan_repitch(c, repitch_audio)
     assert plan["by_source"] == {"nhk16": 1, "shinmeikai8": 1}
     assert plan["replaceable"] == 2
-    assert plan["no_dict"] == 1           # 造語
+    assert plan["no_dict"] == 1
 
 
 def test_run_repitch_replaces_and_keeps_old_media(repitch_col, repitch_audio):
     c, ids = repitch_col
-    con, uf = repitch_audio
-    res = audio.run_repitch(c, con, uf)
+    res = audio.run_repitch(c, repitch_audio)
     assert res["replaced"] == {"nhk16": 1, "shinmeikai8": 1}
-    # replaced with opus
     assert c.get_note(ids["mp3_dict"])[config.TERM_AUDIO].endswith(".opus]")
     assert c.get_note(ids["ogg_dict"])[config.TERM_AUDIO].endswith(".opus]")
-    # no-dict and opus-already untouched
     assert c.get_note(ids["mp3_nodict"])[config.TERM_AUDIO] == "[sound:old3.mp3]"
     assert c.get_note(ids["opus_already"])[config.TERM_AUDIO] == "[sound:la_nhk16_x.opus]"
-    # re-run is a no-op (already the dictionary recording)
-    assert audio.run_repitch(c, con, uf)["replaced"] == {}
+    assert audio.run_repitch(c, repitch_audio)["replaced"] == {}
