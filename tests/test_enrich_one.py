@@ -83,3 +83,23 @@ def test_build_fields_no_audio(tmp_path, monkeypatch):
                                 ex_conn=object(), audio_conn=object(), acc=_Acc())
     assert f.audio_clip is None and f.audio_pick is None
     assert f.pitch_svg == ""        # accent not found -> no graph
+
+
+def test_fields_for_sentence_builds_markup_furigana_cloze():
+    def generate(plain):
+        return plain.replace("勉強", "{[勉強|べんきょう];0}")
+    sf = enrich_one.fields_for_sentence(
+        "勉強", "べんきょう", "毎日勉強する", generate=generate, acc=None)
+    assert sf.sentence == "毎日{[勉強|べんきょう];0}する"
+    assert sf.sentence_furigana == "毎日 勉強[べんきょう]する"
+    assert sf.cloze_before == "毎日"
+    assert sf.cloze_inside == "勉強"
+    assert sf.cloze_after == "する"
+
+def test_fields_for_sentence_unlocatable_leaves_cloze_empty():
+    def generate(plain):
+        return plain  # no markup
+    sf = enrich_one.fields_for_sentence(
+        "存在", "そんざい", "毎日勉強する", generate=generate, acc=None)
+    assert sf.sentence == "毎日勉強する"
+    assert (sf.cloze_before, sf.cloze_inside, sf.cloze_after) == ("", "", "")

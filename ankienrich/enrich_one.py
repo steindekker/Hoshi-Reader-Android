@@ -14,7 +14,7 @@ from .defs import index as defs_index
 from .defs import enrich as defs_enrich
 from .examples import enrich as ex_enrich
 from .audio import enrich as audio_enrich
-from . import pitch as _pitch, pitch_svg as _pitch_svg
+from . import pitch as _pitch, pitch_svg as _pitch_svg, markup as _markup, cloze as _cloze
 from .jrp_fill.align import furigana_segments
 
 _TAG = re.compile(r"<[^>]+>")
@@ -68,6 +68,37 @@ class Fields:
     @property
     def has_definition(self) -> bool:
         return bool(self.meaning)
+
+
+@dataclass(frozen=True)
+class SentenceFields:
+    sentence: str            # JRP markup
+    sentence_furigana: str   # Anki furigana notation
+    cloze_before: str
+    cloze_inside: str
+    cloze_after: str
+
+
+def fields_for_sentence(term: str, reading: str, plain_sentence: str, *,
+                        generate, acc) -> SentenceFields:
+    """Markup + furigana + cloze for a chosen plain sentence. `generate` is the
+    JRP generator (jrp_fill.make_generator()); `acc` an AccentIndex for cloze
+    tokenisation (may be None for the verbatim-find fast path)."""
+    sentence = generate(plain_sentence)
+    furi = _markup.jrp_to_furigana(sentence)
+    plain = _cloze.strip_markup(sentence).strip()
+    # verbatim fast path never needs acc; skip tokenized path when acc is absent
+    pos = plain.find(term) if term else -1
+    if pos != -1:
+        split: tuple[str, str, str] | None = (plain[:pos], term, plain[pos + len(term):])
+    elif acc is not None:
+        split = _cloze.locate(term, reading, plain, acc)
+    else:
+        split = None
+    before, inside, after = split if split else ("", "", "")
+    return SentenceFields(sentence=sentence, sentence_furigana=furi,
+                          cloze_before=before, cloze_inside=inside,
+                          cloze_after=after)
 
 
 def build_fields(term: str, reading: str, *, defs_conn, ex_conn, audio_conn,
