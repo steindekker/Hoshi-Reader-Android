@@ -286,12 +286,12 @@ def test_candidates_sorted_by_frequency(tmp_path):
         ("方", "かた", "jmdict", "je", 1, "person"),
     ])
     dc.commit()
-    # freq.sqlite: かた is rarer (higher rank number) than ほう
+    # freq.sqlite: surface-keyed rows, distinct rank per reading (かた rarer than ほう)
     fbf = tmp_path / "freq.sqlite"
     fc = sqlite3.connect(fbf)
-    fc.execute("CREATE TABLE freq (key TEXT PRIMARY KEY, value INT, display TEXT)")
-    fc.executemany("INSERT INTO freq VALUES (?,?,?)",
-                   [("ほう", 100, "100"), ("かた", 5000, "5000")])
+    fc.execute("CREATE TABLE freq (key TEXT, reading TEXT, value INT, display TEXT)")
+    fc.executemany("INSERT INTO freq VALUES (?,?,?,?)",
+                   [("方", "ほう", 100, "100"), ("方", "かた", 5000, "5000")])
     fc.commit()
     from ankienrich.freq import index as freq_index
     cands = enrich_one.candidates(dc, "方", freq_conn=freq_index.open_index(str(fbf)))

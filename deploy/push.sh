@@ -46,6 +46,9 @@ rsync -az --delete \
 say "Syncing sqlite build artifacts"
 artifacts=(var/defs.sqlite var/examples.sqlite var/audio.sqlite)
 [[ -f var/dict_styles.css ]] && artifacts+=(var/dict_styles.css)
+# freq.sqlite is optional (the mining preview/picker degrade gracefully without
+# it); push it when built so the box gets word frequencies + the Frequency field.
+[[ -f var/freq.sqlite ]] && artifacts+=(var/freq.sqlite)
 rsync -az "${artifacts[@]}" "$REMOTE:$DEST/data/"
 
 # --- Seed the collection once; never clobber the box's live copy ------------
