@@ -42,6 +42,19 @@ def test_candidates_strips_html_from_jj_gloss(tmp_path):
     cands = enrich_one.candidates(conn, "角")
     assert cands[0].gloss == "角のこと"
 
+def test_candidates_folds_reading_less_rows_into_headword(tmp_path):
+    # Kana headwords (e.g. パスタ) are stored reading-less by some J-J dicts. Those
+    # rows must merge into the headword's reading, not spawn a junk empty-reading
+    # candidate showing a raw definition dump.
+    conn = _defs_db(tmp_path, [
+        ("パスタ","パスタ","jmdict","je",0,"pasta"),
+        ("パスタ","","koujien7","jj",0,"パスタ 【pasta】イタリア料理…"),
+        ("パスタ","","daijisen","jj",0,"パスタ …"),
+    ])
+    cands = enrich_one.candidates(conn, "パスタ")
+    assert [c.reading for c in cands] == ["パスタ"]
+    assert "pasta" in cands[0].gloss
+
 
 def test_build_fields_assembles_everything(tmp_path, monkeypatch):
     conn = _defs_db(tmp_path, [("箸", "はし", "jmdict", "je", 0, "chopsticks")])

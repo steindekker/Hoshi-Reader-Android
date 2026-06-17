@@ -48,7 +48,10 @@ def candidates(defs_conn, term: str, *, freq_conn=None) -> list[Candidate]:
     jj, je = defs_index.lookup(defs_conn, term)
     by_reading: dict[str, list] = {}
     for r in (*je, *jj):  # prefer JE gloss for the label
-        by_reading.setdefault(r["reading"], []).append(r)
+        # Some J-J dicts store kana headwords (e.g. パスタ) reading-less; an empty
+        # reading means "same as the headword", so fold it into the term's group
+        # rather than spawning a junk empty-reading candidate.
+        by_reading.setdefault(r["reading"] or term, []).append(r)
     out = []
     for reading, rows in by_reading.items():
         freq = None
