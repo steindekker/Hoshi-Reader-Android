@@ -41,3 +41,45 @@ def test_candidates_strips_html_from_jj_gloss(tmp_path):
     conn = _defs_db(tmp_path, [("角","かど","sankoku8","jj",0,"<b>角</b>のこと")])
     cands = enrich_one.candidates(conn, "角")
     assert cands[0].gloss == "角のこと"
+
+
+def test_build_fields_assembles_everything(tmp_path, monkeypatch):
+    conn = _defs_db(tmp_path, [("箸", "はし", "jmdict", "je", 0, "chopsticks")])
+
+    class _Acc:  # stand-in AccentIndex with the .lookup(lemma, reading) interface
+        def lookup(self, lemma, reading):
+            return [0] if reading == "はし" else None
+
+    from ankienrich.audio.enrich import Pick
+    monkeypatch.setattr(enrich_one.audio_enrich, "lookup",
+                        lambda c, t, r: Pick("nhk16", "1.opus"))
+    monkeypatch.setattr(enrich_one.audio_enrich, "read_clip",
+                        lambda c, p: b"OPUSDATA")
+    monkeypatch.setattr(enrich_one.ex_enrich, "examples_for",
+                        lambda c, t, r: "<div>例</div>")
+
+    f = enrich_one.build_fields(
+        "箸", "はし",
+        defs_conn=conn, ex_conn=object(), audio_conn=object(), acc=_Acc())
+
+    assert f.term == "箸" and f.reading == "はし"
+    assert f.furigana == "箸[はし]"
+    assert f.pitch_svg.startswith("<svg")
+    assert "chopsticks" in f.meaning
+    assert f.definition_source  # non-empty label
+    assert f.examples == "<div>例</div>"
+    assert f.audio_clip == b"OPUSDATA"
+    assert f.audio_pick.source == "nhk16"
+    assert f.has_definition is True
+
+
+def test_build_fields_no_audio(tmp_path, monkeypatch):
+    conn = _defs_db(tmp_path, [("箸", "はし", "jmdict", "je", 0, "chopsticks")])
+    class _Acc:
+        def lookup(self, l, r): return None
+    monkeypatch.setattr(enrich_one.audio_enrich, "lookup", lambda c, t, r: None)
+    monkeypatch.setattr(enrich_one.ex_enrich, "examples_for", lambda c, t, r: "")
+    f = enrich_one.build_fields("箸", "はし", defs_conn=conn,
+                                ex_conn=object(), audio_conn=object(), acc=_Acc())
+    assert f.audio_clip is None and f.audio_pick is None
+    assert f.pitch_svg == ""        # accent not found -> no graph
