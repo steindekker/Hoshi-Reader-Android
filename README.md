@@ -26,9 +26,20 @@ A separate `dedupe` pass merges duplicate cards while preserving review history.
 Requires Python ≥ 3.11 and [`uv`](https://docs.astral.sh/uv/).
 
 ```sh
+# required — AnkiWeb sync
 export ANKIWEB_USERNAME=...
 export ANKIWEB_PASSWORD=...
+
+# optional — Telegram run reports (`--notify`) and the `anki-enrich-bot` listener
+export TELEGRAM_BOT_TOKEN=...
+export TELEGRAM_CHAT_ID=...      # your own chat id; the bot ignores everyone else
 ```
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `ANKIWEB_USERNAME` / `ANKIWEB_PASSWORD` | yes | AnkiWeb login for pull/push |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | for `--notify` / the bot | where run reports go and which chat may drive the bot |
+| `ANKI_ADDONS_DIR` | no | override the add-ons dir (default `~/.local/share/Anki2/addons21`) used to find `local-audio-yomichan` |
 
 The tool keeps its own collection at `var/collection.anki2` (never the desktop
 profile). On first run it builds `var/defs.sqlite` from `dicts/` and, if the J→E
@@ -45,7 +56,9 @@ Optional sources, skipped (not failed) when absent:
 ```sh
 uv run anki-enrich              # pull latest, dry-run preview (no writes)
 uv run anki-enrich --apply      # back up, write in place, push to AnkiWeb
-uv run anki-enrich dedupe --apply   # destructive duplicate merge
+uv run anki-enrich --apply --notify   # also send the result to Telegram
+uv run anki-enrich dedupe --apply     # destructive duplicate merge
+uv run anki-enrich-bot          # listener: /run triggers a run (apply + report)
 ```
 
 Every run is a **dry-run by default**: it prints what each pass would change and
