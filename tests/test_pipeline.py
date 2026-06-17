@@ -20,10 +20,11 @@ def _kino_col(tmp):
 
 
 def test_dry_run_reports_steps(tmp_path, monkeypatch):
-    # Force audio + defs to the skip path so the test needs no external assets.
-    monkeypatch.setenv("ANKI_ADDONS_DIR", str(tmp_path / "nope"))
+    # Force audio + defs + examples to the skip path so the test needs no external assets.
+    from ankienrich.audio import build as audio_build
     from ankienrich.defs import build
     from ankienrich.examples import build as ex_build
+    monkeypatch.setattr(audio_build, "ensure", lambda: "no-source")
     monkeypatch.setattr(build, "ensure", lambda: "no-source")
     monkeypatch.setattr(ex_build, "ensure", lambda: "no-source")
     col = _kino_col(str(tmp_path))
