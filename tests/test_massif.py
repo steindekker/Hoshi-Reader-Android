@@ -29,3 +29,11 @@ def test_top_sentences_returns_empty_on_network_error(monkeypatch):
         raise massif.requests.RequestException("down")
     monkeypatch.setattr(massif.requests, "get", _boom)
     assert massif.top_sentences("勉強", n=5, timeout=1) == []
+
+def test_parse_empty_returns_empty():
+    assert massif.parse("", n=5) == []
+
+def test_parse_tolerates_extra_li_attributes():
+    body = ('<li class="text-japanese" data-id="9">'
+            '<div>これは<em>例</em>です。</div></li>')
+    assert massif.parse(body, n=5) == ["これは例です。"]

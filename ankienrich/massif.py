@@ -13,7 +13,7 @@ import requests
 
 from . import config
 
-_LI = re.compile(r'<li class="text-japanese">\s*<div>(.*?)</div>', re.S)
+_LI = re.compile(r'<li\b[^>]*\bclass="text-japanese"[^>]*>\s*<div>(.*?)</div>', re.S)
 _TAG = re.compile(r"<[^>]+>")
 _HEADERS = {"User-Agent": "Mozilla/5.0 (anki-enrich)"}
 
