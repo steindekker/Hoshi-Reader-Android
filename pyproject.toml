@@ -5,14 +5,16 @@ requires-python = ">=3.11"
 
 [project.scripts]
 anki-enrich = "ankienrich.cli:main"
+anki-enrich-bot = "ankienrich.bot:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "anki>=24.11"]
 jrp = ["sudachipy>=0.6.8", "sudachidict-full>=20240409"]
 wizard = ["questionary>=2"]
+bot = ["pyTelegramBotAPI>=4"]
 
 [tool.uv]
-default-groups = ["dev", "jrp", "wizard"]
+default-groups = ["dev", "jrp", "wizard", "bot"]
 
 [build-system]
 requires = ["hatchling"]
