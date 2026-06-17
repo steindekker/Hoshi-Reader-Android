@@ -64,3 +64,67 @@ def candidates(col) -> list[Candidate]:
             context=_plain(sentence or meaning),
         ))
     return out
+
+
+def _load(col, nid):
+    """The note for nid, or None if it vanished remotely between OPEN and the pick."""
+    try:
+        return col.get_note(nid)
+    except Exception:
+        return None
+
+
+def open_queue() -> list[Candidate]:
+    """The single OPEN pull, encapsulated so bot.py stays thin. runlock → open →
+    pull → candidates → close. Raises runlock.Busy if a run holds the lock."""
+    with runlock.acquire():
+        col = collection.open_working()
+        try:
+            auth = sync.login(col)
+            _, auth = sync.pull(col, auth)
+            return candidates(col)
+        finally:
+            col.close()
+
+
+def set_image(nid: int, image) -> dict:
+    """Write Image + remove needs-image for one note, under the run lock.
+    `image` is (bytes, ext). Returns a status dict; "gone" if the note is absent."""
+    with runlock.acquire():
+        col = collection.open_working()
+        try:
+            auth = sync.login(col)
+            _, auth = sync.pull(col, auth)
+            note = _load(col, nid)
+            if note is None:
+                return {"status": "gone"}
+            data, ext = image
+            fname = col.media.write_data(f"q_{nid}.{ext}", data)
+            note[config.IMAGE] = f'<img src="{fname}">'
+            if config.NEEDS_IMAGE_TAG in note.tags:
+                note.remove_tag(config.NEEDS_IMAGE_TAG)
+            col.update_note(note)
+            _, auth = sync.push(col, auth)
+            return {"status": "ok", "nid": nid, "file": fname}
+        finally:
+            col.close()
+
+
+def skip(nid: int) -> dict:
+    """Swap needs-image for no-image (permanent exclusion), under the run lock."""
+    with runlock.acquire():
+        col = collection.open_working()
+        try:
+            auth = sync.login(col)
+            _, auth = sync.pull(col, auth)
+            note = _load(col, nid)
+            if note is None:
+                return {"status": "gone"}
+            if config.NEEDS_IMAGE_TAG in note.tags:
+                note.remove_tag(config.NEEDS_IMAGE_TAG)
+            note.add_tag(config.NO_IMAGE_TAG)
+            col.update_note(note)
+            _, auth = sync.push(col, auth)
+            return {"status": "ok", "nid": nid}
+        finally:
+            col.close()

@@ -73,3 +73,44 @@ def test_candidates_returns_flagged_in_nid_order_with_context(kcol):
     assert by_nid[a].term == "迷惑" and by_nid[a].reading == "めいわく"
     assert "迷惑をかける" in by_nid[a].context        # from Sentence
     assert "a bridge" in by_nid[b].context           # falls back to Meaning
+
+
+import contextlib
+
+
+def _stub_sync(monkeypatch, col):
+    """Point imagequeue's sync envelope at an open temp collection without network
+    or runlock, and keep the handle open so the test can assert on it afterward."""
+    monkeypatch.setattr(imagequeue.runlock, "acquire", lambda: contextlib.nullcontext())
+    monkeypatch.setattr(imagequeue.collection, "open_working", lambda: col)
+    monkeypatch.setattr(imagequeue.sync, "login", lambda c: "auth")
+    monkeypatch.setattr(imagequeue.sync, "pull", lambda c, a: ("none", a))
+    monkeypatch.setattr(imagequeue.sync, "push", lambda c, a: ("ok", a))
+    monkeypatch.setattr(col, "close", lambda: None)   # set_image/skip close in finally
+
+
+def test_set_image_writes_field_media_and_clears_tag(kcol, monkeypatch):
+    nid = _add(kcol, "迷惑", "めいわく", tags=[config.NEEDS_IMAGE_TAG])
+    _stub_sync(monkeypatch, kcol)
+    res = imagequeue.set_image(nid, (b"\x89PNGfake", "png"))
+    assert res["status"] == "ok"
+    note = kcol.get_note(nid)
+    assert note[config.IMAGE] == f'<img src="q_{nid}.png">'
+    assert config.NEEDS_IMAGE_TAG not in note.tags
+    assert kcol.media.have(f"q_{nid}.png")
+
+
+def test_set_image_gone_when_nid_absent(kcol, monkeypatch):
+    _stub_sync(monkeypatch, kcol)
+    res = imagequeue.set_image(99999999, (b"x", "jpg"))
+    assert res["status"] == "gone"
+
+
+def test_skip_swaps_needs_image_for_no_image(kcol, monkeypatch):
+    nid = _add(kcol, "迷惑", "めいわく", tags=[config.NEEDS_IMAGE_TAG])
+    _stub_sync(monkeypatch, kcol)
+    res = imagequeue.skip(nid)
+    assert res["status"] == "ok"
+    note = kcol.get_note(nid)
+    assert config.NEEDS_IMAGE_TAG not in note.tags
+    assert config.NO_IMAGE_TAG in note.tags
