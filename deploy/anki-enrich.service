@@ -1,0 +1,11 @@
+[Unit]
+Description=anki-enrich nightly enrichment run
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/anki-enrich
+# One-off container from the bot service (same image/env/volume); --rm cleans up.
+# run.lock makes this bow out as Busy if a manual /run is mid-flight.
+ExecStart=/usr/bin/docker compose -f /opt/anki-enrich/compose.yaml run --rm bot anki-enrich --apply --notify
