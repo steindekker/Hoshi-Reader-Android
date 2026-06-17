@@ -6,6 +6,7 @@ import os
 import sqlite3
 
 from . import audio, cloze, config, collection, pitch
+from .audio import build as audio_build, index as audio_index
 from .defs import build as def_build, enrich
 from .examples import build as ex_build
 
@@ -20,21 +21,18 @@ class PipelineError(Exception):
 
 
 def _step_audio(col, apply: bool) -> dict:
-    addons = os.environ.get("ANKI_ADDONS_DIR", os.path.expanduser(
-        "~/.local/share/Anki2/addons21"))
-    located = audio.locate(addons)
-    if located is None:
-        return {"skipped": "local-audio-yomichan entries.db not found"}
-    db_path, ufd = located
-    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    state = audio_build.ensure()
+    if state == "no-source":
+        return {"skipped": "audio.sqlite missing and no local-audio-yomichan source to build it"}
+    conn = audio_index.open_index()
     try:
         if apply:
-            res = audio.run_backfill(col, conn, ufd)
-            rep = audio.run_repitch(col, conn, ufd)
+            res = audio.run_backfill(col, conn)
+            rep = audio.run_repitch(col, conn)
             return {"filled": dict(res["filled"]), "errors": len(res.get("errors", [])),
                     "upgraded": dict(rep["replaced"]), "upgrade_errors": len(rep.get("errors", []))}
-        plan = audio.plan_backfill(col, conn, ufd)
-        rplan = audio.plan_repitch(col, conn, ufd)
+        plan = audio.plan_backfill(col, conn)
+        rplan = audio.plan_repitch(col, conn)
         return {"will_fill": plan["filled"], "by_source": dict(plan["by_source"]),
                 "none": plan["nothing"], "missing_file": plan["missing_file"],
                 "will_upgrade": rplan["replaceable"], "no_dict": rplan["no_dict"]}
