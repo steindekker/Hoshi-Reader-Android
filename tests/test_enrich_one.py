@@ -36,3 +36,8 @@ def test_candidates_multiple_readings(tmp_path):
 def test_candidates_empty_when_no_hits(tmp_path):
     conn = _defs_db(tmp_path, [])
     assert enrich_one.candidates(conn, "存在しない") == []
+
+def test_candidates_strips_html_from_jj_gloss(tmp_path):
+    conn = _defs_db(tmp_path, [("角","かど","sankoku8","jj",0,"<b>角</b>のこと")])
+    cands = enrich_one.candidates(conn, "角")
+    assert cands[0].gloss == "角のこと"

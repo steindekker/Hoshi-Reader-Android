@@ -32,7 +32,7 @@ def _plain_gloss(rows) -> str:
     """First sense's text, tags stripped, clipped — for the disambiguation label."""
     if not rows:
         return ""
-    text = _html.unescape(_TAG.sub("", rows[0]["html"])).strip()
+    text = _html.unescape(_TAG.sub("", rows[0]["html"] or "")).strip()
     return text[:40]
 
 
