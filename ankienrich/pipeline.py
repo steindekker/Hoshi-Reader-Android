@@ -2,9 +2,6 @@
 -> examples -> cloze. Dedupe is destructive and lives in its own command, not here.
 
 Dry-run unless apply=True; a verified backup is taken before any write."""
-import os
-import sqlite3
-
 from . import audio, cloze, config, collection, pitch
 from .audio import build as audio_build, index as audio_index
 from .defs import build as def_build, enrich
