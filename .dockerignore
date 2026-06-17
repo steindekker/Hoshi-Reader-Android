@@ -1,0 +1,20 @@
+# Bulk local-only data — never enters the build context
+var/
+dicts/
+
+# Virtualenv, VCS, IDE, caches
+.venv/
+.git/
+.idea/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+*.pyo
+
+# Reference-only PoC and docs/tests not needed at runtime
+poc/
+docs/
+tests/
+.playwright-mcp/
+.claude/
