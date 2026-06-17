@@ -45,8 +45,8 @@ def _to_hira(s: str) -> str:
 
 @dataclass
 class Pick:
-    """A chosen recording. `file` is the original add-on-relative name (used to
-    fetch the blob from `clips` and to name the media file)."""
+    """A chosen recording. `file` is the source-relative filename (the key into
+    `clips`, and—via `_media_name`—the media file basename)."""
     source: str
     file: str
     speaker: str | None = None
