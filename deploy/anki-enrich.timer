@@ -2,7 +2,7 @@
 Description=Run anki-enrich nightly
 
 [Timer]
-OnCalendar=*-*-* 04:00:00
+OnCalendar=*-*-* 04:00:00 Europe/Amsterdam
 Persistent=true
 
 [Install]

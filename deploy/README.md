@@ -6,6 +6,8 @@ corpus. The collection bootstraps itself from AnkiWeb on first run.
 
 ## Prerequisites on the box
 - Docker Engine + the compose plugin (`docker compose version`).
+- systemd ≥ 252 (the timer pins `04:00 Europe/Amsterdam` via a timezone suffix
+  in `OnCalendar`; Debian 12 / Ubuntu 24.04 and newer are fine).
 - A directory `/opt/anki-enrich` (the paths below assume it).
 
 ## First deploy
