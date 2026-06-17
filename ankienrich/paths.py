@@ -12,6 +12,7 @@ DEFS_DB = os.path.join(VAR_DIR, "defs.sqlite")
 EXAMPLES_DB = os.path.join(VAR_DIR, "examples.sqlite")
 DICT_STYLES = os.path.join(VAR_DIR, "dict_styles.css")
 WORKING_COLLECTION = os.path.join(VAR_DIR, "collection.anki2")
+RUN_LOCK = os.path.join(VAR_DIR, "run.lock")
 
 DICTS_DIR = os.path.join(ROOT, "dicts")
 TATOEBA_DIR = os.path.join(DICTS_DIR, "tatoeba")
