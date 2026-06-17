@@ -1,23 +1,24 @@
-"""Term-audio backfill.
+"""Term-audio backfill from the self-contained var/audio.sqlite store.
 
-Fills empty `Term Audio` on in-scope Kinomoto notes from the local-audio-yomichan
-offline DB. Lookup chain:
+Fills empty `Term Audio` on in-scope Kinomoto notes. Lookup chain:
 
     nhk16 → shinmeikai8 → forvo[strawberrybrown] → jpod   (stop at first hit)
 
-nhk16/shinmeikai8/jpod are matched on exact (term, reading) so homographs get the
-right accent; forvo is term-only and only fires when both dictionaries miss (the
-long tail), preferring the strawberrybrown voice.
+nhk16/shinmeikai8/jpod match on exact (term, reading) so homographs get the right
+accent; forvo is term-only and only fires when both dictionaries miss.
 
-No `aqt` imports — the entries.db connection and the local-audio user_files dir are
-passed in, so this is unit-testable headless.
+No `aqt` imports and no add-on coupling — the connection is to OUR audio.sqlite
+(built by audio/build.py), and clip bytes are embedded blobs, so this is headless
+and unit-testable. audio.sqlite schema:
+    entries(expression, reading, source, speaker, file)   -- lookup index
+    clips(source, file, data BLOB, PRIMARY KEY(source, file))  -- bytes once per clip
 """
 import os
 import re
 from collections import Counter
 from dataclasses import dataclass
 
-from . import config
+from .. import config
 
 # Reading-keyed, accent-authoritative dictionaries (tried first, in this order).
 DICT_SOURCES = ("nhk16", "shinmeikai8")
@@ -44,7 +45,8 @@ def _to_hira(s: str) -> str:
 
 @dataclass
 class Pick:
-    """A chosen recording. `file` is relative to `<source>_files/`."""
+    """A chosen recording. `file` is the original add-on-relative name (used to
+    fetch the blob from `clips` and to name the media file)."""
     source: str
     file: str
     speaker: str | None = None
@@ -69,7 +71,7 @@ def lookup_dict(conn, term: str, reading: str) -> Pick | None:
 
 def lookup(conn, term: str, reading: str) -> Pick | None:
     """Run the full fill chain (nhk16 → shinmeikai8 → forvo[strawberrybrown] →
-    jpod) against an entries.db connection. Returns the best Pick or None."""
+    jpod) against audio.sqlite. Returns the best Pick or None."""
     dict_pick = lookup_dict(conn, term, reading)
     if dict_pick:
         return dict_pick
@@ -98,18 +100,17 @@ def lookup(conn, term: str, reading: str) -> Pick | None:
     return None
 
 
-def source_file_path(user_files_dir: str, pick: Pick) -> str:
-    """Absolute path to the picked recording on disk."""
-    return os.path.join(user_files_dir, f"{pick.source}_files", pick.file)
+def read_clip(conn, pick: Pick) -> bytes | None:
+    """The picked recording's bytes from the clips table, or None if absent."""
+    row = conn.execute(
+        "SELECT data FROM clips WHERE source=? AND file=?", (pick.source, pick.file),
+    ).fetchone()
+    return row[0] if row else None
 
 
-def locate(addons_folder: str) -> tuple[str, str] | None:
-    """Find the local-audio-yomichan install. Returns (entries_db, user_files_dir)
-    or None if the add-on / index isn't present. `addons_folder` is Anki's
-    addons21 dir."""
-    user_files = os.path.join(addons_folder, config.LOCAL_AUDIO_ADDON_ID, "user_files")
-    db = os.path.join(user_files, "entries.db")
-    return (db, user_files) if os.path.isfile(db) else None
+def _media_name(pick: Pick) -> str:
+    """Stable, collision-resistant media filename for a pick."""
+    return f"la_{pick.source}_{os.path.basename(pick.file)}"
 
 
 # --- collection-level pass (anki, no aqt) ---------------------------------------
@@ -126,11 +127,11 @@ def select_targets(col) -> list:
     return list(col.find_notes(_search()))
 
 
-def plan_backfill(col, conn, user_files_dir: str) -> dict:
+def plan_backfill(col, conn) -> dict:
     """Read-only. For every target note, resolve a Pick and classify it.
 
-    Returns {'total', 'by_source': {src: n}, 'nothing', 'missing_file',
-    'samples': [(term, reading, source, speaker)], 'picks': {nid: Pick}}.
+    Returns {'total', 'by_source', 'filled', 'nothing', 'missing_file',
+    'samples', 'picks'}. `missing_file` counts picks whose clip blob is absent.
     """
     by_source = Counter()
     nothing = missing_file = 0
@@ -143,7 +144,7 @@ def plan_backfill(col, conn, user_files_dir: str) -> dict:
         if pick is None:
             nothing += 1
             continue
-        if not os.path.isfile(source_file_path(user_files_dir, pick)):
+        if read_clip(conn, pick) is None:
             missing_file += 1
             continue
         picks[nid] = pick
@@ -161,14 +162,13 @@ def plan_backfill(col, conn, user_files_dir: str) -> dict:
     }
 
 
-def run_backfill(col, conn, user_files_dir: str) -> dict:
-    """Copy each picked recording into collection.media and write `[sound:...]`
-    into the note's Term Audio. Caller is responsible for backup. Only writes
-    notes that are still empty (re-run safe). Per-card errors are collected, not
-    raised, so one bad recording can't strand the rest of the batch.
+def run_backfill(col, conn) -> dict:
+    """Write each picked recording's bytes into collection.media and set
+    `[sound:...]` on the note's Term Audio. Caller backs up first. Only writes
+    notes still empty (re-run safe). Per-card error isolation.
     Returns {'filled': {src: n}, 'errors': [(nid, repr)]}.
     """
-    plan = plan_backfill(col, conn, user_files_dir)
+    plan = plan_backfill(col, conn)
     filled = Counter()
     errors = []
     for nid, pick in plan["picks"].items():
@@ -176,7 +176,8 @@ def run_backfill(col, conn, user_files_dir: str) -> dict:
             note = col.get_note(nid)
             if _SOUND.search(note[config.TERM_AUDIO] or ""):
                 continue  # already has audio (race / re-run)
-            fname = col.media.add_file(source_file_path(user_files_dir, pick))
+            data = read_clip(conn, pick)
+            fname = col.media.write_data(_media_name(pick), data)
             note[config.TERM_AUDIO] = f"[sound:{fname}]"
             col.update_note(note)
             filled[pick.source] += 1
@@ -186,17 +187,10 @@ def run_backfill(col, conn, user_files_dir: str) -> dict:
 
 
 # --- re-pitch pass: replace mined audio with accent-dictionary audio ------------
-# Targets in-scope Kinomoto notes whose Term Audio is a NON-.opus recording (the
-# pre-existing jidoujisho-mined mp3/ogg — likely jpod, with frequent wrong pitch)
-# and replaces it ONLY when an accent dictionary (nhk16/shinmeikai8) has a
-# reading-correct hit. Never replaces with forvo/jpod. Non-destructive: the old
-# media file is left in the collection (only the field reference changes); caller
-# backs up first.
-
 
 def _current_sound(field_val: str) -> str | None:
     m = _SOUND.search(field_val or "")
-    return m.group(0) if m else None  # full "[sound:...]" token
+    return m.group(0) if m else None
 
 
 def _current_sound_file(field_val: str) -> str | None:
@@ -205,11 +199,8 @@ def _current_sound_file(field_val: str) -> str | None:
 
 
 def select_repitch_targets(col) -> list:
-    """In-scope Kinomoto nids whose Term Audio is a non-.opus recording.
-
-    `.opus` files are only ever written by our own local-audio passes (already a
-    best-available source), so they're excluded; everything else is pre-existing
-    mined audio eligible for a dictionary upgrade."""
+    """In-scope Kinomoto nids whose Term Audio is a non-.opus recording (our own
+    passes only ever write .opus, so those are excluded)."""
     if col.models.by_name(config.NOTETYPE) is None:
         return []
     search = f'note:"{config.NOTETYPE}" -"{config.TERM_AUDIO}:"'
@@ -221,9 +212,8 @@ def select_repitch_targets(col) -> list:
     return out
 
 
-def plan_repitch(col, conn, user_files_dir: str) -> dict:
+def plan_repitch(col, conn) -> dict:
     """Read-only. For every non-opus target, resolve a dictionary Pick.
-
     Returns {'targets', 'replaceable', 'no_dict', 'by_source', 'samples', 'picks'}.
     """
     by_source = Counter()
@@ -236,7 +226,7 @@ def plan_repitch(col, conn, user_files_dir: str) -> dict:
         if pick is None:
             no_dict += 1
             continue
-        if not os.path.isfile(source_file_path(user_files_dir, pick)):
+        if read_clip(conn, pick) is None:
             continue
         picks[nid] = pick
         by_source[pick.source] += 1
@@ -253,18 +243,19 @@ def plan_repitch(col, conn, user_files_dir: str) -> dict:
     }
 
 
-def run_repitch(col, conn, user_files_dir: str) -> dict:
-    """Replace each target's Term Audio with its dictionary recording. Caller backs
-    up first. Non-destructive (old media file kept). Per-card error isolation.
+def run_repitch(col, conn) -> dict:
+    """Replace each target's Term Audio with its dictionary recording. Caller
+    backs up first. Non-destructive (old media kept). Per-card error isolation.
     Returns {'replaced': {src: n}, 'errors': [(nid, repr)]}.
     """
-    plan = plan_repitch(col, conn, user_files_dir)
+    plan = plan_repitch(col, conn)
     replaced = Counter()
     errors = []
     for nid, pick in plan["picks"].items():
         try:
             note = col.get_note(nid)
-            fname = col.media.add_file(source_file_path(user_files_dir, pick))
+            data = read_clip(conn, pick)
+            fname = col.media.write_data(_media_name(pick), data)
             newval = f"[sound:{fname}]"
             if (note[config.TERM_AUDIO] or "").strip() == newval:
                 continue  # already this exact recording
