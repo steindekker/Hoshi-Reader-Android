@@ -360,7 +360,21 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
     return bot
 
 
+def _warmup() -> None:
+    """Pre-pay the first word's one-time costs at startup so it feels instant: open
+    the read-only indexes + Sudachi generator (this thread, same one that handles
+    messages), and launch the warm Chromium in the background (its own worker
+    thread). Best effort — a missing browser just means the first search degrades."""
+    try:
+        _indexes()
+    except Exception:
+        pass
+    mine.warm_images()
+
+
 def main(argv=None) -> int:
     token, chat_id = _config()
-    build_bot(token, chat_id).infinity_polling()
+    bot = build_bot(token, chat_id)
+    _warmup()
+    bot.infinity_polling()
     return 0

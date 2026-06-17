@@ -175,6 +175,19 @@ def _search_blocking(term: str, timeout_ms: int) -> list[ImageCandidate]:
                 pass
 
 
+def _warm() -> None:               # runs on the worker thread
+    try:
+        _browser()
+    except Exception:
+        pass
+
+
+def warm() -> None:
+    """Launch the warm Chromium ahead of the first search so its ~2 s cold start is
+    paid at startup, not on the first word. Fire-and-forget; never blocks."""
+    _executor().submit(_warm)
+
+
 def prefetch(term: str, *, timeout_ms: int = 8000) -> None:
     """Kick off a search for `term` in the background so `search_images(term)`
     later returns (near-)instantly. No-op if one is already in flight."""

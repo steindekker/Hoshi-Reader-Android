@@ -61,6 +61,23 @@ def test_search_respects_limit(monkeypatch):
     assert len(images.search_images("Y", limit=3)) == 3
 
 
+def test_warm_launches_browser_in_background(monkeypatch):
+    launched = []
+    monkeypatch.setattr(images, "_browser", lambda: launched.append(1))
+    images.warm()
+    # Single-threaded FIFO executor: this no-op resolves only after _warm ran.
+    images._executor().submit(lambda: None).result(timeout=5)
+    assert launched == [1]
+
+
+def test_warm_swallows_browser_launch_failure(monkeypatch):
+    def _boom():
+        raise RuntimeError("no chromium")
+    monkeypatch.setattr(images, "_browser", _boom)
+    images.warm()                                    # must not raise
+    images._executor().submit(lambda: None).result(timeout=5)
+
+
 def test_safesearch_is_off():
     # SafeSearch disabled via both the URL param and the cookie Bing honours.
     assert "adlt=off" in images.SEARCH_URL

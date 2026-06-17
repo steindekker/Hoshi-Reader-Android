@@ -106,6 +106,15 @@ def prefetch_sentences(term: str) -> None:
         pass
 
 
+def warm_images() -> None:
+    """Launch the headless browser ahead of the first search (its ~2s cold start is
+    the bulk of an image search), e.g. at bot startup. Never raises — best effort."""
+    try:
+        images.warm()
+    except Exception:
+        pass
+
+
 def prefetch_images(term: str) -> None:
     """Start the image search early (e.g. at preview) so the candidates are ready
     by the image step. Never raises — best effort."""
