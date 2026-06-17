@@ -131,7 +131,9 @@ def _indexes():
 
 
 def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
-    bot = telebot.TeleBot(token, parse_mode="HTML")
+    # threaded=False: single-user bot, and the read-only sqlite indexes opened
+    # lazily in _indexes() are not safe to share across telebot's worker threads.
+    bot = telebot.TeleBot(token, parse_mode="HTML", threaded=False)
 
     def _show_home(m):
         bot.send_message(m.chat.id, HELP_TEXT, reply_markup=home_keyboard())
@@ -212,17 +214,20 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
                          reply_markup=kb)
 
     def _apply_mine(chat_id_):
-        s = _SESSIONS.pop(chat_id_, None)
+        s = _SESSIONS.get(chat_id_)
         if not s:
             return
         try:
             res = mine.commit(s.fields, s.sentence_fields, image=s.image)
         except runlock.Busy:
+            # transient: keep the session so the user can just tap Apply again.
             bot.send_message(chat_id_, "⏳ A run is in progress — try again shortly.")
             return
         except Exception as e:
+            _SESSIONS.pop(chat_id_, None)
             bot.send_message(chat_id_, f"⚠️ Sync/add failed: {e}")
             return
+        _SESSIONS.pop(chat_id_, None)
         if res["status"] == "duplicate":
             bot.send_message(chat_id_, "Already in the deck — nothing added.")
         else:
@@ -259,13 +264,17 @@ def build_bot(token: str, chat_id: int) -> telebot.TeleBot:
         # falls through to the run-menu logic below.
         data = c.data
         s = _SESSIONS.get(c.message.chat.id)
-        if data.startswith("cand:"):
-            _enter_preview(c.message.chat.id, int(data.split(":")[1]))
-            bot.answer_callback_query(c.id)
-            return
+        is_mining = data.startswith(("cand:", "go:", "sent:", "img:"))
         if data == "go:cancel":
             _SESSIONS.pop(c.message.chat.id, None)
             bot.answer_callback_query(c.id, "Cancelled")
+            return
+        if is_mining and not s:        # stale keyboard after restart/cancel/new word
+            bot.answer_callback_query(c.id, "Session expired — send the word again")
+            return
+        if data.startswith("cand:"):
+            _enter_preview(c.message.chat.id, int(data.split(":")[1]))
+            bot.answer_callback_query(c.id)
             return
         if data == "go:sentence" and s:
             _, ex_conn, *_ = _indexes()
