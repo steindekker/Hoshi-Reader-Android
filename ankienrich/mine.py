@@ -110,16 +110,24 @@ def _ext_from_url(url: str) -> str:
     return ext if ext in {"jpg", "jpeg", "png", "webp", "gif"} else "jpg"
 
 
+_MAX_IMAGE_BYTES = 10 * 1024 * 1024  # cap a user-driven download
+
+
 def download_image(url: str, *, timeout: int = config.IMAGE_DL_TIMEOUT):
     """Download the chosen image. Returns (bytes, ext) or None on any failure /
-    non-image content."""
+    non-image content / oversize body."""
     try:
         resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (anki-enrich)"},
-                            timeout=timeout)
+                            timeout=timeout, stream=True)
         resp.raise_for_status()
         if not resp.headers.get("Content-Type", "").startswith("image/"):
             return None
-        return resp.content, _ext_from_url(url)
+        data = b""
+        for chunk in resp.iter_content(64 * 1024):
+            data += chunk
+            if len(data) > _MAX_IMAGE_BYTES:
+                return None
+        return data, _ext_from_url(url)
     except requests.RequestException:
         return None
 

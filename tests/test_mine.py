@@ -132,10 +132,19 @@ def test_download_image_returns_bytes_and_ext(monkeypatch):
     class _R:
         status_code = 200
         headers = {"Content-Type": "image/jpeg"}
-        content = b"JPEG"
         def raise_for_status(self): pass
+        def iter_content(self, n): return iter([b"JP", b"EG"])
     monkeypatch.setattr(mine.requests, "get", lambda u, **k: _R())
     assert mine.download_image("http://x/y/pic.png") == (b"JPEG", "png")
+
+def test_download_image_none_when_oversize(monkeypatch):
+    big = b"x" * (mine._MAX_IMAGE_BYTES + 1)
+    class _R:
+        headers = {"Content-Type": "image/jpeg"}
+        def raise_for_status(self): pass
+        def iter_content(self, n): return iter([big])
+    monkeypatch.setattr(mine.requests, "get", lambda u, **k: _R())
+    assert mine.download_image("http://x/pic.jpg") is None
 
 def test_download_image_none_on_failure(monkeypatch):
     def _boom(*a, **k): raise mine.requests.RequestException("down")
