@@ -40,3 +40,19 @@ over.
   `examples.sqlite`. The runtime reads only `var/audio.sqlite` (clip bytes embedded),
   so the add-on is a build-time-only input; without it installed the build is
   skipped, not failed.
+
+## The Telegram bot
+
+`uv run anki-enrich-bot` (needs `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`). Tap ▶️ Run
+to fire the enrichment suite, or **just send a word** to mine a new card: the bot
+previews dict/pitch/audio, lets you pick a Massif example sentence (local
+`examples.sqlite` fallback) and a Bing image (or skip either), then writes a
+`jidoujisho Kinomoto` card tagged `ankienrich::mined` and syncs — one add at a time
+under the same run-lock as the nightly job. 0-hit words are refused.
+
+The image step uses headless Chromium via `ankienrich/images.py` (the `images`
+dep group). **Deploy:** the Hetzner bot Docker image must add
+`uv run playwright install --with-deps chromium` for the image step to work there;
+without a browser the step degrades to "no images → skip" (see
+`docs/image-search-handoff.md`). Follow-up: a preview-time duplicate warning (today
+a duplicate is only caught at Apply, after pull).
