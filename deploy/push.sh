@@ -43,6 +43,8 @@ rsync -az --delete \
   "$REPO_ROOT/" "$REMOTE:$DEST/"
 
 # --- Push build artifacts (always; rsync delta makes reruns cheap) ----------
+# audio.sqlite is the ~6.2 GB android.db term-audio store: the FIRST push is a
+# large one-time transfer; rsync delta keeps later reruns near-free.
 say "Syncing sqlite build artifacts"
 artifacts=(var/defs.sqlite var/examples.sqlite var/audio.sqlite)
 [[ -f var/dict_styles.css ]] && artifacts+=(var/dict_styles.css)
