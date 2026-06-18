@@ -39,8 +39,12 @@ Adopt `android.db` as-is and replicate Hoshi Reader's lookup behaviour exactly.
   prefers the accent dictionaries first. This also retires the broken `.opus` "ours"
   marker (android.db clips are all `.mp3`).
 - **No forvo speaker preference** — match Hoshi (rank by source only).
-- Source android.db located at `dicts/audio/android.db`, overridable via
-  `ANKIENRICH_AUDIO_DB`; hardlinked (fallback copy) into `var/audio.sqlite`.
+- **The android.db file *is* `var/audio.sqlite`** — no source-artifact location, no
+  copy/hardlink, no env override. `var/` is a host bind-mount (`compose.yaml`
+  `./data:/app/var`) populated out-of-band like every other store; the file is
+  dropped in directly. `ensure()` is a pure presence check. (Reverses the earlier
+  `dicts/audio/android.db` + hardlink idea, which only made sense for a generated
+  store.)
 
 ## Schema (android.db — read-only at runtime)
 
@@ -56,18 +60,17 @@ ignored. The runtime never writes to this DB.
 
 ## Components
 
-### `audio/build.py` — locate & place (no transcode)
+### `audio/build.py` — presence check only
 
 Delete `locate_addon`, the `entries`/`clips` transcode `build()`, and the add-on
 schema. `ensure(db_path=None) -> str`:
 
 - `var/audio.sqlite` exists → `"present"`.
-- else source android.db found (`$ANKIENRICH_AUDIO_DB`, else `dicts/audio/android.db`)
-  → `os.link()` into `var/audio.sqlite` (fallback `shutil.copyfile` on cross-device
-  `OSError`) → `"built"`.
 - else → `"no-source"`.
 
-No `aqt` import; `config.LOCAL_AUDIO_ADDON_ID` removed.
+No `aqt` import, no copy/link logic; `config.LOCAL_AUDIO_ADDON_ID` removed. The
+store is placed at `var/audio.sqlite` by hand (locally) / by `deploy/push.sh`
+(server) — there is nothing to build. `ensure()` never returns `"built"`.
 
 ### `audio/enrich.py` — Hoshi-port lookup
 
@@ -138,16 +141,35 @@ and ranking changed.
   across sources; `SOURCE_PRIORITY` ordering incl. daijisen and the new sources;
   unsupported-extension filtering; reading-blank path; `read_clip` from `android`;
   no-hit → None. Delete all re-pitch and `lookup_dict` tests.
-- Rewrite `tests/test_audio_build.py`: `ensure()` present / hardlink-from-source /
-  no-source paths.
+- Rewrite `tests/test_audio_build.py`: `ensure()` present / no-source paths only
+  (no transcode, no source-artifact fixtures).
 - `tests/test_pipeline.py`: update the audio stub to the new `ensure`/`run_backfill`
   surface (no repitch).
 - TDD via the writing-plans step.
 
+## Deploy
+
+`deploy/push.sh` **already** rsyncs `var/audio.sqlite` (preflight at L24–26, push at
+L47–52), so the mechanism needs no change — the file just got bigger. Work is
+doc/comment refresh only:
+
+- `deploy/push.sh` L46–52: drop the stale "~2 GB" aside; note the store is now
+  ~6.2 GB so the *first* push is a large one-time transfer (rsync delta keeps reruns
+  cheap).
+- `deploy/README.md`: "~1.4 GB of prebuilt sqlite" → updated total; rewrite the
+  term-audio provenance paragraph (L37–41) — it ships as the android.db artifact, no
+  add-on, no build step; preflight still requires `var/audio.sqlite`.
+
 ## Docs
 
-Update `CLAUDE.md`, `AGENTS.md`, `README.md`: term-audio source is the android.db
-artifact (`dicts/audio/android.db`), not the add-on; re-pitch pass removed.
+Update `CLAUDE.md`, `AGENTS.md`, `README.md`: term-audio source is the prebuilt
+android.db artifact placed at `var/audio.sqlite`, not built from the add-on; re-pitch
+pass removed.
+
+## Migration note
+
+The previous add-on-built store is preserved at `var/audio.sqlite.addon-bak`
+(gitignored) for A/B comparison; delete once the migration is verified.
 
 ## Out of scope (YAGNI)
 
