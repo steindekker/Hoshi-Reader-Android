@@ -1,18 +1,22 @@
 ## About this fork
 
-This is a personal fork of [Hoshi Reader Android](https://github.com/HuangAntimony/Hoshi-Reader-Android) that tracks upstream closely while adding a few mining-focused extras.
+A personal fork of [Hoshi Reader Android](https://github.com/HuangAntimony/Hoshi-Reader-Android). It tracks upstream closely and adds a couple of Anki mining extras.
 
-The main addition is a separate card-creation button that lets you pick a [Massif](https://massif.la) example sentence when adding an Anki card.
+It adds a **Mine with options** button next to the usual one-tap card button. Before the card is added, you pick its sentence and picture.
 
-<p align="center">
-  <img src="docs/images/readme/example-sentence-picker.jpg" alt="Example sentence picker showing Massif example sentences for 例文" width="300">
-</p>
-
-The same flow then searches Bing for example images of the term, so you can pick one for the card's picture field (the default is no image).
+**Pick a sentence** from [Massif](https://massif.la) examples:
 
 <p align="center">
-  <img src="docs/images/readme/mine-with-options-image-picker.jpg" alt="Web image picker showing Bing image results for 勉強" width="300">
+  <img src="docs/images/readme/example-sentence-picker.jpg" alt="Example sentence picker showing Massif examples for 自転車" width="300">
 </p>
+
+**Pick a picture** — the book cover (the default) or an image from Bing:
+
+<p align="center">
+  <img src="docs/images/readme/mine-with-options-image-picker.jpg" alt="Image picker with the book cover first and Bing results for 自転車" width="300">
+</p>
+
+<p align="center"><sub><i>The book cover is the default; here a Bing image is picked instead.</i></sub></p>
 
 <hr>
 
