@@ -22,9 +22,10 @@ class UpdateSettingsRepositoryTest {
     val tempFolder = TemporaryFolder()
 
     @Test
-    fun emitsAutoCheckEnabledByDefault() = runBlocking {
+    fun emitsAutoCheckDisabledByDefault() = runBlocking {
+        // Personal fork default: upstream auto-update checks are off until the user opts in.
         repository().use { repository ->
-            assertTrue(repository.settings.first().autoCheckUpdates)
+            assertFalse(repository.settings.first().autoCheckUpdates)
         }
     }
 
