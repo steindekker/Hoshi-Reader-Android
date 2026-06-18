@@ -597,7 +597,7 @@
     <string name="sasayaki_no_file_selected">No file selected</string>
     <string name="sasayaki_search_window">Search Window</string>
     <string name="sasayaki_matching">Matching...</string>
-    <string name="mine_with_options_title">Add to Anki</string>
+    <string name="mine_with_options_title">@string/dictionary_add_to_anki</string>
     <string name="mine_with_options_sentence_section">Sentence</string>
     <string name="mine_with_options_loading">Loading examples...</string>
     <string name="mine_with_options_add">Add</string>

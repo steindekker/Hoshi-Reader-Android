@@ -54,11 +54,11 @@ android {
     }
 
     defaultConfig {
-        applicationId = "moe.antimony.hoshi"
+        applicationId = "nl.steindekker.hoshi"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10203
-        versionName = "1.2.3"
+        versionCode = 10300
+        versionName = "1.3.0"
         releaseVersionCode?.let { versionCode = it }
         releaseVersionName?.let { versionName = it }
 
@@ -84,7 +84,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
-            manifestPlaceholders["appLabel"] = "Hoshi Debug"
+            manifestPlaceholders["appLabel"] = "Hoshi (fork) Debug"
             ndk {
                 abiFilters += listOf("arm64-v8a", "x86_64")
             }
@@ -92,7 +92,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            manifestPlaceholders["appLabel"] = "Hoshi Reader"
+            manifestPlaceholders["appLabel"] = "Hoshi (fork)"
             ndk {
                 abiFilters += listOf("arm64-v8a")
             }
