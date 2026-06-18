@@ -1,3 +1,15 @@
+## About this fork
+
+This is a personal fork of [Hoshi Reader Android](https://github.com/HuangAntimony/Hoshi-Reader-Android) that tracks upstream closely while adding a few mining-focused extras.
+
+The main addition is a separate card-creation button that lets you pick a [Massif](https://massif.la) example sentence when adding an Anki card.
+
+<p align="center">
+  <img src="docs/images/readme/example-sentence-picker.jpg" alt="Example sentence picker showing Massif example sentences for 例文" width="300">
+</p>
+
+<hr>
+
 <div align="center">
 
 # Hoshi Reader Android

@@ -595,4 +595,8 @@
     <string name="sasayaki_no_file_selected">未选择文件</string>
     <string name="sasayaki_search_window">搜索窗口</string>
     <string name="sasayaki_matching">正在匹配...</string>
+    <string name="mine_with_options_title">按选项制卡</string>
+    <string name="mine_with_options_sentence_section">句子</string>
+    <string name="mine_with_options_loading">正在加载例句...</string>
+    <string name="mine_with_options_add">添加</string>
 </resources>
