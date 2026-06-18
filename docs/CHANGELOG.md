@@ -72,6 +72,7 @@ Historical release notes before v1.1.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 ### Added
 
 - Reader & dictionary "mine with options": a per-entry `＋…` button (next to the instant `＋`) to pick a Massif example sentence before adding an Anki card — available in the Dictionary tab, the in-book reader, and process-text lookup. The instant `＋` is unchanged.
+- "Mine with options" gains a second step: a Bing image search for the term with a thumbnail grid to pick an example image for the card's Picture field (`{web-image}` marker). The default is no image; the instant `＋` is unchanged. Existing setups can point Picture to `{web-image}` in Settings → Anki field mapping.
 
 ## [v1.2.1] - 2026-06-18
 

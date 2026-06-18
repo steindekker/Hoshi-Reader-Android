@@ -8,6 +8,12 @@ The main addition is a separate card-creation button that lets you pick a [Massi
   <img src="docs/images/readme/example-sentence-picker.jpg" alt="Example sentence picker showing Massif example sentences for 例文" width="300">
 </p>
 
+The same flow then searches Bing for example images of the term, so you can pick one for the card's picture field (the default is no image).
+
+<p align="center">
+  <img src="docs/images/readme/mine-with-options-image-picker.jpg" alt="Web image picker showing Bing image results for 勉強" width="300">
+</p>
+
 <hr>
 
 <div align="center">
