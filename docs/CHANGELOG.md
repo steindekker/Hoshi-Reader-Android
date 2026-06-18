@@ -67,6 +67,12 @@ Historical release notes before v1.1.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 - Keep continuous Reader scrolling from queuing expensive progress calculations that delay progress updates and lookup taps.
 - Keep popup nested lookup taps working when popup scale and custom zoom CSS are both enabled.
 
+## [v1.3.0] - 2026-06-18
+
+### Added
+
+- Reader & dictionary "mine with options": a per-entry `＋…` button (next to the instant `＋`) to pick a Massif example sentence before adding an Anki card — available in the Dictionary tab, the in-book reader, and process-text lookup. The instant `＋` is unchanged.
+
 ## [v1.2.1] - 2026-06-18
 
 ### Added
