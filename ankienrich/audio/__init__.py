@@ -1,15 +1,13 @@
-"""Term-audio enrichment package. Runtime lives in `enrich`; the self-contained
-store is built by `build` and opened by `index`."""
+"""Term-audio enrichment package. Runtime lives in `enrich`; the prebuilt store is
+located by `build` and opened by `index`."""
 from .enrich import (
-    DICT_SOURCES, FILL_ORDER, FORVO_SPEAKER, SOURCE_LABELS, Pick,
-    lookup, lookup_dict, read_clip,
+    SOURCE_PRIORITY, SUPPORTED_EXT, Pick,
+    lookup, read_clip, media_name,
     plan_backfill, run_backfill, select_targets,
-    plan_repitch, run_repitch, select_repitch_targets,
 )
 
 __all__ = [
-    "DICT_SOURCES", "FILL_ORDER", "FORVO_SPEAKER", "SOURCE_LABELS", "Pick",
-    "lookup", "lookup_dict", "read_clip",
+    "SOURCE_PRIORITY", "SUPPORTED_EXT", "Pick",
+    "lookup", "read_clip", "media_name",
     "plan_backfill", "run_backfill", "select_targets",
-    "plan_repitch", "run_repitch", "select_repitch_targets",
 ]
