@@ -1,17 +1,17 @@
-"""Term-audio backfill from the self-contained var/audio.sqlite store.
+"""Term-audio backfill from the prebuilt android.db store (var/audio.sqlite).
 
-Fills empty `Term Audio` on in-scope Kinomoto notes. Lookup chain:
+The store is the local-audio-yomichan / AnkiConnect-Android packaged export:
+    entries(id, expression, reading, source, speaker, display, file)  -- lookup index
+    android(id, file, source, data BLOB)                              -- clip bytes
+all clips .mp3, blobs embedded. We open it read-only.
 
-    nhk16 → shinmeikai8 → forvo[strawberrybrown] → jpod   (stop at first hit)
+`lookup` is a direct port of Hoshi Reader's LocalAudioResolver.resolve: gather every
+row matching the term or the (kata->hira) reading, drop unsupported audio, then rank
+reading-matches first, then by source priority, then source name. (We add one final
+tiebreak — exact-expression — so homograph collisions in the same source resolve to
+the right word; Hoshi leaves that to DB order.)
 
-nhk16/shinmeikai8/jpod match on exact (term, reading) so homographs get the right
-accent; forvo is term-only and only fires when both dictionaries miss.
-
-No `aqt` imports and no add-on coupling — the connection is to OUR audio.sqlite
-(built by audio/build.py), and clip bytes are embedded blobs, so this is headless
-and unit-testable. audio.sqlite schema:
-    entries(expression, reading, source, speaker, file)   -- lookup index
-    clips(source, file, data BLOB, PRIMARY KEY(source, file))  -- bytes once per clip
+Fills empty `Term Audio` on in-scope Kinomoto notes. No `aqt`, no add-on coupling.
 """
 import os
 import re
@@ -22,15 +22,11 @@ import jaconv
 
 from .. import config
 
-# Reading-keyed, accent-authoritative dictionaries (tried first, in this order).
-DICT_SOURCES = ("nhk16", "shinmeikai8")
-# Term-only crowd source (tail fallback) and its preferred curated voice.
-FORVO_SPEAKER = "strawberrybrown"
-
-# Full fill order (mirrors lookup() below) + display labels, for the sources legend.
-FILL_ORDER = ("nhk16", "shinmeikai8", "forvo", "jpod")
-SOURCE_LABELS = {"nhk16": "NHK", "shinmeikai8": "Shinmeikai",
-                 "forvo": "Forvo", "jpod": "JPod"}
+# Source preference, highest first (Hoshi Reader's BuiltInPriority). Sources absent
+# from this list sort last, then alphabetically.
+SOURCE_PRIORITY = ["nhk16", "daijisen", "shinmeikai8", "jpod", "jpod_alternate",
+                   "taas", "ozk5", "forvo", "forvo_ext", "forvo_ext2"]
+SUPPORTED_EXT = {"mp3", "opus", "ogg"}
 
 _TAG = re.compile(r"<[^>]+>")
 _SOUND = re.compile(r"\[sound:[^\]]+\]")
@@ -44,75 +40,78 @@ def _to_hira(s: str) -> str:
     return jaconv.kata2hira(s)
 
 
+def _ext(file: str) -> str:
+    return file.rsplit(".", 1)[-1].lower() if "." in file else ""
+
+
+def _source_rank(source: str) -> int:
+    try:
+        return SOURCE_PRIORITY.index(source)
+    except ValueError:
+        return len(SOURCE_PRIORITY)
+
+
 @dataclass
 class Pick:
-    """A chosen recording. `file` is the source-relative filename (the key into
-    `clips`, and—via `media_name`—the media file basename)."""
+    """A chosen recording. `file` is the source-relative filename (the key into the
+    `android` table, and—via `media_name`—the media file basename)."""
     source: str
     file: str
     speaker: str | None = None
 
 
-def lookup_dict(conn, term: str, reading: str) -> Pick | None:
-    """Reading-keyed accent-dictionary lookup only (nhk16 → shinmeikai8). Never
-    returns forvo/jpod. Used by the re-pitch pass. Pure read."""
+def lookup(conn, term: str, reading: str) -> Pick | None:
+    """Hoshi-port lookup against the android.db store. Returns the best Pick or None.
+
+    Gathers rows where expression == term OR reading == (kata->hira) reading, drops
+    unsupported extensions, then takes the row ranked first by:
+      1. reading-match (rows whose reading equals the query reading come first),
+      2. source priority (SOURCE_PRIORITY),
+      3. source name,
+      4. exact-expression (the row whose expression IS the term wins same-reading
+         same-source ties).
+    """
     term = _clean(term)
     reading = _to_hira(_clean(reading))
-    if not term or not reading:
+    if not term:
         return None
-    for src in DICT_SOURCES:
-        row = conn.execute(
-            "SELECT file FROM entries WHERE expression=? AND reading=? AND source=? LIMIT 1",
-            (term, reading, src),
-        ).fetchone()
-        if row:
-            return Pick(src, row[0])
-    return None
-
-
-def lookup(conn, term: str, reading: str) -> Pick | None:
-    """Run the full fill chain (nhk16 → shinmeikai8 → forvo[strawberrybrown] →
-    jpod) against audio.sqlite. Returns the best Pick or None."""
-    dict_pick = lookup_dict(conn, term, reading)
-    if dict_pick:
-        return dict_pick
-
-    t = _clean(term)
-    if not t:
+    if reading:
+        rows = conn.execute(
+            "SELECT source, expression, reading, file FROM entries "
+            "WHERE expression=? OR reading=?", (term, reading)).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT source, expression, reading, file FROM entries "
+            "WHERE expression=?", (term,)).fetchall()
+    cands = [r for r in rows if _ext(r[3]) in SUPPORTED_EXT]
+    if not cands:
         return None
 
-    rows = conn.execute(
-        "SELECT file, speaker FROM entries WHERE expression=? AND source='forvo'",
-        (t,),
-    ).fetchall()
-    if rows:
-        rows.sort(key=lambda r: r[1] != FORVO_SPEAKER)  # strawberrybrown first
-        return Pick("forvo", rows[0][0], rows[0][1])
+    def _key(r):
+        src, expr, rd, _file = r
+        return (
+            0 if (reading and rd == reading) else 1,
+            _source_rank(src),
+            src,
+            0 if expr == term else 1,
+        )
 
-    r = _to_hira(_clean(reading))
-    if r:
-        row = conn.execute(
-            "SELECT file FROM entries WHERE expression=? AND reading=? AND source='jpod' LIMIT 1",
-            (t, r),
-        ).fetchone()
-        if row:
-            return Pick("jpod", row[0])
-
-    return None
+    src, _expr, _rd, file = min(cands, key=_key)
+    return Pick(src, file)
 
 
 def read_clip(conn, pick: Pick) -> bytes | None:
-    """The picked recording's bytes from the clips table, or None if absent."""
+    """The picked recording's bytes from the `android` table, or None if absent."""
     row = conn.execute(
-        "SELECT data FROM clips WHERE source=? AND file=?", (pick.source, pick.file),
+        "SELECT data FROM android WHERE source=? AND file=? LIMIT 1",
+        (pick.source, pick.file),
     ).fetchone()
     return row[0] if row else None
 
 
 def media_name(pick: Pick) -> str:
-    """Deterministic media filename for a pick. basename can collide across clips
-    (notably forvo, keyed <speaker>/<file>); Anki's write_data renames on content
-    conflict, so each card still gets its own bytes."""
+    """Deterministic media filename for a pick. basenames can collide across clips;
+    Anki's write_data renames on content conflict, so each card still gets its bytes."""
     return f"la_{pick.source}_{os.path.basename(pick.file)}"
 
 
@@ -187,84 +186,3 @@ def run_backfill(col, conn) -> dict:
         except Exception as e:
             errors.append((nid, repr(e)))
     return {"filled": filled, "errors": errors}
-
-
-# --- re-pitch pass: replace mined audio with accent-dictionary audio ------------
-
-def _current_sound(field_val: str) -> str | None:
-    m = _SOUND.search(field_val or "")
-    return m.group(0) if m else None
-
-
-def _current_sound_file(field_val: str) -> str | None:
-    tok = _current_sound(field_val)
-    return tok[len("[sound:"):-1] if tok else None
-
-
-def select_repitch_targets(col) -> list:
-    """In-scope Kinomoto nids whose Term Audio is a non-.opus recording (our own
-    passes only ever write .opus, so those are excluded)."""
-    if col.models.by_name(config.NOTETYPE) is None:
-        return []
-    search = f'note:"{config.NOTETYPE}" -"{config.TERM_AUDIO}:"'
-    out = []
-    for nid in col.find_notes(search):
-        fn = _current_sound_file(col.get_note(nid)[config.TERM_AUDIO])
-        if fn and not fn.lower().endswith(".opus"):
-            out.append(nid)
-    return out
-
-
-def plan_repitch(col, conn) -> dict:
-    """Read-only. For every non-opus target, resolve a dictionary Pick.
-    Returns {'targets', 'replaceable', 'no_dict', 'by_source', 'samples', 'picks'}.
-    """
-    by_source = Counter()
-    no_dict = 0
-    samples = []
-    picks = {}
-    for nid in select_repitch_targets(col):
-        note = col.get_note(nid)
-        pick = lookup_dict(conn, note[config.TERM], note[config.READING])
-        if pick is None:
-            no_dict += 1
-            continue
-        if read_clip(conn, pick) is None:
-            continue
-        picks[nid] = pick
-        by_source[pick.source] += 1
-        if len(samples) < config.SAMPLE_N * 3:
-            samples.append((_clean(note[config.TERM]), _clean(note[config.READING]),
-                            _current_sound_file(note[config.TERM_AUDIO]), pick.source))
-    return {
-        "targets": len(picks) + no_dict,
-        "replaceable": len(picks),
-        "no_dict": no_dict,
-        "by_source": by_source,
-        "samples": samples,
-        "picks": picks,
-    }
-
-
-def run_repitch(col, conn) -> dict:
-    """Replace each target's Term Audio with its dictionary recording. Caller
-    backs up first. Non-destructive (old media kept). Per-card error isolation.
-    Returns {'replaced': {src: n}, 'errors': [(nid, repr)]}.
-    """
-    plan = plan_repitch(col, conn)
-    replaced = Counter()
-    errors = []
-    for nid, pick in plan["picks"].items():
-        try:
-            note = col.get_note(nid)
-            data = read_clip(conn, pick)
-            fname = col.media.write_data(media_name(pick), data)
-            newval = f"[sound:{fname}]"
-            if (note[config.TERM_AUDIO] or "").strip() == newval:
-                continue  # already this exact recording
-            note[config.TERM_AUDIO] = newval
-            col.update_note(note)
-            replaced[pick.source] += 1
-        except Exception as e:
-            errors.append((nid, repr(e)))
-    return {"replaced": replaced, "errors": errors}

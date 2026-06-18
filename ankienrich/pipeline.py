@@ -20,19 +20,15 @@ class PipelineError(Exception):
 def _step_audio(col, apply: bool) -> dict:
     state = audio_build.ensure()
     if state == "no-source":
-        return {"skipped": "audio.sqlite missing and no local-audio-yomichan source to build it"}
+        return {"skipped": "audio.sqlite missing — place the android.db store at var/audio.sqlite"}
     conn = audio_index.open_index()
     try:
         if apply:
             res = audio.run_backfill(col, conn)
-            rep = audio.run_repitch(col, conn)
-            return {"filled": dict(res["filled"]), "errors": len(res.get("errors", [])),
-                    "upgraded": dict(rep["replaced"]), "upgrade_errors": len(rep.get("errors", []))}
+            return {"filled": dict(res["filled"]), "errors": len(res.get("errors", []))}
         plan = audio.plan_backfill(col, conn)
-        rplan = audio.plan_repitch(col, conn)
         return {"will_fill": plan["filled"], "by_source": dict(plan["by_source"]),
-                "none": plan["nothing"], "missing_file": plan["missing_file"],
-                "will_upgrade": rplan["replaceable"], "no_dict": rplan["no_dict"]}
+                "none": plan["nothing"], "missing_file": plan["missing_file"]}
     finally:
         conn.close()
 

@@ -83,11 +83,11 @@ def format_report(res, *, apply, pull_action, push_action=None, error=None) -> s
     if "skipped" in a:
         lines.append(_skipped("audio", a["skipped"]))
     elif apply:
-        filled, upgraded = sum(a["filled"].values()), sum(a["upgraded"].values())
-        lines.append(_line("audio", filled, _detail((upgraded, "upgraded"))))
+        filled = sum(a["filled"].values())
+        lines.append(_line("audio", filled, _detail((a["errors"], "errors"))))
     else:
         lines.append(_line("audio", a["will_fill"],
-                           _detail((a["will_upgrade"], "to upgrade"), (a["none"], "no match"))))
+                           _detail((a["none"], "no match"))))
 
     p = s["pitch"]
     lines.append(_line("pitch", p["filled"],

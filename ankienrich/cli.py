@@ -65,11 +65,11 @@ def _render(res: dict, apply: bool) -> None:
     if "skipped" in a:
         print(_row("audio", _dim("    —"), f"skipped: {a['skipped']}"))
     elif apply:
-        filled, upgraded = sum(a["filled"].values()), sum(a["upgraded"].values())
-        print(_row("audio", _num(filled), f"{upgraded} upgraded"))
+        filled = sum(a["filled"].values())
+        print(_row("audio", _num(filled), f"{a['errors']} errors" if a["errors"] else ""))
     else:
         none = _red(f"{a['none']} no match") if a["none"] else _dim(f"{a['none']} no match")
-        print(_row("audio", _num(a["will_fill"]), f"{a['will_upgrade']} to upgrade · ") + none)
+        print(_row("audio", _num(a["will_fill"]), none))
     p = s["pitch"]
     print(_row("pitch", _num(p["filled"]),
                f"{p['not_found']} not in dict · {p['skipped']} no reading"))

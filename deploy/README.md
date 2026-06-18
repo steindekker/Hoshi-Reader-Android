@@ -1,7 +1,7 @@
 # Deploying anki-enrich to a Hetzner box
 
 The box runs the Telegram `bot` (on-demand `/run`) and a nightly systemd timer.
-It needs only the code + ~1.4 GB of prebuilt sqlite — never the 4.2 GB `dicts/`
+It needs only the code + ~6.5 GB of prebuilt sqlite (the term-audio store alone is ~6.2 GB) — never the 4.2 GB `dicts/`
 corpus. The collection bootstraps itself from AnkiWeb on first run.
 
 ## Prerequisites
@@ -24,7 +24,8 @@ The script is **rerunnable** — run it again any time the code changes. Each ru
 2. rsyncs the code (mirrored with `--delete`, but the box's `data/` is excluded
    so the collection is never touched).
 3. Pushes `defs.sqlite` / `examples.sqlite` / `audio.sqlite` (rsync delta → near-free
-   if unchanged; `audio.sqlite` is ~2 GB but rarely changes, so reruns stay cheap).
+   if unchanged; `audio.sqlite` is ~6.2 GB; the first push is a large one-time
+   transfer, reruns stay cheap via rsync delta).
 4. **Seeds** `collection.anki2` + media only on the *first* deploy; on later runs
    it leaves the box's live, AnkiWeb-synced collection alone.
 5. Writes `/opt/anki-enrich/.env` (mode 600) from your local creds — secrets are
@@ -34,11 +35,11 @@ The script is **rerunnable** — run it again any time the code changes. Each ru
 
 First deploy without a seeded collection still works: the first enrichment run
 opens a fresh `data/collection.anki2` and full-downloads from AnkiWeb (~900 MB).
-Term audio ships as the prebuilt `audio.sqlite` artifact (built locally from the
-local-audio-yomichan add-on, like `defs.sqlite`/`examples.sqlite` are built from
-`dicts/`); the add-on is only needed on the build machine. `push.sh`'s preflight
-requires the built artifact, so the box always ships with audio — the runtime would
-self-skip a missing store rather than fail, but the deploy never leaves it out.
+Term audio ships as the prebuilt `audio.sqlite` artifact — the android.db packaged
+export (local-audio-yomichan / AnkiConnect-Android format), placed at
+`var/audio.sqlite` directly with no build step. `push.sh`'s preflight requires the
+file, so the box always ships with audio; the runtime self-skips a missing store
+rather than failing.
 
 ## Refresh dictionaries
 Rebuild the dicts locally, then just rerun the deploy — it re-pushes the sqlite

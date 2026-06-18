@@ -53,9 +53,6 @@ NO_EXAMPLE_TAG = "ankienrich::no-example"
 # split on this exact string to refresh the block in place — keep it singular.
 DICT_STYLES_MARKER = "/* ---- AnkiAlign dict styles (generated) ---- */"
 
-# local-audio-yomichan add-on (AnkiWeb code) — source of term-audio backfill.
-LOCAL_AUDIO_ADDON_ID = "1045800357"
-
 # How many before/after samples to show in dry-run output.
 SAMPLE_N = 5
 
