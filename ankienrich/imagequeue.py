@@ -60,16 +60,19 @@ def candidates(col) -> list[Candidate]:
     """Imageless cards that want an image, oldest first (nid == creation timestamp).
 
     Selects structurally rather than waiting for a tag: an imageless card is offered
-    unless it's a user-skip (no-image) or part of the already-processed back-catalog
-    (enriched but never flagged). A card added from another app today is imageless
-    and not-yet-enriched, so it shows up immediately — no nightly pass required. The
-    needs-image flag is a durability backstop: it keeps a card in the queue after the
-    nightly defs pass enriches it (and stamps the flag), so skipping a day is safe.
+    unless it's a user-skip (no-image) or part of the already-processed back-catalog.
+    "Processed" means the defs pass has terminated on it — either with a definition
+    (enriched) or without one (no-definition, e.g. proper nouns / slang); both are old
+    cards, not fresh adds. A card added from another app today carries neither tag yet,
+    so it shows up immediately — no nightly pass required. The needs-image flag is a
+    durability backstop: it keeps a card in the queue after the nightly defs pass
+    enriches it (and stamps the flag), so skipping a day is safe.
     Context is a short plain-text snippet from Sentence, falling back to Meaning."""
     flds = _fields(col)
     q = (f'{collection.notetype_search()} "{config.IMAGE}:" '
          f'-tag:{config.NO_IMAGE_TAG} '
-         f'(-tag:{config.ENRICHED_TAG} OR tag:{config.NEEDS_IMAGE_TAG})')
+         f'((-tag:{config.ENRICHED_TAG} -tag:{config.NO_DEF_TAG}) '
+         f'OR tag:{config.NEEDS_IMAGE_TAG})')
     out = []
     for nid in sorted(col.find_notes(q)):
         note = col.get_note(nid)

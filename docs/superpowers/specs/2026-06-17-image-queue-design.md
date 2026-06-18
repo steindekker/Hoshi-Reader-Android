@@ -56,7 +56,7 @@ Out:
 | Where does image-picking live? | **Bot-only on-demand queue.** Not a nightly pass; picking requires the user in the loop. |
 | Trigger | A dedicated persistent **`🖼 画像`** button beside `▶️ 実行`. Tap → pull → build queue → walk one card at a time. |
 | Which cards are offered? | **Newly-added imageless cards**, defined structurally so a card added from another app shows up the *same day* — no nightly pass required. |
-| How is "newly-added" encoded? | **Structural selector, not a tag wait.** The queue offers imageless cards that are *not* `no-image` and *not* part of the processed back-catalog: `Image:` empty `-tag:no-image (-tag:enriched OR tag:needs-image)`. A fresh external add is imageless + not-yet-enriched → shown immediately. The bulk-cleaned back-catalog is `enriched` (and unflagged) → excluded. `needs-image` is a **durability backstop**: the defs pass still flags first-enriched imageless cards (`defs/enrich.py` `first_time`), so a card you *skip today* stays in the queue after tonight's pass enriches it (which would otherwise drop it from the not-`enriched` clause). |
+| How is "newly-added" encoded? | **Structural selector, not a tag wait.** The queue offers imageless cards that are *not* `no-image` and *not* processed back-catalog: `Image:` empty `-tag:no-image ((-tag:enriched -tag:no-definition) OR tag:needs-image)`. "Processed" = the defs pass terminated on it, **either** with a definition (`enriched`) **or** without one (`no-definition` — nohit proper nouns/slang; these old cards never get `enriched`, so they must be excluded too). A fresh external add carries neither tag → shown immediately. `needs-image` is a **durability backstop**: the defs pass flags first-enriched imageless cards (`defs/enrich.py` `first_time`), so a card you *skip today* stays queued after tonight's pass enriches it. (Caveat: a *nohit* new card has no backstop — it's same-day-only, since `flag_new` only fires on a dict hit.) |
 | Skip behaviour | Skipping adds `ankienrich::no-image` (permanent exclusion), mirroring `NO_EXAMPLE_TAG`. Re-imaging later means untagging by hand. |
 | Image search term | The note's `Term` field (same as mining). |
 | Sync timing | Per card: `runlock` → pull → write `Image` (or swap tags) → push. Same pattern and rationale as `mine.commit`. |
@@ -76,7 +76,7 @@ Out:
     `bot.py` stays thin (mirrors `mine.commit` owning its own open/pull/close). Raises
     `runlock.Busy` if a run holds the lock.
   - `candidates(col) -> list[Candidate]` — notes matching the structural selector
-    `{notetype} "Image:" -tag:no-image (-tag:enriched OR tag:needs-image)`, ordered
+    `{notetype} "Image:" -tag:no-image ((-tag:enriched -tag:no-definition) OR tag:needs-image)`, ordered
     by nid (creation order). `Candidate` (frozen dataclass): `nid`, `term`, `reading`,
     `context` (a short hint: the `Sentence` field JRP-surfaced via `markup.jrp_surface`,
     falling back to plain `Meaning`). Takes an already-open `col`; used by `open_queue`
@@ -171,10 +171,12 @@ status and the bot just advances with a note.
   two cards sharing a `Term`, or a future re-image, never collide on one media file
   (unlike mining's `mined_{term}.{ext}`, where each add is a fresh unique term).
 
-Back-catalog: every card carries `ankienrich::enriched` already and is unflagged, so
-the selector's `(-tag:enriched OR tag:needs-image)` clause excludes it. Measured on
-the live collection: 5,136 imageless cards are back-catalog (excluded) vs 19 new/
-external imageless cards (offered) — clean structural separation.
+Back-catalog: a processed card carries `ankienrich::enriched` (hit) or
+`ankienrich::no-definition` (nohit), so the `(-tag:enriched -tag:no-definition …)`
+clause excludes it. Measured on the live collection: of the 5,155 imageless cards,
+5,136 are `enriched` and the remaining 19 are `no-definition` (old nohit cards like
+めった from 2021) — **all** excluded, leaving 0 false positives. Genuinely new
+external adds carry neither defs-pass tag and appear immediately.
 
 ## Config additions
 

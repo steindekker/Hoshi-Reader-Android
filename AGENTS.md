@@ -56,8 +56,9 @@ reading picker for multi-reading words is ordered by frequency. 0-hit words are 
 
 Tap **🖼 画像** to walk newly-added imageless cards and fill each `Image` field with
 a picked Bing image. The queue selects structurally — imageless, not `no-image`, and
-not the processed back-catalog (`-tag:enriched OR tag:needs-image`) — so a card added
-from another app shows up the **same day**, no nightly pass needed. Skipping tags
+not the processed back-catalog (`(-tag:enriched -tag:no-definition) OR tag:needs-image`;
+both defs-pass outcomes — hit and nohit — count as processed) — so a card added from
+another app shows up the **same day**, no nightly pass needed. Skipping tags
 `ankienrich::no-image` (permanent); the defs pass still flags first-enriched imageless
 cards `ankienrich::needs-image` as a durability backstop. Same per-card runlock'd
 pull→write→push as mining. See `ankienrich/imagequeue.py`.

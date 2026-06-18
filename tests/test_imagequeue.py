@@ -79,7 +79,8 @@ def test_candidates_union_selector_shows_new_and_flagged(kcol):
 
 def test_candidates_excludes_backcatalog_imaged_and_skipped(kcol):
     keep = _add(kcol, "迷惑", "めいわく")                                  # new -> shown
-    _add(kcol, "箸", "はし", tags=[config.ENRICHED_TAG])                  # back-catalog -> excluded
+    _add(kcol, "箸", "はし", tags=[config.ENRICHED_TAG])                  # enriched back-catalog -> excluded
+    _add(kcol, "めった", "めった", tags=[config.NO_DEF_TAG])             # nohit back-catalog -> excluded
     _add(kcol, "本", "ほん", image='<img src="x.jpg">')                   # already imaged -> excluded
     _add(kcol, "皿", "さら", tags=[config.NO_IMAGE_TAG])                  # user-skipped -> excluded
     out = imagequeue.candidates(kcol)
