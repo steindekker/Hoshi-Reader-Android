@@ -16,6 +16,7 @@ Historical release notes before v1.1.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 
 - Speed up opening Reader chapters with large Sasayaki subtitle matches.
 - Keep vertical reader lookup highlights from bleeding into adjacent ruby-aware columns.
+- Restore Japanese deinflected lookup filtering for entries that lack matching part-of-speech metadata.
 
 ## [v1.2.0] - 2026-06-15
 
