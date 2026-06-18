@@ -299,6 +299,7 @@
     <string name="reader_visual_novel_sentences_per_screen">每屏句数</string>
     <string name="reader_visual_novel_preserve_dialogue">对话保持同屏</string>
     <string name="reader_visual_novel_click_advance">点击空白处前进</string>
+    <string name="reader_visual_novel_merge_cross_screen_sasayaki_cues">字幕文本同屏</string>
     <string name="reader_appearance_chapter_swipe_distance">章节滑动距离</string>
     <string name="reader_appearance_horizontal_padding">水平边距</string>
     <string name="reader_appearance_vertical_padding">垂直边距</string>

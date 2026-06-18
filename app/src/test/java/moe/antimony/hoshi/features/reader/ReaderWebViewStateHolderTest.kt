@@ -507,6 +507,10 @@ class ReaderWebViewStateHolderTest {
             visualNovel.readerContentReloadKey() ==
                 visualNovel.copy(visualNovelRevealSpeed = 0).readerContentReloadKey(),
         )
+        assertFalse(
+            visualNovel.readerContentReloadKey() ==
+                visualNovel.copy(visualNovelMergeCrossScreenSasayakiCues = true).readerContentReloadKey(),
+        )
     }
 
     @Test

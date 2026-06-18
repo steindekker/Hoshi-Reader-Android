@@ -100,6 +100,11 @@ internal object ReaderPaginationScripts {
                 settings.visualNovelSentencesPerScreen.coerceIn(1, 12).toString(),
             )
             .replace("__HOSHI_VISUAL_NOVEL_PRESERVE_DIALOGUE__", settings.visualNovelPreserveDialogueBubbles.toString())
+            .replace(
+                "__HOSHI_VISUAL_NOVEL_MERGE_CROSS_SCREEN_SASAYAKI_CUES__",
+                settings.visualNovelMergeCrossScreenSasayakiCues.toString(),
+            )
+            .replace("__HOSHI_INITIAL_SASAYAKI_CUES_JSON__", sasayakiCuesJson ?: "null")
             .replace("__HOSHI_INITIAL_PROGRESS__", initialProgress.toString())
             .replace(
                 "__HOSHI_INITIAL_FRAGMENT_LITERAL__",

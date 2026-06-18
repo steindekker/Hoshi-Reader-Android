@@ -11,6 +11,8 @@ function readerSource() {
         .replaceAll('__HOSHI_VISUAL_NOVEL_SCREEN_MODE_LITERAL__', JSON.stringify('block'))
         .replaceAll('__HOSHI_VISUAL_NOVEL_SENTENCES_PER_SCREEN__', '1')
         .replaceAll('__HOSHI_VISUAL_NOVEL_PRESERVE_DIALOGUE__', 'false')
+        .replaceAll('__HOSHI_VISUAL_NOVEL_MERGE_CROSS_SCREEN_SASAYAKI_CUES__', 'false')
+        .replaceAll('__HOSHI_INITIAL_SASAYAKI_CUES_JSON__', 'null')
         .replaceAll('__HOSHI_INITIAL_PROGRESS__', '0')
         .replaceAll('__HOSHI_INITIAL_FRAGMENT_LITERAL__', 'null')
         .replaceAll('__HOSHI_INITIAL_HIGHLIGHTS_JSON__', 'null')
@@ -25,6 +27,14 @@ function configuredReaderSource(options = {}) {
         .replaceAll('__HOSHI_VISUAL_NOVEL_SCREEN_MODE_LITERAL__', JSON.stringify(options.mode ?? 'block'))
         .replaceAll('__HOSHI_VISUAL_NOVEL_SENTENCES_PER_SCREEN__', String(options.sentencesPerScreen ?? 1))
         .replaceAll('__HOSHI_VISUAL_NOVEL_PRESERVE_DIALOGUE__', String(options.preserveDialogue ?? false))
+        .replaceAll(
+            '__HOSHI_VISUAL_NOVEL_MERGE_CROSS_SCREEN_SASAYAKI_CUES__',
+            String(options.mergeCrossScreenSasayakiCues ?? false),
+        )
+        .replaceAll(
+            '__HOSHI_INITIAL_SASAYAKI_CUES_JSON__',
+            options.initialSasayakiCues === undefined ? 'null' : JSON.stringify(options.initialSasayakiCues),
+        )
         .replaceAll('__HOSHI_INITIAL_PROGRESS__', String(options.initialProgress ?? 0))
         .replaceAll('__HOSHI_INITIAL_FRAGMENT_LITERAL__', options.initialFragment === undefined ? 'null' : JSON.stringify(options.initialFragment))
         .replaceAll(
@@ -1205,6 +1215,66 @@ test('visual novel Sasayaki highlights only the visible part of a cross-screen c
     assert.equal(reader.paginate('forward'), 'scrolled');
     assert.equal(sasayakiWrappers(reader).length, 1);
     assert.equal(sasayakiWrappers(reader)[0].textContent, '三四');
+});
+
+test('visual novel Sasayaki merge setting combines block screens intersecting a cross-screen cue', async () => {
+    const cue = { id: 'cue', start: 1, length: 3 };
+    const { reader } = await initializeReader(
+        bodyWith(p('一二。'), p('三四。'), p('五。')),
+        {
+            revealSpeed: 0,
+            mergeCrossScreenSasayakiCues: true,
+            initialSasayakiCues: [cue],
+        },
+    );
+
+    assert.equal(currentScreen(reader).textContent, '一二。三四。');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '五。');
+
+    await reader.restoreProgress(0);
+    reader.highlightSasayakiCue(cue, false);
+    assert.equal(sasayakiWrappers(reader).length, 2);
+    assert.equal(sasayakiWrappers(reader).map((wrapper) => wrapper.textContent).join(''), '二。三四');
+});
+
+test('visual novel Sasayaki merge setting combines sentence screens intersecting a cross-screen cue', async () => {
+    const cue = { id: 'cue', start: 1, length: 2 };
+    const { reader } = await initializeReader(
+        bodyWith(p('一。二。三。四。')),
+        {
+            mode: 'sentences',
+            sentencesPerScreen: 1,
+            revealSpeed: 0,
+            mergeCrossScreenSasayakiCues: true,
+            initialSasayakiCues: [cue],
+        },
+    );
+
+    assert.equal(currentScreen(reader).textContent, '一。');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '二。三。');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '四。');
+});
+
+test('visual novel Sasayaki merged screens still split when text exceeds the viewport', async () => {
+    const cue = { id: 'cue', start: 0, length: 8 };
+    const { reader } = await initializeReader(
+        bodyWith(p('一二三四五六。'), p('七八。')),
+        {
+            revealSpeed: 0,
+            charactersPerScreen: 4,
+            mergeCrossScreenSasayakiCues: true,
+            initialSasayakiCues: [cue],
+        },
+    );
+
+    assert.equal(currentScreen(reader).textContent, '一二三四');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '五六。七');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '八。');
 });
 
 test('visual novel Sasayaki completes reveal before highlighting the active cue', async () => {

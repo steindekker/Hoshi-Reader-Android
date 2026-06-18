@@ -439,6 +439,14 @@ private fun ReaderAppearanceContent(
                             checked = settings.visualNovelClickAdvance,
                             onCheckedChange = { onSettingsChange(settings.copy(visualNovelClickAdvance = it)) },
                         )
+                        AppearanceDivider(palette)
+                        SwitchRow(
+                            label = stringResource(R.string.reader_visual_novel_merge_cross_screen_sasayaki_cues),
+                            checked = settings.visualNovelMergeCrossScreenSasayakiCues,
+                            onCheckedChange = {
+                                onSettingsChange(settings.copy(visualNovelMergeCrossScreenSasayakiCues = it))
+                            },
+                        )
                     }
                     AppearanceDivider(palette)
                     StepperRow(

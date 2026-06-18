@@ -3,6 +3,8 @@ window.hoshiReader = {
   screenMode: __HOSHI_VISUAL_NOVEL_SCREEN_MODE_LITERAL__,
   sentencesPerScreen: __HOSHI_VISUAL_NOVEL_SENTENCES_PER_SCREEN__,
   preserveDialogue: __HOSHI_VISUAL_NOVEL_PRESERVE_DIALOGUE__,
+  mergeCrossScreenSasayakiCues: __HOSHI_VISUAL_NOVEL_MERGE_CROSS_SCREEN_SASAYAKI_CUES__,
+  initialSasayakiCues: __HOSHI_INITIAL_SASAYAKI_CUES_JSON__,
   initialProgress: __HOSHI_INITIAL_PROGRESS__,
   initialFragment: __HOSHI_INITIAL_FRAGMENT_LITERAL__,
   initialHighlights: __HOSHI_INITIAL_HIGHLIGHTS_JSON__,
@@ -10,6 +12,7 @@ window.hoshiReader = {
   activeCueId: null,
   sasayakiCues: [],
   sasayakiCueMap: new Map(),
+  sasayakiCuesSignature: null,
   cueWrappers: new Map(),
   cueSourceRanges: new Map(),
   cueGeometryRanges: new Map(),
@@ -157,6 +160,7 @@ window.hoshiReader = {
       .then(() => {
         this.ensureStage();
         this.buildSourceIndexes();
+        this.setSasayakiCueData(this.initialSasayakiCues);
         this.buildScreens();
         this.renderInitialScreen();
         this.notifyRestoreComplete();
@@ -215,11 +219,14 @@ window.hoshiReader = {
   },
   buildScreens: function() {
     var mode = String(this.screenMode || '').toLowerCase();
+    var baseScreens;
     if (mode === 'sentence' || mode === 'sentences') {
-      this.screens = this.buildSentenceScreens();
+      baseScreens = this.buildSentenceScreens();
     } else {
-      this.screens = this.buildBlockScreens();
+      baseScreens = this.buildBlockScreens();
     }
+    this.baseScreens = baseScreens;
+    this.screens = this.mergeSasayakiCrossScreenScreens(baseScreens);
     if (!this.screens.length) {
       this.screens.push({
         startCharCount: 0,
@@ -232,6 +239,90 @@ window.hoshiReader = {
       });
     }
     this.screens = this.fitScreensToViewport(this.screens);
+  },
+  mergeSasayakiCrossScreenScreens: function(screens) {
+    if (!this.mergeCrossScreenSasayakiCues || !Array.isArray(screens) || screens.length < 2) return screens || [];
+    if (!Array.isArray(this.sasayakiCues) || !this.sasayakiCues.length) return screens;
+    var intervals = [];
+    for (var i = 0; i < this.sasayakiCues.length; i++) {
+      var cue = this.sasayakiCueForInput(this.sasayakiCues[i]);
+      if (!cue) continue;
+      var first = -1;
+      var last = -1;
+      for (var screenIndex = 0; screenIndex < screens.length; screenIndex++) {
+        if (!this.sasayakiCueIntersectsScreen(cue, screens[screenIndex])) continue;
+        if (first < 0) first = screenIndex;
+        last = screenIndex;
+      }
+      if (first < 0 || last <= first) continue;
+      var canMerge = true;
+      for (var mergeIndex = first; mergeIndex <= last; mergeIndex++) {
+        if (!screens[mergeIndex].splittable) {
+          canMerge = false;
+          break;
+        }
+      }
+      if (canMerge) intervals.push({ start: first, end: last });
+    }
+    if (!intervals.length) return screens;
+    intervals.sort(function(a, b) {
+      if (a.start !== b.start) return a.start - b.start;
+      return a.end - b.end;
+    });
+    var mergedIntervals = [];
+    for (var intervalIndex = 0; intervalIndex < intervals.length; intervalIndex++) {
+      var interval = intervals[intervalIndex];
+      var current = mergedIntervals[mergedIntervals.length - 1];
+      if (current && interval.start <= current.end) {
+        current.end = Math.max(current.end, interval.end);
+      } else {
+        mergedIntervals.push({ start: interval.start, end: interval.end });
+      }
+    }
+    var result = [];
+    var cursor = 0;
+    for (var mergedIndex = 0; mergedIndex < mergedIntervals.length; mergedIndex++) {
+      var merged = mergedIntervals[mergedIndex];
+      while (cursor < merged.start) {
+        result.push(screens[cursor]);
+        cursor += 1;
+      }
+      result.push(this.mergeScreenRange(screens, merged.start, merged.end));
+      cursor = merged.end + 1;
+    }
+    while (cursor < screens.length) {
+      result.push(screens[cursor]);
+      cursor += 1;
+    }
+    return result;
+  },
+  mergeScreenRange: function(screens, start, end) {
+    var parts = screens.slice(start, end + 1);
+    var ids = new Set();
+    parts.forEach(function(screen) {
+      (screen.ids || new Set()).forEach(function(id) { ids.add(id); });
+    });
+    var first = parts[0];
+    var last = parts[parts.length - 1];
+    return {
+      startCharCount: first.startCharCount,
+      endCharCount: parts.reduce(function(max, screen) {
+        return Math.max(max, screen.endCharCount);
+      }, first.endCharCount),
+      startRawCount: first.startRawCount,
+      endRawCount: parts.reduce(function(max, screen) {
+        return Math.max(max, screen.endRawCount);
+      }, last.endRawCount),
+      ids: ids,
+      splittable: true,
+      render: () => {
+        var fragment = document.createDocumentFragment();
+        parts.forEach(function(screen) {
+          fragment.appendChild(screen.render());
+        });
+        return fragment;
+      }
+    };
   },
   fitScreensToViewport: function(screens) {
     if (!screens || !screens.length || !this.stage || !this.screen) return screens || [];
@@ -1259,6 +1350,26 @@ window.hoshiReader = {
   setNativeSelectionActive: function(active) {
     this.nativeSelectionActive = !!active;
   },
+  sasayakiCueSignature: function(cues) {
+    var items = Array.isArray(cues) ? cues : [];
+    return JSON.stringify(items.map((cue) => ({
+      id: cue && cue.id ? String(cue.id) : '',
+      start: this.sasayakiCueStart(cue),
+      length: Math.max(0, Number(cue && cue.length) || 0)
+    })));
+  },
+  sasayakiCueDataChanged: function(cues) {
+    return this.sasayakiCueSignature(cues) !== this.sasayakiCuesSignature;
+  },
+  setSasayakiCueData: function(cues) {
+    this.sasayakiCues = Array.isArray(cues) ? cues : [];
+    this.sasayakiCueMap = new Map();
+    for (var i = 0; i < this.sasayakiCues.length; i++) {
+      var cue = this.sasayakiCues[i];
+      if (cue && cue.id) this.sasayakiCueMap.set(cue.id, cue);
+    }
+    this.sasayakiCuesSignature = this.sasayakiCueSignature(this.sasayakiCues);
+  },
   sasayakiCueForInput: function(cue) {
     if (!cue) return null;
     if (typeof cue === 'string') return this.sasayakiCueMap.get(cue) || null;
@@ -1486,16 +1597,30 @@ window.hoshiReader = {
     this.cueWrappers.clear();
     this.clearSasayakiOverlay();
   },
+  clearSasayakiTargets: function() {
+    this.clearSasayakiCuePresentation();
+    var self = this;
+    this.cueWrappers.forEach(function(wrappers) {
+      self.unwrap(wrappers);
+    });
+    this.cueWrappers.clear();
+    this.cueSourceRanges.clear();
+    this.cueGeometryRanges.clear();
+    this.buildNodeOffsets();
+  },
   applySasayakiCues: function(cues) {
     var activeCueId = this.activeCueId;
-    this.resetSasayakiCues();
-    this.sasayakiCues = Array.isArray(cues) ? cues : [];
-    this.sasayakiCueMap = new Map();
-    for (var i = 0; i < this.sasayakiCues.length; i++) {
-      var cue = this.sasayakiCues[i];
-      if (cue && cue.id) this.sasayakiCueMap.set(cue.id, cue);
-    }
+    var nextCues = Array.isArray(cues) ? cues : [];
+    var shouldRebuildScreens = this.mergeCrossScreenSasayakiCues && this.sasayakiCueDataChanged(nextCues);
+    var progress = shouldRebuildScreens ? this.calculateProgress() : null;
+    this.clearSasayakiTargets();
+    this.setSasayakiCueData(nextCues);
     this.activeCueId = activeCueId && this.sasayakiCueMap.has(activeCueId) ? activeCueId : null;
+    if (shouldRebuildScreens) {
+      this.buildScreens();
+      this.renderScreen(this.screenIndexForProgress(progress), true);
+      return;
+    }
     this.buildNodeOffsets();
     if (this.activeCueId) this.refreshSasayakiCuePresentation();
   },
@@ -1553,18 +1678,9 @@ window.hoshiReader = {
     }
   },
   resetSasayakiCues: function() {
-    this.clearSasayakiCuePresentation();
-    var self = this;
-    this.cueWrappers.forEach(function(wrappers) {
-      self.unwrap(wrappers);
-    });
-    this.cueWrappers.clear();
-    this.cueSourceRanges.clear();
-    this.cueGeometryRanges.clear();
-    this.sasayakiCues = [];
-    this.sasayakiCueMap = new Map();
+    this.clearSasayakiTargets();
+    this.setSasayakiCueData([]);
     this.activeCueId = null;
-    this.buildNodeOffsets();
   },
   unwrap: function(wrappers) {
     var parents = [];

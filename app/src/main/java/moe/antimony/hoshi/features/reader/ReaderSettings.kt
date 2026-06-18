@@ -49,6 +49,7 @@ data class ReaderSettings(
     val visualNovelSentencesPerScreen: Int = 1,
     val visualNovelPreserveDialogueBubbles: Boolean = false,
     val visualNovelClickAdvance: Boolean = false,
+    val visualNovelMergeCrossScreenSasayakiCues: Boolean = false,
     val enableStatistics: Boolean = false,
     val statisticsAutostartMode: StatisticsAutostartMode = StatisticsAutostartMode.Off,
     val statisticsSyncEnabled: Boolean = false,
@@ -296,6 +297,10 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
         visualNovelSentencesPerScreen = preferences.getInt("visualNovelSentencesPerScreen", 1).coerceIn(1, 12),
         visualNovelPreserveDialogueBubbles = preferences.getBoolean("visualNovelPreserveDialogueBubbles", false),
         visualNovelClickAdvance = preferences.getBoolean("visualNovelClickAdvance", false),
+        visualNovelMergeCrossScreenSasayakiCues = preferences.getBoolean(
+            "visualNovelMergeCrossScreenSasayakiCues",
+            false,
+        ),
         enableStatistics = preferences.getBoolean("enableStatistics", false),
         statisticsAutostartMode = StatisticsAutostartMode.fromRawValue(
             preferences.getString("statisticsAutostartMode", null),
@@ -360,6 +365,7 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
             .putInt("visualNovelSentencesPerScreen", settings.visualNovelSentencesPerScreen.coerceIn(1, 12))
             .putBoolean("visualNovelPreserveDialogueBubbles", settings.visualNovelPreserveDialogueBubbles)
             .putBoolean("visualNovelClickAdvance", settings.visualNovelClickAdvance)
+            .putBoolean("visualNovelMergeCrossScreenSasayakiCues", settings.visualNovelMergeCrossScreenSasayakiCues)
             .putBoolean("enableStatistics", settings.enableStatistics)
             .putString("statisticsAutostartMode", settings.statisticsAutostartMode.rawValue)
             .putBoolean("statisticsEnableSync", settings.statisticsSyncEnabled)
@@ -500,6 +506,7 @@ class ReaderSettingsRepository(
             visualNovelSentencesPerScreen = (this[KEY_VISUAL_NOVEL_SENTENCES_PER_SCREEN] ?: 1).coerceIn(1, 12),
             visualNovelPreserveDialogueBubbles = this[KEY_VISUAL_NOVEL_PRESERVE_DIALOGUE_BUBBLES] ?: false,
             visualNovelClickAdvance = this[KEY_VISUAL_NOVEL_CLICK_ADVANCE] ?: false,
+            visualNovelMergeCrossScreenSasayakiCues = this[KEY_VISUAL_NOVEL_MERGE_CROSS_SCREEN_SASAYAKI_CUES] ?: false,
             enableStatistics = this[KEY_ENABLE_STATISTICS] ?: false,
             statisticsAutostartMode = StatisticsAutostartMode.fromRawValue(this[KEY_STATISTICS_AUTOSTART_MODE]),
             statisticsSyncEnabled = this[KEY_STATISTICS_SYNC_ENABLED] ?: false,
@@ -561,6 +568,7 @@ class ReaderSettingsRepository(
         this[KEY_VISUAL_NOVEL_SENTENCES_PER_SCREEN] = settings.visualNovelSentencesPerScreen.coerceIn(1, 12)
         this[KEY_VISUAL_NOVEL_PRESERVE_DIALOGUE_BUBBLES] = settings.visualNovelPreserveDialogueBubbles
         this[KEY_VISUAL_NOVEL_CLICK_ADVANCE] = settings.visualNovelClickAdvance
+        this[KEY_VISUAL_NOVEL_MERGE_CROSS_SCREEN_SASAYAKI_CUES] = settings.visualNovelMergeCrossScreenSasayakiCues
         this[KEY_ENABLE_STATISTICS] = settings.enableStatistics
         this[KEY_STATISTICS_AUTOSTART_MODE] = settings.statisticsAutostartMode.rawValue
         this[KEY_STATISTICS_SYNC_ENABLED] = settings.statisticsSyncEnabled
@@ -669,6 +677,8 @@ class ReaderSettingsRepository(
         private val KEY_VISUAL_NOVEL_PRESERVE_DIALOGUE_BUBBLES =
             booleanPreferencesKey("visualNovelPreserveDialogueBubbles")
         private val KEY_VISUAL_NOVEL_CLICK_ADVANCE = booleanPreferencesKey("visualNovelClickAdvance")
+        private val KEY_VISUAL_NOVEL_MERGE_CROSS_SCREEN_SASAYAKI_CUES =
+            booleanPreferencesKey("visualNovelMergeCrossScreenSasayakiCues")
         private val KEY_ENABLE_STATISTICS = booleanPreferencesKey("enableStatistics")
         private val KEY_STATISTICS_AUTOSTART_MODE = stringPreferencesKey("statisticsAutostartMode")
         private val KEY_STATISTICS_SYNC_ENABLED = booleanPreferencesKey("statisticsEnableSync")
@@ -738,6 +748,7 @@ private data class ProfileReaderAppearanceSettings(
     val visualNovelSentencesPerScreen: Int = 1,
     val visualNovelPreserveDialogueBubbles: Boolean = false,
     val visualNovelClickAdvance: Boolean = false,
+    val visualNovelMergeCrossScreenSasayakiCues: Boolean = false,
     val showStatisticsToggle: Boolean = false,
     val showReadingSpeed: Boolean = false,
     val showReadingTime: Boolean = false,
@@ -790,6 +801,7 @@ private fun ReaderSettings.toProfileAppearanceSettings(): ProfileReaderAppearanc
         visualNovelSentencesPerScreen = visualNovelSentencesPerScreen.coerceIn(1, 12),
         visualNovelPreserveDialogueBubbles = visualNovelPreserveDialogueBubbles,
         visualNovelClickAdvance = visualNovelClickAdvance,
+        visualNovelMergeCrossScreenSasayakiCues = visualNovelMergeCrossScreenSasayakiCues,
         showStatisticsToggle = showStatisticsToggle,
         showReadingSpeed = showReadingSpeed,
         showReadingTime = showReadingTime,
@@ -845,6 +857,7 @@ private fun ReaderSettings.withProfileAppearance(appearance: ProfileReaderAppear
         visualNovelSentencesPerScreen = appearance.visualNovelSentencesPerScreen.coerceIn(1, 12),
         visualNovelPreserveDialogueBubbles = appearance.visualNovelPreserveDialogueBubbles,
         visualNovelClickAdvance = appearance.visualNovelClickAdvance,
+        visualNovelMergeCrossScreenSasayakiCues = appearance.visualNovelMergeCrossScreenSasayakiCues,
         showStatisticsToggle = appearance.showStatisticsToggle,
         showReadingSpeed = appearance.showReadingSpeed,
         showReadingTime = appearance.showReadingTime,

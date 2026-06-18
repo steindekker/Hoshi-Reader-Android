@@ -230,7 +230,7 @@ class ReaderPaginationScriptsTest {
             selectionJs = "",
             readerPaginatedJs = "PAGINATED_ASSET",
             readerContinuousJs = "CONTINUOUS_ASSET",
-            readerVisualNovelJs = "VN __HOSHI_VISUAL_NOVEL_REVEAL_SPEED__ __HOSHI_VISUAL_NOVEL_SCREEN_MODE_LITERAL__ __HOSHI_VISUAL_NOVEL_SENTENCES_PER_SCREEN__ __HOSHI_VISUAL_NOVEL_PRESERVE_DIALOGUE__ __HOSHI_INITIAL_PROGRESS__ __HOSHI_INITIAL_FRAGMENT_LITERAL__ __HOSHI_INITIAL_HIGHLIGHTS_JSON__ __HOSHI_RESTORE_TOKEN_LITERAL__",
+            readerVisualNovelJs = "VN __HOSHI_VISUAL_NOVEL_REVEAL_SPEED__ __HOSHI_VISUAL_NOVEL_SCREEN_MODE_LITERAL__ __HOSHI_VISUAL_NOVEL_SENTENCES_PER_SCREEN__ __HOSHI_VISUAL_NOVEL_PRESERVE_DIALOGUE__ __HOSHI_VISUAL_NOVEL_MERGE_CROSS_SCREEN_SASAYAKI_CUES__ __HOSHI_INITIAL_SASAYAKI_CUES_JSON__ __HOSHI_INITIAL_PROGRESS__ __HOSHI_INITIAL_FRAGMENT_LITERAL__ __HOSHI_INITIAL_HIGHLIGHTS_JSON__ __HOSHI_RESTORE_TOKEN_LITERAL__",
             highlightsJs = "",
             readerCss = "",
         )
@@ -245,11 +245,17 @@ class ReaderPaginationScriptsTest {
                 visualNovelScreenMode = VisualNovelScreenMode.Sentences,
                 visualNovelSentencesPerScreen = 3,
                 visualNovelPreserveDialogueBubbles = true,
+                visualNovelMergeCrossScreenSasayakiCues = true,
             ),
+            sasayakiCuesJson = """[{"id":"cue","start":1,"length":3}]""",
             assets = assets,
         )
 
-        assertTrue(script.contains("VN 80 \"sentences\" 3 true 0.25 \"chapter-start\" [{\"id\":\"h1\"}]",))
+        assertTrue(
+            script.contains(
+                "VN 80 \"sentences\" 3 true true [{\"id\":\"cue\",\"start\":1,\"length\":3}] 0.25 \"chapter-start\" [{\"id\":\"h1\"}]",
+            ),
+        )
         assertTrue(script.contains("\"restoreCompleted\""))
         assertFalse(script.contains("PAGINATED_ASSET"))
         assertFalse(script.contains("CONTINUOUS_ASSET"))
