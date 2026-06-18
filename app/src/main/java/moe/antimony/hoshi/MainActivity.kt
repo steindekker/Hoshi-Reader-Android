@@ -11,6 +11,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -18,6 +20,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.launch
@@ -38,6 +44,7 @@ class MainActivity : ComponentActivity() {
     private var pendingSasayakiReaderBookId by mutableStateOf<String?>(null)
     private var readerKeyEventHandler: ((KeyEvent) -> Boolean)? = null
 
+    @OptIn(ExperimentalComposeUiApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pendingImportUri = intent.importUri()
@@ -70,23 +77,27 @@ class MainActivity : ComponentActivity() {
                     useDarkSystemBarIcons = useDarkSystemBarIcons,
                 ) {
                     val loadedReaderSettings = readerSettings ?: return@HoshiReaderTheme
-                    AppShell(
-                        pendingImportUri = pendingImportUri,
-                        onPendingImportConsumed = { pendingImportUri = null },
-                        pendingSasayakiReaderBookId = pendingSasayakiReaderBookId,
-                        onPendingSasayakiReaderConsumed = { pendingSasayakiReaderBookId = null },
-                        readerSettings = loadedReaderSettings,
-                        onReaderSettingsChange = { settings ->
-                            readerSettings = settings
-                            scope.launch {
-                                readerSettingsRepository.update { settings }
+                    // Surface Modifier.testTag(...) as uiautomator resource-ids so
+                    // accessibility-tree driven tooling (mobile-mcp) can target nodes.
+                    Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
+                        AppShell(
+                            pendingImportUri = pendingImportUri,
+                            onPendingImportConsumed = { pendingImportUri = null },
+                            pendingSasayakiReaderBookId = pendingSasayakiReaderBookId,
+                            onPendingSasayakiReaderConsumed = { pendingSasayakiReaderBookId = null },
+                            readerSettings = loadedReaderSettings,
+                            onReaderSettingsChange = { settings ->
+                                readerSettings = settings
+                                scope.launch {
+                                    readerSettingsRepository.update { settings }
+                                }
+                            },
+                            onReaderKeyEventHandlerChange = { handler ->
+                                readerKeyEventHandler = handler
                             }
-                        },
-                        onReaderKeyEventHandlerChange = { handler ->
-                            readerKeyEventHandler = handler
-                        }
-                    )
-                    DownloadedUpdatePrompt()
+                        )
+                        DownloadedUpdatePrompt()
+                    }
                 }
             }
         }

@@ -608,6 +608,7 @@ private fun HoshiCompactBottomNavigation(
             ) {
                 MainTab.entries.forEach { tab ->
                     NavigationBarItem(
+                        modifier = Modifier.testTag("nav-tab-${tab.name.lowercase()}"),
                         selected = tab == selectedTab,
                         onClick = { onSelectedTabChange(tab) },
                         icon = { BottomTabGlyph(tab, Modifier.size(24.dp)) },
@@ -1343,17 +1344,19 @@ private fun BookGridCell(
     onLongPress: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.combinedClickable(
-            enabled = enabled,
-            onClick = {
-                if (isSelecting) {
-                    onToggleSelected()
-                } else {
-                    onOpen()
-                }
-            },
-            onLongClick = onLongPress,
-        ),
+        modifier = Modifier
+            .testTag("book-cell-${entry.metadata.id}")
+            .combinedClickable(
+                enabled = enabled,
+                onClick = {
+                    if (isSelecting) {
+                        onToggleSelected()
+                    } else {
+                        onOpen()
+                    }
+                },
+                onLongClick = onLongPress,
+            ),
     ) {
         Box {
             BookCoverCard(coverSource = coverSource)
