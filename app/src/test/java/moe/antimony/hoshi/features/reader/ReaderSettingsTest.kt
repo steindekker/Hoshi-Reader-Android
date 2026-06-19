@@ -601,10 +601,27 @@ class ReaderSettingsTest {
         assertTrue(css.contains("padding-bottom: calc(var(--hoshi-vertical-padding-block, 4.0vh) + 28px) !important;"))
         assertTrue(css.contains(".hoshi-vn-content"))
         assertTrue(css.contains("max-width: 100% !important;"))
-        assertTrue(css.contains("max-height: 100% !important;"))
+        assertTrue(css.contains("max-height: calc(100% - 28px) !important;"))
+        assertTrue(css.contains("overflow: visible !important;"))
+        assertTrue(css.contains("hanging-punctuation: none !important;"))
         assertTrue(css.contains(".hoshi-vn-content svg"))
         assertTrue(css.contains("width: var(--hoshi-image-max-width, 88vw) !important;"))
         assertTrue(css.contains("height: var(--hoshi-image-max-height, calc(var(--page-height, 100vh) - 28px)) !important;"))
+    }
+
+    @Test
+    fun paginatedReaderKeepsHangingPunctuationWhileVisualNovelContentDisablesIt() {
+        val paginatedCss = ReaderContentStyles.styleTag(
+            ReaderSettings(viewMode = ReaderViewMode.Paginated),
+        )
+        val visualNovelCss = ReaderContentStyles.styleTag(
+            ReaderSettings(viewMode = ReaderViewMode.VisualNovel),
+        )
+
+        assertTrue(paginatedCss.contains("hanging-punctuation: allow-end !important;"))
+        assertFalse(paginatedCss.contains("hanging-punctuation: none !important;"))
+        assertTrue(visualNovelCss.contains(".hoshi-vn-content"))
+        assertTrue(visualNovelCss.contains("hanging-punctuation: none !important;"))
     }
 
     @Test

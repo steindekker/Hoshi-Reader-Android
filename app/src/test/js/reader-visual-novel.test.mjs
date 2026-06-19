@@ -277,10 +277,31 @@ class TestElement extends TestNode {
                 return { x: 0, y: 0, left: 0, right: 800, top: 0, bottom: 800, width: 800, height: 800 };
             }
             const extent = capacity * 24;
+            const screenOverflow = this.classList.contains('hoshi-vn-screen') || this.classList.contains('hoshi-vn-stage')
+                ? (layout?.screenInlineOverflowCharacters ?? 0) * 24
+                : 0;
             if (layout?.writingMode && layout.writingMode.startsWith('vertical')) {
-                return { x: 0, y: 0, left: 0, right: extent, top: 0, bottom: 24, width: extent, height: 24 };
+                return {
+                    x: 0,
+                    y: 0,
+                    left: 0,
+                    right: 24,
+                    top: 0,
+                    bottom: extent + screenOverflow,
+                    width: 24,
+                    height: extent + screenOverflow,
+                };
             }
-            return { x: 0, y: 0, left: 0, right: 24, top: 0, bottom: extent, width: 24, height: extent };
+            return {
+                x: 0,
+                y: 0,
+                left: 0,
+                right: 24,
+                top: 0,
+                bottom: extent + screenOverflow,
+                width: 24,
+                height: extent + screenOverflow,
+            };
         }
         return { x: 0, y: 0, left: 0, right: 24, top: 0, bottom: 24, width: 24, height: 24 };
     }
@@ -424,9 +445,7 @@ class TestRange {
         const end = textOffsetWithin(content, this.endNode === node ? node : this.startNode) + this.endOffset;
         const safeEnd = Math.max(start, end);
         if (layout.writingMode && layout.writingMode.startsWith('vertical')) {
-            const right = (capacity - start) * 24;
-            const left = (capacity - safeEnd) * 24;
-            return { x: left, y: 0, left, right, top: 0, bottom: 24, width: right - left, height: 24 };
+            return { x: 0, y: start * 24, left: 0, right: 24, top: start * 24, bottom: safeEnd * 24, width: 24, height: (safeEnd - start) * 24 };
         }
         return { x: 0, y: start * 24, left: 0, right: 24, top: start * 24, bottom: safeEnd * 24, width: 24, height: (safeEnd - start) * 24 };
     }
@@ -540,6 +559,7 @@ function buildDocument(body, options = {}) {
         _vnLayout: {
             charactersPerScreen: options.charactersPerScreen,
             writingMode: options.vnWritingMode ?? 'horizontal-tb',
+            screenInlineOverflowCharacters: options.screenInlineOverflowCharacters ?? 0,
         },
         fonts: { ready: Promise.resolve() },
         readyState: 'loading',
@@ -805,6 +825,21 @@ test('block mode splits oversized vertical writing blocks against the VN content
     assert.equal(currentScreen(reader).textContent, '一二三');
     assert.equal(reader.paginate('forward'), 'scrolled');
     assert.equal(currentScreen(reader).textContent, '四五六');
+});
+
+test('block mode keeps trailing Japanese punctuation in the same vertical screen when it fits the visible bounds', async () => {
+    const body = bodyWith(p('「小柳さんは、お父さんとお母さん、どっちが来てるの？」'));
+    const { reader } = await initializeReader(body, {
+        mode: 'block',
+        revealSpeed: 0,
+        bodyWritingMode: 'vertical-rl',
+        vnWritingMode: 'vertical-rl',
+        charactersPerScreen: 26,
+        screenInlineOverflowCharacters: 1,
+    });
+
+    assert.equal(currentScreen(reader).textContent, '「小柳さんは、お父さんとお母さん、どっちが来てるの？」');
+    assert.equal(reader.paginate('forward'), 'limit');
 });
 
 test('sentence mode splits an oversized sentence after applying sentence grouping', async () => {

@@ -13,6 +13,7 @@ Historical release notes before v1.1.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 ### Fixed
 
 - Update VN reveal speed in Reader Appearance without reloading the current chapter.
+- Keep VN vertical text screens from splitting closing Japanese quotation marks onto their own page.
 
 ## [v1.2.1] - 2026-06-18
 

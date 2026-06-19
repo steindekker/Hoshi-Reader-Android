@@ -385,11 +385,12 @@ window.hoshiReader = {
       while (measurement.content.firstChild) measurement.content.removeChild(measurement.content.firstChild);
     }
     measurement.content.appendChild(screen.render());
-    var bounds = this.measurementBounds(measurement.content);
+    var bounds = this.measurementBounds(measurement);
     if (!bounds) return true;
     return this.renderedTextFitsBounds(measurement.content, bounds);
   },
-  measurementBounds: function(content) {
+  measurementBounds: function(measurement) {
+    var content = measurement && measurement.content;
     if (!content || !content.getBoundingClientRect) return null;
     var bounds = content.getBoundingClientRect();
     if (!bounds || (!bounds.width && !bounds.height)) {
@@ -403,6 +404,30 @@ window.hoshiReader = {
       };
     }
     if (!bounds.width && !bounds.height) return null;
+    if (measurement.root && measurement.root.getBoundingClientRect) {
+      var rootBounds = measurement.root.getBoundingClientRect();
+      if (rootBounds && (rootBounds.width || rootBounds.height)) {
+        if (this.isVertical()) {
+          bounds = {
+            left: bounds.left,
+            right: bounds.right,
+            top: rootBounds.top,
+            bottom: rootBounds.bottom,
+            width: bounds.width,
+            height: rootBounds.bottom - rootBounds.top
+          };
+        } else {
+          bounds = {
+            left: rootBounds.left,
+            right: rootBounds.right,
+            top: bounds.top,
+            bottom: bounds.bottom,
+            width: rootBounds.right - rootBounds.left,
+            height: bounds.height
+          };
+        }
+      }
+    }
     return bounds;
   },
   renderedTextFitsBounds: function(root, bounds) {

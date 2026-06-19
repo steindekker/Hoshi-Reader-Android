@@ -178,6 +178,11 @@ internal object ReaderContentStyles {
             """.trimIndent()
         }
         val generatedLayout = ReaderGeneratedLayout.from(settings)
+        val visualNovelContentMaxHeight = if (settings.verticalWriting && settings.bottomOverlapPx > 0) {
+            "calc(100% - ${settings.bottomOverlapPx}px)"
+        } else {
+            "100%"
+        }
         val layoutCss = when (settings.viewMode) {
             ReaderViewMode.Continuous -> {
                 val hiddenOverflowAxis = if (settings.verticalWriting) "overflow-y" else "overflow-x"
@@ -249,8 +254,9 @@ internal object ReaderContentStyles {
                     writing-mode: ${settings.writingModeCss} !important;
                     box-sizing: border-box !important;
                     max-width: 100% !important;
-                    max-height: 100% !important;
-                    overflow: hidden !important;
+                    max-height: $visualNovelContentMaxHeight !important;
+                    overflow: visible !important;
+                    hanging-punctuation: none !important;
                 }
                 .hoshi-vn-content svg {
                     width: var(--hoshi-image-max-width, ${settings.imageMaxWidthFallbackCss}) !important;
