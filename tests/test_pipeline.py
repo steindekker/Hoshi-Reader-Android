@@ -20,51 +20,6 @@ def _kino_col(tmp):
     return col
 
 
-def test_apply_flags_new_cards_for_images(tmp_path, monkeypatch):
-    from ankienrich.audio import build as audio_build
-    from ankienrich.defs import build, enrich
-    from ankienrich.examples import build as ex_build
-    from ankienrich import imagequeue
-    monkeypatch.setattr(audio_build, "ensure", lambda: "no-source")
-    monkeypatch.setattr(ex_build, "ensure", lambda: "no-source")
-    # defs step runs; stub enrich_notes to report two first-enriched nids.
-    monkeypatch.setattr(build, "ensure", lambda: "/tmp/defs.sqlite")
-    monkeypatch.setattr(pipeline, "_step_enrich",
-                        lambda col, apply, idx, ov: {"written": 2, "first_enriched_nids": [11, 22]})
-    seen = {}
-
-    def _fake_flag_new(col, nids):
-        seen["nids"] = list(nids)
-        return len(seen["nids"])
-
-    monkeypatch.setattr(imagequeue, "flag_new", _fake_flag_new)
-    col = _kino_col(str(tmp_path))
-    try:
-        res = pipeline.run(col, apply=True)
-        assert seen["nids"] == [11, 22]
-        assert res["steps"]["enrich"]["flagged_images"] == 2
-    finally:
-        col.close()
-
-
-def test_dry_run_does_not_flag(tmp_path, monkeypatch):
-    from ankienrich.audio import build as audio_build
-    from ankienrich.defs import build
-    from ankienrich.examples import build as ex_build
-    from ankienrich import imagequeue
-    monkeypatch.setattr(audio_build, "ensure", lambda: "no-source")
-    monkeypatch.setattr(build, "ensure", lambda: "no-source")
-    monkeypatch.setattr(ex_build, "ensure", lambda: "no-source")
-    called = []
-    monkeypatch.setattr(imagequeue, "flag_new", lambda col, nids: called.append(nids))
-    col = _kino_col(str(tmp_path))
-    try:
-        pipeline.run(col, apply=False)
-        assert called == []
-    finally:
-        col.close()
-
-
 def test_furigana_step_fixes_spacing(tmp_path, monkeypatch):
     from ankienrich.audio import build as audio_build
     from ankienrich.defs import build

@@ -71,20 +71,9 @@ writes and syncs.
 ## Telegram bot
 
 `anki-enrich-bot` is a single-user listener (it answers only `TELEGRAM_CHAT_ID`)
-with two modes:
-
-- **Run the suite** — tap ▶️ Run (or `/run`) to pick which fields to overwrite,
-  then Apply; it shells out to `anki-enrich --apply --notify`.
-- **Mine a word → card** — just send a word. The bot previews its
-  definition/pitch/audio, then walks you through picking a sentence and an image
-  (skip either), and on Apply writes a new card and syncs. Sentences come from
-  [Massif](https://massif.la) (local `examples.sqlite` fallback); images from a
-  headless-Chromium Bing search. Words with no dictionary hit are refused.
-
-Both the sentence and image searches are **prefetched at the preview step** —
-they run in the background while you read the card, so the candidates are usually
-ready the moment you reach each pick. A run-lock keeps mining and the nightly job
-from colliding.
+and a thin run trigger: tap ▶️ Run (or `/run`) to pick which fields to overwrite,
+then Apply. It shells out to `anki-enrich --apply --notify` — an empty selection
+fills missing fields only — and the spawned run sends its own report.
 
 ## Development
 

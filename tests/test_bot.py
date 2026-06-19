@@ -1,4 +1,4 @@
-from ankienrich import bot, config
+from ankienrich import bot
 
 
 def test_authorized():
@@ -75,8 +75,8 @@ def test_keyboard_for_has_all_apply_cancel_and_one_toggle_per_field():
 def test_keyboard_all_button_label_flips_when_all_selected():
     partial = [b.text for row in bot.keyboard_for({"pitch"}).keyboard for b in row]
     full = [b.text for row in bot.keyboard_for(set(bot.OVERWRITE_FIELDS)).keyboard for b in row]
-    assert "全て上書き" in partial
-    assert "全て解除" in full
+    assert "Overwrite all" in partial
+    assert "Clear all" in full
 
 
 # --- home_keyboard: persistent reply keyboard so no command needs typing -----
@@ -97,34 +97,9 @@ def test_home_keyboard_is_persistent_and_resized():
 # --- confirmation_text ------------------------------------------------------
 
 def test_confirmation_text_empty():
-    assert bot.confirmation_text(set()) == "▶️ 実行を開始しました（未入力のみ補完）"
+    assert bot.confirmation_text(set()) == "▶️ Started (fill missing only)"
 
 
 def test_confirmation_text_lists_fields_in_canonical_order():
     assert bot.confirmation_text({"cloze", "pitch"}) == \
-        "▶️ 実行を開始しました — 上書き: ピッチ、穴埋め"
-
-
-# --- _inline: builds an inline keyboard, one button per (label, payload) row --
-
-def test_inline_builds_one_button_per_row():
-    import ankienrich.bot as bot
-    kb = bot._inline([("A", "x:0"), ("B", "x:1")])
-    # InlineKeyboardMarkup.keyboard is a list of rows
-    flat = [b for row in kb.keyboard for b in row]
-    assert [b.text for b in flat] == ["A", "B"]
-    assert [b.callback_data for b in flat] == ["x:0", "x:1"]
-
-
-def test_home_keyboard_includes_image_button():
-    kb = bot.home_keyboard()
-    labels = [b["text"] for row in kb.keyboard for b in row]
-    assert config.IMAGE_BUTTON in labels
-
-
-def test_word_guard_excludes_image_button():
-    # the miner must not treat a tap on the image button as a word to mine
-    assert bot._is_word_text(config.IMAGE_BUTTON) is False
-    assert bot._is_word_text(bot.RUN_BUTTON) is False
-    assert bot._is_word_text("迷惑") is True
-    assert bot._is_word_text("/start") is False
+        "▶️ Started — overwrite: Pitch, Cloze"

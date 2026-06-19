@@ -23,13 +23,6 @@ COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project
 
-# Headless Chromium for the bot's image-search step (ankienrich/images.py). Placed
-# right after the deps layer so the ~400 MB browser + apt libs cache across source
-# edits. --with-deps installs the system libraries Chromium needs on slim. The
-# container runs as root, so the browser under /root/.cache/ms-playwright is found
-# at runtime. Without this the image step degrades to "no images → skip".
-RUN /app/.venv/bin/playwright install --with-deps chromium
-
 # Layer 2: project source + the project install
 COPY ankienrich ./ankienrich
 COPY card ./card

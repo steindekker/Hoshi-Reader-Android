@@ -45,38 +45,8 @@ over.
 
 ## The Telegram bot
 
-`uv run anki-enrich-bot` (needs `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`). Tap ▶️ Run
-to fire the enrichment suite, or **just send a word** to mine a new card: the bot
-previews the formatted definition (dict HTML → Telegram HTML via `mine.tg_html`)
-with pitch + JPDB frequency folded into the header, plays the term audio, lets you
-pick a Massif example sentence (local `examples.sqlite` fallback) and a Bing image
-(or skip either), then writes a `jidoujisho Kinomoto` card tagged `ankienrich::mined`
-and syncs — one add at a time under the same run-lock as the nightly job. The
-reading picker for multi-reading words is ordered by frequency. 0-hit words are refused.
-
-Tap **🖼 画像** to walk newly-added imageless cards and fill each `Image` field with
-a picked Bing image. The queue selects structurally — imageless, not `no-image`, and
-not the processed back-catalog (`(-tag:enriched -tag:no-definition) OR tag:needs-image`;
-both defs-pass outcomes — hit and nohit — count as processed) — so a card added from
-another app shows up the **same day**, no nightly pass needed. Skipping tags
-`ankienrich::no-image` (permanent); the defs pass still flags first-enriched imageless
-cards `ankienrich::needs-image` as a durability backstop. Same per-card runlock'd
-pull→write→push as mining. See `ankienrich/imagequeue.py`.
-
-Word frequency comes from a JPDB Yomitan frequency dict extracted to `dicts/jpdb/`;
-first run builds `var/freq.sqlite` (skipped if absent — the preview/picker just omit
-the rank, like the other build-time inputs). The mined card's `Frequency` field is
-filled from it.
-
-Both searches are **prefetched at the preview step** (`bot.py` `_enter_preview` →
-`mine.prefetch_sentences` + `mine.prefetch_images`): the Massif fetch
-(`massif.prefetch`, a lightweight 1-slot executor) and the Bing search
-(`images.prefetch`, a warm Chromium on its own worker thread) run in the
-background while the user reads the card, so each pick is usually instant.
-
-The image step uses headless Chromium via `ankienrich/images.py` (the `images`
-dep group). The bot `Dockerfile` installs the browser
-(`playwright install --with-deps chromium`, ~400 MB, cached after the deps layer);
-without a browser the step degrades to "no images → skip" (see
-`docs/image-search-handoff.md`). Follow-up: a preview-time duplicate warning (today
-a duplicate is only caught at Apply, after pull).
+`uv run anki-enrich-bot` (needs `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`). A thin,
+single-user run trigger: tap ▶️ Run (or `/run`) to pick which fields to overwrite,
+then Apply shells out to `anki-enrich --apply [--overwrite-*…] --notify` — the bot
+never blocks on a run and never re-implements the pipeline; the spawned CLI sends
+its own report. An empty selection fills missing fields only. See `ankienrich/bot.py`.

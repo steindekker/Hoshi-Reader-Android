@@ -17,13 +17,9 @@ dev = ["pytest>=8", "anki>=24.11"]
 jrp = ["sudachipy>=0.6.8", "sudachidict-full>=20240409"]
 wizard = ["questionary>=2"]
 bot = ["pyTelegramBotAPI>=4"]
-# Headless-Chromium image search (Bing). Needs the browser binary too:
-#   uv run playwright install chromium
-# pillow: burn a number badge into each picker thumbnail (manylinux wheel, no apt).
-images = ["playwright>=1.40", "pillow>=10.1"]
 
 [tool.uv]
-default-groups = ["dev", "jrp", "wizard", "bot", "images"]
+default-groups = ["dev", "jrp", "wizard", "bot"]
 
 [build-system]
 requires = ["hatchling"]

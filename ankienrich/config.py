@@ -57,21 +57,6 @@ DICT_STYLES_MARKER = "/* ---- AnkiAlign dict styles (generated) ---- */"
 SAMPLE_N = 5
 
 
-# Single-word mining (Telegram bot).
-MINED_TAG = "ankienrich::mined"
-NEEDS_IMAGE_TAG = "ankienrich::needs-image"   # image-queue selector; set at first enrich
-NO_IMAGE_TAG = "ankienrich::no-image"         # permanent skip from the image queue
-MINE_SENTENCE_N = 5
-MASSIF_URL = "https://massif.la/ja/search"
-MASSIF_TIMEOUT = 5  # seconds
-MINE_DECK = ""      # "" = derive the modal deck of existing NOTETYPE cards
-IMAGE = "Image"            # Kinomoto field
-FREQUENCY = "Frequency"    # Kinomoto field; filled by the mining flow from JPDB
-MINE_IMAGE_N = 6           # thumbnails offered in the image picker
-IMAGE_DL_TIMEOUT = 8       # seconds to download the chosen image
-IMAGE_BUTTON = "🖼 画像"   # persistent reply-keyboard button that opens the image queue
-
-
 def ankiweb_credentials() -> tuple[str, str]:
     """(username, password) from env. Raises if unset."""
     user = os.environ.get("ANKIWEB_USERNAME")
