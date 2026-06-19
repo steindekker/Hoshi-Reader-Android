@@ -23,6 +23,11 @@ def test_fully_marked_is_noop():
     s = "{[異変|いへん];0}に{[気付|きづ]いた;Y2}"
     assert splice(s, gen) == s
 
+def test_newline_is_a_generate_boundary():
+    # a newline (was <br>) breaks the run: each line is generated on its own,
+    # so generate never sees the newline char
+    assert splice("異端\n本当", gen) == "<<異端>>\n<<本当>>"
+
 def test_stoplist_word_in_existing_markup_is_depitched():
     # pre-existing jidoujisho pitch on a stoplist word is demoted to furigana-only
     assert splice("{それ;1}から", gen) == "それから"

@@ -7,7 +7,8 @@ from ankienrich import markup
 
 
 def _norm(s: str) -> str:
-    return s.replace("<br>", " ").replace("<br/>", " ").replace("　", " ")
+    return (s.replace("<br>", " ").replace("<br/>", " ")
+             .replace("\n", " ").replace("　", " "))
 
 
 @dataclass(frozen=True)
@@ -41,15 +42,18 @@ def build_plan(col, note_type: str, field: str,
         old = note.fields[fi]
         if not old.strip():
             continue
+        # strip presentational HTML first (<br> -> newline) so JRP markup is the
+        # only structure the generator/splice and the guard ever see.
+        cleaned = markup.strip_sentence_html(old)
         if regenerate:
-            surface = markup.jrp_surface(old) if ("{" in old or "[" in old) else old
+            surface = markup.jrp_surface(cleaned) if ("{" in cleaned or "[" in cleaned) else cleaned
             new = generate(surface)
         else:
-            new = splice(old, generate)
-        if new == old:
+            new = splice(cleaned, generate)
+        if new == old:                                # nothing to write (incl. no HTML to strip)
             continue
-        # round-trip guard: visible surface must be unchanged
-        if _norm(markup.jrp_surface(new)) != _norm(markup.jrp_surface(old)):
+        # round-trip guard: visible surface must be unchanged by the markup work
+        if _norm(markup.jrp_surface(new)) != _norm(markup.jrp_surface(cleaned)):
             continue
         plan.append(Fill(nid, old, new))
     return plan

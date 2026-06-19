@@ -19,6 +19,10 @@ def test_term_furigana_kanji():
 def test_term_furigana_kana_is_plain():
     assert enrich_one.term_furigana("みきき", "みきき") == "みきき"
 
+def test_term_furigana_phrase_gets_delimiter_spaces():
+    # multi-segment phrase: the furigana: filter needs a space before each base
+    assert enrich_one.term_furigana("難を逃れる", "なんをのがれる") == "難[なん]を 逃[のが]れる"
+
 def test_candidates_single_reading_with_gloss(tmp_path):
     conn = _defs_db(tmp_path, [("箸","はし","jmdict","je",0,"chopsticks")])
     cands = enrich_one.candidates(conn, "箸")

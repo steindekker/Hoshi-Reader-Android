@@ -74,6 +74,7 @@ def _render(res: dict, apply: bool) -> None:
     print(_row("pitch", _num(p["filled"]),
                f"{p['not_found']} not in dict · {p['skipped']} no reading"))
     print(_row("sentence", _num(s["sentences"]["filled"]), "JRP markup"))
+    print(_row("furigana", _num(s["furigana"]["fixed"]), "spacing"))
     e = s["enrich"]
     if "skipped" in e:
         print(_row("defs", _dim("    —"), f"skipped: {e['skipped']}"))

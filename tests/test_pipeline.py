@@ -9,6 +9,7 @@ def _kino_col(tmp):
     col = Collection(os.path.join(tmp, "c.anki2"))
     m = col.models.new(config.NOTETYPE)
     for fname in (config.TERM, config.READING, config.SENTENCE, config.PITCH,
+                  config.TERM_FURIGANA, config.SENTENCE_FURIGANA,
                   config.CLOZE_BEFORE, config.CLOZE_INSIDE, config.CLOZE_AFTER,
                   config.TERM_AUDIO, config.DEFINITION):
         col.models.add_field(m, col.models.new_field(fname))
@@ -64,6 +65,25 @@ def test_dry_run_does_not_flag(tmp_path, monkeypatch):
         col.close()
 
 
+def test_furigana_step_fixes_spacing(tmp_path, monkeypatch):
+    from ankienrich.audio import build as audio_build
+    from ankienrich.defs import build
+    from ankienrich.examples import build as ex_build
+    monkeypatch.setattr(audio_build, "ensure", lambda: "no-source")
+    monkeypatch.setattr(build, "ensure", lambda: "no-source")
+    monkeypatch.setattr(ex_build, "ensure", lambda: "no-source")
+    col = _kino_col(str(tmp_path))
+    try:
+        n = col.new_note(col.models.by_name(config.NOTETYPE))
+        n[config.TERM] = "難を逃れる"; n[config.TERM_FURIGANA] = "難[なん]を逃[のが]れる"
+        col.add_note(n, col.decks.id("Default"))
+        res = pipeline.run(col, apply=True)
+        assert res["steps"]["furigana"]["fixed"] == 1
+        assert col.get_note(n.id)[config.TERM_FURIGANA] == "難[なん]を 逃[のが]れる"
+    finally:
+        col.close()
+
+
 def test_dry_run_reports_steps(tmp_path, monkeypatch):
     # Force audio + defs + examples to the skip path so the test needs no external assets.
     from ankienrich.audio import build as audio_build
@@ -75,7 +95,8 @@ def test_dry_run_reports_steps(tmp_path, monkeypatch):
     col = _kino_col(str(tmp_path))
     try:
         res = pipeline.run(col, apply=False)
-        assert set(res["steps"]) == {"audio", "pitch", "sentences", "enrich", "examples", "cloze"}
+        assert set(res["steps"]) == {"audio", "pitch", "sentences", "furigana",
+                                     "enrich", "examples", "cloze"}
         assert "skipped" in res["steps"]["audio"]
         assert "skipped" in res["steps"]["enrich"]
         assert "skipped" in res["steps"]["examples"]

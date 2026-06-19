@@ -55,10 +55,12 @@ def _spans(s: str) -> list[tuple[str, str]]:
 def splice(sentence: str, generate: Callable[[str], str]) -> str:
     parts: list[str] = []
     for kind, text in _spans(sentence):
-        if kind == "plain" and KANJI_RE.search(text):
-            parts.append(generate(text))
-        elif kind == "markup":
+        if kind == "markup":
             parts.append(_depitch_if_stoplisted(text))
         else:
-            parts.append(text)
+            # a newline is a structural break (was <br>): generate each line on
+            # its own so the marker never lands inside a generated unit.
+            parts.append("\n".join(
+                generate(line) if KANJI_RE.search(line) else line
+                for line in text.split("\n")))
     return "".join(parts)

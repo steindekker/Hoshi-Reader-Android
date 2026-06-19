@@ -85,6 +85,28 @@ def test_regenerate_not_undone_by_splice_repitch(tmp_path):
     col.close()
 
 
+def test_plan_strips_html_from_sentence(tmp_path):
+    col, m = _make_col(tmp_path)
+    # bold wrapper + a <br>: tags must be stripped (br -> newline), JRP kept
+    nid = _add(col, m, "x", "<b>{[旅路|たびじ];0,2}</b>を<br>進む")
+    plan = engine.build_plan(col, "jidoujisho Kinomoto", "Sentence",
+                             generate=lambda t: "{" + t + ";0}")
+    by_id = {p.note_id: p for p in plan}
+    assert by_id[nid].new_value == "{[旅路|たびじ];0,2}を\n{進む;0}"
+    col.close()
+
+
+def test_plan_html_only_cleanup_still_writes(tmp_path):
+    col, m = _make_col(tmp_path)
+    # fully-marked sentence wrapped in <b>: no JRP work, but the tags must go
+    nid = _add(col, m, "x", "<b>{[異変|いへん];0}だ</b>")
+    plan = engine.build_plan(col, "jidoujisho Kinomoto", "Sentence",
+                             generate=lambda t: "{" + t + ";0}")
+    by_id = {p.note_id: p for p in plan}
+    assert by_id[nid].new_value == "{[異変|いへん];0}だ"
+    col.close()
+
+
 def test_guard_rejects_surface_changing_fill(tmp_path):
     col, m = _make_col(tmp_path)
     _add(col, m, "異端", "異端である")

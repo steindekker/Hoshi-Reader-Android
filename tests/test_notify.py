@@ -80,6 +80,7 @@ def _dry_res():
         "audio": {"will_fill": 12, "by_source": {"nhk16": 8, "forvo": 4}, "none": 4, "missing_file": 0},
         "pitch": {"filled": 8, "not_found": 2, "skipped": 1},
         "sentences": {"filled": 5},
+        "furigana": {"fixed": 3},
         "enrich": {"to_write": 10, "nohit": 1, "terms": ["猫", "犬"]},
         "examples": {"to_write": 7, "none": 2},
         "cloze": {"filled": 4, "skipped": 1}}}
@@ -90,6 +91,7 @@ def _apply_res():
         "audio": {"filled": {"nhk16": 9, "forvo": 3}, "errors": 0},
         "pitch": {"filled": 8, "not_found": 2, "skipped": 1},
         "sentences": {"filled": 5},
+        "furigana": {"fixed": 3},
         "enrich": {"written": 10, "dropped": 0, "terms": ["猫", "犬"]},
         "examples": {"written": 7, "none_tagged": 2},
         "cloze": {"filled": 4, "skipped": 1}}}
@@ -102,6 +104,7 @@ def test_format_report_dry_run():
     assert "dry run" in out
     assert "1,234 cards scanned" in out          # thousands separator
     assert "sentence" in out and "<b>5</b>" in out
+    assert "furigana" in out and "<b>3</b>" in out  # furigana spacing fixes
 
 
 def test_format_report_lists_new_terms():

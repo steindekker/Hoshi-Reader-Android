@@ -4,8 +4,46 @@ No Anki imports — unit-testable standalone.
 """
 import re
 
+import jaconv
+
 # matches an Anki furigana segment: base[reading]
 _RUBY = re.compile(r"([^\s\[\]<>]+)\[([^\]]+)\]")
+
+_KANA = re.compile(r"[぀-ヿｦ-ﾟ]")          # hira + kata (+ half-width)
+_FURI_SEG = re.compile(r"([^ >]+?)\[([^\]]+)\]")             # mirrors Anki's furigana: filter
+
+
+def fix_furigana_spacing(s: str) -> str:
+    """Insert the delimiter space Anki's `furigana:` filter needs before a
+    base[reading] group, so a preceding kana particle isn't swallowed into the
+    ruby base (`を逃[のが]` -> `を 逃[のが]`). Conservative: a leading-kana run is
+    split off only when it is NOT a prefix of the reading — compounds whose kana
+    IS read (`シャボン玉[しゃぼんだま]`) are left whole. Idempotent."""
+    def _fix(m: re.Match) -> str:
+        base, reading = m.group(1), m.group(2)
+        i = 0
+        while i < len(base) and _KANA.match(base[i]):
+            i += 1
+        lead, rest = base[:i], base[i:]
+        if not lead or not rest:                            # all-kanji-led or all-kana: nothing to split
+            return m.group(0)
+        if jaconv.kata2hira(reading).startswith(jaconv.kata2hira(lead)):
+            return m.group(0)                               # kana is part of the reading -> one group
+        return f"{lead} {rest}[{reading}]"
+    return _FURI_SEG.sub(_fix, s)
+
+_BR = re.compile(r"<br\s*/?>", re.I)
+_RT = re.compile(r"<rt\b[^>]*>.*?</rt>", re.I | re.S)   # duplicate reading: drop content too
+_TAG = re.compile(r"</?[a-zA-Z][^>]*>")
+
+
+def strip_sentence_html(s: str) -> str:
+    """Reduce a Sentence field to JRP markup + bare text: <br> -> newline, the
+    redundant ruby reading (<rt>…</rt>) dropped wholesale, every other tag
+    unwrapped (contents kept). JRP `{…}`/`[…]` markup is left untouched."""
+    s = _BR.sub("\n", s)
+    s = _RT.sub("", s)
+    return _TAG.sub("", s)
 # Kanji character class (CJK ideograph ranges + 々). Single source of truth;
 # re-exported by ankienrich.jrp_fill.kana.
 KANJI_RE = re.compile(r"[㐀-鿿豈-﫿々\U00020000-\U0002A6DF\U0002A700-\U0002CEAF\U0002CEB0-\U0002EBEF]")

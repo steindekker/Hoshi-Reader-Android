@@ -28,9 +28,11 @@ class Candidate:
 
 
 def term_furigana(term: str, reading: str) -> str:
-    """Anki furigana notation, e.g. ('部活','ぶかつ') -> '部活[ぶかつ]'; kana-only plain."""
+    """Anki furigana notation, e.g. ('部活','ぶかつ') -> '部活[ぶかつ]'; kana-only plain.
+    A multi-segment phrase gets the delimiter space the furigana: filter needs
+    (`難を逃れる` -> `難[なん]を 逃[のが]れる`)."""
     segs = furigana_segments(term, reading)
-    return "".join(f"{b}[{r}]" if r else b for b, r in segs)
+    return _markup.fix_furigana_spacing("".join(f"{b}[{r}]" if r else b for b, r in segs))
 
 
 def _plain_gloss(rows) -> str:

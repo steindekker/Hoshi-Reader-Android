@@ -1,8 +1,9 @@
-"""Headless enrichment suite. Order: audio -> pitch -> sentences -> definitions
--> examples -> cloze. Dedupe is destructive and lives in its own command, not here.
+"""Headless enrichment suite. Order: audio -> pitch -> sentences -> furigana
+-> definitions -> examples -> cloze. Dedupe is destructive and lives in its own
+command, not here.
 
 Dry-run unless apply=True; a verified backup is taken before any write."""
-from . import audio, cloze, config, collection, imagequeue, pitch
+from . import audio, cloze, config, collection, furigana, imagequeue, pitch
 from .audio import build as audio_build, index as audio_index
 from .defs import build as def_build, enrich
 from .examples import build as ex_build
@@ -43,6 +44,13 @@ def _step_sentences(col, apply: bool, overwrite: bool) -> dict:
     plan = engine.build_plan(col, config.NOTETYPE, config.SENTENCE, gen,
                              regenerate=overwrite)
     return {"filled": len(plan)}
+
+
+def _step_furigana(col, apply: bool) -> dict:
+    plan = furigana.build_plan(col)
+    if apply:
+        return {"fixed": furigana.apply_plan(col, plan)}
+    return {"fixed": len(plan)}
 
 
 def _step_enrich(col, apply: bool, def_index: str, overwrite: bool) -> dict:
@@ -89,6 +97,7 @@ def run(col, *, apply=False, overwrite_pitch=False, overwrite_cloze=False,
             pitch.backfill_pitch(col, overwrite=overwrite_pitch) if apply
             else pitch.build_pitch_plan(col, overwrite=overwrite_pitch)["counts"])),
         ("sentences", "sentence", lambda: _step_sentences(col, apply, overwrite_sentences)),
+        ("furigana", "furigana", lambda: _step_furigana(col, apply)),
         ("enrich", "defs", lambda: _step_enrich(col, apply, def_index, overwrite_defs)),
         ("examples", "examples", lambda: _step_examples(col, apply, overwrite_examples)),
         ("cloze", "cloze", lambda: cloze.run(col, apply=apply, overwrite=overwrite_cloze)),

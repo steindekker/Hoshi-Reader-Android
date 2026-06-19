@@ -104,7 +104,8 @@
   font-size: 20px;
   line-height: 1.4;
   margin-bottom: 16px;
-} 
+  white-space: pre-wrap;   /* render literal newlines (sentences store \n, not <br>) */
+}
 
 .pitch {
   border-top: solid red 2px;

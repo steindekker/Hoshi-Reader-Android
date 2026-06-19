@@ -45,7 +45,7 @@ _SYNC_TEXT = {
 
 
 # Per-pass glyphs. One emoji a line — enough to scan on a phone, not a parade.
-_EMOJI = {"audio": "🔊", "pitch": "📈", "sentence": "📝",
+_EMOJI = {"audio": "🔊", "pitch": "📈", "sentence": "📝", "furigana": "🔤",
           "defs": "📖", "examples": "💬", "cloze": "🧩"}
 
 # Newly-defined terms listed inline; cap so a first bulk run can't flood the chat.
@@ -93,6 +93,7 @@ def format_report(res, *, apply, pull_action, push_action=None, error=None) -> s
     lines.append(_line("pitch", p["filled"],
                        _detail((p["not_found"], "not in dict"), (p["skipped"], "no reading"))))
     lines.append(_line("sentence", s["sentences"]["filled"]))
+    lines.append(_line("furigana", s["furigana"]["fixed"]))
 
     e = s["enrich"]
     if "skipped" in e:
