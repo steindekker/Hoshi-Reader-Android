@@ -10,8 +10,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 data class UpdateSettings(
-    // Personal fork: upstream auto-update checks default off. Manual check in About still works.
-    val autoCheckUpdates: Boolean = false,
+    // Fork: auto-checks this fork's own releases (see GitHubReleaseUpdateRepository.LatestReleaseUrl).
+    val autoCheckUpdates: Boolean = true,
 )
 
 private val Context.updateSettingsDataStore by preferencesDataStore(name = "update-settings")
@@ -26,7 +26,7 @@ class UpdateSettingsRepository(
         UpdateSettings(
             autoCheckUpdates = preferences[KEY_AUTO_CHECK_UPDATES]
                 ?: preferences[KEY_AUTO_DOWNLOAD_UPDATES]
-                ?: false,
+                ?: true,
         )
     }
 
@@ -35,7 +35,7 @@ class UpdateSettingsRepository(
             val current = UpdateSettings(
                 autoCheckUpdates = preferences[KEY_AUTO_CHECK_UPDATES]
                     ?: preferences[KEY_AUTO_DOWNLOAD_UPDATES]
-                    ?: false,
+                    ?: true,
             )
             val next = transform(current)
             preferences[KEY_AUTO_CHECK_UPDATES] = next.autoCheckUpdates

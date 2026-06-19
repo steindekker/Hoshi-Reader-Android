@@ -41,7 +41,7 @@ class GitHubReleaseUpdateRepositoryTest {
     fun fallsBackToMirroredLatestReleaseAndPrefersMirroredDownloads() = runBlocking {
         val client = FakeGitHubHttpClient(
             responses = mapOf(
-                "https://ghproxy.vip/https://api.github.com/repos/HuangAntimony/Hoshi-Reader-Android/releases/latest" to """
+                "https://ghproxy.vip/https://api.github.com/repos/steindekker/Hoshi-Reader-Android/releases/latest" to """
                     {
                       "tag_name": "v0.3.5",
                       "html_url": "https://github.com/HuangAntimony/Hoshi-Reader-Android/releases/tag/v0.3.5",
@@ -65,7 +65,7 @@ class GitHubReleaseUpdateRepositoryTest {
         assertEquals(
             listOf(
                 GitHubReleaseUpdateRepository.LatestReleaseUrl,
-                "https://ghproxy.vip/https://api.github.com/repos/HuangAntimony/Hoshi-Reader-Android/releases/latest",
+                "https://ghproxy.vip/https://api.github.com/repos/steindekker/Hoshi-Reader-Android/releases/latest",
             ),
             client.requestedUrls.take(2),
         )
