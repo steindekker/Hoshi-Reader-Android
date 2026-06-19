@@ -199,8 +199,9 @@ internal class GitHubReleaseUpdateRepository private constructor(
     )
 
     companion object {
+        // Fork: check this fork's own releases, not upstream's.
         const val LatestReleaseUrl =
-            "https://api.github.com/repos/HuangAntimony/Hoshi-Reader-Android/releases/latest"
+            "https://api.github.com/repos/steindekker/Hoshi-Reader-Android/releases/latest"
     }
 }
 
