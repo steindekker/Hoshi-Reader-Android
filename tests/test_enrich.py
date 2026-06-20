@@ -6,7 +6,6 @@ from ankienrich import config
 from ankienrich.defs import enrich, index
 
 
-# Inlined from poc/tests/test_convert.py (no convert module in this tree).
 def _new_notetype(col, name, fields):
     m = col.models.new(name)
     for fname in fields:

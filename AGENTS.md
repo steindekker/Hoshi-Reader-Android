@@ -18,12 +18,6 @@ tiny and intentionally omits implementation detail.
 - Single user, single collection — enrichment passes only touch cards missing the
   relevant field.
 
-## The poc
-
-A proof-of-concept lives in `poc/`. Use it as inspiration only — **nothing may be
-linked against or compiled against it**. If you need data (dicts, etc.), copy it
-over.
-
 ## Running
 
 - `ANKIWEB_USERNAME`/`ANKIWEB_PASSWORD` must be set; the tool keeps its own

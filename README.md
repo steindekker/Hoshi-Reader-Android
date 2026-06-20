@@ -80,6 +80,3 @@ fills missing fields only — and the spawned run sends its own report.
 ```sh
 uv run pytest
 ```
-
-A proof-of-concept lives in `poc/` as a read-only reference — nothing is linked
-or compiled against it.

@@ -16,13 +16,6 @@ dicts/
 .idea/
 .pytest_cache/
 
-# poc/ is kept as source-only reference — exclude all bulk (data, dicts, index)
-poc/research/
-poc/collection.anki2*
-poc/collection.media/
-poc/ankialign/user_files/
-poc/ankialign/data/
-
 # direnv local env (creds)
 .envrc
 # real env file (holds secrets, never commit)

@@ -12,8 +12,7 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Reference-only PoC and docs/tests not needed at runtime
-poc/
+# Docs/tests not needed at runtime
 docs/
 tests/
 .playwright-mcp/

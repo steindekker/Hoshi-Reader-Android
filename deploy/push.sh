@@ -36,7 +36,7 @@ ssh "$REMOTE" "mkdir -p '$DEST/data'"
 say "Syncing code to $REMOTE:$DEST"
 rsync -az --delete \
   --exclude='/data/' --exclude='var/' --exclude='dicts/' \
-  --exclude='.git/' --exclude='.venv/' --exclude='poc/' \
+  --exclude='.git/' --exclude='.venv/' \
   --exclude='__pycache__/' --exclude='*.pyc' \
   --exclude='.pytest_cache/' --exclude='.ruff_cache/' \
   --exclude='.idea/' --exclude='.claude/' --exclude='.env' \
