@@ -84,9 +84,12 @@ def _modes():
     return t.Tokenizer.SplitMode.A, t.Tokenizer.SplitMode.C
 
 @lru_cache(maxsize=4096)
-def _lemma_reading(lemma: str) -> str:
+def _lemma_reading(word: str) -> str:
+    """Re-tokenize a word in isolation -> hira reading. Isolating it fixes Sudachi's
+    context-dependent mis-reads (香 reads かおり inside お香 but こう alone), so a lemma
+    or an honorific stem looked up on its own gets the right reading."""
     _, C = _modes()
-    ms = _tok().tokenize(lemma, C)
+    ms = _tok().tokenize(word, C)
     return hira("".join(m.reading_form() or m.surface() for m in ms))
 
 # Honorific-PERSON nouns: referent-honorific ご-words that keep their own accent
@@ -98,14 +101,11 @@ _PERSON_HON = frozenset({
     "次女", "息女", "友人",
 })
 
-@lru_cache(maxsize=4096)
-def _surface_reading(surface: str) -> str:
-    """Re-tokenize a bare surface in isolation -> hira reading. Isolating the stem
-    fixes Sudachi's context-dependent mis-reads (香 reads かおり inside お香 but こう
-    alone), so the honorific stem lookup uses the right reading."""
-    _, C = _modes()
-    ms = _tok().tokenize(surface, C)
-    return hira("".join(m.reading_form() or m.surface() for m in ms))
+def _join_surface_reading(morphemes) -> tuple[str, str]:
+    """Joined surface and joined hira reading over a span of morphemes."""
+    surf = "".join(x.surface() for x in morphemes)
+    read = hira("".join(x.reading_form() or x.surface() for x in morphemes))
+    return surf, read
 
 def _dict_reading(lemma: str, acc: AccentIndex) -> tuple[str, list[int]] | None:
     """If the dict knows exactly one reading for this word, return it. Lets the
@@ -121,7 +121,8 @@ def _to_unit(m, acc: AccentIndex) -> Unit:
     pos = m.part_of_speech()
     pos0 = pos[0]
     surface = m.surface()
-    reading = _READING_OVERRIDE.get(surface) or hira(m.reading_form() or surface)
+    ov = _READING_OVERRIDE.get(surface)
+    reading = ov or hira(m.reading_form() or surface)
     lemma = m.dictionary_form() or surface
     is_content = pos0 in _CONTENT
     if not is_content or _is_bound_aux(pos0, surface, lemma):
@@ -133,11 +134,11 @@ def _to_unit(m, acc: AccentIndex) -> Unit:
         if lemma in _NO_FURIGANA:                     # ...and drop the reading too
             reading = surface
         return Unit(surface, lemma, reading, reading, True, False, ())
-    lemread = _READING_OVERRIDE.get(surface) or _lemma_reading(lemma)
+    lemread = ov or _lemma_reading(lemma)
     positions = acc.lookup(lemma, lemread) or acc.lookup(lemma, reading)
     # dict oracle: non-inflecting word whose Sudachi reading the dict doesn't
     # know -> adopt the dict's reading if it's unambiguous (fixes 綾->あや).
-    if not positions and pos0 not in _YOUGEN and surface not in _READING_OVERRIDE:
+    if not positions and pos0 not in _YOUGEN and ov is None:
         oracle = _dict_reading(lemma, acc)
         if oracle is not None:
             reading = lemread = oracle[0]
@@ -224,8 +225,7 @@ def _merge_yougen(ms, i: int, acc: AccentIndex,
         j += 1
     if j == i + 1:
         return None  # bare verb, no tail -> let the per-morpheme path handle it
-    surf = "".join(x.surface() for x in ms[i:j])
-    read = "".join(hira(x.reading_form() or x.surface()) for x in ms[i:j])
+    surf, read = _join_surface_reading(ms[i:j])
     if lemma in _NO_PITCH_LEMMAS:  # 言った etc. -> furigana, no pitch
         return Unit(surf, lemma, read, read, True, False, ()), j - i
     # lexicalized whole form (思わず, 我ながら...): the inflected span is itself a
@@ -255,8 +255,7 @@ def _counter_merge(m, nxt, acc: AccentIndex) -> Unit | None:
     never producing a wrong reading)."""
     if nxt.part_of_speech()[0] != "接尾辞":
         return None
-    js = m.surface() + nxt.surface()
-    jr = hira((m.reading_form() or m.surface()) + (nxt.reading_form() or nxt.surface()))
+    js, jr = _join_surface_reading((m, nxt))
     pos = acc.lookup(js, jr)
     return Unit(js, js, jr, jr, True, False, tuple(pos)) if pos else None
 
@@ -267,8 +266,7 @@ def _kosoado_iu_merge(m, nxt, acc: AccentIndex) -> Unit | None:
         return None
     if (nxt.dictionary_form() or "") not in ("いう", "言う"):
         return None
-    js = m.surface() + nxt.surface()
-    jr = hira((m.reading_form() or m.surface()) + (nxt.reading_form() or nxt.surface()))
+    js, jr = _join_surface_reading((m, nxt))
     pos = acc.lookup(js, jr)
     return Unit(js, js, jr, jr, True, False, tuple(pos) if pos else ())
 
@@ -314,8 +312,7 @@ def _nominal_merge(ms, i: int, acc: AccentIndex) -> tuple[Unit, int] | None:
     while j < n and ms[j].part_of_speech()[0] in (_NOMINAL | _AFFIX):
         j += 1
     while j - i >= 2:
-        surf = "".join(x.surface() for x in ms[i:j])
-        read = hira("".join(x.reading_form() or x.surface() for x in ms[i:j]))
+        surf, read = _join_surface_reading(ms[i:j])
         pos = acc.lookup(surf, read) or acc.by_reading(read)
         if pos:
             return Unit(surf, surf, read, read, True, False, tuple(pos)), j - i
@@ -328,7 +325,7 @@ def _nominal_merge(ms, i: int, acc: AccentIndex) -> tuple[Unit, int] | None:
             # person-honorific (those keep their own accent).
             if (pre.part_of_speech()[0] == "接頭辞" and pre.surface() in _PREFIX):
                 stem = surf[len(pre.surface()):]
-                sr = _surface_reading(stem) if stem else ""
+                sr = _lemma_reading(stem) if stem else ""
                 if (stem and stem not in _PERSON_HON
                         and (acc.lookup(stem, sr) is not None or acc.readings_for(stem))):
                     rd = hira(pre.reading_form() or pre.surface()) + sr
