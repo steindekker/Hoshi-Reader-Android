@@ -24,9 +24,11 @@ def test_furigana_step_fixes_spacing(tmp_path, monkeypatch):
     from ankienrich.audio import build as audio_build
     from ankienrich.defs import build
     from ankienrich.examples import build as ex_build
+    from ankienrich.freq import build as freq_build
     monkeypatch.setattr(audio_build, "ensure", lambda: "no-source")
     monkeypatch.setattr(build, "ensure", lambda: "no-source")
     monkeypatch.setattr(ex_build, "ensure", lambda: "no-source")
+    monkeypatch.setattr(freq_build, "ensure", lambda: "no-source")
     col = _kino_col(str(tmp_path))
     try:
         n = col.new_note(col.models.by_name(config.NOTETYPE))
@@ -44,16 +46,19 @@ def test_dry_run_reports_steps(tmp_path, monkeypatch):
     from ankienrich.audio import build as audio_build
     from ankienrich.defs import build
     from ankienrich.examples import build as ex_build
+    from ankienrich.freq import build as freq_build
     monkeypatch.setattr(audio_build, "ensure", lambda: "no-source")
     monkeypatch.setattr(build, "ensure", lambda: "no-source")
     monkeypatch.setattr(ex_build, "ensure", lambda: "no-source")
+    monkeypatch.setattr(freq_build, "ensure", lambda: "no-source")
     col = _kino_col(str(tmp_path))
     try:
         res = pipeline.run(col, apply=False)
         assert set(res["steps"]) == {"audio", "pitch", "sentences", "furigana",
-                                     "enrich", "examples", "cloze"}
+                                     "enrich", "frequency", "examples", "cloze"}
         assert "skipped" in res["steps"]["audio"]
         assert "skipped" in res["steps"]["enrich"]
+        assert "skipped" in res["steps"]["frequency"]
         assert "skipped" in res["steps"]["examples"]
         assert res["backup"] is None
     finally:

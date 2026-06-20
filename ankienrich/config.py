@@ -53,6 +53,11 @@ NO_EXAMPLE_TAG = "ankienrich::no-example"
 # split on this exact string to refresh the block in place — keep it singular.
 DICT_STYLES_MARKER = "/* ---- AnkiAlign dict styles (generated) ---- */"
 
+# Frequency enrichment. The Frequency field holds the JPDB rank (raw integer as a
+# string), asserted on every card from the freq index — a pure (term, reading)
+# function, so no tags/overwrite flag (see freq/enrich.py).
+FREQUENCY = "Frequency"
+
 # How many before/after samples to show in dry-run output.
 SAMPLE_N = 5
 

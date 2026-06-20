@@ -82,6 +82,7 @@ def _dry_res():
         "sentences": {"filled": 5},
         "furigana": {"fixed": 3},
         "enrich": {"to_write": 10, "nohit": 1, "terms": ["猫", "犬"]},
+        "frequency": {"to_write": 6, "none": 3},
         "examples": {"to_write": 7, "none": 2},
         "cloze": {"filled": 4, "skipped": 1}}}
 
@@ -93,6 +94,7 @@ def _apply_res():
         "sentences": {"filled": 5},
         "furigana": {"fixed": 3},
         "enrich": {"written": 10, "dropped": 0, "terms": ["猫", "犬"]},
+        "frequency": {"written": 6, "none": 3},
         "examples": {"written": 7, "none_tagged": 2},
         "cloze": {"filled": 4, "skipped": 1}}}
 
@@ -105,6 +107,7 @@ def test_format_report_dry_run():
     assert "1,234 cards scanned" in out          # thousands separator
     assert "sentence" in out and "<b>5</b>" in out
     assert "furigana" in out and "<b>3</b>" in out  # furigana spacing fixes
+    assert "frequency" in out and "<b>6</b>" in out  # JPDB rank fills
 
 
 def test_format_report_lists_new_terms():

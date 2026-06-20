@@ -1,12 +1,13 @@
 """Headless enrichment suite. Order: audio -> pitch -> sentences -> furigana
--> definitions -> examples -> cloze. Dedupe is destructive and lives in its own
-command, not here.
+-> definitions -> frequency -> examples -> cloze. Dedupe is destructive and lives
+in its own command, not here.
 
 Dry-run unless apply=True; a verified backup is taken before any write."""
 from . import audio, cloze, config, collection, furigana, pitch
 from .audio import build as audio_build, index as audio_index
 from .defs import build as def_build, enrich
 from .examples import build as ex_build
+from .freq import build as freq_build
 
 
 class PipelineError(Exception):
@@ -67,6 +68,20 @@ def _step_enrich(col, apply: bool, def_index: str, overwrite: bool) -> dict:
         conn.close()
 
 
+def _step_frequency(col, apply: bool) -> dict:
+    state = freq_build.ensure()
+    if state == "no-source":
+        return {"skipped": "freq.sqlite missing and no JPDB source (dicts/jpdb) to build it"}
+    from .freq import index, enrich as freq_enrich
+    conn = index.open_index()
+    try:
+        if apply:
+            return freq_enrich.enrich_notes(col, conn)
+        return freq_enrich.build_plan(col, conn)
+    finally:
+        conn.close()
+
+
 def _step_examples(col, apply: bool, overwrite: bool) -> dict:
     ex_index = ex_build.ensure()
     if ex_index == "no-source":
@@ -99,6 +114,7 @@ def run(col, *, apply=False, overwrite_pitch=False, overwrite_cloze=False,
         ("sentences", "sentence", lambda: _step_sentences(col, apply, overwrite_sentences)),
         ("furigana", "furigana", lambda: _step_furigana(col, apply)),
         ("enrich", "defs", lambda: _step_enrich(col, apply, def_index, overwrite_defs)),
+        ("frequency", "frequency", lambda: _step_frequency(col, apply)),
         ("examples", "examples", lambda: _step_examples(col, apply, overwrite_examples)),
         ("cloze", "cloze", lambda: cloze.run(col, apply=apply, overwrite=overwrite_cloze)),
     ]

@@ -82,6 +82,13 @@ def _render(res: dict, apply: bool) -> None:
         print(_row("defs", _num(e["written"]), f"{e['dropped']} dropped"))
     else:
         print(_row("defs", _num(e["to_write"]), f"{e['nohit']} no-hit"))
+    f = s["frequency"]
+    if "skipped" in f:
+        print(_row("frequency", _dim("    —"), f"skipped: {f['skipped']}"))
+    elif apply:
+        print(_row("frequency", _num(f["written"]), f"{f['none']} no rank"))
+    else:
+        print(_row("frequency", _num(f["to_write"]), f"{f['none']} no rank"))
     x = s["examples"]
     if "skipped" in x:
         print(_row("examples", _dim("    —"), f"skipped: {x['skipped']}"))
