@@ -66,55 +66,55 @@ def format_report(res, *, apply, pull_action, push_action=None, error=None) -> s
         return (f"❌ <b>anki-enrich</b> · failed at {html.escape(step)}\n"
                 f"<pre>{html.escape(body)}</pre>")
 
-    s = res["steps"]
+    steps = res["steps"]
     verdict = "applied + pushed" if apply else "dry run"
     lines = [f"<b>anki-enrich</b> · {verdict}",
              f"<i>{res['scanned']:,} cards scanned</i>", ""]
 
-    a = s["audio"]
-    if "skipped" in a:
-        lines.append(_skipped("audio", a["skipped"]))
+    audio = steps["audio"]
+    if "skipped" in audio:
+        lines.append(_skipped("audio", audio["skipped"]))
     elif apply:
-        filled = sum(a["filled"].values())
-        lines.append(_line("audio", filled, _detail((a["errors"], "errors"))))
+        filled = sum(audio["filled"].values())
+        lines.append(_line("audio", filled, _detail((audio["errors"], "errors"))))
     else:
-        lines.append(_line("audio", a["will_fill"],
-                           _detail((a["none"], "no match"))))
+        lines.append(_line("audio", audio["will_fill"],
+                           _detail((audio["none"], "no match"))))
 
-    p = s["pitch"]
-    lines.append(_line("pitch", p["filled"],
-                       _detail((p["not_found"], "not in dict"), (p["skipped"], "no reading"))))
-    lines.append(_line("sentence", s["sentences"]["filled"]))
-    lines.append(_line("furigana", s["furigana"]["fixed"]))
+    pitch = steps["pitch"]
+    lines.append(_line("pitch", pitch["filled"],
+                       _detail((pitch["not_found"], "not in dict"), (pitch["skipped"], "no reading"))))
+    lines.append(_line("sentence", steps["sentences"]["filled"]))
+    lines.append(_line("furigana", steps["furigana"]["fixed"]))
 
-    e = s["enrich"]
-    if "skipped" in e:
-        lines.append(_skipped("defs", e["skipped"]))
+    defs = steps["enrich"]
+    if "skipped" in defs:
+        lines.append(_skipped("defs", defs["skipped"]))
     elif apply:
-        lines.append(_line("defs", e["written"], _detail((e["dropped"], "dropped"))))
+        lines.append(_line("defs", defs["written"], _detail((defs["dropped"], "dropped"))))
     else:
-        lines.append(_line("defs", e["to_write"], _detail((e["nohit"], "no-hit"))))
+        lines.append(_line("defs", defs["to_write"], _detail((defs["nohit"], "no-hit"))))
 
-    f = s["frequency"]
-    if "skipped" in f:
-        lines.append(_skipped("frequency", f["skipped"]))
+    freq = steps["frequency"]
+    if "skipped" in freq:
+        lines.append(_skipped("frequency", freq["skipped"]))
     elif apply:
-        lines.append(_line("frequency", f["written"], _detail((f["none"], "no rank"))))
+        lines.append(_line("frequency", freq["written"], _detail((freq["none"], "no rank"))))
     else:
-        lines.append(_line("frequency", f["to_write"], _detail((f["none"], "no rank"))))
+        lines.append(_line("frequency", freq["to_write"], _detail((freq["none"], "no rank"))))
 
-    x = s["examples"]
-    if "skipped" in x:
-        lines.append(_skipped("examples", x["skipped"]))
+    examples = steps["examples"]
+    if "skipped" in examples:
+        lines.append(_skipped("examples", examples["skipped"]))
     elif apply:
-        lines.append(_line("examples", x["written"], _detail((x["none_tagged"], "none"))))
+        lines.append(_line("examples", examples["written"], _detail((examples["none_tagged"], "none"))))
     else:
-        lines.append(_line("examples", x["to_write"], _detail((x["none"], "none"))))
+        lines.append(_line("examples", examples["to_write"], _detail((examples["none"], "none"))))
 
-    c = s["cloze"]
-    lines.append(_line("cloze", c["filled"], _detail((c["skipped"], "unlocatable"))))
+    cloze = steps["cloze"]
+    lines.append(_line("cloze", cloze["filled"], _detail((cloze["skipped"], "unlocatable"))))
 
-    terms = s.get("enrich", {}).get("terms") or []
+    terms = steps.get("enrich", {}).get("terms") or []
     if terms:
         shown = "、".join(html.escape(t) for t in terms[:_TERM_CAP])
         if len(terms) > _TERM_CAP:

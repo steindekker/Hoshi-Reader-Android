@@ -46,50 +46,50 @@ def _sync_line(direction: str, action: str) -> None:
 
 
 def _render(res: dict, apply: bool) -> None:
-    s = res["steps"]
+    steps = res["steps"]
     print()
     print(_row("scanned", f"{_bold(res['scanned'])} cards"))
     if res["backup"]:
         print(_row("backup", _dim(res["backup"])))
     print()
-    a = s["audio"]
-    if "skipped" in a:
-        print(_row("audio", _dim("    —"), f"skipped: {a['skipped']}"))
+    audio = steps["audio"]
+    if "skipped" in audio:
+        print(_row("audio", _dim("    —"), f"skipped: {audio['skipped']}"))
     elif apply:
-        filled = sum(a["filled"].values())
-        print(_row("audio", _num(filled), f"{a['errors']} errors" if a["errors"] else ""))
+        filled = sum(audio["filled"].values())
+        print(_row("audio", _num(filled), f"{audio['errors']} errors" if audio["errors"] else ""))
     else:
-        none = _red(f"{a['none']} no match") if a["none"] else _dim(f"{a['none']} no match")
-        print(_row("audio", _num(a["will_fill"]), none))
-    p = s["pitch"]
-    print(_row("pitch", _num(p["filled"]),
-               f"{p['not_found']} not in dict · {p['skipped']} no reading"))
-    print(_row("sentence", _num(s["sentences"]["filled"]), "JRP markup"))
-    print(_row("furigana", _num(s["furigana"]["fixed"]), "spacing"))
-    e = s["enrich"]
-    if "skipped" in e:
-        print(_row("defs", _dim("    —"), f"skipped: {e['skipped']}"))
+        none = _red(f"{audio['none']} no match") if audio["none"] else _dim(f"{audio['none']} no match")
+        print(_row("audio", _num(audio["will_fill"]), none))
+    pitch = steps["pitch"]
+    print(_row("pitch", _num(pitch["filled"]),
+               f"{pitch['not_found']} not in dict · {pitch['skipped']} no reading"))
+    print(_row("sentence", _num(steps["sentences"]["filled"]), "JRP markup"))
+    print(_row("furigana", _num(steps["furigana"]["fixed"]), "spacing"))
+    defs = steps["enrich"]
+    if "skipped" in defs:
+        print(_row("defs", _dim("    —"), f"skipped: {defs['skipped']}"))
     elif apply:
-        print(_row("defs", _num(e["written"]), f"{e['dropped']} dropped"))
+        print(_row("defs", _num(defs["written"]), f"{defs['dropped']} dropped"))
     else:
-        print(_row("defs", _num(e["to_write"]), f"{e['nohit']} no-hit"))
-    f = s["frequency"]
-    if "skipped" in f:
-        print(_row("frequency", _dim("    —"), f"skipped: {f['skipped']}"))
+        print(_row("defs", _num(defs["to_write"]), f"{defs['nohit']} no-hit"))
+    freq = steps["frequency"]
+    if "skipped" in freq:
+        print(_row("frequency", _dim("    —"), f"skipped: {freq['skipped']}"))
     elif apply:
-        print(_row("frequency", _num(f["written"]), f"{f['none']} no rank"))
+        print(_row("frequency", _num(freq["written"]), f"{freq['none']} no rank"))
     else:
-        print(_row("frequency", _num(f["to_write"]), f"{f['none']} no rank"))
-    x = s["examples"]
-    if "skipped" in x:
-        print(_row("examples", _dim("    —"), f"skipped: {x['skipped']}"))
+        print(_row("frequency", _num(freq["to_write"]), f"{freq['none']} no rank"))
+    examples = steps["examples"]
+    if "skipped" in examples:
+        print(_row("examples", _dim("    —"), f"skipped: {examples['skipped']}"))
     elif apply:
-        print(_row("examples", _num(x["written"]), f"{x['none_tagged']} no-example"))
+        print(_row("examples", _num(examples["written"]), f"{examples['none_tagged']} no-example"))
     else:
-        print(_row("examples", _num(x["to_write"]), f"{x['none']} no-example"))
-    c = s["cloze"]
-    print(_row("cloze", _num(c["filled"]), f"{c['skipped']} unlocatable"))
-    terms = e.get("terms") or []
+        print(_row("examples", _num(examples["to_write"]), f"{examples['none']} no-example"))
+    cloze = steps["cloze"]
+    print(_row("cloze", _num(cloze["filled"]), f"{cloze['skipped']} unlocatable"))
+    terms = defs.get("terms") or []
     if terms:
         print()
         if len(terms) > _TERM_CAP:
