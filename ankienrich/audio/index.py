@@ -2,10 +2,9 @@
 import sqlite3
 
 from ankienrich import paths
+from ankienrich.dbutil import open_row_db
 
 
 def open_index(path=None) -> sqlite3.Connection:
     """Read-only connection to audio.sqlite."""
-    p = path or paths.AUDIO_DB
-    conn = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
-    return conn
+    return open_row_db(path or paths.AUDIO_DB, readonly=True)

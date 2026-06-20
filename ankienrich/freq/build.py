@@ -13,11 +13,13 @@ import json
 import sqlite3
 from pathlib import Path
 
+from ankienrich.dbutil import term_banks
+
 DICT_ID = "jpdb"
 
 
 def _banks(dicts_dir, dict_id) -> list[Path]:
-    return sorted(Path(dicts_dir, dict_id).glob("term_meta_bank_*.json"))
+    return term_banks(dicts_dir, dict_id, "term_meta_bank_*.json")
 
 
 def _parse(meta) -> tuple[str, int, str] | None:
@@ -68,10 +70,8 @@ def build(dicts_dir, db_path) -> int:
             k = (e[0], reading)
             if k not in best or value < best[k][0]:
                 best[k] = (value, display)
-    if Path(db_path).exists():
-        Path(db_path).unlink()
     conn = sqlite3.connect(db_path)
-    _schema(conn)
+    _schema(conn)  # DROP TABLE IF EXISTS handles a rebuild
     conn.executemany("INSERT INTO freq VALUES (?,?,?,?)",
                      ((key, rd, v, d) for (key, rd), (v, d) in best.items()))
     conn.execute("CREATE INDEX freq_key ON freq (key)")

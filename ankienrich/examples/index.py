@@ -2,22 +2,12 @@
 import sqlite3
 
 from ankienrich import config, paths
+from ankienrich.dbutil import by_reading as _by_reading, open_row_db
 from ankienrich.examples import parse
 
 
 def open_index(path=None) -> sqlite3.Connection:
-    conn = sqlite3.connect(path or paths.EXAMPLES_DB)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def _by_reading(rows, reading):
-    """Rows matching the note reading; fall back to reading-less, then all."""
-    exact = [r for r in rows if r["reading"] == reading]
-    if exact:
-        return exact
-    blank = [r for r in rows if r["reading"] == ""]
-    return blank or rows
+    return open_row_db(path or paths.EXAMPLES_DB)
 
 
 def select(conn, term: str, reading: str,

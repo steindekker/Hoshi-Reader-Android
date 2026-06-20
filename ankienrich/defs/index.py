@@ -2,14 +2,13 @@
 import sqlite3
 
 from ankienrich import paths
+from ankienrich.dbutil import open_row_db
 
 _COLS = ("term", "reading", "dict_id", "kind", "sense_ord", "html")
 
 
 def open_index(path=None) -> sqlite3.Connection:
-    conn = sqlite3.connect(path or paths.DEFS_DB)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return open_row_db(path or paths.DEFS_DB)
 
 
 def lookup(conn, term: str) -> tuple[list[dict], list[dict]]:

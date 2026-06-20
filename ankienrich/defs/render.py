@@ -2,6 +2,8 @@
 import html
 import re
 
+from ankienrich.dbutil import by_reading as _by_reading
+
 _VOID = {"br", "hr"}
 
 
@@ -57,15 +59,6 @@ def render_sc(node) -> str:
             return f"<{tag}{attrs}>"
         return f"<{tag}{attrs}>{render_sc(node.get('content'))}</{tag}>"
     return ""
-
-
-def _by_reading(rows, reading):
-    """Rows matching the note reading; fall back to reading-less, then all."""
-    exact = [r for r in rows if r["reading"] == reading]
-    if exact:
-        return exact
-    blank = [r for r in rows if r["reading"] == ""]
-    return blank or rows
 
 
 def numbered_glosses(je_rows, reading, cap=4) -> str:

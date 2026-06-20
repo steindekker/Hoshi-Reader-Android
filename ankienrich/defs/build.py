@@ -7,14 +7,11 @@ from pathlib import Path
 import tinycss2
 
 from ankienrich import config
+from ankienrich.dbutil import term_banks as _banks
 from ankienrich.defs import render
 
 JJ_DICTS = config.JJ_CHAIN
 JE_DICT = config.JE_DICT
-
-
-def _banks(dicts_dir, dict_id) -> list[Path]:
-    return sorted(Path(dicts_dir, dict_id).glob("term_bank_*.json"))
 
 
 def _load_bank(bank: Path) -> list:

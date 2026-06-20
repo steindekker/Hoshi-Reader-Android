@@ -6,11 +6,8 @@ import sqlite3
 from pathlib import Path
 
 from ankienrich import config, paths
+from ankienrich.dbutil import term_banks as _banks
 from ankienrich.examples import parse
-
-
-def _banks(dicts_dir, dict_id) -> list[Path]:
-    return sorted(Path(dicts_dir, dict_id).glob("term_bank_*.json"))
 
 
 def _schema(conn):
