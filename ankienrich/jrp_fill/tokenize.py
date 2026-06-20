@@ -3,75 +3,27 @@ lookup and a Mode C -> Mode A split-and-retry cascade.
 
 Dict misses (~1%) are left with no accent (furigana only); they are mostly
 function words / slang / proper nouns that don't need a pitch graph.
+
+The linguistic data (POS sets, stoplists) lives in lexicon.py.
 """
 from __future__ import annotations
 from functools import lru_cache
 from .unit import Unit
 from .accent import AccentIndex
 from .kana import hira, KANJI_RE
+from .lexicon import (
+    AFFIX_POS, CONTENT_POS, DERIV_SUFFIXES, HON_PREFIXES, KOSOADO, LIGHT_LEMMAS,
+    NO_ABSORB, NO_FURIGANA, NO_PITCH_FORMS, NO_PITCH_LEMMAS, NOMINAL_POS,
+    PERSON_HONORIFICS, READING_OVERRIDE, YOUGEN_POS,
+)
 
-_CONTENT = {"名詞", "代名詞", "動詞", "形容詞", "副詞", "形状詞", "連体詞", "感動詞"}
-_YOUGEN = {"動詞", "形容詞"}
-# Light/auxiliary verbs Sudachi peels off fixed expressions (もしかしたら,
-# かもしれない) and て-form chains. Pitching their bound fragments (し, い, しれ)
-# looks wrong. Multi-mora real auxiliaries (しまう, くれる, full いる, できる, なる...)
-# are unaffected.
-_LIGHT_LEMMAS = {"する", "しれる"}
-
-# Very common, low-information words: keep furigana but DROP the pitch color —
-# it only adds clutter and hurts readability. Keyed by lemma.
-# both kana and kanji lemma variants, since Sudachi uses either (言う/いう, 物/もの)
-_NO_PITCH_LEMMAS = {
-    "こと", "事", "言う", "いう", "物", "もの", "ある", "有る",
-    "いる", "居る", "なる", "成る", "よう", "様",
-    "ない", "無い",                  # standalone/なさ negative only;
-    # demonstratives (こそあど) — pure deixis, pitch adds nothing to reading
-    "これ", "それ", "あれ", "どれ",                  # 代名詞 (things)
-    "ここ", "そこ", "あそこ", "どこ",                # 代名詞 (places)
-    "この", "その", "あの", "どの",                  # 連体詞
-    "こんな", "そんな", "あんな", "どんな",          # 連体詞/形状詞
-    "こう", "そう", "ああ", "どう",                  # 副詞 (manner) — incl. standalone そう
-    # formal / dependent nouns: grammaticalized, carry structure not meaning.
-    # kanji that share a lemma with a real content word (時=とき/じ, 方=ほう/かた,
-    # 内=うち/ない, 訳=わけ/やく) are handled reading-aware in _NO_PITCH_FORMS instead.
-    "ところ", "所", "とき", "ため", "為", "ほう", "はず",
-    "わけ", "うち", "まま", "そのまま",
-    # interrogatives — same pure deixis as the demonstratives above
-    "何", "何時", "いつ", "誰", "なぜ",
-    # giving/receiving auxiliaries: structural, not content (in 〜て form they're
-    # absorbed into the main verb, which keeps its pitch — only standalone hits)
-    "くれる", "くださる",
-    # polite copula/existential, same class as です/ます (ありがとうございます)
-    "ござる",
-}
-# conjugated negatives (分からない, 高くない) absorb ない into the head verb/adjective,
-# whose lemma is 分かる/高い -> still pitched.
-
-# (lemma, reading) pairs to de-pitch ONLY for that reading, so polysemous kanji
-# don't lose pitch on their content sense (三時 じ / 話し方 かた / 以内 / 翻訳 やく).
-_NO_PITCH_FORMS = {("時", "とき"), ("方", "ほう"), ("内", "うち"), ("訳", "わけ")}
-
-# こそあど + いう form lexicalized 連体詞 (そういう, こういう...) Sudachi splits as
-# 副詞/連体詞 + 動詞; fuse them into one block (dict has them as headwords).
-_KOSOADO = {"こう", "そう", "ああ", "どう"}
-
-# Common-reading preference for words the dict lists under MULTIPLE readings, so
-# the dict oracle can't disambiguate and Sudachi picks the rarer one. Keyed on
-# the exact whole surface (never fires inside a compound: 私立=しりつ untouched).
-# Reserve this only for genuine frequency calls; wrong single readings the dict
-# *can* settle (綾->あや) are handled by the oracle below, not here.
-_READING_OVERRIDE = {"私": "わたし"}
-
-# stoplisted words rendered WITHOUT furigana too — 何's reading (なに/なん) is
-# ambiguous & low-value; bare kanji preferred
-_NO_FURIGANA = {"何"}
 
 def _is_bound_aux(pos0: str, surface: str, lemma: str) -> bool:
     # single-mora kana verb fragment (し, い, さ, き...) — always a conjugation
     # artifact, never a standalone word worth a pitch graph
     if pos0 == "動詞" and len(surface) == 1 and "぀" <= surface <= "ヿ":
         return True
-    return lemma in _LIGHT_LEMMAS
+    return lemma in LIGHT_LEMMAS
 
 @lru_cache(maxsize=1)
 def _tok():
@@ -91,15 +43,6 @@ def _lemma_reading(word: str) -> str:
     _, C = _modes()
     ms = _tok().tokenize(word, C)
     return hira("".join(m.reading_form() or m.surface() for m in ms))
-
-# Honorific-PERSON nouns: referent-honorific ご-words that keep their own accent
-# (ご子息[2,3]), so 美化語平板化 does NOT apply. Unlike the transparent keigo the dict
-# omits, these are accented-but-unlisted, so the heiban fallback must skip them.
-_PERSON_HON = frozenset({
-    "両親", "家族", "夫婦", "夫妻", "主人", "子息", "令息", "令嬢", "令室", "夫人",
-    "母堂", "尊父", "兄弟", "姉妹", "親戚", "親族", "一族", "長男", "長女", "次男",
-    "次女", "息女", "友人",
-})
 
 def _join_surface_reading(morphemes) -> tuple[str, str]:
     """Joined surface and joined hira reading over a span of morphemes."""
@@ -121,29 +64,29 @@ def _to_unit(m, acc: AccentIndex) -> Unit:
     pos = m.part_of_speech()
     pos0 = pos[0]
     surface = m.surface()
-    ov = _READING_OVERRIDE.get(surface)
+    ov = READING_OVERRIDE.get(surface)
     reading = ov or hira(m.reading_form() or surface)
     lemma = m.dictionary_form() or surface
-    is_content = pos0 in _CONTENT
+    is_content = pos0 in CONTENT_POS
     if not is_content or _is_bound_aux(pos0, surface, lemma):
         return Unit(surface, lemma, reading, reading, False, False, ())
     # modal stems (evidential/likeness よう, みたい = 形状詞/助動詞語幹) are
     # grammatical -> no pitch; reading-aware drops for polysemous kanji formal nouns
-    if (lemma in _NO_PITCH_LEMMAS or pos[1] == "助動詞語幹"
-            or (lemma, reading) in _NO_PITCH_FORMS):  # keep furigana, drop pitch
-        if lemma in _NO_FURIGANA:                     # ...and drop the reading too
+    if (lemma in NO_PITCH_LEMMAS or pos[1] == "助動詞語幹"
+            or (lemma, reading) in NO_PITCH_FORMS):  # keep furigana, drop pitch
+        if lemma in NO_FURIGANA:                     # ...and drop the reading too
             reading = surface
         return Unit(surface, lemma, reading, reading, True, False, ())
     lemread = ov or _lemma_reading(lemma)
     positions = acc.lookup(lemma, lemread) or acc.lookup(lemma, reading)
     # dict oracle: non-inflecting word whose Sudachi reading the dict doesn't
     # know -> adopt the dict's reading if it's unambiguous (fixes 綾->あや).
-    if not positions and pos0 not in _YOUGEN and ov is None:
+    if not positions and pos0 not in YOUGEN_POS and ov is None:
         oracle = _dict_reading(lemma, acc)
         if oracle is not None:
             reading = lemread = oracle[0]
             positions = oracle[1]
-    return Unit(surface, lemma, reading, lemread, True, pos0 in _YOUGEN,
+    return Unit(surface, lemma, reading, lemread, True, pos0 in YOUGEN_POS,
                 tuple(positions) if positions else ())
 
 def _is_aux_tail(m) -> bool:
@@ -153,15 +96,10 @@ def _is_aux_tail(m) -> bool:
     form (生きてきた, 祀っている) becomes one unit."""
     pos = m.part_of_speech()
     if pos[0] == "助動詞":
-        return (m.dictionary_form() or "") not in _NO_ABSORB
+        return (m.dictionary_form() or "") not in NO_ABSORB
     if pos[0] == "助詞" and pos[1] == "接続助詞" and m.surface() in ("て", "で", "ば"):
         return True
-    return pos[0] in _YOUGEN and pos[1] == "非自立可能"
-
-_DERIV = {"れる", "られる", "せる", "させる"}  # passive/potential/causative
-# modal auxiliaries that carry their OWN accent — don't fuse them into the verb
-# (できないらしい, 難しいでしょう); the verb computes on its own, the modal stays plain
-_NO_ABSORB = {"らしい", "です", "だ", "べし"}  # べし=べき: modal "should", own unit
+    return pos[0] in YOUGEN_POS and pos[1] == "非自立可能"
 
 def _conj_downstep(head, tail, heiban: bool, dict_acc: int,
                    lemread: str, conj_reading: str) -> int | None:
@@ -194,11 +132,11 @@ def _conj_downstep(head, tail, heiban: bool, dict_acc: int,
         form = "nakatta" if prev == "ない" else "ta"
     elif last == "ない":
         form = "nai"
-    elif last in _DERIV:
+    elif last in DERIV_SUFFIXES:
         form = "dict"            # derived verb in plain present (断られる)
     else:
         return None
-    derived = any(lem in _DERIV for lem in lemmas)
+    derived = any(lem in DERIV_SUFFIXES for lem in lemmas)
     if head.part_of_speech()[0] == "形容詞":
         if derived:
             return None
@@ -218,7 +156,7 @@ def _merge_yougen(ms, i: int, acc: AccentIndex,
     pos0 = head.part_of_speech()[0]
     surface = head.surface()
     lemma = head.dictionary_form() or surface
-    if pos0 not in _YOUGEN or _is_bound_aux(pos0, surface, lemma):
+    if pos0 not in YOUGEN_POS or _is_bound_aux(pos0, surface, lemma):
         return None
     j = i + 1
     while j < len(ms) and _is_aux_tail(ms[j]):
@@ -226,7 +164,7 @@ def _merge_yougen(ms, i: int, acc: AccentIndex,
     if j == i + 1:
         return None  # bare verb, no tail -> let the per-morpheme path handle it
     surf, read = _join_surface_reading(ms[i:j])
-    if lemma in _NO_PITCH_LEMMAS:  # 言った etc. -> furigana, no pitch
+    if lemma in NO_PITCH_LEMMAS:  # 言った etc. -> furigana, no pitch
         return Unit(surf, lemma, read, read, True, False, ()), j - i
     # lexicalized whole form (思わず, 我ながら...): the inflected span is itself a
     # dict headword, so use its OWN accent as a plain unit, not the verb's. The
@@ -234,7 +172,7 @@ def _merge_yougen(ms, i: int, acc: AccentIndex,
     whole = acc.lookup(surf, read)
     if whole is not None:
         return Unit(surf, surf, read, read, True, False, tuple(whole)), j - i
-    lemread = _READING_OVERRIDE.get(surface) or _lemma_reading(lemma)
+    lemread = READING_OVERRIDE.get(surface) or _lemma_reading(lemma)
     positions = acc.lookup(lemma, lemread) or \
         acc.lookup(lemma, hira(head.reading_form() or surface))
     if not positions:
@@ -262,15 +200,13 @@ def _counter_merge(m, nxt, acc: AccentIndex) -> Unit | None:
 def _kosoado_iu_merge(m, nxt, acc: AccentIndex) -> Unit | None:
     """こう/そう/ああ/どう + いう -> one 連体詞 block (そういう, こういう...). One block
     even if the dict lacks it; pitched when present (そういう[0], どういう[1])."""
-    if m.surface() not in _KOSOADO or nxt.part_of_speech()[0] != "動詞":
+    if m.surface() not in KOSOADO or nxt.part_of_speech()[0] != "動詞":
         return None
     if (nxt.dictionary_form() or "") not in ("いう", "言う"):
         return None
     js, jr = _join_surface_reading((m, nxt))
     pos = acc.lookup(js, jr)
     return Unit(js, js, jr, jr, True, False, tuple(pos) if pos else ())
-
-_PREFIX = {"お", "ご", "御"}  # 美化語/honorific prefixes Sudachi peels off
 
 def _prefix_merge(ms, i: int, acc: AccentIndex,
                   conj_accent: bool) -> tuple[Unit, int] | None:
@@ -279,7 +215,7 @@ def _prefix_merge(ms, i: int, acc: AccentIndex,
     so the dict's whole-word accent wins: おはなし[0], not the split はなし[3]). The result
     is a plain noun (no 用言 marking) even if it wraps a verb stem (お出まし)."""
     m = ms[i]
-    if m.part_of_speech()[0] != "接頭辞" or m.surface() not in _PREFIX or i + 1 >= len(ms):
+    if m.part_of_speech()[0] != "接頭辞" or m.surface() not in HON_PREFIXES or i + 1 >= len(ms):
         return None
     pre_s = m.surface()
     pre_r = hira(m.reading_form() or pre_s)
@@ -296,9 +232,6 @@ def _prefix_merge(ms, i: int, acc: AccentIndex,
         return Unit(js, js, jr, jr, True, False, tuple(pos)), 1 + n
     return None
 
-_NOMINAL = {"名詞", "代名詞", "連体詞", "形状詞"}
-_AFFIX = {"接頭辞", "接尾辞"}
-
 def _nominal_merge(ms, i: int, acc: AccentIndex) -> tuple[Unit, int] | None:
     """Fuse adjacent nominal morphemes Sudachi over-split. Two triggers, longest
     window first: (a) the joined surface+reading is a dict headword -> pitched with
@@ -306,10 +239,10 @@ def _nominal_merge(ms, i: int, acc: AccentIndex) -> tuple[Unit, int] | None:
     -> kept whole even on a dict miss, furigana-only (おばあちゃん). Verb stems stop
     the window, so お出まし stays for _prefix_merge."""
     n = len(ms)
-    if ms[i].part_of_speech()[0] not in (_NOMINAL | {"接頭辞"}):
+    if ms[i].part_of_speech()[0] not in (NOMINAL_POS | {"接頭辞"}):
         return None
     j = i
-    while j < n and ms[j].part_of_speech()[0] in (_NOMINAL | _AFFIX):
+    while j < n and ms[j].part_of_speech()[0] in (NOMINAL_POS | AFFIX_POS):
         j += 1
     while j - i >= 2:
         surf, read = _join_surface_reading(ms[i:j])
@@ -323,15 +256,37 @@ def _nominal_merge(ms, i: int, acc: AccentIndex) -> tuple[Unit, int] | None:
             # but only when the stem is itself a known dict word (so we trust the
             # reading and skip novel compounds / 〜ちゃん diminutives), and not a
             # person-honorific (those keep their own accent).
-            if (pre.part_of_speech()[0] == "接頭辞" and pre.surface() in _PREFIX):
+            if (pre.part_of_speech()[0] == "接頭辞" and pre.surface() in HON_PREFIXES):
                 stem = surf[len(pre.surface()):]
                 sr = _lemma_reading(stem) if stem else ""
-                if (stem and stem not in _PERSON_HON
+                if (stem and stem not in PERSON_HONORIFICS
                         and (acc.lookup(stem, sr) is not None or acc.readings_for(stem))):
                     rd = hira(pre.reading_form() or pre.surface()) + sr
                     accents = (0,)
             return Unit(surf, surf, rd, rd, True, False, accents), j - i
         j -= 1
+    return None
+
+def _resolve_dict_miss(u: Unit, m, mode_a, acc: AccentIndex) -> list[Unit] | None:
+    """A content unit Sudachi kept whole but the accent dict misses: try to recover
+    a pitch. Returns the replacement unit(s), or None to keep `u` as furigana-only.
+
+    First trust Mode C — if the exact reading is an unambiguous dict homophone
+    (開放感/解放感 -> かいほうかん[3]) keep the word whole with that accent. Otherwise
+    fall back to a Mode A re-split, but only when every sub-unit is itself
+    non-content or accented (so the split never drops a content word's pitch)."""
+    if (not u.is_yougen and KANJI_RE.search(u.surface)
+            and u.lemma not in NO_PITCH_LEMMAS
+            and (u.lemma, u.reading) not in NO_PITCH_FORMS):
+        rb = acc.by_reading(u.reading)
+        if rb is not None:
+            return [Unit(u.surface, u.lemma, u.reading, u.reading,
+                         True, False, tuple(rb))]
+    subs = list(m.split(mode_a))
+    if len(subs) > 1:
+        sub_us = [_to_unit(x, acc) for x in subs]
+        if all((not su.is_content) or su.accents for su in sub_us):
+            return sub_us
     return None
 
 def units(text: str, acc: AccentIndex, conj_accent: bool = False) -> list[Unit]:
@@ -368,26 +323,11 @@ def units(text: str, acc: AccentIndex, conj_accent: bool = False) -> list[Unit]:
             continue
         u = _to_unit(m, acc)
         if u.is_content and not u.accents:
-            # Sudachi kept this as ONE word but the dict misses its surface; if the
-            # exact reading is an unambiguous dict entry (a same-shape homophone,
-            # 開放感/解放感 -> かいほうかん[3]), trust Mode C and keep it whole rather
-            # than splitting into base+suffix pieces.
-            if (not u.is_yougen and KANJI_RE.search(u.surface)
-                    and u.lemma not in _NO_PITCH_LEMMAS
-                    and (u.lemma, u.reading) not in _NO_PITCH_FORMS):
-                rb = acc.by_reading(u.reading)
-                if rb is not None:
-                    out.append(Unit(u.surface, u.lemma, u.reading, u.reading,
-                                    True, False, tuple(rb)))
-                    i += 1
-                    continue
-            subs = list(m.split(A))
-            if len(subs) > 1:
-                sub_us = [_to_unit(x, acc) for x in subs]
-                if all((not su.is_content) or su.accents for su in sub_us):
-                    out.extend(sub_us)
-                    i += 1
-                    continue
+            replacement = _resolve_dict_miss(u, m, A, acc)
+            if replacement is not None:
+                out.extend(replacement)
+                i += 1
+                continue
         out.append(u)
         i += 1
     return out

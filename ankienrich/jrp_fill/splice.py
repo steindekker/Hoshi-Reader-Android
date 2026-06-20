@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from .kana import KANJI_RE
-from .tokenize import _NO_PITCH_LEMMAS, _NO_PITCH_FORMS
+from .lexicon import NO_PITCH_LEMMAS, NO_PITCH_FORMS
 
 _FURI = re.compile(r'\[([^|\]]+)\|([^\]]+)\]')
 
@@ -23,8 +23,8 @@ def _depitch_if_stoplisted(unit: str) -> str:
     body = unit[1:-1].partition(";")[0]          # surface part, before the accent
     plain = _FURI.sub(lambda m: m.group(1), body)  # [漢字|かな] -> 漢字
     read = _FURI.sub(lambda m: m.group(2), body)   # [漢字|かな] -> かな
-    if (plain in _NO_PITCH_LEMMAS or read in _NO_PITCH_LEMMAS
-            or (plain, read) in _NO_PITCH_FORMS):
+    if (plain in NO_PITCH_LEMMAS or read in NO_PITCH_LEMMAS
+            or (plain, read) in NO_PITCH_FORMS):
         return body
     return unit
 

@@ -26,7 +26,8 @@ pytestmark = pytest.mark.skipif(
 def test_strict_accent_coverage_at_least_98pct():
     import sqlite3
     from ankienrich.jrp_fill.accent import AccentIndex
-    from ankienrich.jrp_fill.tokenize import units, _NO_PITCH_LEMMAS, _NO_PITCH_FORMS
+    from ankienrich.jrp_fill.tokenize import units
+    from ankienrich.jrp_fill.lexicon import NO_PITCH_LEMMAS, NO_PITCH_FORMS
     from ankienrich import markup
     acc = AccentIndex.load(IDX)
     con = sqlite3.connect(f"file:{DB}?immutable=1", uri=True)
@@ -54,8 +55,8 @@ def test_strict_accent_coverage_at_least_98pct():
     for s in sample:
         for u in units(s, acc):
             # Exclude intentionally-unpitched common words from the denominator.
-            if (u.is_content and u.lemma not in _NO_PITCH_LEMMAS
-                    and (u.lemma, u.reading) not in _NO_PITCH_FORMS):
+            if (u.is_content and u.lemma not in NO_PITCH_LEMMAS
+                    and (u.lemma, u.reading) not in NO_PITCH_FORMS):
                 total += 1
                 if u.accents:
                     hit += 1
