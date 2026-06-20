@@ -21,6 +21,7 @@ from dataclasses import dataclass
 import jaconv
 
 from .. import config
+from ..collection import notetype_search
 
 # Source preference, highest first (Hoshi Reader's BuiltInPriority). Sources absent
 # from this list sort last, then alphabetically.
@@ -57,7 +58,6 @@ class Pick:
     `android` table, and—via `media_name`—the media file basename)."""
     source: str
     file: str
-    speaker: str | None = None
 
 
 def lookup(conn, term: str, reading: str) -> Pick | None:
@@ -117,16 +117,12 @@ def media_name(pick: Pick) -> str:
 
 # --- collection-level pass (anki, no aqt) ---------------------------------------
 
-def _search() -> str:
-    # `"Term Audio:"` matches notes whose Term Audio field is empty.
-    return f'note:"{config.NOTETYPE}" "{config.TERM_AUDIO}:"'
-
-
 def select_targets(col) -> list:
     """In-scope Kinomoto note ids with an empty Term Audio field."""
     if col.models.by_name(config.NOTETYPE) is None:
         return []
-    return list(col.find_notes(_search()))
+    # `"Term Audio:"` matches notes whose Term Audio field is empty.
+    return list(col.find_notes(f'{notetype_search()} "{config.TERM_AUDIO}:"'))
 
 
 def plan_backfill(col, conn) -> dict:
@@ -152,7 +148,7 @@ def plan_backfill(col, conn) -> dict:
         picks[nid] = pick
         by_source[pick.source] += 1
         if len(samples) < config.SAMPLE_N * 3:
-            samples.append((_clean(term), _clean(reading), pick.source, pick.speaker))
+            samples.append((_clean(term), _clean(reading), pick.source))
     return {
         "total": len(picks) + nothing + missing_file,
         "by_source": by_source,

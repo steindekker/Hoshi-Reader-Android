@@ -4,16 +4,12 @@ Mora-splitting + accent-contour rules are ported from the Kinomoto card
 template's JRP renderer (research/pitch-pipeline/reference/kino_template.js):
 split_moras / i_dan / e_comp.
 """
+from jaconv import hira2kata as _to_kata
 
 # い-dan kana that combine with small ゃゅょ
 _I_DAN = set("キギシジチヂニヒビピミリ")
 # bases that combine with small ェ
 _E_COMP = set("イウキギクグシジチツニヒビピフミリヴ")
-
-
-def _to_kata(s: str) -> str:
-    """Hiragana -> katakana (1:1, length-preserving). Non-kana pass through."""
-    return "".join(chr(ord(c) + 0x60) if "ぁ" <= c <= "ゖ" else c for c in s)
 
 
 def _combines(ck: str, nk: str) -> bool:
