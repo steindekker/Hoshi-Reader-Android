@@ -109,8 +109,8 @@ def run(col, *, apply=False, overwrite_pitch=False, overwrite_cloze=False,
     steps = [
         ("audio", "audio", lambda: _step_audio(col, apply)),
         ("pitch", "pitch", lambda: (
-            pitch.backfill_pitch(col, overwrite=overwrite_pitch) if apply
-            else pitch.build_pitch_plan(col, overwrite=overwrite_pitch)["counts"])),
+            pitch.run_backfill(col, overwrite=overwrite_pitch) if apply
+            else pitch.plan_backfill(col, overwrite=overwrite_pitch)["counts"])),
         ("sentences", "sentence", lambda: _step_sentences(col, apply, overwrite_sentences)),
         ("furigana", "furigana", lambda: _step_furigana(col, apply)),
         ("enrich", "defs", lambda: _step_enrich(col, apply, def_index, overwrite_defs)),

@@ -66,7 +66,7 @@ def _iter_targets(col, idx, *, overwrite=False):
         yield note, "filled", svg
 
 
-def build_pitch_plan(col, *, overwrite=False) -> dict:
+def plan_backfill(col, *, overwrite=False) -> dict:
     """Read-only: counts + a few (term, reading, svg) samples. No mutation."""
     idx = AccentIndex.load(_INDEX_PATH)
     counts = {"filled": 0, "not_found": 0, "skipped": 0}
@@ -78,7 +78,7 @@ def build_pitch_plan(col, *, overwrite=False) -> dict:
     return {"counts": counts, "samples": samples}
 
 
-def backfill_pitch(col, *, overwrite=False) -> dict:
+def run_backfill(col, *, overwrite=False) -> dict:
     """Write SVG graphs into Pitch Accent fields. Returns action counts.
 
     overwrite=True re-renders graphs that already exist (clobbering hand-edited

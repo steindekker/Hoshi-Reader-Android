@@ -55,14 +55,14 @@ def col(tmp_path, monkeypatch):
     c.close()
 
 
-def test_build_pitch_plan_counts(col):
-    plan = pitch.build_pitch_plan(col)
+def test_plan_backfill_counts(col):
+    plan = pitch.plan_backfill(col)
     assert plan["counts"] == {"filled": 3, "not_found": 1, "skipped": 1}
     assert len(plan["samples"]) == plan["counts"]["filled"] or len(plan["samples"]) <= config.SAMPLE_N
 
 
 def test_backfill_fills_only_empty(col):
-    res = pitch.backfill_pitch(col)
+    res = pitch.run_backfill(col)
     assert res == {"filled": 3, "not_found": 1, "skipped": 1}
     nids = list(col.find_notes(f'note:"{config.NOTETYPE}"'))
     pas = {col.get_note(i)[config.TERM]: col.get_note(i)[config.PITCH] for i in nids}
@@ -74,14 +74,14 @@ def test_backfill_fills_only_empty(col):
 
 
 def test_backfill_is_idempotent(col):
-    pitch.backfill_pitch(col)
-    res2 = pitch.backfill_pitch(col)
+    pitch.run_backfill(col)
+    res2 = pitch.run_backfill(col)
     assert res2["filled"] == 0
 
 
 def test_overwrite_rerenders_stale_only(col):
-    pitch.backfill_pitch(col)                                  # fill all empties
-    assert pitch.backfill_pitch(col)["filled"] == 0           # idempotent
+    pitch.run_backfill(col)                                  # fill all empties
+    assert pitch.run_backfill(col)["filled"] == 0           # idempotent
 
     nid = col.find_notes('"Term:異変"')[0]                     # in-dict, give a stale graph
     n = col.get_note(nid)
@@ -89,11 +89,11 @@ def test_overwrite_rerenders_stale_only(col):
     col.update_note(n)
 
     # default leaves the existing (stale) graph alone
-    assert pitch.backfill_pitch(col)["filled"] == 0
+    assert pitch.run_backfill(col)["filled"] == 0
     assert "STALE" in col.get_note(nid)[config.PITCH]
 
     # overwrite re-renders the stale one (and only it — the rest already match)
-    assert pitch.backfill_pitch(col, overwrite=True)["filled"] == 1
+    assert pitch.run_backfill(col, overwrite=True)["filled"] == 1
     pa = col.get_note(nid)[config.PITCH]
     assert "STALE" not in pa and "<svg" in pa
 
