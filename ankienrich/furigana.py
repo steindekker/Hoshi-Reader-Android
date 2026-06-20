@@ -6,7 +6,6 @@ swallowed into the ruby base (`難[なん]を逃[のが]れる` renders のが o
 `markup.fix_furigana_spacing` repairs the spacing; this module plans/applies it
 over the Furigana + SentenceFurigana fields. Idempotent — only touches cards
 that change, so it self-heals any future broken import on the nightly run.
-(New mined cards are already correct at the source; see enrich_one.term_furigana.)
 """
 from __future__ import annotations
 from collections import defaultdict

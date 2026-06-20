@@ -16,6 +16,7 @@ from __future__ import annotations
 import re
 
 from . import config
+from .collection import notetype_search
 from .jrp_fill.accent import AccentIndex
 from .jrp_fill.kana import hira
 from .jrp_fill.tokenize import units
@@ -101,7 +102,7 @@ def run(col, *, apply: bool = False, acc=None, overwrite=False) -> dict:
     iB, iI, iA = fld[config.CLOZE_BEFORE], fld[config.CLOZE_INSIDE], fld[config.CLOZE_AFTER]
 
     filled, skipped, batch = 0, 0, []
-    for nid in col.find_notes(f'note:"{config.NOTETYPE}"'):
+    for nid in col.find_notes(notetype_search()):
         note = col.get_note(nid)
         f = note.fields
         has_cloze = any(f[k].strip() for k in (iB, iI, iA))

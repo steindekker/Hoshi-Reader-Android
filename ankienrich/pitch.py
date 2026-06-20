@@ -4,6 +4,7 @@ so it can be tested headless. Idempotent: writes only changed notes.
 Uses the shared, dict-authoritative AccentIndex (NHK2016 + アクセント辞典v2).
 positions[0] is the primary accent."""
 from . import config, pitch_svg
+from .collection import notetype_search
 from .jrp_fill.accent import AccentIndex
 from .jrp_fill.kana import hira
 from .paths import ACCENT_INDEX as _INDEX_PATH
@@ -44,7 +45,7 @@ def _iter_targets(col, idx, *, overwrite=False):
     accent dicts and yielded as "filled" only when the render differs (so an
     already-correct graph isn't rewritten); a note the dicts can't cover keeps
     its existing graph untouched (never cleared)."""
-    for nid in col.find_notes(f'note:"{config.NOTETYPE}"'):
+    for nid in col.find_notes(notetype_search()):
         note = col.get_note(nid)
         has_graph = bool(note[_FIELD].strip())
         if has_graph and not overwrite:

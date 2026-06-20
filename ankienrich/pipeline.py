@@ -100,7 +100,7 @@ def _step_examples(col, apply: bool, overwrite: bool) -> dict:
 def run(col, *, apply=False, overwrite_pitch=False, overwrite_cloze=False,
         overwrite_sentences=False, overwrite_defs=False, overwrite_examples=False) -> dict:
     def_index = def_build.ensure()
-    scanned = len(col.find_notes(f'note:"{config.NOTETYPE}"'))
+    scanned = len(col.find_notes(collection.notetype_search()))
     out = {"def_index": def_index, "scanned": scanned, "backup": None, "steps": {}}
 
     if apply:

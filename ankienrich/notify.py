@@ -2,24 +2,16 @@
 from __future__ import annotations
 
 import html
-import os
 
 import requests
+
+from . import config
 
 _API = "https://api.telegram.org"
 
 
-def _credentials() -> tuple[str, str]:
-    token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat = os.environ.get("TELEGRAM_CHAT_ID")
-    if not token or not chat:
-        raise RuntimeError(
-            "set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment")
-    return token, chat
-
-
 def send_message(text: str) -> None:
-    token, chat = _credentials()
+    token, chat = config.telegram_credentials()
     payload = {"chat_id": chat, "text": text, "parse_mode": "HTML"}
     try:
         resp = requests.post(
@@ -35,8 +27,8 @@ def send_message(text: str) -> None:
         raise RuntimeError(f"Telegram API error: {desc}") from e
 
 
-# AnkiWeb sync action code -> human text (mirrors the CLI's sync wording).
-_SYNC_TEXT = {
+# AnkiWeb sync action code -> human text. Shared with the CLI's sync wording.
+SYNC_TEXT = {
     "pull": {"none": "already up to date", "normal": "fetched changes",
              "download": "downloaded full collection"},
     "push": {"none": "nothing to upload", "normal": "uploaded changes",
@@ -129,9 +121,9 @@ def format_report(res, *, apply, pull_action, push_action=None, error=None) -> s
             shown += f" ＋{len(terms) - _TERM_CAP}"
         lines += ["", f"🆕 <i>{shown}</i>"]
 
-    pull = _SYNC_TEXT["pull"].get(pull_action, pull_action)
+    pull = SYNC_TEXT["pull"].get(pull_action, pull_action)
     sync = pull
     if apply and push_action is not None:
-        sync = f"{pull} → {_SYNC_TEXT['push'].get(push_action, push_action)}"
+        sync = f"{pull} → {SYNC_TEXT['push'].get(push_action, push_action)}"
     lines += ["", f"<i>🔄 {sync}</i>"]
     return "\n".join(lines)

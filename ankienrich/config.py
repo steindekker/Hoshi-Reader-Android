@@ -70,3 +70,14 @@ def ankiweb_credentials() -> tuple[str, str]:
         raise RuntimeError(
             "set ANKIWEB_USERNAME and ANKIWEB_PASSWORD in the environment")
     return user, pw
+
+
+def telegram_credentials() -> tuple[str, str]:
+    """(bot token, chat id) from env. Raises if unset. Chat id stays a string;
+    the bot casts it to int, the notifier sends it as-is."""
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat = os.environ.get("TELEGRAM_CHAT_ID")
+    if not token or not chat:
+        raise RuntimeError(
+            "set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment")
+    return token, chat

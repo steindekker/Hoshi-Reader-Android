@@ -4,10 +4,11 @@ toggle keyboard to pick which fields to overwrite, then Apply shells out to
 — the bot never blocks on a run and never re-implements the pipeline."""
 from __future__ import annotations
 
-import os
 import subprocess
 
 import telebot
+
+from . import config
 
 # Persistent reply-keyboard buttons, so a run is one tap and never a typed command.
 RUN_BUTTON = "▶️ Run"
@@ -72,9 +73,8 @@ def keyboard_for(fields: set[str]) -> telebot.types.InlineKeyboardMarkup:
         mark = "✅" if name in fields else "⬜"
         return btn(f"{mark} {FIELD_LABELS[name]}", callback_data=f"toggle:{name}")
 
-    kb.add(field_btn("pitch"), field_btn("sentence"))
-    kb.add(field_btn("defs"), field_btn("examples"))
-    kb.add(field_btn("cloze"))
+    for row in range(0, len(OVERWRITE_FIELDS), 2):  # two fields per keyboard row
+        kb.add(*(field_btn(f) for f in OVERWRITE_FIELDS[row:row + 2]))
     all_label = "Clear all" if fields == set(OVERWRITE_FIELDS) else "Overwrite all"
     kb.add(btn(all_label, callback_data="all"))
     kb.add(btn("▶️ Apply", callback_data="apply"),
@@ -100,11 +100,7 @@ def _spawn(fields: set[str]) -> None:
 
 
 def _config() -> tuple[str, int]:
-    token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat = os.environ.get("TELEGRAM_CHAT_ID")
-    if not token or not chat:
-        raise RuntimeError(
-            "set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment")
+    token, chat = config.telegram_credentials()
     return token, int(chat)
 
 

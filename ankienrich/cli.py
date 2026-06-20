@@ -39,17 +39,8 @@ def _row(label: str, big: str, detail: str = "") -> str:
     return f"{line}   {_dim(detail)}" if detail else line
 
 
-# human-readable sync outcomes, keyed by direction then action
-_SYNC_TEXT = {
-    "pull": {"none": "already up to date", "normal": "fetched changes",
-             "download": "downloaded full collection"},
-    "push": {"none": "nothing to upload", "normal": "uploaded changes",
-             "upload": "uploaded full collection"},
-}
-
-
 def _sync_line(direction: str, action: str) -> None:
-    text = _SYNC_TEXT.get(direction, {}).get(action, action)
+    text = notify.SYNC_TEXT.get(direction, {}).get(action, action)
     paint = _dim if action == "none" else _cyan
     print(_row("sync", paint(f"{direction} — {text}")))
 
