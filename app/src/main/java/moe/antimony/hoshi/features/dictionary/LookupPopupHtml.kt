@@ -13,6 +13,7 @@ import kotlinx.serialization.json.putJsonArray
 import moe.antimony.hoshi.content.ContentLanguageProfile
 import moe.antimony.hoshi.features.audio.AudioSettings
 import moe.antimony.hoshi.features.anki.AnkiPopupSettings
+import moe.antimony.hoshi.features.reader.coerceReaderPopupScale
 import java.util.Locale
 
 internal data class LookupPopupAssets(
@@ -87,7 +88,7 @@ internal object LookupPopupHtml {
             <style>
                 ${fontFaceCss.trim()}
                 :root { --hoshi-content-font-family: ${contentLanguageProfile.webViewFontFamilyCss}; }
-                html { zoom: ${popupCssNumber(popupScale.coerceIn(0.8, 1.5))}; }
+                html { zoom: ${popupCssNumber(popupScale.coerceReaderPopupScale())}; }
             </style>
         """.trimIndent()
         val customCss = customCssStyle(normalizedSettings.customCSS)

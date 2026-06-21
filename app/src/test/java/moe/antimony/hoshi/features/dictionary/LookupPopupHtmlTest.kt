@@ -51,6 +51,15 @@ class LookupPopupHtmlTest {
     }
 
     @Test
+    fun iframePopupShellAllowsTwoPointZeroPopupScale() {
+        val html = LookupPopupHtml.renderIframeDocument(
+            popupScale = 2.0,
+        )
+
+        assertTrue(html.contains("html { zoom: 2.0; }"))
+    }
+
+    @Test
     fun iframePopupShellCanInlineAssetsForTestsAndResourceSnapshots() {
         val html = LookupPopupHtml.renderIframeDocument(
             assets = LookupPopupAssets(

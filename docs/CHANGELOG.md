@@ -14,6 +14,7 @@ Historical release notes before v1.1.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 ### Changed
 
 - Support installing Hoshi Reader Android on Android 8.0 and 8.1 devices.
+- Allow popup scale to be increased up to 2.00.
 
 ### Fixed
 

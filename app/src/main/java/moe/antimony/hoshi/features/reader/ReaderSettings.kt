@@ -30,6 +30,14 @@ import moe.antimony.hoshi.features.sync.StatisticsSyncMode
 import moe.antimony.hoshi.profiles.ProfileRepository
 import java.util.Locale
 
+internal const val ReaderPopupScaleMin = 0.8
+internal const val ReaderPopupScaleMax = 2.0
+internal const val ReaderPopupScaleStep = 0.05
+internal const val ReaderPopupScaleSliderSteps = 23
+
+internal fun Double.coerceReaderPopupScale(): Double =
+    coerceIn(ReaderPopupScaleMin, ReaderPopupScaleMax)
+
 data class ReaderSettings(
     val theme: ReaderTheme = ReaderTheme.System,
     val eInkMode: Boolean = false,
@@ -328,7 +336,7 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
         showReaderBackButton = preferences.getBoolean("readerShowBackButton", true),
         popupWidth = preferences.getInt("popupWidth", 320),
         popupHeight = preferences.getInt("popupHeight", 250),
-        popupScale = preferences.getFloat("popupScale", 1.0f).toDouble().coerceIn(0.8, 1.5),
+        popupScale = preferences.getFloat("popupScale", 1.0f).toDouble().coerceReaderPopupScale(),
         popupActionBar = preferences.getBoolean("popupActionBar", false),
         popupFullWidth = preferences.getBoolean("popupFullWidth", false),
         popupSwipeToDismiss = preferences.getBoolean("popupSwipeToDismiss", true),
@@ -391,7 +399,7 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
             .putBoolean("readerShowBackButton", settings.showReaderBackButton)
             .putInt("popupWidth", settings.popupWidth)
             .putInt("popupHeight", settings.popupHeight)
-            .putFloat("popupScale", settings.popupScale.coerceIn(0.8, 1.5).toFloat())
+            .putFloat("popupScale", settings.popupScale.coerceReaderPopupScale().toFloat())
             .putBoolean("popupActionBar", settings.popupActionBar)
             .putBoolean("popupFullWidth", settings.popupFullWidth)
             .putBoolean("popupSwipeToDismiss", settings.popupSwipeToDismiss)
@@ -532,7 +540,7 @@ class ReaderSettingsRepository(
             showReaderBackButton = this[KEY_SHOW_READER_BACK_BUTTON] ?: true,
             popupWidth = this[KEY_POPUP_WIDTH] ?: 320,
             popupHeight = this[KEY_POPUP_HEIGHT] ?: 250,
-            popupScale = (this[KEY_POPUP_SCALE] ?: 1.0f).toDouble().coerceIn(0.8, 1.5),
+            popupScale = (this[KEY_POPUP_SCALE] ?: 1.0f).toDouble().coerceReaderPopupScale(),
             popupActionBar = this[KEY_POPUP_ACTION_BAR] ?: false,
             popupFullWidth = this[KEY_POPUP_FULL_WIDTH] ?: false,
             popupSwipeToDismiss = this[KEY_POPUP_SWIPE_TO_DISMISS] ?: true,
@@ -594,7 +602,7 @@ class ReaderSettingsRepository(
         this[KEY_SHOW_READER_BACK_BUTTON] = settings.showReaderBackButton
         this[KEY_POPUP_WIDTH] = settings.popupWidth
         this[KEY_POPUP_HEIGHT] = settings.popupHeight
-        this[KEY_POPUP_SCALE] = settings.popupScale.coerceIn(0.8, 1.5).toFloat()
+        this[KEY_POPUP_SCALE] = settings.popupScale.coerceReaderPopupScale().toFloat()
         this[KEY_POPUP_ACTION_BAR] = settings.popupActionBar
         this[KEY_POPUP_FULL_WIDTH] = settings.popupFullWidth
         this[KEY_POPUP_SWIPE_TO_DISMISS] = settings.popupSwipeToDismiss
@@ -879,7 +887,7 @@ private fun ReaderSettings.withProfileAppearance(appearance: ProfileReaderAppear
         showReaderBackButton = appearance.showReaderBackButton,
         popupWidth = appearance.popupWidth,
         popupHeight = appearance.popupHeight,
-        popupScale = appearance.popupScale.coerceIn(0.8, 1.5),
+        popupScale = appearance.popupScale.coerceReaderPopupScale(),
         popupActionBar = appearance.popupActionBar,
         popupFullWidth = appearance.popupFullWidth,
         popupSwipeToDismiss = appearance.popupSwipeToDismiss,

@@ -277,6 +277,17 @@ class ReaderSettingsRepositoryTest {
     }
 
     @Test
+    fun popupScalePersistsUpToTwoPointZero() = runBlocking {
+        repository().use { repository ->
+            repository.update { it.copy(popupScale = 2.0) }
+
+            val saved = repository.settings.first()
+
+            assertEquals(2.0, saved.popupScale, 0.000001)
+        }
+    }
+
+    @Test
     fun falseToTrueStatisticsRepositoryUpdateEnablesDisplayControls() = runBlocking {
         repository().use { repository ->
             repository.update {
