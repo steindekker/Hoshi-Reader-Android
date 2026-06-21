@@ -53,6 +53,7 @@ class AnkiConnectBackend(
     endpoint: String,
     private val transport: AnkiConnectTransport = HttpAnkiConnectTransport(),
     private val timeoutMillis: Int = 10_000,
+    private val apiKey: String = "",
 ) : AnkiBackend {
     private val endpoint = AnkiConnectUrlValidator.requireValidEndpoint(endpoint).toString()
 
@@ -243,6 +244,9 @@ class AnkiConnectBackend(
             put("version", 6)
             if (params != null) {
                 put("params", params)
+            }
+            if (apiKey.isNotEmpty()) {
+                put("key", apiKey)
             }
         }
         val response = json.parseToJsonElement(transport.post(endpoint, body.toString(), timeoutMillis)).jsonObject

@@ -469,6 +469,8 @@
     <string name="anki_duplicate_scope_deck_root">Deck Root</string>
     <string name="anki_connect_address">Address</string>
     <string name="anki_connect_url">AnkiConnect URL</string>
+    <string name="anki_connect_api_key">API Key (optional)</string>
+    <string name="anki_connect_api_key_configured">Configured</string>
     <string name="anki_connect_use">Use AnkiConnect</string>
     <string name="anki_connect_use_description">This replaces AnkiDroid requests with AnkiConnect JSON requests.</string>
     <string name="anki_connect_address_help">Use HTTPS for internet hosts. HTTP is accepted only for localhost and private network addresses.</string>

@@ -201,6 +201,18 @@ internal class AnkiViewModel @Inject constructor(
         }
     }
 
+    fun updateAnkiConnectApiKey(value: String) {
+        viewModelScope.launch {
+            repository.updateSettings {
+                it.copy(
+                    ankiConnectApiKey = value,
+                    backendKind = AnkiBackendKind.AnkiConnect,
+                )
+            }
+            _uiState.value = _uiState.value.copy(isAnkiConnectReachable = false, ankiConnectMessage = null)
+        }
+    }
+
     fun pingAnkiConnect() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(

@@ -467,6 +467,8 @@
     <string name="anki_duplicate_scope_deck_root">牌组根级</string>
     <string name="anki_connect_address">地址</string>
     <string name="anki_connect_url">AnkiConnect URL</string>
+    <string name="anki_connect_api_key">API 密钥（可选）</string>
+    <string name="anki_connect_api_key_configured">已配置</string>
     <string name="anki_connect_use">使用 AnkiConnect</string>
     <string name="anki_connect_use_description">这会用 AnkiConnect JSON 请求替代 AnkiDroid 请求。</string>
     <string name="anki_connect_address_help">互联网主机请使用 HTTPS。HTTP 仅允许 localhost 和私有网络地址。</string>

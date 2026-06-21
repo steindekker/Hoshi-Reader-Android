@@ -25,7 +25,7 @@ internal class AnkiRepository(
     private val backend: AnkiBackend,
     private val settingsRepository: AnkiSettingsRepository,
     private val localAudioRepository: LocalAudioRepository,
-    private val ankiConnectBackendFactory: (String) -> AnkiBackend,
+    private val ankiConnectBackendFactory: (String, String) -> AnkiBackend,
     private val loadDictionaryMedia: (DictionaryMedia) -> ByteArray?,
 ) {
     @Inject
@@ -40,7 +40,9 @@ internal class AnkiRepository(
         backend = backend,
         settingsRepository = settingsRepository,
         localAudioRepository = localAudioRepository,
-        ankiConnectBackendFactory = { endpoint: String -> AnkiConnectBackend(endpoint) },
+        ankiConnectBackendFactory = { endpoint: String, apiKey: String ->
+            AnkiConnectBackend(endpoint, apiKey = apiKey)
+        },
         loadDictionaryMedia = { media -> dictionaryRepository.dictionaryMedia(media.dictionary, media.path) },
     )
 
@@ -49,7 +51,9 @@ internal class AnkiRepository(
         backend: AnkiBackend,
         settingsRepository: AnkiSettingsRepository,
         localAudioRepository: LocalAudioRepository,
-        ankiConnectBackendFactory: (String) -> AnkiBackend = { endpoint: String -> AnkiConnectBackend(endpoint) },
+        ankiConnectBackendFactory: (String, String) -> AnkiBackend = { endpoint: String, apiKey: String ->
+            AnkiConnectBackend(endpoint, apiKey = apiKey)
+        },
     ) : this(
         context = context,
         backend = backend,
@@ -156,7 +160,7 @@ internal class AnkiRepository(
                 error.message?.let(UiText::Literal) ?: UiText.Resource(R.string.anki_connect_invalid_url),
             )
         }
-        if (ankiConnectBackendFactory(endpoint).isAvailable()) {
+        if (ankiConnectBackendFactory(endpoint, currentSettings.ankiConnectApiKey).isAvailable()) {
             AnkiConnectConnectionResult.Connected
         } else {
             AnkiConnectConnectionResult.Error(UiText.Resource(R.string.anki_fetch_connect_ankiconnect_failed))
@@ -308,7 +312,7 @@ internal class AnkiRepository(
             AnkiBackendKind.AnkiDroid -> Result.success(backend)
             AnkiBackendKind.AnkiConnect -> runCatching {
                 val endpoint = AnkiConnectUrlValidator.requireValidEndpoint(settings.ankiConnectUrl).toString()
-                ankiConnectBackendFactory(endpoint)
+                ankiConnectBackendFactory(endpoint, settings.ankiConnectApiKey)
             }
         }
 }

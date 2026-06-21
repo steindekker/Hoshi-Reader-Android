@@ -2,6 +2,7 @@ package moe.antimony.hoshi.features.anki
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.input.TextObfuscationMode
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,10 +13,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedSecureTextField
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -38,6 +41,7 @@ import moe.antimony.hoshi.ui.hoshiOutlinedTextFieldColors
 import moe.antimony.hoshi.ui.hoshiSingleLineTextFieldLineLimits
 import moe.antimony.hoshi.ui.rememberSyncedTextFieldState
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnkiConnectView(
     onClose: () -> Unit,
@@ -48,6 +52,8 @@ fun AnkiConnectView(
     val enabled = uiState.settings.backendKind == AnkiBackendKind.AnkiConnect
     var editingAddress by remember { mutableStateOf(false) }
     var addressInput by remember { mutableStateOf("") }
+    var editingApiKey by remember { mutableStateOf(false) }
+    var apiKeyInput by remember { mutableStateOf("") }
 
     if (editingAddress) {
         val addressScrollState = rememberScrollState()
@@ -82,6 +88,41 @@ fun AnkiConnectView(
             },
             dismissButton = {
                 TextButton(onClick = { editingAddress = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+
+    if (editingApiKey) {
+        val apiKeyState = rememberSyncedTextFieldState(
+            value = apiKeyInput,
+            onValueChange = { apiKeyInput = it },
+        )
+        AlertDialog(
+            onDismissRequest = { editingApiKey = false },
+            title = { Text(stringResource(R.string.anki_connect_api_key)) },
+            text = {
+                OutlinedSecureTextField(
+                    state = apiKeyState,
+                    label = { Text(stringResource(R.string.anki_connect_api_key)) },
+                    textObfuscationMode = TextObfuscationMode.Hidden,
+                    colors = hoshiOutlinedTextFieldColors(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.updateAnkiConnectApiKey(apiKeyInput)
+                        editingApiKey = false
+                    },
+                ) {
+                    Text(stringResource(R.string.action_save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingApiKey = false }) {
                     Text(stringResource(R.string.action_cancel))
                 }
             },
@@ -142,6 +183,30 @@ fun AnkiConnectView(
                                     onClick = {
                                         addressInput = uiState.settings.ankiConnectUrl
                                         editingAddress = true
+                                    },
+                                ) {
+                                    Text(stringResource(R.string.action_edit))
+                                }
+                            },
+                        )
+                        HorizontalDivider()
+                        ListItem(
+                            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                            headlineContent = { Text(stringResource(R.string.anki_connect_api_key)) },
+                            supportingContent = {
+                                Text(
+                                    if (uiState.settings.ankiConnectApiKey.isEmpty()) {
+                                        stringResource(R.string.none)
+                                    } else {
+                                        stringResource(R.string.anki_connect_api_key_configured)
+                                    },
+                                )
+                            },
+                            trailingContent = {
+                                TextButton(
+                                    onClick = {
+                                        apiKeyInput = uiState.settings.ankiConnectApiKey
+                                        editingApiKey = true
                                     },
                                 ) {
                                     Text(stringResource(R.string.action_edit))

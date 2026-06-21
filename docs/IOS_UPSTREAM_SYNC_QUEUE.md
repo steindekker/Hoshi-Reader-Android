@@ -42,45 +42,7 @@ Validation:
 - Open a book that is missing from storage or fails parsing and confirm the Reader shows a localized failure view with a working Close action.
 - Confirm normal reader open/close and Android Back still preserve bookshelf state and bookmark refresh behavior.
 
-### 2. AnkiConnect API key support
-
-Status: pending Android sync.
-
-Commits:
-
-- `29cccb3` - support API key in AnkiConnect.
-
-Dependency/value reasoning:
-
-- This unblocks users whose AnkiConnect server requires an API key. It touches persisted Anki settings, settings UI, and the AnkiConnect JSON request body.
-
-iOS behavior to mirror:
-
-- AnkiConnect settings include an optional secure API key field.
-- Every AnkiConnect request adds top-level `"key"` when the saved key is non-empty.
-- Existing configurations without a key continue to work.
-
-Android current gap:
-
-- `AnkiSettings` in `app/src/main/java/moe/antimony/hoshi/features/anki/AnkiModels.kt` has `ankiConnectUrl` and `ankiConnectForceSync`, but no API key field.
-- `AnkiConnectView()` in `app/src/main/java/moe/antimony/hoshi/features/anki/AnkiConnectView.kt` exposes URL, connection, duplicate scope, all-model duplicate checks, and force sync, but no secure API key input.
-- `AnkiConnectBackend.request()` in `app/src/main/java/moe/antimony/hoshi/features/anki/AnkiConnectBackend.kt` builds request bodies with `action`, `version`, and optional `params`; it never sends top-level `key`.
-- `AnkiRepository` currently creates AnkiConnect backends from only the endpoint string, so the saved key cannot reach the backend.
-
-Suggested slice:
-
-- Add an optional API key to `AnkiSettings` with backward-compatible serialization defaults.
-- Add localized secure input and ViewModel update flow in the AnkiConnect settings screen.
-- Pass the key into `AnkiConnectBackend` and include it only when non-blank.
-- Cover request JSON and old-settings migration/default behavior in unit tests.
-
-Validation:
-
-- Fetch decks, duplicate-check, add-note, store-media, and sync with no key and with a configured key.
-- Confirm old persisted Anki settings decode with an empty key.
-- Run the focused Anki unit tests and localization resource test.
-
-### 3. Lookup popup two-column layout and visual sizing
+### 2. Lookup popup two-column layout and visual sizing
 
 Status: pending Android sync.
 
@@ -123,7 +85,7 @@ Validation:
 - Dark, light, e-ink, reduced-motion popup scrolling, Anki mining buttons, audio buttons, image glossary rendering, and outside-tap dismissal.
 - `node --test app/src/test/js/*.test.mjs`, focused popup/settings unit tests, localization test, and `./gradlew lint` for resource changes.
 
-### 4. Google Drive timeout and automatic-refresh error suppression
+### 3. Google Drive timeout and automatic-refresh error suppression
 
 Status: pending Android sync.
 
@@ -159,7 +121,7 @@ Validation:
 - Manual Google Drive connect, refresh, import, export, and delete still show actionable errors when user-triggered.
 - Existing Google Drive sync, remote cover cache, stale-cache retry, and device-code polling tests.
 
-### 5. Bookshelf cover decode pressure
+### 4. Bookshelf cover decode pressure
 
 Status: pending Android sync.
 
@@ -192,7 +154,7 @@ Validation:
 - Bookshelf with many local and remote covers, fast scrolling, tab switching, and refresh after returning from Reader.
 - Memory/jank spot check on a large library before and after if this slice is implemented as a performance fix.
 
-### 6. Reader WebView line-box CSS parity
+### 5. Reader WebView line-box CSS parity
 
 Status: pending Android sync.
 
@@ -229,7 +191,6 @@ Validation:
 | Commit | Date | iOS summary | Android status |
 | --- | --- | --- | --- |
 | `53fdb72` | 2026-06-15 | Show a closeable book-open failure view | Pending route error UI |
-| `29cccb3` | 2026-06-08 | Add optional AnkiConnect API key | Pending settings/storage/request support |
 | `ed25036` | 2026-06-14 | Add popup two-column layout, visual refresh, and 800px height range | Pending settings and popup asset sync |
 | `4dae37c` | 2026-06-13 | Add 10s Drive timeout and suppress transient timeout errors | Pending Drive timeout/error normalization |
 | `b928010` | 2026-06-15 | Serialize cover thumbnail decoding | Pending cover decode concurrency limit |
@@ -238,15 +199,16 @@ Validation:
 ## Suggested Implementation Order
 
 1. Reader route open-failure fallback.
-2. AnkiConnect API key support.
-3. Lookup popup two-column layout and visual sizing.
-4. Google Drive timeout and automatic-refresh error suppression.
-5. Bookshelf cover decode pressure.
-6. Reader WebView line-box CSS parity.
+2. Lookup popup two-column layout and visual sizing.
+3. Google Drive timeout and automatic-refresh error suppression.
+4. Bookshelf cover decode pressure.
+5. Reader WebView line-box CSS parity.
 
 ## Covered Or No Android Action
 
 - `17f6574`: GitHub issue templates only.
+- `29cccb3`: Android AnkiConnect settings now store an optional API key and
+  send it as the top-level `"key"` field on AnkiConnect requests when non-empty.
 - `9e191af`: Android settings already use Nav3 typed routes through `AppShell`, `SettingsDetailRoute`, and independent tab back stacks.
 - `5764c5c`: Android audio-source toggles update by `AudioSource` identity through `AudioSettings.withAudioSourceEnabled(source, enabled)`, not stale list indices.
 - `35c928e`: iOS AVAudioSession deactivation threading has no direct Android analogue; Android Sasayaki uses Media3 session release through `SasayakiMediaSessionHandle`.

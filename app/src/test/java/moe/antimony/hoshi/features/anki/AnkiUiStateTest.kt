@@ -35,13 +35,13 @@ class AnkiUiStateTest {
 
     @Test
     fun oldPersistedAnkiSettingsDefaultToCollectionScopeAndSelectedModelOnly() {
-        val settings = Json { ignoreUnknownKeys = true }
-            .decodeFromString<AnkiSettings>("""{"allowDupes":false,"compactGlossaries":true}""")
+        val settings = json.decodeFromString<AnkiSettings>("""{"allowDupes":false,"compactGlossaries":true}""")
 
         assertEquals(AnkiBackendKind.AnkiDroid, settings.backendKind)
         assertEquals(AnkiDuplicateScope.Collection, settings.duplicateScope)
         assertFalse(settings.checkDuplicatesAcrossAllModels)
         assertEquals("", settings.ankiConnectUrl)
+        assertEquals("", settings.ankiConnectApiKey)
         assertFalse(settings.ankiConnectForceSync)
         assertFalse(settings.ankiDroidForceSync)
     }
@@ -94,5 +94,9 @@ class AnkiUiStateTest {
 
         assertFalse(state.popupSettings.needsAudio)
         assertFalse(state.popupSettings.needsSasayakiAudio)
+    }
+
+    private companion object {
+        val json = Json { ignoreUnknownKeys = true }
     }
 }

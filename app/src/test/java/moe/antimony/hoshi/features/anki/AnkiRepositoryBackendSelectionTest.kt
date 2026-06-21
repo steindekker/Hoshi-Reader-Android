@@ -19,6 +19,7 @@ class AnkiRepositoryBackendSelectionTest {
             AnkiSettings(
                 backendKind = AnkiBackendKind.AnkiConnect,
                 ankiConnectUrl = "https://anki.example.com",
+                ankiConnectApiKey = "hoshi-secret",
             ),
         )
         val ankiDroid = RecordingBackend(available = false)
@@ -26,11 +27,13 @@ class AnkiRepositoryBackendSelectionTest {
             decks = listOf(AnkiDeck(10L, "Mining")),
             noteTypes = listOf(AnkiNoteType(20L, "Lapis", listOf("Expression"))),
         )
+        var capturedApiKey = ""
         val repository = repository(
             backend = ankiDroid,
             settingsRepository = settingsRepository,
-            ankiConnectBackendFactory = { endpoint ->
+            ankiConnectBackendFactory = { endpoint, apiKey ->
                 assertEquals("https://anki.example.com", endpoint)
+                capturedApiKey = apiKey
                 ankiConnect
             },
         )
@@ -44,8 +47,33 @@ class AnkiRepositoryBackendSelectionTest {
         )
         assertEquals(0, ankiDroid.fetchDecksCalls)
         assertEquals(1, ankiConnect.fetchDecksCalls)
+        assertEquals("hoshi-secret", capturedApiKey)
         assertEquals(10L, settingsRepository.current.selectedDeckId)
         assertEquals(20L, settingsRepository.current.selectedNoteTypeId)
+    }
+
+    @Test
+    fun pingAnkiConnectPassesSavedApiKeyToBackendFactory() = runBlocking {
+        var capturedEndpoint = ""
+        var capturedApiKey = ""
+        val repository = repository(
+            settingsRepository = InMemoryAnkiSettingsRepository(
+                AnkiSettings(
+                    backendKind = AnkiBackendKind.AnkiConnect,
+                    ankiConnectUrl = "https://anki.example.com",
+                    ankiConnectApiKey = "hoshi-secret",
+                ),
+            ),
+            ankiConnectBackendFactory = { endpoint, apiKey ->
+                capturedEndpoint = endpoint
+                capturedApiKey = apiKey
+                RecordingBackend()
+            },
+        )
+
+        assertEquals(AnkiConnectConnectionResult.Connected, repository.pingAnkiConnect())
+        assertEquals("https://anki.example.com", capturedEndpoint)
+        assertEquals("hoshi-secret", capturedApiKey)
     }
 
     @Test
@@ -58,7 +86,7 @@ class AnkiRepositoryBackendSelectionTest {
                     ankiConnectUrl = "http://anki.example.com:8765",
                 ),
             ),
-            ankiConnectBackendFactory = { ankiConnect },
+            ankiConnectBackendFactory = { _, _ -> ankiConnect },
         )
 
         assertEquals(
@@ -90,7 +118,7 @@ class AnkiRepositoryBackendSelectionTest {
                     fieldMappings = mapOf("Expression" to "{expression}"),
                 ),
             ),
-            ankiConnectBackendFactory = { ankiConnect },
+            ankiConnectBackendFactory = { _, _ -> ankiConnect },
         )
 
         assertTrue(
@@ -240,7 +268,7 @@ class AnkiRepositoryBackendSelectionTest {
                     availableNoteTypes = listOf(noteType),
                 ),
             ),
-            ankiConnectBackendFactory = { ankiConnect },
+            ankiConnectBackendFactory = { _, _ -> ankiConnect },
         )
 
         assertTrue(repository.isDuplicate("食べる", decks = emptyList(), noteTypes = emptyList()))
@@ -272,7 +300,7 @@ class AnkiRepositoryBackendSelectionTest {
                     ),
                 ),
             ),
-            ankiConnectBackendFactory = { ankiConnect },
+            ankiConnectBackendFactory = { _, _ -> ankiConnect },
         )
 
         assertTrue(
@@ -315,7 +343,7 @@ class AnkiRepositoryBackendSelectionTest {
                     ),
                 ),
             ),
-            ankiConnectBackendFactory = { ankiConnect },
+            ankiConnectBackendFactory = { _, _ -> ankiConnect },
         )
 
         assertTrue(
@@ -353,7 +381,7 @@ class AnkiRepositoryBackendSelectionTest {
                     ),
                 ),
             ),
-            ankiConnectBackendFactory = { ankiConnect },
+            ankiConnectBackendFactory = { _, _ -> ankiConnect },
         )
 
         assertTrue(
@@ -394,7 +422,7 @@ class AnkiRepositoryBackendSelectionTest {
                     fieldMappings = mapOf("Expression" to "{expression}"),
                 ),
             ),
-            ankiConnectBackendFactory = { ankiConnect },
+            ankiConnectBackendFactory = { _, _ -> ankiConnect },
         )
 
         assertTrue(
@@ -435,7 +463,7 @@ class AnkiRepositoryBackendSelectionTest {
                     fieldMappings = mapOf("Media" to "{audio} {sasayaki-audio}"),
                 ),
             ),
-            ankiConnectBackendFactory = { ankiConnect },
+            ankiConnectBackendFactory = { _, _ -> ankiConnect },
         )
 
         assertTrue(
@@ -475,7 +503,7 @@ class AnkiRepositoryBackendSelectionTest {
                     fieldMappings = mapOf("Media" to "{audio}"),
                 ),
             ),
-            ankiConnectBackendFactory = { ankiConnect },
+            ankiConnectBackendFactory = { _, _ -> ankiConnect },
         )
 
         assertTrue(
@@ -496,7 +524,7 @@ class AnkiRepositoryBackendSelectionTest {
     private fun repository(
         backend: AnkiBackend = RecordingBackend(),
         settingsRepository: InMemoryAnkiSettingsRepository = InMemoryAnkiSettingsRepository(),
-        ankiConnectBackendFactory: (String) -> AnkiBackend = { RecordingBackend() },
+        ankiConnectBackendFactory: (String, String) -> AnkiBackend = { _, _ -> RecordingBackend() },
     ): AnkiRepository {
         val cacheDir = Files.createTempDirectory("hoshi-anki-cache").toFile()
         return AnkiRepository(

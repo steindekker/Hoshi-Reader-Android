@@ -21,6 +21,48 @@ class AnkiConnectBackendTest {
     }
 
     @Test
+    fun requestsIncludeApiKeyWhenConfigured() {
+        val transport = FakeAnkiConnectTransport("""{"result":6,"error":null}""")
+        val backend = AnkiConnectBackend(
+            endpoint = "https://anki.example.com",
+            transport = transport,
+            apiKey = "hoshi-secret",
+        )
+
+        assertTrue(backend.isAvailable())
+
+        assertEquals("hoshi-secret", transport.lastBody().getValue("key").jsonPrimitive.content)
+    }
+
+    @Test
+    fun requestsOmitEmptyApiKey() {
+        val transport = FakeAnkiConnectTransport("""{"result":6,"error":null}""")
+        val backend = AnkiConnectBackend(
+            endpoint = "https://anki.example.com",
+            transport = transport,
+            apiKey = "",
+        )
+
+        assertTrue(backend.isAvailable())
+
+        assertFalse("key" in transport.lastBody())
+    }
+
+    @Test
+    fun requestsIncludeWhitespaceApiKeyWhenConfigured() {
+        val transport = FakeAnkiConnectTransport("""{"result":6,"error":null}""")
+        val backend = AnkiConnectBackend(
+            endpoint = "https://anki.example.com",
+            transport = transport,
+            apiKey = " ",
+        )
+
+        assertTrue(backend.isAvailable())
+
+        assertEquals(" ", transport.lastBody().getValue("key").jsonPrimitive.content)
+    }
+
+    @Test
     fun fetchesDecksAndNoteTypesFromAnkiConnect() {
         val transport = FakeAnkiConnectTransport(
             """{"result":["Default","Mining"],"error":null}""",
@@ -109,7 +151,11 @@ class AnkiConnectBackendTest {
             """{"result":123,"error":null}""",
             """{"result":null,"error":null}""",
         )
-        val backend = AnkiConnectBackend("https://anki.example.com", transport)
+        val backend = AnkiConnectBackend(
+            endpoint = "https://anki.example.com",
+            transport = transport,
+            apiKey = "hoshi-secret",
+        )
 
         assertEquals(
             """<img src="hoshi_dict_image.png">""",
@@ -133,6 +179,9 @@ class AnkiConnectBackendTest {
         assertTrue(backend.sync())
 
         assertEquals(listOf("storeMediaFile", "addNote", "sync"), transport.actions)
+        transport.bodies.forEach { body ->
+            assertEquals("hoshi-secret", body.getValue("key").jsonPrimitive.content)
+        }
         val mediaParams = transport.bodies.first().getValue("params").jsonObject
         assertEquals("hoshi_dict_image.png", mediaParams.getValue("filename").jsonPrimitive.content)
         assertEquals("AQID", mediaParams.getValue("data").jsonPrimitive.content)

@@ -51,6 +51,7 @@ data class AnkiSettings(
     val embedMedia: Boolean = true,
     val ankiDroidForceSync: Boolean = false,
     val ankiConnectUrl: String = "",
+    val ankiConnectApiKey: String = "",
     val ankiConnectForceSync: Boolean = false,
 )
 
