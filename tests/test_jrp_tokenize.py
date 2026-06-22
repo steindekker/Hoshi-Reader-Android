@@ -267,6 +267,40 @@ def test_nominal_compound_merge():
     # no over-merge without a 接頭辞 or dict hit: 学生 keeps its pitch, さん separate
     assert "{[学生|がくせい];0}さん" in g("学生さんが来た")
 
+@pytest.mark.skipif(not _sudachi_available(), reason="sudachipy not installed")
+def test_particle_phrase_idiom_kept_whole():
+    # 目に余る is ONE accent-dict headword (めにあまる[1,4]) but Mode C splits it at the
+    # particle に, and no reading-keyed merge crosses a 助詞 -> it used to fragment
+    # into 目 / に / 余る. The surface-keyed idiom merge keeps it one pitched unit.
+    from ankienrich.jrp_fill.accent import AccentIndex
+    from ankienrich.jrp_fill.tokenize import units
+    from ankienrich.jrp_fill.emit import emit_sentence
+    from ankienrich import markup
+    acc = AccentIndex.load(IDX)
+    g = lambda s: emit_sentence(units(s, acc))
+    out = g("その振る舞いは目に余る。")
+    assert markup.jrp_surface(out) == "その振る舞いは目に余る。"
+    assert "{[目|め]に[余|あま]る;1,4}" in out          # one unit, dict accent
+    # GUARD (本の trap): noun + genitive の must NOT fuse into the 連体詞 ほんの — the
+    # span ends in a 助詞, not a 用言, so the idiom merge never fires.
+    assert "{[本|ほん]の;" not in g("本の値段は高い。")
+
+@pytest.mark.skipif(not _sudachi_available(), reason="sudachipy not installed")
+def test_misread_compound_kept_whole_by_surface():
+    # 天下一品 IS a dict headword (てんかいっぴん[1]) but in-sentence Sudachi splits it
+    # 天下一+品 and mis-reads it てんかいち+ひん, so the reading-keyed lookup misses.
+    # The surface-keyed nominal merge keeps it whole with the DICT reading + accent.
+    from ankienrich.jrp_fill.accent import AccentIndex
+    from ankienrich.jrp_fill.tokenize import units
+    from ankienrich.jrp_fill.emit import emit_sentence
+    from ankienrich import markup
+    acc = AccentIndex.load(IDX)
+    g = lambda s: emit_sentence(units(s, acc))
+    out = g("この料理は天下一品だ。")
+    assert markup.jrp_surface(out) == "この料理は天下一品だ。"
+    assert "てんかいっぴん" in out and out.count("{") >= 1
+    assert "ひん" not in out.split("天下一", 1)[0][-3:]   # not the split てんかいち/ひん
+
 def test_dict_miss_word_kept_whole_via_reading_and_gozaimasu():
     from ankienrich.jrp_fill.accent import AccentIndex
     from ankienrich.jrp_fill.tokenize import units

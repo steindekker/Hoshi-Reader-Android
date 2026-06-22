@@ -232,6 +232,30 @@ def _prefix_merge(ms, i: int, acc: AccentIndex,
         return Unit(js, js, jr, jr, True, False, tuple(pos)), 1 + n
     return None
 
+_IDIOM_MAX = 8  # phrasal idioms rarely run past a handful of morphemes
+
+def _idiom_merge(ms, i: int, acc: AccentIndex) -> tuple[Unit, int] | None:
+    """Fuse a particle-containing phrase whose whole SURFACE is a dict headword into
+    ONE unit (目に余る -> めにあまる[1,4]). The reading-keyed merges can't reach these:
+    none of them crosses a 助詞. Longest span first, gated so it only fires on a real
+    verb phrase — ends in a 用言 AND carries an interior 助詞 — which excludes the
+    こと/もの formal-noun class and the noun+の coincidence (本の != the 連体詞 ほんの).
+    Uses the DICT reading and only when it's unambiguous, so a Sudachi mis-read on a
+    sub-morpheme can never leak into the result."""
+    if ms[i].part_of_speech()[0] not in CONTENT_POS:
+        return None
+    hi = min(i + _IDIOM_MAX, len(ms))
+    for j in range(hi, i + 2, -1):       # >= 3 morphemes: head + 助詞 + 用言
+        if ms[j - 1].part_of_speech()[0] not in YOUGEN_POS:
+            continue
+        if not any(ms[k].part_of_speech()[0] == "助詞" for k in range(i + 1, j - 1)):
+            continue
+        surf = "".join(x.surface() for x in ms[i:j])
+        ds = _dict_reading(surf, acc)
+        if ds is not None:
+            return Unit(surf, surf, ds[0], ds[0], True, False, tuple(ds[1])), j - i
+    return None
+
 def _nominal_merge(ms, i: int, acc: AccentIndex) -> tuple[Unit, int] | None:
     """Fuse adjacent nominal morphemes Sudachi over-split. Two triggers, longest
     window first: (a) the joined surface+reading is a dict headword -> pitched with
@@ -249,7 +273,17 @@ def _nominal_merge(ms, i: int, acc: AccentIndex) -> tuple[Unit, int] | None:
         pos = acc.lookup(surf, read) or acc.by_reading(read)
         if pos:
             return Unit(surf, surf, read, read, True, False, tuple(pos)), j - i
-        if any(ms[k].part_of_speech()[0] == "接頭辞" for k in range(i, j)):
+        has_prefix = any(ms[k].part_of_speech()[0] == "接頭辞" for k in range(i, j))
+        # surface IS a dict headword but Sudachi mis-read a sub-morpheme, so the
+        # reading-keyed lookups missed (天下一品: てんかいち+ひん != てんかいっぴん).
+        # Adopt the dict's own reading + accent when it's unambiguous. Skip 接頭辞
+        # spans: the honorific branch below owns those (お酒 is おさけ here, not the
+        # dict's rare お酒=ごしゅ headword).
+        if not has_prefix:
+            ds = _dict_reading(surf, acc)
+            if ds is not None:
+                return Unit(surf, surf, ds[0], ds[0], True, False, tuple(ds[1])), j - i
+        if has_prefix:
             rd, accents = read, ()
             pre = ms[i]
             # honorific お/ご compound the dict omits = transparent 美化語 -> 平板 (0),
@@ -303,6 +337,12 @@ def units(text: str, acc: AccentIndex, conj_accent: bool = False) -> list[Unit]:
                 out.append(merged)
                 i += 2
                 continue
+        im = _idiom_merge(ms, i, acc)
+        if im is not None:
+            unit, consumed = im
+            out.append(unit)
+            i += consumed
+            continue
         nm = _nominal_merge(ms, i, acc)
         if nm is not None:
             unit, consumed = nm
