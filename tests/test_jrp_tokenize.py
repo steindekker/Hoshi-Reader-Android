@@ -244,8 +244,9 @@ def test_honorific_heiban_on_dict_miss():
     # stem isolation corrects Sudachi's contextual mis-read: お香 こう (not かおり)
     assert "{お[香|こう];0}" in g("お香を焚く")
     # GUARD 1: stem not a dict word (〜ちゃん diminutive) -> stays furigana-only
-    out = g("おばあちゃんがいる")
-    assert "おばあちゃん" in out and "{おばあ" not in out and "ちゃん;" not in out
+    # (おばあちゃん/おじいちゃん ARE dict headwords now, so use a still-missing one)
+    out = g("おにいちゃんがいる")
+    assert "おにいちゃん" in out and "{おにい" not in out and "ちゃん;" not in out
     # GUARD 2: person-honorific (closed class) is accented, not heiban -> furigana-only
     out2 = g("ご両親によろしく")
     assert markup.jrp_surface(out2) == "ご両親によろしく"
@@ -263,7 +264,7 @@ def test_nominal_compound_merge():
     assert "{わが[国|くに];1}" in g("わが国の未来")          # was わが[1] + 国[0]
     assert "{[我|わ]が[国|くに];1}" in g("我が国の未来")
     # honorific 接頭辞 run kept whole even on a dict miss (furigana-only, no pitch)
-    assert "おばあちゃん" in g("おばあちゃんがいる") and "{おばあ;" not in g("おばあちゃんがいる")
+    assert "おにいちゃん" in g("おにいちゃんがいる") and "{おにい;" not in g("おにいちゃんがいる")
     # no over-merge without a 接頭辞 or dict hit: 学生 keeps its pitch, さん separate
     assert "{[学生|がくせい];0}さん" in g("学生さんが来た")
 

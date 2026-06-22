@@ -1,7 +1,8 @@
 """Pitch-graph backfill engine. Uses the anki `col` API; no aqt (GUI) imports
 so it can be tested headless. Idempotent: writes only changed notes.
 
-Uses the shared, dict-authoritative AccentIndex (NHK2016 + アクセント辞典v2).
+Uses the shared, dict-authoritative AccentIndex (NHK2016 + アクセント辞典v2,
+gap-filled from 三省堂第八版 — see accent_augment.py).
 positions[0] is the primary accent."""
 from . import config, pitch_svg
 from .collection import notetype_search
@@ -12,7 +13,7 @@ from .paths import ACCENT_INDEX as _INDEX_PATH
 _FIELD = config.PITCH
 
 # Provenance baked into accent_index.marshal.gz.
-SOURCES = ("NHK2016", "アクセント辞典v2")
+SOURCES = ("NHK2016", "アクセント辞典v2", "三省堂第八版")
 
 
 def accents_for(idx: AccentIndex, term: str, reading: str) -> list[int] | None:
