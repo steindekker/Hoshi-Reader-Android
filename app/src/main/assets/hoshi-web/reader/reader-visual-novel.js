@@ -1575,6 +1575,8 @@ window.hoshiReader = {
           if (cursor === end) flushSegment();
         } else if (segment) {
           segment.end = next;
+        } else if (cursor > start && cursor < end) {
+          segment = { node: node, start: offset, end: next };
         }
         offset = next;
       }

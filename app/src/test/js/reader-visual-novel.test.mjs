@@ -1235,6 +1235,20 @@ test('visual novel Sasayaki wraps and activates a cue on the current screen', as
     assert.equal(reader.nodeStartOffsets.get(collectTextNodes(wrappers[0])[0]), 0);
 });
 
+test('visual novel Sasayaki cue includes punctuation between text nodes inside the same cue', async () => {
+    const cue = { id: 'cue', start: 0, length: 5 };
+    const paragraph = new TestElement('p');
+    paragraph.appendChild(new TestText('古都'));
+    paragraph.appendChild(new TestText('。'));
+    paragraph.appendChild(new TestText('３年生'));
+    const { reader } = await initializeReader(bodyWith(paragraph), { revealSpeed: 0 });
+
+    reader.applySasayakiCues([cue]);
+    reader.highlightSasayakiCue(cue, false);
+
+    assert.equal(sasayakiWrappers(reader).map((wrapper) => wrapper.textContent).join(''), '古都。３年生');
+});
+
 test('visual novel Sasayaki reveal jumps to a later screen and returns progress', async () => {
     const cue = { id: 'cue', start: 1, length: 2 };
     const { reader } = await initializeReader(
