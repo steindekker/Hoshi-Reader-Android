@@ -4,9 +4,38 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 const readerVisualNovelUrl = new URL('../../main/assets/hoshi-web/reader/reader-visual-novel.js', import.meta.url);
+const readerTextSemanticsUrl = new URL('../../main/assets/hoshi-web/reader/reader-text-semantics.js', import.meta.url);
+const readerMediaSemanticsUrl = new URL('../../main/assets/hoshi-web/reader/reader-media-semantics.js', import.meta.url);
+const readerVnContentStreamUrl = new URL('../../main/assets/hoshi-web/reader/reader-vn-content-stream.js', import.meta.url);
+const readerVnRangeMapUrl = new URL('../../main/assets/hoshi-web/reader/reader-vn-range-map.js', import.meta.url);
+const readerHighlightsUrl = new URL('../../main/assets/hoshi-web/reader/highlights.js', import.meta.url);
+
+function readerTextSemanticsSource() {
+    return fs.readFileSync(readerTextSemanticsUrl, 'utf8');
+}
+
+function readerVnContentStreamSource() {
+    return fs.readFileSync(readerVnContentStreamUrl, 'utf8');
+}
+
+function readerVnRangeMapSource() {
+    return fs.readFileSync(readerVnRangeMapUrl, 'utf8');
+}
+
+function readerMediaSemanticsSource() {
+    return fs.readFileSync(readerMediaSemanticsUrl, 'utf8');
+}
+
+function readerHighlightsSource() {
+    return fs.readFileSync(readerHighlightsUrl, 'utf8');
+}
 
 function readerSource() {
     return fs.readFileSync(readerVisualNovelUrl, 'utf8')
+        .replaceAll('__HOSHI_READER_TEXT_SEMANTICS_SCRIPT__', readerTextSemanticsSource())
+        .replaceAll('__HOSHI_READER_MEDIA_SEMANTICS_SCRIPT__', readerMediaSemanticsSource())
+        .replaceAll('__HOSHI_READER_VN_CONTENT_STREAM_SCRIPT__', readerVnContentStreamSource())
+        .replaceAll('__HOSHI_READER_VN_RANGE_MAP_SCRIPT__', readerVnRangeMapSource())
         .replaceAll('__HOSHI_VISUAL_NOVEL_REVEAL_SPEED__', '0')
         .replaceAll('__HOSHI_VISUAL_NOVEL_SCREEN_MODE_LITERAL__', JSON.stringify('block'))
         .replaceAll('__HOSHI_VISUAL_NOVEL_SENTENCES_PER_SCREEN__', '1')
@@ -23,6 +52,10 @@ function readerSource() {
 
 function configuredReaderSource(options = {}) {
     return fs.readFileSync(readerVisualNovelUrl, 'utf8')
+        .replaceAll('__HOSHI_READER_TEXT_SEMANTICS_SCRIPT__', options.textSemanticsScript ?? readerTextSemanticsSource())
+        .replaceAll('__HOSHI_READER_MEDIA_SEMANTICS_SCRIPT__', options.mediaSemanticsScript ?? readerMediaSemanticsSource())
+        .replaceAll('__HOSHI_READER_VN_CONTENT_STREAM_SCRIPT__', options.contentStreamScript ?? readerVnContentStreamSource())
+        .replaceAll('__HOSHI_READER_VN_RANGE_MAP_SCRIPT__', options.rangeMapScript ?? readerVnRangeMapSource())
         .replaceAll('__HOSHI_VISUAL_NOVEL_REVEAL_SPEED__', String(options.revealSpeed ?? 0))
         .replaceAll('__HOSHI_VISUAL_NOVEL_SCREEN_MODE_LITERAL__', JSON.stringify(options.mode ?? 'block'))
         .replaceAll('__HOSHI_VISUAL_NOVEL_SENTENCES_PER_SCREEN__', String(options.sentencesPerScreen ?? 1))
@@ -529,10 +562,17 @@ function matchesSelector(node, selector) {
 }
 
 function querySelectorAll(root, selector) {
+    const svgImageSelector = selector.trim() === 'svg image';
     const selectors = selector.split(',').map((item) => item.trim());
     const result = [];
     const visit = (node) => {
-        if (node.nodeType === 1 && selectors.some((item) => matchesSelector(node, item))) {
+        if (
+            node.nodeType === 1 &&
+            (
+                (svgImageSelector && node.tagName === 'IMAGE' && closestElement(node, 'svg')) ||
+                selectors.some((item) => matchesSelector(node, item))
+            )
+        ) {
             result.push(node);
         }
         node.childNodes?.forEach(visit);
@@ -725,6 +765,24 @@ function p(text, attributes = {}) {
     return paragraph;
 }
 
+function element(tagName, attributes = {}, children = []) {
+    const node = new TestElement(tagName);
+    Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, value));
+    children.forEach((child) => node.appendChild(typeof child === 'string' ? new TestText(child) : child));
+    return node;
+}
+
+function paragraphWith(...children) {
+    return element('p', {}, children);
+}
+
+function rubyText(base, annotation) {
+    return element('ruby', {}, [
+        base,
+        element('rt', {}, [annotation]),
+    ]);
+}
+
 function image(src, attributes = {}) {
     const img = new TestElement('img');
     img.setAttribute('src', src);
@@ -735,6 +793,14 @@ function image(src, attributes = {}) {
     img.naturalWidth = 320;
     img.naturalHeight = 240;
     return img;
+}
+
+function svgImage(src, attributes = {}) {
+    const svg = element('svg', attributes, [element('image', {}, [])]);
+    const inner = svg.querySelector('image');
+    inner.setAttribute('href', src);
+    inner.href = { baseVal: src };
+    return svg;
 }
 
 function imageBlock(src, attributes = {}) {
@@ -787,6 +853,37 @@ test('visual novel reader asset defines the expected public surface', () => {
     assert.equal(typeof reader.nodeStartRawOffsets.get, 'function');
 });
 
+test('visual novel reader requires the shared text semantics asset', async () => {
+    const { reader } = loadReader(bodyWith(p('本文。')), { textSemanticsScript: '' });
+
+    await assert.rejects(() => reader.initialize(), /hoshiReaderTextSemantics/);
+});
+
+test('visual novel reader requires the VN content stream asset', async () => {
+    const { reader } = loadReader(bodyWith(p('本文。')), { contentStreamScript: '' });
+
+    await assert.rejects(() => reader.initialize(), /hoshiReaderVnContentStream/);
+});
+
+test('visual novel reader requires the VN range map asset', async () => {
+    const { reader } = loadReader(bodyWith(p('本文。')), { rangeMapScript: '' });
+
+    await assert.rejects(() => reader.initialize(), /hoshiReaderVnRangeMap/);
+});
+
+test('visual novel reader uses shared text semantics', () => {
+    const { reader, window } = loadReader(bodyWith(p('本文。')));
+    const originalCountChars = window.hoshiReaderTextSemantics.countChars;
+    let countCalls = 0;
+    window.hoshiReaderTextSemantics.countChars = (text) => {
+        countCalls += 1;
+        return originalCountChars(text);
+    };
+
+    assert.equal(reader.countChars('一、二'), 2);
+    assert.equal(countCalls, 1);
+});
+
 test('block mode renders one top-level block per screen without cloning the entire chapter', async () => {
     const body = bodyWith(p('第一段落。'), p('第二段落。'));
     const { reader } = await initializeReader(body, { mode: 'block', revealSpeed: 0 });
@@ -796,6 +893,22 @@ test('block mode renders one top-level block per screen without cloning the enti
     assert.equal(reader.paginate('forward'), 'scrolled');
     assert.equal(currentScreen(reader).textContent, '第二段落。');
     assert.equal(currentScreen(reader).textContent.includes('第一段落。'), false);
+});
+
+test('block mode preserves ruby annotations while indexing only base text', async () => {
+    const body = bodyWith(paragraphWith('夜', rubyText('星', 'ほし'), '。'));
+    const { reader } = await initializeReader(body, { mode: 'block', revealSpeed: 0 });
+    const screen = currentScreen(reader);
+    const ruby = screen.querySelector('ruby');
+    const rt = screen.querySelector('rt');
+
+    assert.notEqual(ruby, null);
+    assert.notEqual(rt, null);
+    const rubyTextNodes = collectTextNodes(ruby);
+    assert.equal(rt.textContent, 'ほし');
+    assert.equal(reader.totalChapterChars, 2);
+    assert.equal(reader.nodeStartOffsets.get(rubyTextNodes.find((node) => node.textContent === '星')), 1);
+    assert.equal(reader.nodeStartOffsets.get(rubyTextNodes.find((node) => node.textContent === 'ほし')), undefined);
 });
 
 test('block mode builds source positions without scanning every text entry for every block', async () => {
@@ -884,6 +997,51 @@ test('viewport fitting skips precise range layout when scroll bounds already fit
     assert.equal(preciseRangeChecks, 0);
 });
 
+test('viewport fitting rejects vertical screens that overflow the content clipping box', () => {
+    const { reader, document } = loadReader(bodyWith(p('seed')), {
+        mode: 'block',
+        revealSpeed: 0,
+        vnWritingMode: 'vertical-rl',
+    });
+    const root = document.createElement('div');
+    root.className = 'hoshi-vn-screen';
+    const content = document.createElement('div');
+    content.className = 'hoshi-vn-content';
+    root.appendChild(content);
+    Object.defineProperties(root, {
+        clientWidth: { value: 384 },
+        clientHeight: { value: 834 },
+        scrollWidth: { value: 400 },
+        scrollHeight: { value: 834 },
+    });
+    Object.defineProperties(content, {
+        clientWidth: { value: 353 },
+        clientHeight: { value: 768 },
+        scrollWidth: { value: 385 },
+        scrollHeight: { value: 768 },
+    });
+    let preciseRangeChecks = 0;
+    reader.renderedTextFitsBounds = () => {
+        preciseRangeChecks += 1;
+        return false;
+    };
+    const screen = reader.screenDescriptor({
+        startCharCount: 0,
+        endCharCount: 4,
+        startRawCount: 0,
+        endRawCount: 4,
+        splittable: true,
+        render: () => {
+            const fragment = new TestFragment();
+            fragment.appendChild(new TestText('本文'));
+            return fragment;
+        },
+    });
+
+    assert.equal(reader.measureScreenFits(screen, { root, content }), false);
+    assert.equal(preciseRangeChecks, 1);
+});
+
 test('block mode splits a chapter wrapper into child block screens', async () => {
     const wrapper = new TestElement('section');
     wrapper.setAttribute('id', 'chapter');
@@ -922,6 +1080,101 @@ test('block mode splits oversized text blocks to keep every part reachable', asy
     assert.equal(currentScreen(reader).textContent, '九十。');
     assert.equal(reader.paginate('forward'), 'scrolled');
     assert.equal(currentScreen(reader).textContent, '次段落。');
+});
+
+test('block mode splits oversized text blocks that contain inline images', async () => {
+    const marker = image('images/marker.png', { id: 'marker' });
+    marker.naturalWidth = 48;
+    marker.naturalHeight = 48;
+    const body = bodyWith(element('blockquote', { id: 'quote' }, ['一二', marker, '三四五六']));
+    const { reader } = await initializeReader(body, {
+        mode: 'block',
+        revealSpeed: 0,
+        charactersPerScreen: 4,
+    });
+
+    assert.equal(currentScreen(reader).textContent, '一二三四');
+    assert.equal(currentScreen(reader).querySelector('#marker').getAttribute('src'), 'images/marker.png');
+    assert.equal(reader.screenIndexForFragment('quote'), 0);
+
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '五六');
+    assert.equal(currentScreen(reader).querySelector('#marker'), null);
+});
+
+test('block mode keeps leading inline images with the first split text screen', async () => {
+    const marker = image('images/marker.png', { id: 'marker' });
+    marker.naturalWidth = 48;
+    marker.naturalHeight = 48;
+    const body = bodyWith(element('blockquote', { id: 'quote' }, [marker, '一二三四五六']));
+    const { reader } = await initializeReader(body, {
+        mode: 'block',
+        revealSpeed: 0,
+        charactersPerScreen: 4,
+    });
+
+    assert.equal(currentScreen(reader).textContent, '一二三四');
+    assert.equal(currentScreen(reader).querySelector('#marker').getAttribute('src'), 'images/marker.png');
+
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '五六');
+    assert.equal(currentScreen(reader).querySelector('#marker'), null);
+});
+
+test('block mode fitting avoids source tree scans for ruby-only split blocks', async () => {
+    const children = [];
+    for (let i = 0; i < 80; i += 1) {
+        children.push(rubyText('漢', 'かん'));
+        if (i % 20 === 19) children.push('。');
+    }
+    const { reader } = loadReader(bodyWith(element('p', { id: 'long' }, children)), {
+        mode: 'block',
+        revealSpeed: 0,
+        charactersPerScreen: 40,
+    });
+    let preorderLookups = 0;
+    const originalSourcePreorderForNode = reader.sourcePreorderForNode;
+    reader.sourcePreorderForNode = function(node) {
+        preorderLookups += 1;
+        return originalSourcePreorderForNode.call(this, node);
+    };
+
+    await reader.initialize();
+
+    assert.equal(reader.screens.length, 6);
+    assert.ok(
+        preorderLookups < 12000,
+        `expected bounded preorder lookups while fitting ruby-only blocks, got ${preorderLookups}`,
+    );
+});
+
+test('viewport fitting keeps ruby roots atomic when splitting oversized VN screens', async () => {
+    const body = bodyWith(paragraphWith('一', rubyText('二三', 'にさん'), '四五'));
+    const { reader } = await initializeReader(body, {
+        mode: 'block',
+        revealSpeed: 0,
+        charactersPerScreen: 2,
+    });
+
+    assert.equal(reader.totalChapterChars, 5);
+    assert.equal(currentScreen(reader).textContent, '一');
+    assert.equal(currentScreen(reader).querySelectorAll('ruby').length, 0);
+
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    const rubyScreen = currentScreen(reader);
+    const ruby = rubyScreen.querySelector('ruby');
+    assert.equal(rubyScreen.querySelectorAll('ruby').length, 1);
+    assert.deepEqual(collectTextNodes(ruby).map((node) => node.textContent), ['二三', 'にさん']);
+    assert.equal(rubyScreen.querySelector('rt').textContent, 'にさん');
+    assert.equal(reader.calculateProgress(), 3 / 5);
+
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '四五');
+    assert.equal(currentScreen(reader).querySelectorAll('ruby').length, 0);
+
+    await reader.restoreProgress(2 / reader.totalChapterChars);
+    assert.equal(currentScreen(reader).querySelectorAll('ruby').length, 1);
+    assert.deepEqual(collectTextNodes(currentScreen(reader).querySelector('ruby')).map((node) => node.textContent), ['二三', 'にさん']);
 });
 
 test('block mode splits oversized vertical writing blocks against the VN content bounds', async () => {
@@ -984,6 +1237,24 @@ test('sentence mode groups sentences by configured count', async () => {
     assert.equal(currentScreen(reader).textContent, '三？四。');
 });
 
+test('sentence mode preserves ruby annotations after reveal completion', async () => {
+    const body = bodyWith(paragraphWith(rubyText('星', 'ほし'), '。次。'));
+    const { reader } = await initializeReader(body, {
+        mode: 'sentences',
+        sentencesPerScreen: 1,
+        revealSpeed: 10,
+    });
+
+    assert.equal(reader.totalChapterChars, 2);
+    assert.equal(reader.calculateProgress(), 1 / 2);
+    assert.equal(reader.paginate('forward'), 'revealed');
+    assert.equal(currentScreen(reader).querySelector('rt').textContent, 'ほし');
+    assert.equal(currentScreen(reader).querySelectorAll('[data-hoshi-visual-novel-unrevealed]').length, 0);
+
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '次。');
+});
+
 test('sentence mode keeps media-only blocks as standalone visual novel screens', async () => {
     const body = bodyWith(p('一。'), imageBlock('images/cover.jpg', { id: 'cover' }), p('二。'));
     const { reader } = await initializeReader(body, {
@@ -999,6 +1270,181 @@ test('sentence mode keeps media-only blocks as standalone visual novel screens',
     assert.equal(reader.screenIndexForFragment('cover'), 1);
     assert.equal(reader.paginate('forward'), 'scrolled');
     assert.equal(currentScreen(reader).textContent, '二。');
+});
+
+test('block mode splits consecutive media in one media-only block into independent screens', async () => {
+    const gallery = element('p', { id: 'gallery' }, [
+        '\n  ',
+        image('images/one.jpg', { id: 'one' }),
+        '\n  ',
+        image('images/two.jpg', { id: 'two' }),
+        '\n',
+    ]);
+    const { reader } = await initializeReader(bodyWith(gallery), { mode: 'block', revealSpeed: 0 });
+
+    assert.equal(currentScreen(reader).querySelectorAll('img').length, 1);
+    assert.equal(currentScreen(reader).querySelector('#one').getAttribute('src'), 'images/one.jpg');
+    assert.equal(reader.screenIndexForFragment('gallery'), 0);
+    assert.equal(reader.screenIndexForFragment('one'), 0);
+    assert.equal(reader.screenIndexForFragment('two'), 1);
+
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).querySelectorAll('img').length, 1);
+    assert.equal(currentScreen(reader).querySelector('#two').getAttribute('src'), 'images/two.jpg');
+    assert.equal(reader.paginate('forward'), 'limit');
+});
+
+test('block mode keeps nested media-only block wrappers without cloning sibling chapter text', async () => {
+    const gallery = element('p', { id: 'gallery', class: 'gallery' }, [
+        image('images/one.jpg', { id: 'one' }),
+        image('images/two.jpg', { id: 'two' }),
+    ]);
+    const chapter = element('section', { id: 'chapter' }, [
+        p('前。'),
+        gallery,
+        p('後。'),
+    ]);
+    const { reader } = await initializeReader(bodyWith(chapter), { mode: 'block', revealSpeed: 0 });
+
+    assert.equal(currentScreen(reader).textContent, '前。');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '');
+    assert.notEqual(currentScreen(reader).querySelector('.gallery'), null);
+    assert.equal(currentScreen(reader).querySelectorAll('img').length, 1);
+    assert.equal(currentScreen(reader).querySelector('#one').getAttribute('src'), 'images/one.jpg');
+    assert.equal(currentScreen(reader).querySelector('#two'), null);
+    assert.equal(reader.screenIndexForFragment('chapter'), 0);
+    assert.equal(reader.screenIndexForFragment('gallery'), 1);
+
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).querySelector('#two').getAttribute('src'), 'images/two.jpg');
+    assert.equal(currentScreen(reader).querySelector('#one'), null);
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '後。');
+});
+
+test('sentence mode keeps consecutive media-only images ordered between text screens', async () => {
+    const gallery = element('p', {}, [
+        image('images/one.jpg', { id: 'one' }),
+        image('images/two.jpg', { id: 'two' }),
+    ]);
+    const body = bodyWith(p('一。'), gallery, p('二。'));
+    const { reader } = await initializeReader(body, {
+        mode: 'sentences',
+        sentencesPerScreen: 1,
+        revealSpeed: 0,
+    });
+
+    assert.equal(currentScreen(reader).textContent, '一。');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).querySelector('#one').getAttribute('src'), 'images/one.jpg');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).querySelector('#two').getAttribute('src'), 'images/two.jpg');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '二。');
+});
+
+test('visual novel restore keeps distinct progress for consecutive media screens', async () => {
+    const gallery = element('p', {}, [
+        image('images/one.jpg', { id: 'one' }),
+        image('images/two.jpg', { id: 'two' }),
+    ]);
+    const body = bodyWith(gallery, p('後。'));
+    const { reader } = await initializeReader(body, {
+        mode: 'sentences',
+        sentencesPerScreen: 1,
+        revealSpeed: 0,
+    });
+
+    assert.equal(currentScreen(reader).querySelector('#one').getAttribute('src'), 'images/one.jpg');
+    const firstImageProgress = reader.calculateProgress();
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).querySelector('#two').getAttribute('src'), 'images/two.jpg');
+    const secondImageProgress = reader.calculateProgress();
+    assert.notEqual(secondImageProgress, firstImageProgress);
+
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '後。');
+    assert.equal(reader.paginate('backward'), 'scrolled');
+    assert.equal(currentScreen(reader).querySelector('#two').getAttribute('src'), 'images/two.jpg');
+
+    await reader.restoreProgress(secondImageProgress);
+    assert.equal(currentScreen(reader).querySelector('#two').getAttribute('src'), 'images/two.jpg');
+    await reader.restoreProgress(firstImageProgress);
+    assert.equal(currentScreen(reader).querySelector('#one').getAttribute('src'), 'images/one.jpg');
+});
+
+test('visual novel restoreProgress one lands on the last screen in an image-only chapter', async () => {
+    const gallery = element('div', { class: 'main' }, [
+        element('div', { class: 'align-center' }, [
+            element('p', {}, [image('images/one.jpg', { id: 'one' })]),
+        ]),
+        element('div', { class: 'align-center' }, [
+            element('p', {}, [image('images/two.jpg', { id: 'two' })]),
+        ]),
+    ]);
+    const { reader } = await initializeReader(bodyWith(gallery), {
+        mode: 'block',
+        revealSpeed: 0,
+    });
+
+    assert.equal(reader.totalChapterChars, 0);
+    assert.equal(currentScreen(reader).querySelector('#one').getAttribute('src'), 'images/one.jpg');
+    assert.equal(reader.calculateProgress(), 0);
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).querySelector('#two').getAttribute('src'), 'images/two.jpg');
+    assert.equal(reader.calculateProgress(), 1);
+    assert.equal(reader.screenIndexForProgress(reader.calculateProgress()), 1);
+
+    await reader.restoreProgress(1);
+
+    assert.equal(currentScreen(reader).querySelector('#two').getAttribute('src'), 'images/two.jpg');
+});
+
+test('sentence mode splits nested chapter wrapper text and consecutive media screens', async () => {
+    const chapter = element('section', { id: 'chapter' }, [
+        p('一。'),
+        element('p', {}, [
+            '\n',
+            image('images/one.jpg', { id: 'one' }),
+            '\n',
+            image('images/two.jpg', { id: 'two' }),
+            '\n',
+        ]),
+        p('二。'),
+    ]);
+    const { reader } = await initializeReader(bodyWith(chapter), {
+        mode: 'sentences',
+        sentencesPerScreen: 1,
+        revealSpeed: 0,
+    });
+
+    assert.equal(currentScreen(reader).textContent, '一。');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).querySelector('#one').getAttribute('src'), 'images/one.jpg');
+    assert.equal(currentScreen(reader).textContent.trim(), '');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).querySelector('#two').getAttribute('src'), 'images/two.jpg');
+    assert.equal(currentScreen(reader).textContent.trim(), '');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '二。');
+});
+
+test('visual novel media stream keeps svg as media and gaiji inline', async () => {
+    const body = bodyWith(
+        paragraphWith('一', image('images/gaiji.png', { class: 'gaiji', id: 'gaiji' }), '二。'),
+        element('p', { id: 'svg-block' }, [svgImage('images/plate.jpg', { id: 'plate' })]),
+        p('三。'),
+    );
+    const { reader } = await initializeReader(body, { mode: 'block', revealSpeed: 0 });
+
+    assert.equal(currentScreen(reader).textContent, '一二。');
+    assert.equal(currentScreen(reader).querySelector('#gaiji').getAttribute('src'), 'images/gaiji.png');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).querySelector('#plate').tagName, 'SVG');
+    assert.equal(reader.screenIndexForFragment('svg-block'), 1);
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '三。');
 });
 
 test('sentence mode can preserve Japanese dialogue bracket bubbles', async () => {
@@ -1097,6 +1543,28 @@ test('visual novel image setup preserves blur and native image tap behavior', as
     assert.equal(JSON.stringify(imageMessages), JSON.stringify(['https://example.invalid/images/pic.jpg']));
 });
 
+test('visual novel SVG image setup preserves aspect ratio and native image tap behavior', async () => {
+    const body = bodyWith(element('p', {}, [
+        svgImage('images/plate.jpg', { id: 'plate', preserveAspectRatio: 'none' }),
+    ]));
+    const { reader, imageMessages } = await initializeReader(body, {
+        mode: 'block',
+        revealSpeed: 0,
+    });
+    const svg = currentScreen(reader).querySelector('#plate');
+    const innerImage = svg.querySelector('image');
+
+    assert.equal(svg.getAttribute('preserveAspectRatio'), 'xMidYMid meet');
+
+    innerImage.dispatchEvent({
+        type: 'click',
+        preventDefault() {},
+        stopPropagation() {},
+    });
+
+    assert.equal(JSON.stringify(imageMessages), JSON.stringify(['https://example.invalid/images/plate.jpg']));
+});
+
 test('forward and backward pagination report limits at chapter edges', async () => {
     const body = bodyWith(p('前。'), p('後。'));
     const { reader } = await initializeReader(body, { revealSpeed: 0 });
@@ -1141,6 +1609,17 @@ test('jumpToFragment lands on the screen containing a matching id and renders it
     assert.equal(await reader.jumpToFragment('target'), true);
 
     assert.equal(currentScreen(reader).textContent, '目的地。');
+    assert.equal(currentScreen(reader).querySelectorAll('[data-hoshi-visual-novel-unrevealed]').length, 0);
+});
+
+test('jumpToFragment lands on a media-only visual novel screen', async () => {
+    const body = bodyWith(p('序。'), imageBlock('images/cover.jpg', { id: 'cover' }), p('本文。'));
+    const { reader } = await initializeReader(body, { revealSpeed: 10 });
+
+    assert.equal(await reader.jumpToFragment('cover'), true);
+
+    assert.equal(currentScreen(reader).querySelector('#cover').id, 'cover');
+    assert.equal(currentScreen(reader).querySelector('img').getAttribute('src'), 'images/cover.jpg');
     assert.equal(currentScreen(reader).querySelectorAll('[data-hoshi-visual-novel-unrevealed]').length, 0);
 });
 
@@ -1193,6 +1672,27 @@ test('visual novel highlight segments use chapter-level raw offsets on later scr
     assert.equal(segments[0].end, 2);
 });
 
+test('visual novel persisted highlights wrap only the visible raw range on each screen', async () => {
+    const highlight = { id: 'h1', color: 'yellow', offset: 2, text: 'いう' };
+    const { reader, window } = await initializeReader(bodyWith(p('あ、い'), p('うえ')), {
+        revealSpeed: 0,
+        highlightsScript: readerHighlightsSource(),
+        initialHighlights: [highlight],
+    });
+
+    assert.deepEqual(
+        currentScreen(reader).querySelectorAll('.hoshi-highlight').map((node) => node.textContent),
+        ['い'],
+    );
+
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.deepEqual(
+        currentScreen(reader).querySelectorAll('.hoshi-highlight').map((node) => node.textContent),
+        ['う'],
+    );
+    assert.equal(window.hoshiHighlights.wrappers.get('h1').length, 1);
+});
+
 test('visible node offsets remain chapter-level after rendering later screens', async () => {
     const body = bodyWith(p('あ、い'), p('うえ'));
     const { reader } = await initializeReader(body, { revealSpeed: 0 });
@@ -1233,6 +1733,17 @@ test('visual novel Sasayaki wraps and activates a cue on the current screen', as
     assert.equal(wrappers[0].textContent, '蒸し暑い');
     assert.equal(reader.cueWrappers.get('cue')[0], wrappers[0]);
     assert.equal(reader.nodeStartOffsets.get(collectTextNodes(wrappers[0])[0]), 0);
+});
+
+test('visual novel Sasayaki range map normalizes string cue offsets', async () => {
+    const cue = { id: 'cue', start: '1', length: '2' };
+    const { reader } = await initializeReader(bodyWith(p('一二三四。')), { revealSpeed: 0 });
+
+    reader.applySasayakiCues([cue]);
+    reader.highlightSasayakiCue(cue, false);
+
+    assert.equal(sasayakiWrappers(reader).length, 1);
+    assert.equal(sasayakiWrappers(reader)[0].textContent, '二三');
 });
 
 test('visual novel Sasayaki cue includes punctuation between text nodes inside the same cue', async () => {
@@ -1289,9 +1800,17 @@ test('visual novel Sasayaki media stop plan includes every standalone image scre
         Array.from(stops, (stop) => stop.screenIndex),
         [1, 2],
     );
-    assert.equal(reader.showSasayakiMediaStop(stops[0]), 1 / 3);
+    const firstStopProgress = reader.showSasayakiMediaStop(stops[0]);
     assert.equal(currentScreen(reader).querySelector('img').getAttribute('src'), 'images/first.jpg');
-    assert.equal(reader.showSasayakiMediaStop(stops[1]), 1 / 3);
+    const secondStopProgress = reader.showSasayakiMediaStop(stops[1]);
+    assert.equal(currentScreen(reader).querySelector('img').getAttribute('src'), 'images/second.jpg');
+    assert.equal(firstStopProgress > 1 / 3, true);
+    assert.equal(secondStopProgress > firstStopProgress, true);
+    assert.equal(secondStopProgress < 1, true);
+
+    await reader.restoreProgress(firstStopProgress);
+    assert.equal(currentScreen(reader).querySelector('img').getAttribute('src'), 'images/first.jpg');
+    await reader.restoreProgress(secondStopProgress);
     assert.equal(currentScreen(reader).querySelector('img').getAttribute('src'), 'images/second.jpg');
 });
 
@@ -1461,6 +1980,27 @@ test('visual novel Sasayaki highlights only the visible part of a cross-screen c
     assert.equal(reader.paginate('forward'), 'scrolled');
     assert.equal(sasayakiWrappers(reader).length, 1);
     assert.equal(sasayakiWrappers(reader)[0].textContent, '三四');
+});
+
+test('visual novel Sasayaki e-ink cross-screen cue uses only visible geometry', async () => {
+    const cue = { id: 'cue', start: 1, length: 3 };
+    const { reader } = await initializeReader(bodyWith(p('一二。'), p('三四。')), { revealSpeed: 0 });
+    reader.isEInkMode = () => true;
+
+    reader.applySasayakiCues([cue]);
+    reader.highlightSasayakiCue(cue, false);
+    let ranges = reader.cueGeometryRanges.get('cue') ?? [];
+    assert.equal(ranges.length, 1);
+    assert.equal(ranges[0].startNode.textContent, '一二。');
+    assert.equal(ranges[0].startOffset, 1);
+    assert.equal(ranges[0].endOffset, 3);
+
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    ranges = reader.cueGeometryRanges.get('cue') ?? [];
+    assert.equal(ranges.length, 1);
+    assert.equal(ranges[0].startNode.textContent, '三四。');
+    assert.equal(ranges[0].startOffset, 0);
+    assert.equal(ranges[0].endOffset, 2);
 });
 
 test('visual novel Sasayaki merge setting combines block screens intersecting a cross-screen cue', async () => {

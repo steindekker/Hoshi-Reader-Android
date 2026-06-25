@@ -1582,6 +1582,7 @@ fun ReaderWebView(
                 stableStatusBarInsetDp = stableStatusBarPaddingDp,
             ),
     )
+    val restoreLoadingPresentation = readerRestoreLoadingPresentation(stateHolder.isWebViewRestoring)
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -1732,6 +1733,12 @@ fun ReaderWebView(
                     rootHighlight = readerRootSelectionHighlightPayload,
                 )
             }
+        }
+        if (restoreLoadingPresentation == ReaderRestoreLoadingPresentation.BehindChromeStaticSpinner) {
+            ReaderLoadingPage(
+                backgroundColor = Color(effectiveSettings.backgroundColor(systemDarkTheme)),
+                modifier = Modifier.fillMaxSize(),
+            )
         }
         ReaderTopInfo(
             state = chromeState,
@@ -1908,6 +1915,15 @@ fun ReaderWebView(
         webView?.let { _ -> Unit }
     }
 }
+
+internal enum class ReaderRestoreLoadingPresentation {
+    BehindChromeStaticSpinner,
+}
+
+internal fun readerRestoreLoadingPresentation(
+    isWebViewRestoring: Boolean,
+): ReaderRestoreLoadingPresentation? =
+    if (isWebViewRestoring) ReaderRestoreLoadingPresentation.BehindChromeStaticSpinner else null
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this

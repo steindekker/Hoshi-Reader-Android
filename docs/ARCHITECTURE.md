@@ -1,6 +1,6 @@
 # Hoshi Android Current Architecture
 
-Date: 2026-06-23
+Date: 2026-06-25
 
 This document describes the current architecture that exists in the Android
 repo. It is not a future plan and should not track task status. Long-lived
@@ -85,6 +85,28 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
 - Reader layout modes are WebView-backed assets for paginated, continuous, and
   VN reading. Kotlin selects the asset, injects typed settings, and keeps
   persisted progress as chapter progress mapped to whole-book character count.
+- Reader text semantics live in `reader-text-semantics.js` and are consumed by
+  paginated, continuous, and VN assets for normalization, matchable character
+  counting, raw character counting, and matchable-character checks.
+- Paginated and continuous share live DOM ruby/text normalization through
+  `reader-dom-text.js`; the mode assets keep thin public wrapper methods so
+  existing reader commands and tests continue to call the same surface.
+- Reader image setup semantics live in `reader-media-semantics.js` and are
+  consumed by paginated, continuous, and VN assets for SVG image aspect-ratio
+  correction, large image block marking, blur wrappers, native image tap
+  bridging, and scoped setup. Paginated and continuous apply it to the chapter
+  document and wait for image load/failure before restore; VN applies it to the
+  current rendered screen without blocking screen rendering on image load.
+- VN reading uses VN-specific reader-web runtime primitives for chapter content
+  streams and rendered range mapping. `reader-vn-content-stream.js` owns source
+  text/raw offsets, matchable offsets, ruby-aware text entries, structural IDs,
+  and standalone media units. `reader-vn-range-map.js` maps VN rendered screens
+  back to raw highlight ranges and matchable Sasayaki ranges. VN keeps its
+  mode-specific block/sentence boundaries, reveal behavior, cross-screen
+  Sasayaki merge, viewport fitting, and current-screen rendering.
+- Paginated and continuous production page/scroll runtime paths remain
+  unchanged and are not wired to VN content stream instances or the VN range-map
+  module.
 - Reader fixes compare against the iOS `ReaderWebView` and matching JS/CSS
   before adding Android-specific behavior.
 - Reader resource loading must stay on the repository's safe loading path and

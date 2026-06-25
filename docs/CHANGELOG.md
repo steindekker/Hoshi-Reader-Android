@@ -20,6 +20,13 @@ Historical release notes before v1.1.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 - Pause Sasayaki auto-scroll during natural playback on skipped image pages for one second, including multiple image pages, image-only chapters, vertical continuous reading, and fullscreen image interruptions, while cue or progress seeks jump directly without leaving playback paused.
 - Keep Sasayaki cross-chapter cue jumps from briefly showing the chapter start, counting the hidden restore landing in reading statistics, or applying cue jumps before slow chapter restores finish.
 - Keep Sasayaki cue highlights from dropping punctuation split across EPUB text nodes.
+- Show a static lightweight loading spinner while Reader opens or restores chapters without blocking Reader chrome during restore.
+- Speed up VN restore for ruby-heavy chapters by avoiding repeated full source-tree scans while fitting split screens.
+- Keep VN screens from dropping ruby/furigana annotations.
+- Keep VN vertical text screens from clipping the leftmost line when EPUB styling makes the rendered text wider than the VN content box.
+- Keep VN text blocks with small inline images from being treated as unsplittable media screens, preventing vertical text from overflowing off-screen.
+- Keep consecutive media-only images in VN from collapsing into one screen or being skipped when reverse-turning into an image-only chapter.
+- Clean EPUB `.calibre_12`-style publisher CSS classes so layout-breaking writing mode, line height, height, and positive indentation rules cannot bypass reader CSS sanitization.
 
 ## [v1.2.2] - 2026-06-21
 

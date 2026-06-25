@@ -1,3 +1,8 @@
+__HOSHI_READER_TEXT_SEMANTICS_SCRIPT__
+__HOSHI_READER_MEDIA_SEMANTICS_SCRIPT__
+__HOSHI_READER_VN_CONTENT_STREAM_SCRIPT__
+__HOSHI_READER_VN_RANGE_MAP_SCRIPT__
+
 window.hoshiReader = {
   revealSpeed: __HOSHI_VISUAL_NOVEL_REVEAL_SPEED__,
   screenMode: __HOSHI_VISUAL_NOVEL_SCREEN_MODE_LITERAL__,
@@ -18,14 +23,8 @@ window.hoshiReader = {
   cueGeometryRanges: new Map(),
   nodeStartOffsets: new WeakMap(),
   nodeStartRawOffsets: new WeakMap(),
-  sourceTextOffsets: new WeakMap(),
-  sourceTextRawOffsets: new WeakMap(),
-  sourceNodeStats: new WeakMap(),
-  sourceOrderIndexes: new WeakMap(),
-  cloneTextOffsets: new WeakMap(),
-  cloneTextRawOffsets: new WeakMap(),
-  ttuRegexNegated: /[^0-9A-Za-z○◯々-〇〻ぁ-ゖゝ-ゞァ-ヺー０-９Ａ-Ｚａ-ｚｦ-ﾝ\p{Radical}\p{Unified_Ideograph}]+/gimu,
-  ttuRegex: /[0-9A-Za-z○◯々-〇〻ぁ-ゖゝ-ゞァ-ヺー０-９Ａ-Ｚａ-ｚｦ-ﾝ\p{Radical}\p{Unified_Ideograph}]/iu,
+  contentStream: null,
+  rangeMap: null,
   sentenceDelimiters: '。！？.!?',
   totalChapterChars: 0,
   currentScreenIndex: 0,
@@ -73,21 +72,31 @@ window.hoshiReader = {
     var el = node && node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
     return !!(el && el.closest('rt, rp, script, style'));
   },
+  isDiscardedCloneElement: function(node) {
+    var el = node && node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+    return !!(el && el.closest('script, style'));
+  },
   isUnrevealed: function(node) {
     var el = node && node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
     return !!(el && el.closest('[data-hoshi-visual-novel-unrevealed]'));
   },
+  textSemantics: function() {
+    if (!window.hoshiReaderTextSemantics) {
+      throw new Error('hoshiReaderTextSemantics is required for reader text semantics');
+    }
+    return window.hoshiReaderTextSemantics;
+  },
   normalizeText: function(text) {
-    return (text || '').replace(this.ttuRegexNegated, '');
+    return this.textSemantics().normalizeText(text);
   },
   countChars: function(text) {
-    return Array.from(this.normalizeText(text)).length;
+    return this.textSemantics().countChars(text);
   },
   countRawChars: function(text) {
-    return Array.from(text || '').length;
+    return this.textSemantics().countRawChars(text);
   },
   isMatchableChar: function(char) {
-    return this.ttuRegex.test(char || '');
+    return this.textSemantics().isMatchableChar(char);
   },
   textOffsetForCharCount: function(node, targetCount) {
     var text = node.textContent || '';
@@ -128,12 +137,12 @@ window.hoshiReader = {
     var rawOffsets = new WeakMap();
     var walker = this.createWalker();
     var currentScreen = this.screens && this.screens[this.currentScreenIndex];
-    var fallbackCount = currentScreen ? (currentScreen.startCharCount || 0) : 0;
-    var fallbackRawCount = currentScreen ? (currentScreen.startRawCount || 0) : 0;
+    var fallbackCount = currentScreen ? this.screenStartCharCount(currentScreen) : 0;
+    var fallbackRawCount = currentScreen ? this.screenStartRawCount(currentScreen) : 0;
     var node;
     while (node = walker.nextNode()) {
-      var mappedCount = this.cloneTextOffsets.get(node);
-      var mappedRawCount = this.cloneTextRawOffsets.get(node);
+      var mappedCount = this.rangeMap.cloneTextOffsetForNode(node);
+      var mappedRawCount = this.rangeMap.cloneTextRawOffsetForNode(node);
       var startCount = mappedCount !== undefined ? mappedCount : fallbackCount;
       var startRawCount = mappedRawCount !== undefined ? mappedRawCount : fallbackRawCount;
       offsets.set(node, startCount);
@@ -203,57 +212,17 @@ window.hoshiReader = {
     document.body.appendChild(this.stage);
   },
   buildSourceIndexes: function() {
-    this.sourceTextOffsets = new WeakMap();
-    this.sourceTextRawOffsets = new WeakMap();
-    this.sourceNodeStats = new WeakMap();
-    this.sourceOrderIndexes = new WeakMap();
-    this.sourceEntries = [];
-    var topLevelNodes = Array.from(this.sourceRoot.childNodes || []);
-    for (var order = 0; order < topLevelNodes.length; order++) {
-      this.sourceOrderIndexes.set(topLevelNodes[order], order);
+    var contentStreamFactory = window.hoshiReaderVnContentStream && window.hoshiReaderVnContentStream.create;
+    if (!contentStreamFactory) {
+      throw new Error('hoshiReaderVnContentStream is required for visual novel reader');
     }
-    var walker = this.createWalker(this.sourceRoot);
-    var count = 0;
-    var rawCount = 0;
-    var node;
-    while (node = walker.nextNode()) {
-      this.sourceTextOffsets.set(node, count);
-      this.sourceTextRawOffsets.set(node, rawCount);
-      var entry = {
-        node: node,
-        startChar: count,
-        startRaw: rawCount,
-        text: node.textContent || ''
-      };
-      count += this.countChars(entry.text);
-      rawCount += this.countRawChars(entry.text);
-      entry.endChar = count;
-      entry.endRaw = rawCount;
-      this.sourceEntries.push(entry);
-      this.updateSourceNodeStats(node, entry);
+    var rangeMapFactory = window.hoshiReaderVnRangeMap && window.hoshiReaderVnRangeMap.create;
+    if (!rangeMapFactory) {
+      throw new Error('hoshiReaderVnRangeMap is required for visual novel reader');
     }
-    this.totalChapterChars = count;
-  },
-  updateSourceNodeStats: function(node, entry) {
-    var current = node;
-    while (current && current !== this.sourceRoot) {
-      var stats = this.sourceNodeStats.get(current);
-      if (!stats) {
-        this.sourceNodeStats.set(current, {
-          hasText: true,
-          startChar: entry.startChar,
-          endChar: entry.endChar,
-          startRaw: entry.startRaw,
-          endRaw: entry.endRaw
-        });
-      } else {
-        stats.startChar = Math.min(stats.startChar, entry.startChar);
-        stats.endChar = Math.max(stats.endChar, entry.endChar);
-        stats.startRaw = Math.min(stats.startRaw, entry.startRaw);
-        stats.endRaw = Math.max(stats.endRaw, entry.endRaw);
-      }
-      current = current.parentNode;
-    }
+    this.contentStream = contentStreamFactory(this.sourceRoot);
+    this.rangeMap = rangeMapFactory(this);
+    this.totalChapterChars = this.contentStream.totalMatchableChars;
   },
   buildScreens: function() {
     var mode = String(this.screenMode || '').toLowerCase();
@@ -266,7 +235,7 @@ window.hoshiReader = {
     this.baseScreens = baseScreens;
     this.screens = this.mergeSasayakiCrossScreenScreens(baseScreens);
     if (!this.screens.length) {
-      this.screens.push({
+      this.screens.push(this.screenDescriptor({
         startCharCount: 0,
         endCharCount: 0,
         startRawCount: 0,
@@ -274,9 +243,150 @@ window.hoshiReader = {
         ids: new Set(),
         splittable: false,
         render: () => document.createDocumentFragment()
-      });
+      }));
     }
     this.screens = this.fitScreensToViewport(this.screens);
+    this.assignScreenProgressAnchors();
+  },
+  screenDescriptor: function(options) {
+    var source = options || {};
+    var startChar = this.normalizedScreenCount(source.startCharCount, 0);
+    var endChar = Math.max(startChar, this.normalizedScreenCount(source.endCharCount, startChar));
+    var startRaw = this.normalizedScreenCount(source.startRawCount, 0);
+    var endRaw = Math.max(startRaw, this.normalizedScreenCount(source.endRawCount, startRaw));
+    var render = typeof source.render === 'function'
+      ? source.render
+      : function() { return document.createDocumentFragment(); };
+    return {
+      standalone: !!source.standalone,
+      order: source.order,
+      preorder: source.preorder,
+      startCharCount: startChar,
+      endCharCount: endChar,
+      startRawCount: startRaw,
+      endRawCount: endRaw,
+      progressAnchor: Number.isFinite(Number(source.progressAnchor)) ? Number(source.progressAnchor) : null,
+      ids: source.ids instanceof Set ? new Set(source.ids) : new Set(source.ids || []),
+      splittable: !!source.splittable,
+      mediaStop: !!source.mediaStop,
+      render: render
+    };
+  },
+  normalizedScreenCount: function(value, fallback) {
+    var parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.max(0, parsed);
+  },
+  screenStartCharCount: function(screen) {
+    return this.normalizedScreenCount(screen && screen.startCharCount, 0);
+  },
+  screenEndCharCount: function(screen) {
+    return Math.max(this.screenStartCharCount(screen), this.normalizedScreenCount(screen && screen.endCharCount, this.screenStartCharCount(screen)));
+  },
+  screenStartRawCount: function(screen) {
+    return this.normalizedScreenCount(screen && screen.startRawCount, 0);
+  },
+  screenEndRawCount: function(screen) {
+    return Math.max(this.screenStartRawCount(screen), this.normalizedScreenCount(screen && screen.endRawCount, this.screenStartRawCount(screen)));
+  },
+  screenIds: function(screen) {
+    return screen && screen.ids instanceof Set ? screen.ids : new Set();
+  },
+  screenContainsFragment: function(screen, fragment) {
+    return this.screenIds(screen).has(fragment);
+  },
+  screenContainsCharOffset: function(screen, offset) {
+    var start = this.screenStartCharCount(screen);
+    var end = this.screenEndCharCount(screen);
+    return offset >= start && offset < end;
+  },
+  screenIntersectsCharRange: function(screen, start, end) {
+    var screenStart = this.screenStartCharCount(screen);
+    var screenEnd = this.screenEndCharCount(screen);
+    if (end <= start) return start >= screenStart && start <= screenEnd;
+    return end > screenStart && start < screenEnd;
+  },
+  progressTargetCharCount: function(progress) {
+    var clamped = Math.min(1, Math.max(0, Number(progress) || 0));
+    return Math.ceil(this.totalChapterChars * clamped);
+  },
+  assignScreenProgressAnchors: function() {
+    if (!this.screens || !this.screens.length) return;
+    if (!this.totalChapterChars) {
+      var denominator = Math.max(1, this.screens.length - 1);
+      for (var emptyIndex = 0; emptyIndex < this.screens.length; emptyIndex++) {
+        this.screens[emptyIndex].progressAnchor = this.screens.length === 1 ? 0 : emptyIndex / denominator;
+      }
+      return;
+    }
+    var index = 0;
+    var previousAnchor = 0;
+    var hasPreviousAnchor = false;
+    while (index < this.screens.length) {
+      var runStart = index;
+      var endChar = this.screenEndCharCount(this.screens[index]);
+      index += 1;
+      while (index < this.screens.length && this.screenEndCharCount(this.screens[index]) === endChar) {
+        index += 1;
+      }
+      var runEnd = index;
+      var count = runEnd - runStart;
+      var baseProgress = this.progressForCharCount(endChar);
+      var nextProgress = runEnd < this.screens.length
+        ? this.progressForCharCount(this.screenEndCharCount(this.screens[runEnd]))
+        : 1;
+      var previous = hasPreviousAnchor ? previousAnchor : 0;
+      var anchors = this.progressAnchorsForScreenRun(
+        count,
+        baseProgress,
+        previous,
+        nextProgress,
+        runStart === 0,
+      );
+      for (var runIndex = 0; runIndex < count; runIndex++) {
+        var anchor = Math.min(1, Math.max(0, anchors[runIndex]));
+        this.screens[runStart + runIndex].progressAnchor = anchor;
+        previousAnchor = anchor;
+        hasPreviousAnchor = true;
+      }
+    }
+  },
+  progressForCharCount: function(charCount) {
+    if (!this.totalChapterChars) return 0;
+    return Math.min(1, Math.max(0, this.normalizedScreenCount(charCount, 0) / this.totalChapterChars));
+  },
+  progressAnchorsForScreenRun: function(count, baseProgress, previousProgress, nextProgress, startsChapter) {
+    if (count <= 1) return [baseProgress];
+    var anchors = [];
+    if (nextProgress <= baseProgress && baseProgress > previousProgress) {
+      var trailingStep = (baseProgress - previousProgress) / count;
+      for (var trailingIndex = 0; trailingIndex < count; trailingIndex++) {
+        anchors.push(previousProgress + trailingStep * (trailingIndex + 1));
+      }
+      return anchors;
+    }
+    if (baseProgress > previousProgress || startsChapter) {
+      anchors.push(baseProgress);
+      var gap = Math.max(0, nextProgress - baseProgress);
+      var step = gap / count;
+      for (var afterBaseIndex = 1; afterBaseIndex < count; afterBaseIndex++) {
+        anchors.push(baseProgress + step * afterBaseIndex);
+      }
+      return anchors;
+    }
+    var duplicateStep = Math.max(0, nextProgress - previousProgress) / (count + 1);
+    for (var duplicateIndex = 0; duplicateIndex < count; duplicateIndex++) {
+      anchors.push(previousProgress + duplicateStep * (duplicateIndex + 1));
+    }
+    return anchors;
+  },
+  screenProgressAnchor: function(screen) {
+    var anchor = Number(screen && screen.progressAnchor);
+    if (Number.isFinite(anchor)) return Math.min(1, Math.max(0, anchor));
+    return this.progressForCharCount(this.screenEndCharCount(screen));
+  },
+  progressForScreen: function(screen) {
+    return this.screenProgressAnchor(screen);
   },
   mergeSasayakiCrossScreenScreens: function(screens) {
     if (!this.mergeCrossScreenSasayakiCues || !Array.isArray(screens) || screens.length < 2) return screens || [];
@@ -302,18 +412,18 @@ window.hoshiReader = {
       var cueEnd = this.sasayakiCueEnd(cue);
       var zeroLengthCue = cueEnd <= cueStart;
       while (searchStart < screens.length) {
-        var screenEnd = Number(screens[searchStart].endCharCount) || 0;
+        var screenEnd = this.screenEndCharCount(screens[searchStart]);
         if (zeroLengthCue) {
           if (cueStart <= screenEnd) break;
-        } else if (cueEnd > (Number(screens[searchStart].startCharCount) || 0)) {
+        } else if (cueEnd > this.screenStartCharCount(screens[searchStart])) {
           if (cueStart < screenEnd) break;
         }
         searchStart += 1;
       }
       for (var screenIndex = searchStart; screenIndex < screens.length; screenIndex++) {
         var screen = screens[screenIndex];
-        var screenStart = Number(screen.startCharCount) || 0;
-        var screenEnd = Number(screen.endCharCount) || 0;
+        var screenStart = this.screenStartCharCount(screen);
+        var screenEnd = this.screenEndCharCount(screen);
         if (!this.sasayakiCueIntersectsScreen(cue, screen)) {
           if (zeroLengthCue ? cueStart < screenStart : cueEnd <= screenStart) break;
           continue;
@@ -376,15 +486,15 @@ window.hoshiReader = {
     });
     var first = parts[0];
     var last = parts[parts.length - 1];
-    return {
-      startCharCount: first.startCharCount,
+    return this.screenDescriptor({
+      startCharCount: this.screenStartCharCount(first),
       endCharCount: parts.reduce(function(max, screen) {
-        return Math.max(max, screen.endCharCount);
-      }, first.endCharCount),
-      startRawCount: first.startRawCount,
+        return Math.max(max, this.screenEndCharCount(screen));
+      }.bind(this), this.screenEndCharCount(first)),
+      startRawCount: this.screenStartRawCount(first),
       endRawCount: parts.reduce(function(max, screen) {
-        return Math.max(max, screen.endRawCount);
-      }, last.endRawCount),
+        return Math.max(max, this.screenEndRawCount(screen));
+      }.bind(this), this.screenEndRawCount(last)),
       ids: ids,
       splittable: true,
       mediaStop: parts.some(function(screen) { return !!screen.mediaStop; }),
@@ -395,7 +505,7 @@ window.hoshiReader = {
         });
         return fragment;
       }
-    };
+    });
   },
   fitScreensToViewport: function(screens) {
     if (!screens || !screens.length || !this.stage || !this.screen) return screens || [];
@@ -459,8 +569,12 @@ window.hoshiReader = {
     var root = measurement && measurement.root;
     var content = measurement && measurement.content;
     if (!root || !content) return false;
-    var width = Number(root.clientWidth) || Number(root.offsetWidth) || 0;
-    var height = Number(root.clientHeight) || Number(root.offsetHeight) || 0;
+    var rootWidth = Number(root.clientWidth) || Number(root.offsetWidth) || 0;
+    var rootHeight = Number(root.clientHeight) || Number(root.offsetHeight) || 0;
+    var contentWidth = Number(content.clientWidth) || Number(content.offsetWidth) || rootWidth;
+    var contentHeight = Number(content.clientHeight) || Number(content.offsetHeight) || rootHeight;
+    var width = rootWidth && contentWidth ? Math.min(rootWidth, contentWidth) : rootWidth || contentWidth;
+    var height = rootHeight && contentHeight ? Math.min(rootHeight, contentHeight) : rootHeight || contentHeight;
     var scrollWidth = Number(content.scrollWidth) || 0;
     var scrollHeight = Number(content.scrollHeight) || 0;
     if (!width || !height || !scrollWidth || !scrollHeight) return false;
@@ -538,15 +652,18 @@ window.hoshiReader = {
   splitScreenToViewport: function(screen, measurement) {
     var items = this.textItemsForScreen(screen);
     if (!items.length) return [];
+    var units = this.viewportSplitUnitsForItems(items);
+    if (!units.length) return [];
     var result = [];
     var start = 0;
-    while (start < items.length) {
+    while (start < units.length) {
       var low = start + 1;
-      var high = items.length;
+      var high = units.length;
       var best = -1;
       while (low <= high) {
         var mid = Math.floor((low + high) / 2);
-        var candidate = this.screenFromTextItems(items, start, mid, screen.ids);
+        var candidateItems = this.textItemsFromViewportUnits(units, start, mid);
+        var candidate = this.screenFromTextItems(candidateItems, 0, candidateItems.length, screen.ids);
         if (this.measureScreenFits(candidate, measurement)) {
           best = mid;
           low = mid + 1;
@@ -555,15 +672,39 @@ window.hoshiReader = {
         }
       }
       if (best <= start) best = start + 1;
-      result.push(this.screenFromTextItems(items, start, best, screen.ids));
+      var splitItems = this.textItemsFromViewportUnits(units, start, best);
+      result.push(this.screenFromTextItems(splitItems, 0, splitItems.length, screen.ids));
       start = best;
+    }
+    return result;
+  },
+  viewportSplitUnitsForItems: function(items) {
+    var units = [];
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      var rubyRoot = item.rubyRoot || (this.contentStream && this.contentStream.rubyRootForTextNode
+        ? this.contentStream.rubyRootForTextNode(item.node)
+        : null);
+      var last = units[units.length - 1];
+      if (rubyRoot && last && last.rubyRoot === rubyRoot) {
+        last.items.push(item);
+      } else {
+        units.push({ rubyRoot: rubyRoot, items: [item] });
+      }
+    }
+    return units;
+  },
+  textItemsFromViewportUnits: function(units, start, end) {
+    var result = [];
+    for (var i = start; i < end; i++) {
+      Array.prototype.push.apply(result, units[i].items);
     }
     return result;
   },
   textItemsForScreen: function(screen) {
     if (!this.viewportFitTextItems) this.viewportFitTextItems = this.buildTextItems();
-    var startRaw = Number(screen.startRawCount) || 0;
-    var endRaw = Number(screen.endRawCount) || startRaw;
+    var startRaw = this.screenStartRawCount(screen);
+    var endRaw = this.screenEndRawCount(screen);
     var items = this.viewportFitTextItems;
     var startIndex = this.lowerBoundTextItemsByRawStart(items, startRaw);
     var result = [];
@@ -595,7 +736,7 @@ window.hoshiReader = {
       this.collectIdsForTextNode(range.node).forEach((id) => ids.add(id));
     });
     var first = slice[0];
-    return {
+    return this.screenDescriptor({
       startCharCount: first.chapterCharStart,
       endCharCount: slice.reduce(function(max, item) {
         return Math.max(max, item.chapterCharEnd);
@@ -608,7 +749,7 @@ window.hoshiReader = {
       splittable: false,
       mediaStop: false,
       render: () => this.cloneRangesWithOffsets(ranges)
-    };
+    });
   },
   buildBlockScreens: function() {
     var screens = [];
@@ -619,13 +760,20 @@ window.hoshiReader = {
       let child = sources[i].node;
       var stats = this.statsForSourceNode(child);
       var hasStandaloneMedia = this.containsStandaloneMedia(child);
+      if (hasStandaloneMedia && this.isMediaOnlySource(child)) {
+        var mediaScreens = this.mediaScreensForSourceNode(child, sources[i].extraIds);
+        if (mediaScreens.length) {
+          screens = screens.concat(mediaScreens);
+          continue;
+        }
+      }
       var start = stats.hasText ? stats.startChar : runningEnd;
       var end = stats.hasText ? stats.endChar : start;
       var rawStart = stats.hasText ? stats.startRaw : runningRawEnd;
       var rawEnd = stats.hasText ? stats.endRaw : rawStart;
       runningEnd = end;
       runningRawEnd = rawEnd;
-      screens.push({
+      screens.push(this.screenDescriptor({
         startCharCount: start,
         endCharCount: end,
         startRawCount: rawStart,
@@ -638,7 +786,7 @@ window.hoshiReader = {
           fragment.appendChild(this.cloneSourceNodeWithOffsets(child));
           return fragment;
         }
-      });
+      }));
     }
     return screens;
   },
@@ -759,7 +907,8 @@ window.hoshiReader = {
       .concat(this.buildStandaloneSentenceUnits())
       .sort(function(a, b) {
         if (a.order !== b.order) return a.order - b.order;
-        return a.startRawCount - b.startRawCount;
+        if (a.startRawCount !== b.startRawCount) return a.startRawCount - b.startRawCount;
+        return (a.preorder || 0) - (b.preorder || 0);
       });
     var groupSize = this.clampSentenceCount(this.sentencesPerScreen);
     var screens = [];
@@ -791,7 +940,7 @@ window.hoshiReader = {
     });
     let firstUnit = groupedUnits[0];
     let lastUnit = groupedUnits[groupedUnits.length - 1];
-    return {
+    return this.screenDescriptor({
       startCharCount: firstUnit.startCharCount,
       endCharCount: lastUnit.endCharCount,
       startRawCount: firstUnit.startRawCount,
@@ -800,39 +949,47 @@ window.hoshiReader = {
       splittable: true,
       mediaStop: groupedUnits.some(function(unit) { return !!unit.mediaStop; }),
       render: () => this.cloneRangesWithOffsets(ranges)
-    };
+    });
   },
   buildSentenceAtomicRoots: function() {
     var roots = new WeakSet();
-    var children = Array.from(this.sourceRoot.childNodes);
-    for (var i = 0; i < children.length; i++) {
-      var child = children[i];
-      if (child.nodeType === Node.TEXT_NODE && !(child.textContent || '').trim()) continue;
-      if (child.nodeType === Node.ELEMENT_NODE && this.isIgnoredElement(child)) continue;
-      if (child.nodeType === Node.ELEMENT_NODE && this.containsStandaloneMedia(child)) roots.add(child);
+    var sources = this.collectBlockScreenSources(this.sourceRoot);
+    for (var i = 0; i < sources.length; i++) {
+      var source = sources[i].node;
+      if (source && source.nodeType === Node.ELEMENT_NODE && this.containsStandaloneMedia(source)) {
+        roots.add(source);
+      }
     }
     return roots;
   },
   buildStandaloneSentenceUnits: function() {
     var units = [];
-    var children = Array.from(this.sourceRoot.childNodes);
-    for (var i = 0; i < children.length; i++) {
-      let child = children[i];
+    var sources = this.collectBlockScreenSources(this.sourceRoot);
+    for (var i = 0; i < sources.length; i++) {
+      let child = sources[i].node;
       if (child.nodeType === Node.TEXT_NODE && !(child.textContent || '').trim()) continue;
       if (child.nodeType === Node.ELEMENT_NODE && this.isIgnoredElement(child)) continue;
       var stats = this.statsForSourceNode(child);
       var atomic = this.sentenceAtomicRoots && this.sentenceAtomicRoots.has(child);
       if (!atomic && stats.hasText) continue;
-      var position = stats.hasText ? stats : this.sourcePositionForTopLevelNode(i);
+      if (atomic && this.isMediaOnlySource(child)) {
+        var mediaUnits = this.mediaScreensForSourceNode(child, sources[i].extraIds);
+        if (mediaUnits.length) {
+          units = units.concat(mediaUnits);
+          continue;
+        }
+      }
+      var position = stats.hasText ? stats : this.sourcePositionForNode(child, i);
       var hasStandaloneMedia = child.nodeType === Node.ELEMENT_NODE && this.containsStandaloneMedia(child);
-      units.push({
+      units.push(this.screenDescriptor({
         standalone: true,
-        order: i,
+        order: this.sourceOrderForNode(child),
+        preorder: this.sourcePreorderForNode(child),
         startCharCount: position.startChar,
         endCharCount: position.endChar,
         startRawCount: position.startRaw,
         endRawCount: position.endRaw,
-        ids: this.collectIdsForNode(child),
+        ids: this.collectIdsForNode(child, sources[i].extraIds),
         splittable: false,
         mediaStop: hasStandaloneMedia,
         render: () => {
@@ -840,31 +997,22 @@ window.hoshiReader = {
           fragment.appendChild(this.cloneSourceNodeWithOffsets(child));
           return fragment;
         }
-      });
+      }));
     }
     return units;
   },
-  sourcePositionForTopLevelNode: function(order) {
-    var previous = null;
-    for (var i = 0; i < this.sourceEntries.length; i++) {
-      var entry = this.sourceEntries[i];
-      var entryOrder = this.sourceOrderForTextNode(entry.node);
-      if (entryOrder > order) {
-        return {
-          hasText: false,
-          startChar: entry.startChar,
-          endChar: entry.startChar,
-          startRaw: entry.startRaw,
-          endRaw: entry.startRaw
-        };
-      }
-      if (entryOrder < order) previous = entry;
+  sourcePositionForNode: function(node, fallbackOrder) {
+    var stats = this.statsForSourceNode(node);
+    if (stats.hasText) return stats;
+    if (this.contentStream && typeof this.contentStream.sourcePositionForNode === 'function') {
+      return this.contentStream.sourcePositionForNode(node);
     }
-    var char = previous ? previous.endChar : 0;
-    var raw = previous ? previous.endRaw : 0;
-    return { hasText: false, startChar: char, endChar: char, startRaw: raw, endRaw: raw };
+    return { hasText: false, startChar: 0, endChar: 0, startRaw: 0, endRaw: 0 };
   },
   containsStandaloneMedia: function(root) {
+    if (this.contentStream && typeof this.contentStream.containsStandaloneMedia === 'function') {
+      return this.contentStream.containsStandaloneMedia(root);
+    }
     if (!root || root.nodeType !== Node.ELEMENT_NODE) return false;
     var tag = String(root.tagName || '').toLowerCase();
     if (this.isStandaloneMediaTag(tag)) return true;
@@ -884,6 +1032,79 @@ window.hoshiReader = {
       'object',
       'embed'
     ].indexOf(tag) >= 0;
+  },
+  isMediaOnlySource: function(root) {
+    return this.containsStandaloneMedia(root) && !(root && String(root.textContent || '').trim());
+  },
+  mediaUnitsForSourceNode: function(root) {
+    if (!this.contentStream || typeof this.contentStream.mediaUnits !== 'function') return [];
+    return this.contentStream.mediaUnits().filter((unit) => this.isDescendantOf(unit.mediaNode || unit.node, root));
+  },
+  mediaScreensForSourceNode: function(root, extraIds) {
+    var units = this.mediaUnitsForSourceNode(root);
+    var result = [];
+    for (var i = 0; i < units.length; i++) {
+      result.push(this.screenFromMediaUnit(units[i], extraIds));
+    }
+    return result;
+  },
+  screenFromMediaUnit: function(unit, extraIds) {
+    var ids = this.mergeIds(extraIds || new Set(), unit.ids || new Set());
+    return this.screenDescriptor({
+      standalone: true,
+      order: unit.sourceOrder,
+      preorder: unit.preorder,
+      startCharCount: unit.startChar,
+      endCharCount: unit.endChar,
+      startRawCount: unit.startRaw,
+      endRawCount: unit.endRaw,
+      ids: ids,
+      splittable: false,
+      mediaStop: true,
+      render: () => {
+        var fragment = document.createDocumentFragment();
+        fragment.appendChild(this.cloneMediaUnit(unit));
+        return fragment;
+      }
+    });
+  },
+  cloneMediaUnit: function(unit) {
+    var renderSource = this.renderSourceForMediaUnit(unit);
+    if (!unit || renderSource === unit.renderRoot) {
+      return this.cloneSourceNodeWithOffsets(renderSource);
+    }
+    var renderRoot = unit.renderRoot;
+    var mediaNode = unit.mediaNode || unit.node;
+    var path = [];
+    var current = mediaNode;
+    while (current && current !== renderRoot) {
+      path.unshift(current);
+      current = current.parentNode;
+    }
+    if (!renderRoot || current !== renderRoot) return this.cloneSourceNodeWithOffsets(mediaNode);
+    var rootClone = renderRoot.cloneNode ? renderRoot.cloneNode(false) : document.createElement(renderRoot.tagName.toLowerCase());
+    var parentClone = rootClone;
+    for (var i = 0; i < path.length; i++) {
+      var source = path[i];
+      if (source === mediaNode) {
+        parentClone.appendChild(this.cloneSourceNodeWithOffsets(source));
+      } else {
+        var clone = source.cloneNode ? source.cloneNode(false) : document.createElement(source.tagName.toLowerCase());
+        parentClone.appendChild(clone);
+        parentClone = clone;
+      }
+    }
+    return rootClone;
+  },
+  renderSourceForMediaUnit: function(unit) {
+    if (!unit || unit.renderRoot === unit.mediaNode) return unit && unit.renderRoot;
+    var units = this.contentStream && typeof this.contentStream.mediaUnits === 'function'
+      ? this.contentStream.mediaUnits()
+      : [];
+    var sharedRootCount = units.filter(function(candidate) {
+      return candidate.renderRoot === unit.renderRoot;
+    }).length;
+    return sharedRootCount <= 1 ? unit.renderRoot : unit.mediaNode;
   },
   buildSentenceUnits: function() {
     var items = this.buildTextItems();
@@ -957,58 +1178,68 @@ window.hoshiReader = {
     });
   },
   buildTextItems: function() {
-    var items = [];
-    for (var e = 0; e < this.sourceEntries.length; e++) {
-      var entry = this.sourceEntries[e];
-      if (this.isSentenceAtomicTextNode(entry.node)) continue;
-      var text = entry.text;
-      var offset = 0;
-      var rawOffset = 0;
-      var matchableOffset = 0;
-      while (offset < text.length) {
-        var char = String.fromCodePoint(text.codePointAt(offset));
-        var next = offset + char.length;
-        var isMatchable = this.isMatchableChar(char);
-        items.push({
-          node: entry.node,
-          order: this.sourceOrderForTextNode(entry.node),
-          char: char,
-          start: offset,
-          end: next,
-          chapterRawStart: entry.startRaw + rawOffset,
-          chapterRawEnd: entry.startRaw + rawOffset + 1,
-          chapterCharStart: entry.startChar + matchableOffset,
-          chapterCharEnd: entry.startChar + matchableOffset + (isMatchable ? 1 : 0)
-        });
-        if (isMatchable) matchableOffset += 1;
-        rawOffset += 1;
-        offset = next;
-      }
+    if (this.contentStream && typeof this.contentStream.textItems === 'function') {
+      var streamItems = this.contentStream.textItems();
+      return streamItems.filter((item) => !this.isSentenceAtomicTextNode(item.node));
     }
-    return items;
+    return [];
   },
   sourceOrderForTextNode: function(node) {
-    var root = this.topLevelSourceNode(node);
-    var order = this.sourceOrderIndexes && this.sourceOrderIndexes.get(root);
-    if (order !== undefined) return order;
-    return Array.from(this.sourceRoot.childNodes).indexOf(root);
-  },
-  topLevelSourceNode: function(node) {
-    var current = node;
-    while (current && current.parentNode && current.parentNode !== this.sourceRoot) {
-      current = current.parentNode;
+    if (this.contentStream && typeof this.contentStream.sourceOrderForTextNode === 'function') {
+      return this.contentStream.sourceOrderForTextNode(node);
     }
-    return current;
+    return 0;
   },
   isSentenceAtomicTextNode: function(node) {
     if (!this.sentenceAtomicRoots) return false;
-    var root = this.topLevelSourceNode(node);
-    return !!(root && this.sentenceAtomicRoots.has(root));
+    var current = node;
+    while (current && current !== this.sourceRoot) {
+      if (this.sentenceAtomicRoots.has(current)) return true;
+      current = current.parentNode;
+    }
+    return false;
+  },
+  sourceOrderForNode: function(node) {
+    if (this.contentStream && typeof this.contentStream.sourceOrderForNode === 'function') {
+      return this.contentStream.sourceOrderForNode(node);
+    }
+    return 0;
+  },
+  sourcePreorderForNode: function(node) {
+    if (this.contentStream && typeof this.contentStream.sourcePreorderForNode === 'function') {
+      return this.contentStream.sourcePreorderForNode(node);
+    }
+    return 0;
   },
   rangesFromItems: function(items) {
     var ranges = [];
     for (var i = 0; i < items.length; i++) {
       var item = items[i];
+      var rubyRoot = item.rubyRoot || (this.contentStream && this.contentStream.rubyRootForTextNode
+        ? this.contentStream.rubyRootForTextNode(item.node)
+        : null);
+      if (rubyRoot) {
+        var rubyStats = this.statsForSourceNode(rubyRoot);
+        var lastRuby = ranges[ranges.length - 1];
+        if (lastRuby && lastRuby.rubyRoot === rubyRoot) {
+          lastRuby.end = item.end;
+          lastRuby.endCharCount = rubyStats.hasText ? rubyStats.endChar : Math.max(lastRuby.endCharCount, item.chapterCharEnd);
+          lastRuby.chapterRawEnd = rubyStats.hasText ? rubyStats.endRaw : Math.max(lastRuby.chapterRawEnd, item.chapterRawEnd);
+          continue;
+        }
+        ranges.push({
+          node: item.node,
+          rubyRoot: rubyRoot,
+          order: item.order,
+          start: item.start,
+          end: item.end,
+          chapterCharStart: rubyStats.hasText ? rubyStats.startChar : item.chapterCharStart,
+          chapterRawStart: rubyStats.hasText ? rubyStats.startRaw : item.chapterRawStart,
+          chapterRawEnd: rubyStats.hasText ? rubyStats.endRaw : item.chapterRawEnd,
+          endCharCount: rubyStats.hasText ? rubyStats.endChar : item.chapterCharEnd
+        });
+        continue;
+      }
       var last = ranges[ranges.length - 1];
       if (last && last.node === item.node && last.end === item.start) {
         last.end = item.end;
@@ -1035,7 +1266,10 @@ window.hoshiReader = {
     return Math.min(12, Math.max(1, Math.floor(parsed)));
   },
   statsForSourceNode: function(root) {
-    return this.sourceNodeStats.get(root) || { hasText: false, startChar: 0, endChar: 0, startRaw: 0, endRaw: 0 };
+    if (this.contentStream && typeof this.contentStream.statsForNode === 'function') {
+      return this.contentStream.statsForNode(root);
+    }
+    return { hasText: false, startChar: 0, endChar: 0, startRaw: 0, endRaw: 0 };
   },
   isDescendantOf: function(node, root) {
     var current = node;
@@ -1077,13 +1311,17 @@ window.hoshiReader = {
   cloneSourceNodeWithOffsets: function(sourceNode) {
     if (sourceNode.nodeType === Node.TEXT_NODE) {
       var cloneText = document.createTextNode(sourceNode.textContent || '');
-      this.registerCloneTextOffset(cloneText, this.sourceTextOffsets.get(sourceNode), this.sourceTextRawOffsets.get(sourceNode));
+      var charOffset = this.sourceTextOffsetForNode(sourceNode);
+      var rawOffset = this.sourceTextRawOffsetForNode(sourceNode);
+      if (charOffset !== undefined || rawOffset !== undefined) {
+        this.rangeMap.registerCloneTextOffset(cloneText, charOffset, rawOffset);
+      }
       return cloneText;
     }
     if (sourceNode.nodeType !== Node.ELEMENT_NODE && sourceNode.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) {
       return sourceNode.cloneNode ? sourceNode.cloneNode(true) : document.createTextNode('');
     }
-    if (sourceNode.nodeType === Node.ELEMENT_NODE && this.isIgnoredElement(sourceNode)) {
+    if (sourceNode.nodeType === Node.ELEMENT_NODE && this.isDiscardedCloneElement(sourceNode)) {
       return document.createDocumentFragment();
     }
     var clone = sourceNode.cloneNode ? sourceNode.cloneNode(false) : document.createElement(sourceNode.tagName.toLowerCase());
@@ -1093,94 +1331,206 @@ window.hoshiReader = {
     }
     return clone;
   },
+  sourceTextOffsetForNode: function(node) {
+    if (!this.contentStream || !this.contentStream.sourceTextOffsets) return undefined;
+    return this.contentStream.sourceTextOffsets.get(node);
+  },
+  sourceTextRawOffsetForNode: function(node) {
+    if (!this.contentStream || !this.contentStream.sourceTextRawOffsets) return undefined;
+    return this.contentStream.sourceTextRawOffsets.get(node);
+  },
   cloneRangesWithOffsets: function(ranges) {
     var fragment = document.createDocumentFragment();
     var cloneMap = new WeakMap();
+    var clonePreorder = new WeakMap();
+    var clonedRubyRoots = new WeakSet();
+    var insertedInlineMedia = new WeakSet();
+    var boundsByRoot = [];
+    var mediaNodeEntries = null;
+    var topLevelSourceNodeFor = (sourceNode) => {
+      var current = sourceNode;
+      while (current && current.parentNode && current.parentNode !== this.sourceRoot) {
+        current = current.parentNode;
+      }
+      return current || sourceNode;
+    };
+    var boundsForRoot = (root) => {
+      for (var i = 0; i < boundsByRoot.length; i++) {
+        if (boundsByRoot[i].root === root) return boundsByRoot[i];
+      }
+      var bounds = { root: root, min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY, ranges: [] };
+      boundsByRoot.push(bounds);
+      return bounds;
+    };
+    var recordRangeBounds = (range) => {
+      var sourceNode = range.rubyRoot || range.node;
+      if (!sourceNode) return;
+      var root = topLevelSourceNodeFor(sourceNode);
+      var preorder = this.sourcePreorderForNode(sourceNode);
+      var bounds = boundsForRoot(root);
+      bounds.min = Math.min(bounds.min, preorder);
+      bounds.max = Math.max(bounds.max, preorder);
+      bounds.ranges.push(range);
+    };
+    ranges.forEach(recordRangeBounds);
+    var appendCloneInSourceOrder = (parentClone, cloneNode, preorder) => {
+      clonePreorder.set(cloneNode, preorder);
+      if (parentClone && parentClone.childNodes && parentClone.insertBefore) {
+        var children = Array.from(parentClone.childNodes);
+        for (var i = 0; i < children.length; i++) {
+          var childPreorder = clonePreorder.get(children[i]);
+          if (childPreorder !== undefined && childPreorder > preorder) {
+            parentClone.insertBefore(cloneNode, children[i]);
+            return;
+          }
+        }
+      }
+      parentClone.appendChild(cloneNode);
+    };
     var ensureElementClone = (sourceElement) => {
       if (cloneMap.has(sourceElement)) return cloneMap.get(sourceElement);
       var clone = sourceElement.cloneNode ? sourceElement.cloneNode(false) : document.createElement(sourceElement.tagName.toLowerCase());
       cloneMap.set(sourceElement, clone);
+      var preorder = this.sourcePreorderForNode(sourceElement);
       var parent = sourceElement.parentNode;
       if (!parent || parent === this.sourceRoot) {
-        fragment.appendChild(clone);
+        appendCloneInSourceOrder(fragment, clone, preorder);
       } else {
-        ensureElementClone(parent).appendChild(clone);
+        appendCloneInSourceOrder(ensureElementClone(parent), clone, preorder);
       }
       return clone;
     };
+    var appendCloneUnderSourceParent = (sourceNode, cloneNode) => {
+      var parent = sourceNode.parentNode;
+      var preorder = this.sourcePreorderForNode(sourceNode);
+      if (!parent || parent === this.sourceRoot) {
+        appendCloneInSourceOrder(fragment, cloneNode, preorder);
+      } else {
+        appendCloneInSourceOrder(ensureElementClone(parent), cloneNode, preorder);
+      }
+    };
+    var isInlineMediaNodeForRangeClone = (sourceNode, contextRoot) => {
+      return !!(
+        this.contentStream &&
+        typeof this.contentStream.isInlineMediaNode === 'function' &&
+        this.contentStream.isInlineMediaNode(sourceNode, contextRoot)
+      );
+    };
+    var appendInlineMediaClone = (sourceNode) => {
+      if (insertedInlineMedia.has(sourceNode)) return;
+      insertedInlineMedia.add(sourceNode);
+      appendCloneUnderSourceParent(sourceNode, this.cloneSourceNodeWithOffsets(sourceNode));
+    };
+    var hasVisibleTextBetweenPreorder = (root, start, end) => {
+      if (this.contentStream && typeof this.contentStream.hasVisibleTextBetweenPreorder === 'function') {
+        return this.contentStream.hasVisibleTextBetweenPreorder(root, start, end);
+      }
+      var found = false;
+      var visit = (sourceNode) => {
+        if (found || !sourceNode) return;
+        if (sourceNode.nodeType === Node.TEXT_NODE) {
+          var preorder = this.sourcePreorderForNode(sourceNode);
+          if (preorder > start && preorder < end && !this.isIgnoredElement(sourceNode) && String(sourceNode.textContent || '').trim()) {
+            found = true;
+          }
+          return;
+        }
+        var children = Array.from(sourceNode.childNodes || []);
+        for (var i = 0; i < children.length; i++) visit(children[i]);
+      };
+      visit(root);
+      return found;
+    };
+    var mediaNodesForRangeClone = () => {
+      if (mediaNodeEntries !== null) return mediaNodeEntries;
+      mediaNodeEntries = this.contentStream && typeof this.contentStream.mediaNodes === 'function'
+        ? this.contentStream.mediaNodes()
+        : [];
+      return mediaNodeEntries;
+    };
+    var mediaNodeForEntry = (entry) => entry && entry.node ? entry.node : entry;
+    var mediaPreorderForEntry = (entry) => {
+      var value = Number(entry && entry.preorder);
+      if (Number.isFinite(value)) return value;
+      return this.sourcePreorderForNode(mediaNodeForEntry(entry));
+    };
+    var rangeStartsAtSourceBoundary = (bounds) => {
+      return bounds.ranges.some((range) => {
+        var sourceNode = range.rubyRoot || range.node;
+        return this.sourcePreorderForNode(sourceNode) === bounds.min && (range.rubyRoot || range.start <= 0);
+      });
+    };
+    var rangeEndsAtSourceBoundary = (bounds) => {
+      return bounds.ranges.some((range) => {
+        var sourceNode = range.rubyRoot || range.node;
+        var textLength = range.node && range.node.textContent ? range.node.textContent.length : 0;
+        return this.sourcePreorderForNode(sourceNode) === bounds.max && (range.rubyRoot || range.end >= textLength);
+      });
+    };
+    var appendInlineMediaForBounds = (bounds) => {
+      var entries = mediaNodesForRangeClone();
+      if (!entries.length) return;
+      var startsAtBoundary = rangeStartsAtSourceBoundary(bounds);
+      var endsAtBoundary = rangeEndsAtSourceBoundary(bounds);
+      for (var i = 0; i < entries.length; i++) {
+        var sourceNode = mediaNodeForEntry(entries[i]);
+        if (!sourceNode || !this.isDescendantOf(sourceNode, bounds.root)) continue;
+        var preorder = mediaPreorderForEntry(entries[i]);
+        var insideRange = preorder > bounds.min && preorder < bounds.max;
+        var leadingBoundary = startsAtBoundary &&
+          preorder < bounds.min &&
+          !hasVisibleTextBetweenPreorder(bounds.root, preorder, bounds.min);
+        var trailingBoundary = endsAtBoundary &&
+          preorder > bounds.max &&
+          !hasVisibleTextBetweenPreorder(bounds.root, bounds.max, preorder);
+        if (
+          (insideRange || leadingBoundary || trailingBoundary) &&
+          isInlineMediaNodeForRangeClone(sourceNode, bounds.root)
+        ) {
+          appendInlineMediaClone(sourceNode);
+        }
+      }
+    };
     for (var i = 0; i < ranges.length; i++) {
       var range = ranges[i];
+      if (range.rubyRoot) {
+        if (clonedRubyRoots.has(range.rubyRoot)) continue;
+        clonedRubyRoots.add(range.rubyRoot);
+        appendCloneUnderSourceParent(range.rubyRoot, this.cloneSourceNodeWithOffsets(range.rubyRoot));
+        continue;
+      }
       var text = (range.node.textContent || '').slice(range.start, range.end);
       if (!text) continue;
       var cloneText = document.createTextNode(text);
-      this.registerCloneTextOffset(cloneText, range.chapterCharStart, range.chapterRawStart);
+      this.rangeMap.registerCloneTextOffset(cloneText, range.chapterCharStart, range.chapterRawStart);
       var parent = range.node.parentNode;
       if (!parent || parent === this.sourceRoot) {
-        fragment.appendChild(cloneText);
+        appendCloneInSourceOrder(fragment, cloneText, this.sourcePreorderForNode(range.node));
       } else {
-        ensureElementClone(parent).appendChild(cloneText);
+        appendCloneInSourceOrder(ensureElementClone(parent), cloneText, this.sourcePreorderForNode(range.node));
       }
     }
+    boundsByRoot.forEach((bounds) => {
+      if (Number.isFinite(bounds.min) && Number.isFinite(bounds.max)) {
+        appendInlineMediaForBounds(bounds);
+      }
+    });
     return fragment;
   },
-  registerCloneTextOffset: function(node, charOffset, rawOffset) {
-    this.cloneTextOffsets.set(node, charOffset === undefined ? 0 : charOffset);
-    this.cloneTextRawOffsets.set(node, rawOffset === undefined ? 0 : rawOffset);
-  },
   setupReaderImage: function(element, src, wrap, blurElement) {
-    if (!element || !src || element.hoshiReaderImageSetup) return;
-    element.hoshiReaderImageSetup = true;
-    blurElement = blurElement || element;
-    if (__HOSHI_BLUR_IMAGES__) {
-      blurElement.classList.add('blurred');
-      if (wrap && !(blurElement.parentElement && blurElement.parentElement.classList.contains('blur-wrapper'))) {
-        var target = document.createElement('span');
-        target.className = 'blur-wrapper';
-        blurElement.parentNode.insertBefore(target, blurElement);
-        target.appendChild(blurElement);
-      }
-    }
-    element.addEventListener('click', function(event) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (blurElement.classList.contains('blurred')) {
-        blurElement.classList.remove('blurred');
-        return;
-      }
-      if (window.HoshiReaderImage && window.HoshiReaderImage.postMessage) {
-        window.HoshiReaderImage.postMessage(new URL(src, document.baseURI).href);
-      }
+    return window.hoshiReaderMediaSemantics.setupReaderImage(element, src, {
+      blurImages: __HOSHI_BLUR_IMAGES__,
+      imageBridge: window.HoshiReaderImage,
+      wrap: wrap,
+      blurElement: blurElement
     });
   },
   setupReaderImages: function(root) {
     var scope = root || this.screen;
-    if (!scope || !scope.querySelectorAll) return;
-    var svgImages = Array.from(scope.querySelectorAll('svg image'));
-    svgImages.forEach((svgImage) => {
-      var svg = svgImage.closest('svg');
-      if (!svg) return;
-      if (svg.getAttribute('preserveAspectRatio') === 'none') {
-        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-      }
-      var svgImageSrc = svgImage.href && svgImage.href.baseVal
-        ? svgImage.href.baseVal
-        : (svgImage.getAttribute('href') || svgImage.getAttribute('xlink:href'));
-      this.setupReaderImage(svgImage, svgImageSrc, false, svg);
-    });
-    var images = Array.from(scope.querySelectorAll('img'));
-    images.forEach((img) => {
-      var isGaiji = img.classList.contains('gaiji') || img.classList.contains('gaiji-line');
-      var mark = () => {
-        if (!isGaiji && (img.naturalWidth > 256 || img.naturalHeight > 256)) {
-          img.classList.add('block-img');
-          this.setupReaderImage(img, img.currentSrc || img.src || img.getAttribute('src'), true);
-        }
-      };
-      if (img.complete) {
-        if ((img.naturalWidth || 0) > 0) mark();
-      } else {
-        img.onload = mark;
-      }
+    return window.hoshiReaderMediaSemantics.setupReaderImages(scope, {
+      blurImages: __HOSHI_BLUR_IMAGES__,
+      imageBridge: window.HoshiReaderImage,
+      waitForImages: false
     });
   },
   renderInitialScreen: function() {
@@ -1242,8 +1592,8 @@ window.hoshiReader = {
     if (!parent) return;
     var text = node.textContent || '';
     if (!text) return;
-    var charOffset = this.cloneTextOffsets.get(node);
-    var rawOffset = this.cloneTextRawOffsets.get(node);
+    var charOffset = this.rangeMap.cloneTextOffsetForNode(node);
+    var rawOffset = this.rangeMap.cloneTextRawOffsetForNode(node);
     var visible = document.createTextNode('');
     var hidden = document.createElement('span');
     hidden.setAttribute('data-hoshi-visual-novel-unrevealed', '');
@@ -1252,7 +1602,7 @@ window.hoshiReader = {
     parent.insertBefore(visible, node);
     parent.insertBefore(hidden, node);
     parent.removeChild(node);
-    this.registerCloneTextOffset(visible, charOffset, rawOffset);
+    this.rangeMap.registerCloneTextOffset(visible, charOffset, rawOffset);
     this.revealSegments.push({
       visible: visible,
       hidden: hidden,
@@ -1350,39 +1700,7 @@ window.hoshiReader = {
     highlights.hoshiVisualNovelPatched = true;
   },
   highlightSegmentsForChapterRawRange: function(offset, length) {
-    var start = Number(offset) || 0;
-    var end = start + Math.max(0, Number(length) || 0);
-    var segments = [];
-    var walker = this.createWalker();
-    var node;
-    while (node = walker.nextNode()) {
-      var nodeStart = this.nodeStartRawOffsets.get(node);
-      if (nodeStart === undefined) continue;
-      var text = node.textContent || '';
-      var rawCursor = nodeStart;
-      var i = 0;
-      var segment = null;
-      var flushSegment = function() {
-        if (!segment) return;
-        segments.push(segment);
-        segment = null;
-      };
-      while (i < text.length && rawCursor < end) {
-        var char = String.fromCodePoint(text.codePointAt(i));
-        var next = i + char.length;
-        if (rawCursor >= start) {
-          if (!segment) {
-            segment = { node: node, start: i, end: next };
-          } else {
-            segment.end = next;
-          }
-        }
-        rawCursor += 1;
-        i = next;
-      }
-      flushSegment();
-    }
-    return segments;
+    return this.rangeMap.collectRawSegments(offset, length);
   },
   rememberCreatedHighlight: function(id, color, result) {
     var highlights = Array.isArray(this.initialHighlights) ? this.initialHighlights.slice() : [];
@@ -1437,15 +1755,14 @@ window.hoshiReader = {
     return "scrolled";
   },
   calculateProgress: function() {
-    if (!this.totalChapterChars || !this.screens.length) return 0;
-    var screen = this.screens[this.currentScreenIndex];
-    return Math.min(1, Math.max(0, screen.endCharCount / this.totalChapterChars));
+    if (!this.screens.length) return 0;
+    return this.progressForScreen(this.screens[this.currentScreenIndex]);
   },
   screenIndexForProgress: function(progress) {
     if (!this.screens.length) return 0;
-    var target = Math.ceil(this.totalChapterChars * Math.min(1, Math.max(0, Number(progress) || 0)));
+    var target = Math.min(1, Math.max(0, Number(progress) || 0));
     for (var i = 0; i < this.screens.length; i++) {
-      if (this.screens[i].endCharCount >= target) return i;
+      if (this.screenProgressAnchor(this.screens[i]) + 1e-9 >= target) return i;
     }
     return this.screens.length - 1;
   },
@@ -1458,7 +1775,7 @@ window.hoshiReader = {
     var raw = (fragment || '').trim();
     if (!raw) return -1;
     for (var i = 0; i < this.screens.length; i++) {
-      if (this.screens[i].ids.has(raw)) return i;
+      if (this.screenContainsFragment(this.screens[i], raw)) return i;
     }
     return -1;
   },
@@ -1515,15 +1832,13 @@ window.hoshiReader = {
     if (!cue || !screen) return false;
     var start = this.sasayakiCueStart(cue);
     var end = this.sasayakiCueEnd(cue);
-    if (end <= start) return start >= screen.startCharCount && start <= screen.endCharCount;
-    return end > screen.startCharCount && start < screen.endCharCount;
+    return this.screenIntersectsCharRange(screen, start, end);
   },
   screenIndexForSasayakiCue: function(cue) {
     if (!cue || !this.screens || !this.screens.length) return -1;
     var start = this.sasayakiCueStart(cue);
     for (var i = 0; i < this.screens.length; i++) {
-      var screen = this.screens[i];
-      if (start >= screen.startCharCount && start < screen.endCharCount) return i;
+      if (this.screenContainsCharOffset(this.screens[i], start)) return i;
     }
     for (var j = 0; j < this.screens.length; j++) {
       if (this.sasayakiCueIntersectsScreen(cue, this.screens[j])) return j;
@@ -1531,58 +1846,19 @@ window.hoshiReader = {
     return -1;
   },
   collectSasayakiCueRanges: function(cues) {
-    var result = [];
+    var normalized = [];
     for (var i = 0; i < cues.length; i++) {
       var cue = this.sasayakiCueForInput(cues[i]);
       if (!cue || !cue.id) continue;
-      result.push({ id: cue.id, ranges: this.currentScreenRangesForSasayakiCue(cue) });
+      var start = this.sasayakiCueStart(cue);
+      normalized.push({ id: cue.id, start: start, length: this.sasayakiCueEnd(cue) - start });
     }
-    return result;
+    return this.rangeMap.collectMatchableCueRanges(normalized);
   },
   currentScreenRangesForSasayakiCue: function(cue) {
     var start = this.sasayakiCueStart(cue);
     var end = this.sasayakiCueEnd(cue);
-    var ranges = [];
-    if (end <= start) return ranges;
-    var walker = this.createWalker();
-    var node;
-    while (node = walker.nextNode()) {
-      var nodeStart = this.nodeStartOffsets.get(node);
-      if (nodeStart === undefined) continue;
-      var text = node.textContent || '';
-      var cursor = nodeStart;
-      var offset = 0;
-      var segment = null;
-      var flushSegment = function() {
-        if (!segment) return;
-        ranges.push(segment);
-        segment = null;
-      };
-      while (offset < text.length && cursor < end) {
-        var char = String.fromCodePoint(text.codePointAt(offset));
-        var next = offset + char.length;
-        if (this.isMatchableChar(char)) {
-          if (cursor >= start && cursor < end) {
-            if (!segment) {
-              segment = { node: node, start: offset, end: next };
-            } else {
-              segment.end = next;
-            }
-          } else {
-            flushSegment();
-          }
-          cursor += 1;
-          if (cursor === end) flushSegment();
-        } else if (segment) {
-          segment.end = next;
-        } else if (cursor > start && cursor < end) {
-          segment = { node: node, start: offset, end: next };
-        }
-        offset = next;
-      }
-      flushSegment();
-    }
-    return ranges;
+    return this.rangeMap.collectMatchableSegments(start, end);
   },
   rememberSasayakiCueSources: function(cueRanges) {
     for (var i = 0; i < cueRanges.length; i++) {

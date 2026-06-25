@@ -109,6 +109,11 @@ internal object ReaderPaginationScripts {
         val body = template
             .replace("__HOSHI_HIGHLIGHTS_SCRIPT__", source.highlights)
             .replace("__HOSHI_READER_SASAYAKI_SCRIPT__", source.readerSasayaki)
+            .replace("__HOSHI_READER_TEXT_SEMANTICS_SCRIPT__", source.readerTextSemantics)
+            .replace("__HOSHI_READER_DOM_TEXT_SCRIPT__", source.readerDomText)
+            .replace("__HOSHI_READER_MEDIA_SEMANTICS_SCRIPT__", source.readerMediaSemantics)
+            .replace("__HOSHI_READER_VN_CONTENT_STREAM_SCRIPT__", source.readerVnContentStream)
+            .replace("__HOSHI_READER_VN_RANGE_MAP_SCRIPT__", source.readerVnRangeMap)
             .replace("__HOSHI_RESTORE_TOKEN_LITERAL__", restoreToken.javaScriptStringLiteral())
             .replace("__HOSHI_VISUAL_NOVEL_REVEAL_SPEED__", settings.visualNovelRevealSpeed.coerceIn(0, 120).toString())
             .replace("__HOSHI_VISUAL_NOVEL_SCREEN_MODE_LITERAL__", settings.visualNovelScreenMode.rawValue.javaScriptStringLiteral())
@@ -147,6 +152,11 @@ private data class ReaderPaginationAssetSource(
     val continuous: String,
     val visualNovel: String,
     val readerSasayaki: String,
+    val readerTextSemantics: String,
+    val readerDomText: String,
+    val readerMediaSemantics: String,
+    val readerVnContentStream: String,
+    val readerVnRangeMap: String,
     val highlights: String,
 ) {
     companion object {
@@ -157,6 +167,11 @@ private data class ReaderPaginationAssetSource(
                     continuous = assets.readerContinuousJs,
                     visualNovel = assets.readerVisualNovelJs,
                     readerSasayaki = assets.readerSasayakiJs,
+                    readerTextSemantics = assets.readerTextSemanticsJs,
+                    readerDomText = assets.readerDomTextJs,
+                    readerMediaSemantics = assets.readerMediaSemanticsJs,
+                    readerVnContentStream = assets.readerVnContentStreamJs,
+                    readerVnRangeMap = assets.readerVnRangeMapJs,
                     highlights = assets.highlightsJs,
                 )
             }
@@ -172,6 +187,11 @@ private object SourceTreeReaderPaginationAssets {
             continuous = readSourceAsset("hoshi-web/reader/reader-continuous.js"),
             visualNovel = readSourceAsset("hoshi-web/reader/reader-visual-novel.js"),
             readerSasayaki = readSourceAsset("hoshi-web/reader/reader-sasayaki.js"),
+            readerTextSemantics = readSourceAsset("hoshi-web/reader/reader-text-semantics.js"),
+            readerDomText = readSourceAsset("hoshi-web/reader/reader-dom-text.js"),
+            readerMediaSemantics = readSourceAsset("hoshi-web/reader/reader-media-semantics.js"),
+            readerVnContentStream = readSourceAsset("hoshi-web/reader/reader-vn-content-stream.js"),
+            readerVnRangeMap = readSourceAsset("hoshi-web/reader/reader-vn-range-map.js"),
             highlights = readSourceAsset("hoshi-web/reader/highlights.js"),
         )
     }

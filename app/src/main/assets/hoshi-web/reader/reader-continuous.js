@@ -1,10 +1,12 @@
+__HOSHI_READER_TEXT_SEMANTICS_SCRIPT__
+__HOSHI_READER_DOM_TEXT_SCRIPT__
+__HOSHI_READER_MEDIA_SEMANTICS_SCRIPT__
+
  window.hoshiReader = {
    cueWrappers: new Map(),
    cueSourceRanges: new Map(),
    cueGeometryRanges: new Map(),
   activeCueId: null,
-  ttuRegexNegated: /[^0-9A-Za-z○◯々-〇〻ぁ-ゖゝ-ゞァ-ヺー０-９Ａ-Ｚａ-ｚｦ-ﾝ\p{Radical}\p{Unified_Ideograph}]+/gimu,
-  ttuRegex: /[0-9A-Za-z○◯々-〇〻ぁ-ゖゝ-ゞァ-ヺー０-９Ａ-Ｚａ-ｚｦ-ﾝ\p{Radical}\p{Unified_Ideograph}]/iu,
   nodeStartOffsets: new WeakMap(),
   nodeStartRawOffsets: new WeakMap(),
   isVertical: function() {
@@ -20,17 +22,29 @@
     var el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
     return !!(el && el.closest('rt, rp'));
   },
+  textSemantics: function() {
+    if (!window.hoshiReaderTextSemantics) {
+      throw new Error('hoshiReaderTextSemantics is required for reader text semantics');
+    }
+    return window.hoshiReaderTextSemantics;
+  },
   normalizeText: function(text) {
-    return (text || '').replace(this.ttuRegexNegated, '');
+    return this.textSemantics().normalizeText(text);
   },
   countChars: function(text) {
-    return Array.from(this.normalizeText(text)).length;
+    return this.textSemantics().countChars(text);
   },
   countRawChars: function(text) {
-    return Array.from(text || '').length;
+    return this.textSemantics().countRawChars(text);
   },
   isMatchableChar: function(char) {
-    return this.ttuRegex.test(char || '');
+    return this.textSemantics().isMatchableChar(char);
+  },
+  domText: function() {
+    if (!window.hoshiReaderDomText) {
+      throw new Error('hoshiReaderDomText is required for reader DOM text normalization');
+    }
+    return window.hoshiReaderDomText;
   },
   textOffsetForCharCount: function(node, targetCount) {
     var text = node.textContent || '';
@@ -304,80 +318,16 @@ __HOSHI_READER_SASAYAKI_SCRIPT__
     parents.forEach(function(parent) { self.normalizeReaderText(parent); });
   },
   normalizeReaderText: function(parent) {
-    if (!parent) return;
-    this.normalizeRubyTextNodes(parent);
-    parent.normalize();
-    this.stabilizeRubyAdjacentTextNodes(parent);
+    this.domText().normalizeReaderText(this, parent);
   },
   normalizeRubyTextNodes: function(root) {
-    var rubyNodes = new Set();
-    if (root && root.nodeType === Node.ELEMENT_NODE && String(root.tagName).toLowerCase() === 'ruby') {
-      rubyNodes.add(root);
-    }
-    var scope = root && root.querySelectorAll ? root : document;
-    Array.from(scope.querySelectorAll('ruby')).forEach(function(ruby) {
-      rubyNodes.add(ruby);
-    });
-    rubyNodes.forEach(function(ruby) {
-      Array.from(ruby.childNodes).forEach(function(node) {
-        if (node.nodeType !== Node.TEXT_NODE) return;
-        if (!node.nodeValue.trim()) {
-          ruby.removeChild(node);
-          return;
-        }
-        var wrapper = document.createElement('span');
-        ruby.insertBefore(wrapper, node);
-        wrapper.appendChild(node);
-      });
-    });
+    this.domText().normalizeRubyTextNodes(root);
   },
   isJapaneseBreakCharacter: function(text) {
-    var code = (text || '').codePointAt(0);
-    return (code >= 0x3000 && code <= 0x303f) ||
-      (code >= 0x3040 && code <= 0x30ff) ||
-      (code >= 0x3400 && code <= 0x9fff) ||
-      (code >= 0xf900 && code <= 0xfaff) ||
-      (code >= 0xff00 && code <= 0xffef);
+    return this.domText().isJapaneseBreakCharacter(text);
   },
   stabilizeRubyAdjacentTextNodes: function(root) {
-    if (!this.isVertical()) return;
-    var self = this;
-    var splitLimit = 64;
-    var scope = root && root.querySelectorAll ? root : document;
-    var rubies = Array.from(scope.querySelectorAll('ruby'));
-    if (root && root.tagName && root.tagName.toLowerCase() === 'ruby') {
-      rubies.unshift(root);
-    }
-    rubies.forEach(function(ruby) {
-      if (ruby.closest('rt, rp')) return;
-      var node = ruby.nextSibling;
-      while (node && node.nodeType === Node.TEXT_NODE && !node.nodeValue.trim()) {
-        node = node.nextSibling;
-      }
-      if (!node || node.nodeType !== Node.TEXT_NODE || !node.nodeValue) return;
-      var chars = Array.from(node.nodeValue);
-      if (chars.length <= 1) return;
-      var fragment = document.createDocumentFragment();
-      var pending = '';
-      var splitCount = 0;
-      var flush = function() {
-        if (!pending) return;
-        fragment.appendChild(document.createTextNode(pending));
-        pending = '';
-      };
-      chars.forEach(function(char) {
-        if (splitCount < splitLimit && self.isJapaneseBreakCharacter(char)) {
-          flush();
-          fragment.appendChild(document.createTextNode(char));
-          splitCount += 1;
-        } else {
-          pending += char;
-        }
-      });
-      if (splitCount === 0) return;
-      flush();
-      node.replaceWith(fragment);
-    });
+    this.domText().stabilizeRubyAdjacentTextNodes(this, root);
   },
   calculateProgress: function() {
     var vertical = this.isVertical();
@@ -503,64 +453,13 @@ window.hoshiReader.initialize = function() {
   document.documentElement.style.setProperty('--hoshi-continuous-height', window.innerHeight + 'px');
   document.documentElement.style.setProperty('--hoshi-image-max-width', Math.max(1, Math.floor(window.innerWidth * __HOSHI_IMAGE_WIDTH_VIEWPORT_RATIO__) - __HOSHI_IMAGE_WIDTH_REDUCTION_PX__) + 'px');
   document.documentElement.style.setProperty('--hoshi-image-max-height', Math.max(1, Math.floor(window.innerHeight * __HOSHI_IMAGE_HEIGHT_VIEWPORT_RATIO__)) + 'px');
-  function setupReaderImage(element, src, wrap, blurElement) {
-  if (!element || !src) return;
-  blurElement = blurElement || element;
-  if (__HOSHI_BLUR_IMAGES__) {
-    blurElement.classList.add('blurred');
-    if (wrap && !blurElement.parentElement?.classList.contains('blur-wrapper')) {
-      var target = document.createElement('span');
-      target.className = 'blur-wrapper';
-      blurElement.parentNode.insertBefore(target, blurElement);
-      target.appendChild(blurElement);
-    }
-  }
-  element.addEventListener('click', function(event) {
-    event.preventDefault();
-    event.stopPropagation();
-    if (blurElement.classList.contains('blurred')) {
-      blurElement.classList.remove('blurred');
-      return;
-    }
-    if (window.HoshiReaderImage && window.HoshiReaderImage.postMessage) {
-      HoshiReaderImage.postMessage(new URL(src, document.baseURI).href);
-    }
-  });
-}
-  var svgImages = Array.from(document.querySelectorAll('svg image'));
-  svgImages.forEach(function(svgImage) {
-    var svg = svgImage.closest('svg');
-    if (!svg) return;
-    if (svg.getAttribute('preserveAspectRatio') === 'none') {
-      svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-    }
-    var svgImageSrc = svgImage.href && svgImage.href.baseVal ? svgImage.href.baseVal : (svgImage.getAttribute('href') || svgImage.getAttribute('xlink:href'));
-    setupReaderImage(svgImage, svgImageSrc, false, svg);
-  });
   var images = Array.from(document.querySelectorAll('img'));
-  var imagePromises = images.map(function(img) {
-    return new Promise(function(resolve) {
-      var isGaiji = img.classList.contains('gaiji') || img.classList.contains('gaiji-line');
-      var mark = function() {
-        if (!isGaiji && (img.naturalWidth > 256 || img.naturalHeight > 256)) {
-          img.classList.add('block-img');
-          setupReaderImage(img, img.currentSrc || img.src, true);
-        }
-        resolve();
-      };
-      if (img.complete) {
-        if (img.naturalWidth > 0) {
-          mark();
-        } else {
-          resolve();
-        }
-      } else {
-        img.onload = mark;
-        img.onerror = function() { resolve(); };
-      }
-    });
+  var imageSetupPromise = window.hoshiReaderMediaSemantics.setupReaderImages(document, {
+    blurImages: __HOSHI_BLUR_IMAGES__,
+    imageBridge: window.HoshiReaderImage,
+    waitForImages: true
   });
-  Promise.all(imagePromises).then(function() {
+  imageSetupPromise.then(function() {
     if (!images.length) return;
     return new Promise(function(resolve) { setTimeout(resolve, 50); });
   }).then(function() {
