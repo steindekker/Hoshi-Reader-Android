@@ -71,6 +71,12 @@
     });
   }
 
+  function hasMeaningfulTextOutsideChild(node, childOnMediaPath) {
+    return childrenOf(node).some(function(child) {
+      return child !== childOnMediaPath && hasMeaningfulText(child);
+    });
+  }
+
   function isTextMediaContextRoot(node) {
     var tag = tagName(node);
     return [
@@ -188,6 +194,7 @@
     while (current && current.parentNode && current.parentNode !== root) {
       var parent = current.parentNode;
       if (parent.nodeType === ELEMENT_NODE && !mediaTags.has(tagName(parent))) {
+        if (hasMeaningfulTextOutsideChild(parent, current)) break;
         candidate = parent;
       }
       current = parent;

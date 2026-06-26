@@ -285,6 +285,43 @@ test('content stream keeps sibling media ids isolated inside a shared wrapper', 
     );
 });
 
+test('content stream does not use a text-bearing chapter wrapper as a singleton media render root', () => {
+    const image = el('img', { id: 'plate', src: 'plate.jpg' });
+    image.naturalWidth = 320;
+    image.naturalHeight = 240;
+    const paragraph = el('p', { id: 'plate-block' }, [image]);
+    const chapter = el('div', { class: 'main' }, [
+        el('p', {}, ['前']),
+        paragraph,
+        el('p', {}, ['後']),
+    ]);
+    const root = el('section', {}, [chapter]);
+
+    const stream = loadContentStreamModule().create(root);
+    const units = stream.mediaUnits();
+
+    assert.equal(units.length, 1);
+    assert.equal(units[0].renderRoot, paragraph);
+    assert.deepEqual(
+        plain({
+            renderRootTagName: units[0].renderRootTagName,
+            startChar: units[0].startChar,
+            endChar: units[0].endChar,
+            startRaw: units[0].startRaw,
+            endRaw: units[0].endRaw,
+            ids: [...units[0].ids].sort(),
+        }),
+        {
+            renderRootTagName: 'p',
+            startChar: 1,
+            endChar: 1,
+            startRaw: 1,
+            endRaw: 1,
+            ids: ['plate', 'plate-block'],
+        },
+    );
+});
+
 test('content stream treats small images embedded in text as inline content', () => {
     const marker = el('img', { id: 'marker', src: 'marker.png' });
     marker.naturalWidth = 48;

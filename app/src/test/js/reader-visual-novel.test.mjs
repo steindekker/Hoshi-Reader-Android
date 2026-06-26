@@ -1323,6 +1323,27 @@ test('block mode keeps nested media-only block wrappers without cloning sibling 
     assert.equal(currentScreen(reader).textContent, '後。');
 });
 
+test('block mode keeps a singleton nested image screen from cloning sibling chapter text', async () => {
+    const imageParagraph = element('p', { id: 'plate-block' }, [
+        image('images/plate.jpg', { id: 'plate' }),
+    ]);
+    const chapter = element('div', { class: 'main' }, [
+        p('前。'),
+        imageParagraph,
+        p('後。'),
+    ]);
+    const { reader } = await initializeReader(bodyWith(chapter), { mode: 'block', revealSpeed: 0 });
+
+    assert.equal(currentScreen(reader).textContent, '前。');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent.trim(), '');
+    assert.equal(currentScreen(reader).querySelector('#plate').getAttribute('src'), 'images/plate.jpg');
+    assert.equal(currentScreen(reader).querySelector('#plate-block').id, 'plate-block');
+    assert.equal(reader.calculateProgress() < 1, true);
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '後。');
+});
+
 test('sentence mode keeps consecutive media-only images ordered between text screens', async () => {
     const gallery = element('p', {}, [
         image('images/one.jpg', { id: 'one' }),

@@ -6,6 +6,10 @@ Historical release notes before v1.1.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep singleton media VN screens from cloning surrounding chapter text and hijacking Sasayaki playback jumps.
+
 ## [v1.2.3] - 2026-06-25
 
 ### Added
