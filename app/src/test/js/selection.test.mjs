@@ -294,6 +294,13 @@ test('japanese reader selection still honors the non-Japanese scan toggle', () =
     );
 });
 
+test('shared selection scans supplementary-plane hits from the full character boundary', () => {
+    assert.equal(
+        scanTextFromOffset('𠮟り付けてはみても、不安', 1, { language: 'ja' }),
+        '𠮟り付けてはみても',
+    );
+});
+
 test('shared selection treats svg containers as reader taps while preserving svg image hits', () => {
     const { document, selection } = loadSelection('猫');
     let clearCount = 0;

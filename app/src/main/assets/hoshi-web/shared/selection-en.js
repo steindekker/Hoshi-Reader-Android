@@ -15,14 +15,14 @@
     }
 
     function isWordInternalDelimiter(text, offset) {
-        const char = text[offset];
+        const char = window.hoshiSelection?.codePointAt(text, offset) ?? text[offset];
         return EnglishWordInternalDelimiters.includes(char) &&
             isEnglishWordChar(text[offset - 1]) &&
             isEnglishWordChar(text[offset + 1]);
     }
 
     function isEnglishScanBoundary(text, offset, selection) {
-        const char = text[offset];
+        const char = selection.codePointAt?.(text, offset) ?? text[offset];
         return selection.scanDelimiters.includes(char) ||
             (EnglishScanDelimiters.includes(char) && !isWordInternalDelimiter(text, offset));
     }
@@ -41,7 +41,8 @@
         },
 
         isHitBoundaryAt(text, offset, selection) {
-            return /^[\s\u3000]$/.test(text[offset]) || isEnglishScanBoundary(text, offset, selection);
+            const char = selection.codePointAt?.(text, offset) ?? text[offset];
+            return /^[\s\u3000]$/.test(char) || isEnglishScanBoundary(text, offset, selection);
         },
 
         isWordStartBoundary(char, selection) {

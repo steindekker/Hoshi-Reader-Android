@@ -199,7 +199,7 @@ window.hoshiSelection = {
         const policy = this.languagePolicy();
         if (!policy) return true;
         if (policy.isScanBoundaryAt) return policy.isScanBoundaryAt.call(policy, text, offset, this);
-        return policy.isScanBoundary.call(policy, text[offset], this);
+        return policy.isScanBoundary.call(policy, this.codePointAt(text, offset), this);
     },
 
     isHitBoundary(char) {
@@ -214,7 +214,7 @@ window.hoshiSelection = {
         if (!policy) return true;
         if (policy.isHitBoundaryAt) return policy.isHitBoundaryAt.call(policy, text, offset, this);
         const isBoundary = policy.isHitBoundary || policy.isScanBoundary;
-        return isBoundary.call(policy, text[offset], this);
+        return isBoundary.call(policy, this.codePointAt(text, offset), this);
     },
 
     isWordStartBoundary(char) {
@@ -229,22 +229,61 @@ window.hoshiSelection = {
         if (!policy) return true;
         if (policy.isWordStartBoundaryAt) return policy.isWordStartBoundaryAt.call(policy, text, offset, this);
         const isBoundary = policy.isWordStartBoundary || policy.isHitBoundary || policy.isScanBoundary;
-        return isBoundary.call(policy, text[offset], this);
+        return isBoundary.call(policy, this.codePointAt(text, offset), this);
     },
 
     selectionStartForHit(hit) {
         const policy = this.languagePolicy();
         if (!policy) return hit;
-        return policy.selectionStartForHit ? policy.selectionStartForHit(hit, this) : hit;
+        const normalizedHit = {
+            ...hit,
+            offset: this.codePointStartOffset(hit.node?.textContent || '', hit.offset),
+        };
+        return policy.selectionStartForHit ? policy.selectionStartForHit(normalizedHit, this) : normalizedHit;
     },
 
     findWordStart(hit) {
         const text = hit.node.textContent;
-        let offset = hit.offset;
-        while (offset > 0 && !this.isWordStartBoundaryAt(text, offset - 1)) {
-            offset -= 1;
+        let offset = this.codePointStartOffset(text, hit.offset);
+        while (offset > 0) {
+            const previous = this.previousCodePointStartOffset(text, offset);
+            if (this.isWordStartBoundaryAt(text, previous)) {
+                break;
+            }
+            offset = previous;
         }
         return { node: hit.node, offset };
+    },
+
+    codePointStartOffset(text, offset) {
+        if (offset > 0 &&
+            offset < text.length &&
+            text.charCodeAt(offset) >= 0xDC00 &&
+            text.charCodeAt(offset) <= 0xDFFF &&
+            text.charCodeAt(offset - 1) >= 0xD800 &&
+            text.charCodeAt(offset - 1) <= 0xDBFF) {
+            return offset - 1;
+        }
+        return Math.max(0, Math.min(offset, text.length));
+    },
+
+    nextCodePointOffset(text, offset) {
+        const start = this.codePointStartOffset(text, offset);
+        if (start >= text.length) return text.length;
+        const codePoint = text.codePointAt(start);
+        if (codePoint === undefined) return text.length;
+        return start + String.fromCodePoint(codePoint).length;
+    },
+
+    previousCodePointStartOffset(text, offset) {
+        if (offset <= 0) return 0;
+        return this.codePointStartOffset(text, offset - 1);
+    },
+
+    codePointAt(text, offset) {
+        const start = this.codePointStartOffset(text, offset);
+        const codePoint = text.codePointAt(start);
+        return codePoint === undefined ? '' : String.fromCodePoint(codePoint);
     },
 
     isFurigana(node) {
@@ -302,13 +341,15 @@ window.hoshiSelection = {
             const range = document.createRange();
             let node;
             while (node = walker.nextNode()) {
-                for (let i = 0; i < node.textContent.length; i++) {
+                for (let i = 0; i < node.textContent.length;) {
+                    const end = this.nextCodePointOffset(node.textContent, i);
                     range.setStart(node, i);
-                    range.setEnd(node, i + 1);
+                    range.setEnd(node, end);
                     if (this.inCharRange(range, rectX, rectY)) {
                         range.collapse(true);
                         return range;
                     }
+                    i = end;
                 }
             }
             return document.caretRangeFromPoint(x, y);
@@ -338,14 +379,16 @@ window.hoshiSelection = {
                 continue;
             }
 
+            const start = this.codePointStartOffset(text, offset);
+            const end = this.nextCodePointOffset(text, start);
             const charRange = document.createRange();
-            charRange.setStart(node, offset);
-            charRange.setEnd(node, offset + 1);
+            charRange.setStart(node, start);
+            charRange.setEnd(node, end);
             if (this.inCharRange(charRange, rectX, rectY)) {
-                if (this.isHitBoundaryAt(text, offset)) {
+                if (this.isHitBoundaryAt(text, start)) {
                     return null;
                 }
-                return { node, offset };
+                return { node, offset: start };
             }
         }
 
@@ -509,12 +552,12 @@ window.hoshiSelection = {
             const start = offset;
 
             while (offset < content.length && text.length < maxLength) {
-                const char = content[offset];
+                const char = this.codePointAt(content, offset);
                 if (this.isScanBoundaryAt(content, offset)) {
                     break;
                 }
                 text += char;
-                offset++;
+                offset = this.nextCodePointOffset(content, offset);
             }
 
             if (offset > start) {
@@ -559,9 +602,10 @@ window.hoshiSelection = {
         }
 
         const first = this.selection.ranges[0];
+        const end = this.nextCodePointOffset(first.node.textContent, first.start);
         const range = document.createRange();
         range.setStart(first.node, first.start);
-        range.setEnd(first.node, first.start + 1);
+        range.setEnd(first.node, end);
 
         const rects = this.rectsForRange(range);
         const rect = rects.find(rect => x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height) ??
@@ -725,7 +769,8 @@ window.hoshiSelection = {
     getNormalizedOffset(targetNode, offset) {
         let count = window.hoshiReader.nodeStartOffsets.get(targetNode) ?? 0;
         const text = targetNode.textContent;
-        for (let i = 0; i < offset;) {
+        const targetOffset = this.codePointStartOffset(text, offset);
+        for (let i = 0; i < targetOffset;) {
             const char = String.fromCodePoint(text.codePointAt(i));
             if (window.hoshiReader.isMatchableChar(char)) {
                 count++;
