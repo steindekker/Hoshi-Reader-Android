@@ -1016,11 +1016,7 @@ internal fun sasayakiPlaybackHeaderInfo(
 }
 
 private fun SasayakiPlaybackData.audioSourceDisplayTitle(): String? =
-    when {
-        audioFileName != null -> audioFileName.audioSourceNameTitle()
-        audioUri != null -> audioUri.audioSourceNameTitle()
-        else -> null
-    }
+    audioFileName?.audioSourceNameTitle()
 
 private fun String.audioSourceNameTitle(): String? {
     val name = substringBefore('?')

@@ -25,6 +25,32 @@ internal fun minimalMp4WithChpl(
         }
     }
 
+internal fun minimalMp4WithMetadata(
+    title: String? = null,
+    artist: String? = null,
+    albumArtist: String? = null,
+    artworkData: ByteArray? = null,
+): ByteArray =
+    buildBytes {
+        writeBox("ftyp") {
+            writeAscii("M4A ")
+            writeUInt32(0)
+            writeAscii("M4A ")
+        }
+        writeBox("moov") {
+            writeBox("udta") {
+                writeMeta {
+                    writeBox("ilst") {
+                        title?.let { writeTextMetadataItem("\u00a9nam", it) }
+                        artist?.let { writeTextMetadataItem("\u00a9ART", it) }
+                        albumArtist?.let { writeTextMetadataItem("aART", it) }
+                        artworkData?.let { writeBinaryMetadataItem("covr", dataType = 13, it) }
+                    }
+                }
+            }
+        }
+    }
+
 private fun ByteArrayOutputStream.writeMvhd(durationSeconds: Double) {
     writeBox("mvhd") {
         writeUInt32(0)
@@ -46,6 +72,31 @@ private fun ByteArrayOutputStream.writeChpl(chapters: List<SasayakiChapterFixtur
             val titleBytes = chapter.title.toByteArray(Charsets.UTF_8)
             write(titleBytes.size)
             write(titleBytes)
+        }
+    }
+}
+
+private fun ByteArrayOutputStream.writeMeta(writeContent: ByteArrayOutputStream.() -> Unit) {
+    writeBox("meta") {
+        writeUInt32(0)
+        writeContent()
+    }
+}
+
+private fun ByteArrayOutputStream.writeTextMetadataItem(type: String, value: String) {
+    writeBinaryMetadataItem(type, dataType = 1, value.toByteArray(Charsets.UTF_8))
+}
+
+private fun ByteArrayOutputStream.writeBinaryMetadataItem(
+    type: String,
+    dataType: Int,
+    value: ByteArray,
+) {
+    writeBox(type) {
+        writeBox("data") {
+            writeUInt32(dataType.toLong())
+            writeUInt32(0)
+            write(value)
         }
     }
 }

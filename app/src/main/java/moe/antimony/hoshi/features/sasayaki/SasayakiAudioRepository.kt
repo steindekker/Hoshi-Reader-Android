@@ -61,19 +61,38 @@ class SasayakiAudioRepository(private val bookRoot: File) {
         playback: SasayakiPlaybackData,
         context: Context,
     ): SasayakiAudiobookMetadata =
-        audiobookMetadata(playback) { source ->
-            AndroidSasayakiAudiobookMetadataReader.read(context, source)
-        }
+        readAudiobookMetadata(
+            playback = playback,
+            readMetadata = { source -> AndroidSasayakiAudiobookMetadataReader.read(context, source) },
+            readFallbackMetadata = { source -> readMp4Metadata(source, context.contentResolver) },
+        )
 
     internal fun audiobookMetadata(
         playback: SasayakiPlaybackData,
         readMetadata: (SasayakiPlaybackSource) -> SasayakiAudiobookMetadata,
+    ): SasayakiAudiobookMetadata =
+        readAudiobookMetadata(
+            playback = playback,
+            readMetadata = readMetadata,
+            readFallbackMetadata = { source -> readMp4Metadata(source) },
+        )
+
+    private fun readAudiobookMetadata(
+        playback: SasayakiPlaybackData,
+        readMetadata: (SasayakiPlaybackSource) -> SasayakiAudiobookMetadata,
+        readFallbackMetadata: (SasayakiPlaybackSource) -> SasayakiAudiobookMetadata,
     ): SasayakiAudiobookMetadata {
         val source = runCatching { playbackSource(playback) }.getOrNull()
             ?: return SasayakiAudiobookMetadata.Empty
-        return runCatching {
-            readMetadata(source).normalized()
-        }.getOrDefault(SasayakiAudiobookMetadata.Empty)
+        val metadata = runCatching { readMetadata(source) }
+            .getOrDefault(SasayakiAudiobookMetadata.Empty)
+        val normalized = metadata.normalized()
+        if (normalized.title != null && normalized.artist != null && normalized.artworkData != null) {
+            return normalized
+        }
+        val fallbackMetadata = runCatching { readFallbackMetadata(source) }
+            .getOrDefault(SasayakiAudiobookMetadata.Empty)
+        return normalized.mergedWith(fallbackMetadata.normalized()).normalized()
     }
 
     fun clearAudioSource(playback: SasayakiPlaybackData, contentResolver: ContentResolver) {
@@ -144,6 +163,29 @@ internal data class SasayakiAudiobookMetadata(
         val Empty = SasayakiAudiobookMetadata()
     }
 }
+
+private fun SasayakiAudiobookMetadata.mergedWith(
+    fallback: SasayakiAudiobookMetadata,
+): SasayakiAudiobookMetadata =
+    SasayakiAudiobookMetadata(
+        title = title ?: fallback.title,
+        artist = artist ?: fallback.artist,
+        albumArtist = albumArtist ?: fallback.albumArtist,
+        author = author ?: fallback.author,
+        artworkData = artworkData ?: fallback.artworkData,
+    )
+
+private fun readMp4Metadata(
+    source: SasayakiPlaybackSource,
+    contentResolver: ContentResolver? = null,
+): SasayakiAudiobookMetadata =
+    when (source) {
+        is SasayakiPlaybackSource.PrivateFile -> SasayakiAudiobookMp4Metadata.parse(source.file)
+        is SasayakiPlaybackSource.ExternalUri -> contentResolver
+            ?.openSeekableAudioChannel(source.uri)
+            ?.use(SasayakiAudiobookMp4Metadata::parse)
+            ?: SasayakiAudiobookMetadata.Empty
+    }
 
 private object AndroidSasayakiAudiobookMetadataReader {
     fun read(context: Context, source: SasayakiPlaybackSource): SasayakiAudiobookMetadata {

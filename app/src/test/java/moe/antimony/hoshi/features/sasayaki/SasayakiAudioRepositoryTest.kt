@@ -139,6 +139,31 @@ class SasayakiAudioRepositoryTest {
     }
 
     @Test
+    fun audiobookMetadataFallsBackToMp4AtomsWhenPlatformReaderReturnsEmpty() {
+        val bookRoot = temporaryFolder.newFolder("mp4-metadata-book")
+        val repository = SasayakiAudioRepository(bookRoot)
+        val audioFile = bookRoot.resolve("Sasayaki/sasayaki_audio.m4b")
+        val artwork = byteArrayOf(0xff.toByte(), 0xd8.toByte(), 0xff.toByte(), 0xd9.toByte())
+        audioFile.parentFile!!.mkdirs()
+        audioFile.writeBytes(
+            minimalMp4WithMetadata(
+                title = "MP4 Title",
+                artist = "Author",
+                albumArtist = "Narrator",
+                artworkData = artwork,
+            ),
+        )
+
+        val metadata = repository.audiobookMetadata(playback(audioFileName = "sasayaki_audio.m4b")) {
+            SasayakiAudiobookMetadata(title = " ", artist = "")
+        }
+
+        assertEquals("MP4 Title", metadata.title)
+        assertEquals("Author", metadata.artist)
+        assertArrayEquals(artwork, metadata.artworkData)
+    }
+
+    @Test
     fun audiobookMetadataReturnsEmptyWhenAudioMissingOrReaderFails() {
         val repository = SasayakiAudioRepository(temporaryFolder.newFolder("missing-metadata-book"))
 

@@ -141,4 +141,20 @@ class SasayakiSheetTest {
             ).title,
         )
     }
+
+    @Test
+    fun playbackHeaderInfoDoesNotExposeExternalDocumentUriAsTitle() {
+        val info = sasayakiPlaybackHeaderInfo(
+            playback = SasayakiPlaybackData(
+                lastPosition = 0.0,
+                audioUri = "content://com.android.externalstorage.documents/document/" +
+                    "primary%3A115yun%2Fdownload%2F%5B1%E5%B7%BB%5D%20Book%2001.m4b",
+            ),
+            metadata = SasayakiAudiobookMetadata.Empty,
+            fallbackBookTitle = "Reader Book",
+            currentChapter = null,
+        )
+
+        assertEquals("Reader Book", info.title)
+    }
 }
