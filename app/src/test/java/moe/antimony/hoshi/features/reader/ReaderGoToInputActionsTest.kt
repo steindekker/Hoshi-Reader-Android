@@ -13,6 +13,19 @@ class ReaderGoToInputActionsTest {
     }
 
     @Test
+    fun goToTabsUseChapterHighlightSearchOrder() {
+        assertEquals(
+            listOf(ReaderGoToTab.Chapters, ReaderGoToTab.Highlights, ReaderGoToTab.Search),
+            ReaderGoToTab.entries.toList(),
+        )
+    }
+
+    @Test
+    fun goToSheetDefaultsToChapters() {
+        assertEquals(ReaderGoToTab.Chapters, readerGoToDefaultTab())
+    }
+
+    @Test
     fun bookHeaderCoverUsesSquareArtworkFrame() {
         val metrics = readerSheetDensityMetrics()
 
@@ -30,6 +43,18 @@ class ReaderGoToInputActionsTest {
         )
 
         assertEquals(listOf("search", "clearFocus", "hideKeyboard"), events)
+    }
+
+    @Test
+    fun searchTabActivationFocusesInputAndShowsKeyboard() {
+        val events = mutableListOf<String>()
+
+        readerSearchTabActivationAction(
+            requestFocus = { events += "requestFocus" },
+            showKeyboard = { events += "showKeyboard" },
+        )
+
+        assertEquals(listOf("requestFocus", "showKeyboard"), events)
     }
 
     @Test

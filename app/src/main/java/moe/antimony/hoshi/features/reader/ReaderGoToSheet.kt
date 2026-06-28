@@ -74,12 +74,14 @@ import moe.antimony.hoshi.ui.hoshiTextFieldCursorBrush
 import moe.antimony.hoshi.ui.rememberSyncedTextFieldState
 
 internal enum class ReaderGoToTab {
-    Search,
     Chapters,
     Highlights,
+    Search,
 }
 
 internal val ReaderGoToTabRole = Role.Tab
+
+internal fun readerGoToDefaultTab(): ReaderGoToTab = ReaderGoToTab.Chapters
 
 @Composable
 internal fun ReaderGoToSheet(
@@ -94,7 +96,7 @@ internal fun ReaderGoToSheet(
     onHighlightDelete: (ReaderHighlight) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var selectedTab by remember { mutableStateOf(ReaderGoToTab.Search) }
+    var selectedTab by remember { mutableStateOf(readerGoToDefaultTab()) }
     var showJumpDialog by remember { mutableStateOf(false) }
     val coverBitmap = remember(book) { book.decodeCoverImageBitmap() }
     val searchState = remember(book) { ReaderSearchSheetState() }
@@ -143,13 +145,6 @@ internal fun ReaderGoToSheet(
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 10.dp),
         )
         when (selectedTab) {
-            ReaderGoToTab.Search -> ReaderSearchTab(
-                searchState = searchState,
-                progressDisplay = progressDisplay,
-                totalCharacters = book.bookInfo.characterCount,
-                onJump = onSearchResultJump,
-                modifier = Modifier.weight(1f),
-            )
             ReaderGoToTab.Chapters -> ReaderGoToChaptersTab(
                 book = book,
                 currentPosition = currentPosition,
@@ -162,6 +157,13 @@ internal fun ReaderGoToSheet(
                 highlights = highlights,
                 onJump = onHighlightJump,
                 onDelete = onHighlightDelete,
+                modifier = Modifier.weight(1f),
+            )
+            ReaderGoToTab.Search -> ReaderSearchTab(
+                searchState = searchState,
+                progressDisplay = progressDisplay,
+                totalCharacters = book.bookInfo.characterCount,
+                onJump = onSearchResultJump,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -271,6 +273,13 @@ private fun ReaderSearchTab(
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(Unit) {
+        readerSearchTabActivationAction(
+            requestFocus = { focusRequester.requestFocus() },
+            showKeyboard = { keyboardController?.show() },
+        )
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         ReaderCompactSearchField(
@@ -636,6 +645,14 @@ internal fun readerSearchImeAction(
     onSearch()
     clearFocus()
     hideKeyboard()
+}
+
+internal fun readerSearchTabActivationAction(
+    requestFocus: () -> Unit,
+    showKeyboard: () -> Unit,
+) {
+    requestFocus()
+    showKeyboard()
 }
 
 internal fun readerJumpImeAction(

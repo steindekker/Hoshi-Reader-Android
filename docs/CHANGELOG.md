@@ -6,6 +6,10 @@ Historical release notes before v1.1.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 
 ## [Unreleased]
 
+### Changed
+
+- Open the Reader Go to panel on Chapters by default, order its tabs as Chapters, Highlights, Search, and focus the search field when Search is selected.
+
 ### Fixed
 
 - Read Sasayaki M4B title, author, and cover metadata from MP4 atoms when Android's platform metadata reader returns empty.
