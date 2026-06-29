@@ -16,6 +16,7 @@ Historical release notes before v1.1.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 - Keep singleton media VN screens from cloning surrounding chapter text and hijacking Sasayaki playback jumps.
 - Show the first newly created VN highlight immediately without requiring reader re-entry.
 - Keep VN and continuous vertical reader content from reserving extra space or centering against the bottom overlap area beyond the configured vertical padding.
+- Keep VN vertical screens from isolating trailing closing punctuation that WebView naturally keeps with the preceding line.
 - Keep VN vertical lookup and Sasayaki e-ink highlight boxes aligned with the highlighted text.
 - Prevent reader lookups from crashing on words that begin with supplementary-plane kanji such as 𠮟.
 

@@ -525,8 +525,14 @@ class TestRange {
         if (!capacity || !node) return null;
         const content = closestElement(node, '.hoshi-vn-content');
         if (!content) return null;
-        const start = textOffsetWithin(content, node) + this.startOffset;
-        const end = textOffsetWithin(content, this.endNode === node ? node : this.startNode) + this.endOffset;
+        const offsetRoot = layout.resetTextOffsetAtContentChildren
+            ? directChildContaining(content, node) ?? content
+            : content;
+        const endOffsetRoot = layout.resetTextOffsetAtContentChildren
+            ? directChildContaining(content, this.endNode === node ? node : this.startNode) ?? offsetRoot
+            : content;
+        const start = textOffsetWithin(offsetRoot, node) + this.startOffset;
+        const end = textOffsetWithin(endOffsetRoot, this.endNode === node ? node : this.startNode) + this.endOffset;
         const safeEnd = Math.max(start, end);
         if (layout.writingMode && layout.writingMode.startsWith('vertical')) {
             return { x: 0, y: start * 24, left: 0, right: 24, top: start * 24, bottom: safeEnd * 24, width: 24, height: (safeEnd - start) * 24 };
@@ -556,6 +562,14 @@ function closestElement(node, selector) {
         current = current.parentElement;
     }
     return null;
+}
+
+function directChildContaining(root, target) {
+    let current = target;
+    while (current?.parentNode && current.parentNode !== root) {
+        current = current.parentNode;
+    }
+    return current?.parentNode === root ? current : null;
 }
 
 function textOffsetWithin(root, target) {
@@ -651,6 +665,7 @@ function buildDocument(body, options = {}) {
             charactersPerScreen: options.charactersPerScreen,
             writingMode: options.vnWritingMode ?? 'horizontal-tb',
             screenInlineOverflowCharacters: options.screenInlineOverflowCharacters ?? 0,
+            resetTextOffsetAtContentChildren: options.resetTextOffsetAtContentChildren ?? false,
         },
         fonts: { ready: Promise.resolve() },
         readyState: 'loading',
@@ -1252,6 +1267,25 @@ test('block mode keeps trailing Japanese punctuation in the same vertical screen
     });
 
     assert.equal(currentScreen(reader).textContent, '「小柳さんは、お父さんとお母さん、どっちが来てるの？」');
+    assert.equal(reader.paginate('forward'), 'limit');
+});
+
+test('block mode keeps trailing closing punctuation in the browser-laid-out vertical text flow', async () => {
+    const body = bodyWith(p(`${'一'.repeat(26)}」`));
+    const { reader } = await initializeReader(body, {
+        mode: 'block',
+        revealSpeed: 0,
+        bodyWritingMode: 'vertical-rl',
+        vnWritingMode: 'vertical-rl',
+        charactersPerScreen: 26,
+        resetTextOffsetAtContentChildren: true,
+    });
+
+    assert.equal(currentScreen(reader).textContent, `${'一'.repeat(26)}」`);
+    const directFlowSegments = Array.from(currentScreen(reader).firstChild.childNodes)
+        .map((node) => node.textContent)
+        .filter(Boolean);
+    assert.notEqual(directFlowSegments.at(-1), '」');
     assert.equal(reader.paginate('forward'), 'limit');
 });
 

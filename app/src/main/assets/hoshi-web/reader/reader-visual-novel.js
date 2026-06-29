@@ -26,6 +26,7 @@ window.hoshiReader = {
   contentStream: null,
   rangeMap: null,
   sentenceDelimiters: '。！？.!?',
+  lineStartProhibitedChars: '。、，,.！？!?…‥」』）)】〉》〕｝}］]',
   totalChapterChars: 0,
   currentScreenIndex: 0,
   revealComplete: true,
@@ -563,7 +564,8 @@ window.hoshiReader = {
     if (this.measurementScrollFits(measurement)) return true;
     var bounds = this.measurementBounds(measurement);
     if (!bounds) return true;
-    return this.renderedTextFitsBounds(measurement.content, bounds);
+    if (this.renderedTextFitsBounds(measurement.content, bounds)) return true;
+    return this.renderedTextFitsBoundsWithTrailingPunctuation(measurement.content, bounds);
   },
   measurementScrollFits: function(measurement) {
     var root = measurement && measurement.root;
@@ -648,6 +650,91 @@ window.hoshiReader = {
       rect.right <= bounds.right + tolerance &&
       rect.top >= bounds.top - tolerance &&
       rect.bottom <= bounds.bottom + tolerance;
+  },
+  renderedTextFitsBoundsWithTrailingPunctuation: function(root, bounds) {
+    var nodes = [];
+    var walker = this.createWalker(root);
+    var node;
+    while (node = walker.nextNode()) {
+      if ((node.textContent || '').trim()) nodes.push(node);
+    }
+    if (!nodes.length) return true;
+    var lastNode = nodes[nodes.length - 1];
+    var trailingRange = this.trailingLineStartProhibitedRange(lastNode.textContent || '');
+    if (!trailingRange) return false;
+    var range = document.createRange();
+    var tolerance = 1;
+    var rangeFits = (textNode, start, end, allowLineEndOverflow) => {
+      if (end <= start) return true;
+      range.setStart(textNode, start);
+      range.setEnd(textNode, end);
+      var rects = Array.from(range.getClientRects ? range.getClientRects() : []);
+      for (var i = 0; i < rects.length; i++) {
+        var rect = rects[i];
+        if (!rect || (!rect.width && !rect.height)) continue;
+        var fits = allowLineEndOverflow
+          ? this.rectFitsBoundsWithLineEndOverflow(rect, bounds, tolerance)
+          : this.rectFitsBounds(rect, bounds, tolerance);
+        if (!fits) return false;
+      }
+      return true;
+    };
+    for (var i = 0; i < nodes.length - 1; i++) {
+      var text = nodes[i].textContent || '';
+      if (!rangeFits(nodes[i], 0, text.length, false)) {
+        if (range.detach) range.detach();
+        return false;
+      }
+    }
+    if (!rangeFits(lastNode, 0, trailingRange.start, false)) {
+      if (range.detach) range.detach();
+      return false;
+    }
+    var trailingFits = rangeFits(lastNode, trailingRange.start, trailingRange.end, true);
+    if (range.detach) range.detach();
+    return trailingFits;
+  },
+  rectFitsBoundsWithLineEndOverflow: function(rect, bounds, tolerance) {
+    var lineEndOverflow = Math.max(rect.width || 0, rect.height || 0, 1) + tolerance;
+    if (this.isVertical()) {
+      return rect.left >= bounds.left - tolerance &&
+        rect.right <= bounds.right + tolerance &&
+        rect.top >= bounds.top - tolerance &&
+        rect.top <= bounds.bottom + tolerance &&
+        rect.bottom <= bounds.bottom + lineEndOverflow;
+    }
+    return rect.left >= bounds.left - tolerance &&
+      rect.left <= bounds.right + tolerance &&
+      rect.right <= bounds.right + lineEndOverflow &&
+      rect.top >= bounds.top - tolerance &&
+      rect.bottom <= bounds.bottom + tolerance;
+  },
+  trailingLineStartProhibitedRange: function(text) {
+    var chars = Array.from(text || '');
+    if (!chars.length) return null;
+    var offsets = [];
+    var offset = 0;
+    for (var i = 0; i < chars.length; i++) {
+      offsets.push(offset);
+      offset += chars[i].length;
+    }
+    offsets.push(offset);
+    var end = chars.length;
+    while (end > 0 && /\s/.test(chars[end - 1])) end -= 1;
+    var start = end;
+    var hasProhibited = false;
+    while (start > 0) {
+      var char = chars[start - 1];
+      if (/\s/.test(char)) {
+        start -= 1;
+        continue;
+      }
+      if (this.lineStartProhibitedChars.indexOf(char) < 0) break;
+      hasProhibited = true;
+      start -= 1;
+    }
+    if (!hasProhibited) return null;
+    return { start: offsets[start], end: offsets[end] };
   },
   splitScreenToViewport: function(screen, measurement) {
     var items = this.textItemsForScreen(screen);

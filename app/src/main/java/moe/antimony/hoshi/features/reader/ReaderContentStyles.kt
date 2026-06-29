@@ -134,6 +134,11 @@ internal object ReaderContentStyles {
         } else {
             ""
         }
+        val vnContentHangingPunctuationCss = if (!settings.justifyText) {
+            "hanging-punctuation: allow-end !important;"
+        } else {
+            ""
+        }
         val pageBreakCss = if (settings.avoidPageBreak) {
             """
             p {
@@ -254,7 +259,7 @@ internal object ReaderContentStyles {
                     max-width: 100% !important;
                     max-height: 100% !important;
                     overflow: visible !important;
-                    hanging-punctuation: none !important;
+                    $vnContentHangingPunctuationCss
                 }
                 .hoshi-vn-content * {
                     column-count: auto !important;

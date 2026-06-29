@@ -586,9 +586,10 @@ class ReaderSettingsTest {
         val visualNovelCss = ReaderContentStyles.styleTag(
             ReaderSettings(viewMode = ReaderViewMode.VisualNovel),
         )
+        val declarations = cssDeclarationsForSelector(visualNovelCss, ".hoshi-vn-content *")
 
-        assertTrue(Regex("""\.hoshi-vn-content \* \{\s+column-count: auto !important;""").containsMatchIn(visualNovelCss))
-        assertTrue(visualNovelCss.contains("-webkit-column-count: auto !important;"))
+        assertEquals("auto !important", declarations["column-count"])
+        assertEquals("auto !important", declarations["-webkit-column-count"])
     }
 
     @Test
@@ -603,39 +604,53 @@ class ReaderSettingsTest {
             ),
         )
 
-        assertTrue(css.contains(".hoshi-vn-stage"))
-        assertTrue(css.contains("height: var(--hoshi-reader-visible-height, var(--page-height, 100vh)) !important;"))
-        assertTrue(css.contains(".hoshi-vn-screen"))
-        assertTrue(css.contains("display: flex !important;"))
-        assertTrue(css.contains("align-items: center !important;"))
-        assertTrue(css.contains("justify-content: center !important;"))
-        assertTrue(css.contains("height: 100% !important;"))
-        assertTrue(css.contains("padding: var(--hoshi-vertical-padding-block, 4.0vh) 6.0vw !important;"))
-        assertTrue(css.contains("padding-bottom: var(--hoshi-vertical-padding-block, 4.0vh) !important;"))
-        assertTrue(css.contains(".hoshi-vn-content"))
-        assertTrue(css.contains("max-width: 100% !important;"))
-        assertTrue(css.contains("max-height: 100% !important;"))
-        assertTrue(css.contains("overflow: visible !important;"))
-        assertTrue(css.contains("hanging-punctuation: none !important;"))
-        assertTrue(css.contains(".hoshi-vn-content svg"))
-        assertTrue(css.contains("width: var(--hoshi-image-max-width, 88vw) !important;"))
-        assertTrue(css.contains("height: var(--hoshi-image-max-height, calc(var(--page-height, 100vh) - 28px)) !important;"))
-        assertFalse(css.contains("max-height: calc(100% - 28px) !important;"))
+        val stage = cssDeclarationsForSelector(css, ".hoshi-vn-stage")
+        val screen = cssDeclarationsForSelector(css, ".hoshi-vn-screen")
+        val content = cssDeclarationsForSelector(css, ".hoshi-vn-content")
+        val contentSvg = cssDeclarationsForSelector(css, ".hoshi-vn-content svg")
+
+        assertEquals("var(--hoshi-reader-visible-height, var(--page-height, 100vh)) !important", stage["height"])
+        assertEquals("flex !important", screen["display"])
+        assertEquals("center !important", screen["align-items"])
+        assertEquals("center !important", screen["justify-content"])
+        assertEquals("100% !important", screen["height"])
+        assertEquals("var(--hoshi-vertical-padding-block, 4.0vh) 6.0vw !important", screen["padding"])
+        assertEquals("var(--hoshi-vertical-padding-block, 4.0vh) !important", screen["padding-bottom"])
+        assertEquals("100% !important", content["max-width"])
+        assertEquals("100% !important", content["max-height"])
+        assertEquals("visible !important", content["overflow"])
+        assertEquals("allow-end !important", content["hanging-punctuation"])
+        assertEquals("var(--hoshi-image-max-width, 88vw) !important", contentSvg["width"])
+        assertEquals("var(--hoshi-image-max-height, calc(var(--page-height, 100vh) - 28px)) !important", contentSvg["height"])
+        assertFalse(content.containsValue("calc(100% - 28px) !important"))
     }
 
     @Test
-    fun paginatedReaderKeepsHangingPunctuationWhileVisualNovelContentDisablesIt() {
+    fun visualNovelContentKeepsTheReaderHangingPunctuationContractWhenTextIsNotJustified() {
         val paginatedCss = ReaderContentStyles.styleTag(
             ReaderSettings(viewMode = ReaderViewMode.Paginated),
         )
         val visualNovelCss = ReaderContentStyles.styleTag(
             ReaderSettings(viewMode = ReaderViewMode.VisualNovel),
         )
+        val visualNovelContent = cssDeclarationsForSelector(visualNovelCss, ".hoshi-vn-content")
 
         assertTrue(paginatedCss.contains("hanging-punctuation: allow-end !important;"))
         assertFalse(paginatedCss.contains("hanging-punctuation: none !important;"))
-        assertTrue(visualNovelCss.contains(".hoshi-vn-content"))
-        assertTrue(visualNovelCss.contains("hanging-punctuation: none !important;"))
+        assertEquals("allow-end !important", visualNovelContent["hanging-punctuation"])
+        assertFalse(visualNovelCss.contains("hanging-punctuation: none !important;"))
+    }
+
+    @Test
+    fun visualNovelContentDoesNotForceHangingPunctuationWhenTextIsJustified() {
+        val visualNovelCss = ReaderContentStyles.styleTag(
+            ReaderSettings(viewMode = ReaderViewMode.VisualNovel, justifyText = true),
+        )
+        val visualNovelContent = cssDeclarationsForSelector(visualNovelCss, ".hoshi-vn-content")
+
+        assertFalse(visualNovelContent.containsKey("hanging-punctuation"))
+        assertFalse(visualNovelCss.contains("hanging-punctuation: allow-end !important;"))
+        assertFalse(visualNovelCss.contains("hanging-punctuation: none !important;"))
     }
 
     @Test
@@ -691,4 +706,22 @@ class ReaderSettingsTest {
         assertEquals(Color.Black, colors.border)
     }
 
+    private fun cssDeclarationsForSelector(css: String, selector: String): Map<String, String> {
+        val escapedSelector = Regex.escape(selector)
+        val block = Regex("""$escapedSelector\s*\{([^}]*)}""")
+            .find(css)
+            ?.groupValues
+            ?.get(1)
+            ?: return emptyMap()
+        return block
+            .split(";")
+            .mapNotNull { declaration ->
+                val separator = declaration.indexOf(":")
+                if (separator < 0) return@mapNotNull null
+                val name = declaration.substring(0, separator).trim()
+                val value = declaration.substring(separator + 1).trim()
+                if (name.isEmpty() || value.isEmpty()) null else name to value
+            }
+            .toMap()
+    }
 }
