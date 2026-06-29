@@ -353,6 +353,14 @@ test('shared ruby geometry exposes merged inline rects for reader Sasayaki overl
     assert.equal(merged[0].height, 12);
 });
 
+test('shared selection geometry uses the active reader writing direction when available', () => {
+    const { selection, window } = loadSelection('猫');
+    window.hoshiReader = { isVertical: () => true };
+
+    assert.equal(window.hoshiRubyGeometry.isVertical(), true);
+    assert.equal(selection.isVertical(), true);
+});
+
 test('shared ruby geometry keeps vertical adjacent columns split when ruby edges barely overlap', () => {
     const { window } = loadSelection('誰');
     window.getComputedStyle = () => ({ writingMode: 'vertical-rl' });
@@ -367,6 +375,45 @@ test('shared ruby geometry keeps vertical adjacent columns split when ruby edges
     assert.equal(merged[0].height, 80);
     assert.equal(merged[1].x, 80);
     assert.equal(merged[1].height, 160);
+});
+
+test('shared ruby geometry uses reader vertical direction for single-character ruby rects', () => {
+    const { window } = loadSelection('花');
+    window.hoshiReader = { isVertical: () => true };
+
+    const rect = (x, y, width, height) => ({
+        x,
+        y,
+        width,
+        height,
+        left: x,
+        top: y,
+        right: x + width,
+        bottom: y + height,
+    });
+    const previousRt = { getClientRects: () => [rect(171, 434, 14, 21)] };
+    const targetRt = { getClientRects: () => [rect(171, 455, 14, 21)] };
+    const nextRt = { getClientRects: () => [rect(171, 476, 14, 21)] };
+    const ruby = {
+        querySelectorAll(selector) {
+            return selector === 'rt' ? [previousRt, targetRt, nextRt] : [];
+        },
+    };
+    const baseNode = {
+        nodeType: 3,
+        parentElement: {
+            closest(selector) {
+                return selector === 'ruby' ? ruby : null;
+            },
+        },
+    };
+
+    const rubyAware = window.hoshiRubyGeometry.rubyAwareRect(rect(148, 455, 30, 21), baseNode);
+
+    assert.equal(rubyAware.x, 148);
+    assert.equal(rubyAware.y, 455);
+    assert.equal(rubyAware.width, 37);
+    assert.equal(rubyAware.height, 21);
 });
 
 test('shared ruby geometry does not cascade a vertical single-character base rect into adjacent ruby text', () => {

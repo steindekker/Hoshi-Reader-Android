@@ -9,6 +9,12 @@
 
 window.hoshiRubyGeometry = window.hoshiRubyGeometry || {
     isVertical() {
+        const reader = window.hoshiReader;
+        if (reader && typeof reader.isVertical === 'function') {
+            try {
+                return !!reader.isVertical();
+            } catch {}
+        }
         return window.getComputedStyle(document.body).writingMode === "vertical-rl";
     },
 
@@ -175,7 +181,8 @@ window.hoshiSelection = {
     },
 
     isVertical() {
-        return window.getComputedStyle(document.body).writingMode === "vertical-rl";
+        return window.hoshiRubyGeometry?.isVertical?.() ??
+            (window.getComputedStyle(document.body).writingMode === "vertical-rl");
     },
 
     languagePolicy() {

@@ -15,6 +15,7 @@ Historical release notes before v1.1.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 - Read Sasayaki M4B title, author, and cover metadata from MP4 atoms when Android's platform metadata reader returns empty.
 - Keep singleton media VN screens from cloning surrounding chapter text and hijacking Sasayaki playback jumps.
 - Show the first newly created VN highlight immediately without requiring reader re-entry.
+- Keep VN vertical lookup and Sasayaki e-ink highlight boxes aligned with the highlighted text.
 - Prevent reader lookups from crashing on words that begin with supplementary-plane kanji such as 𠮟.
 
 ## [v1.2.3] - 2026-06-25

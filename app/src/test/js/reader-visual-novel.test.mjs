@@ -9,6 +9,7 @@ const readerMediaSemanticsUrl = new URL('../../main/assets/hoshi-web/reader/read
 const readerVnContentStreamUrl = new URL('../../main/assets/hoshi-web/reader/reader-vn-content-stream.js', import.meta.url);
 const readerVnRangeMapUrl = new URL('../../main/assets/hoshi-web/reader/reader-vn-range-map.js', import.meta.url);
 const readerHighlightsUrl = new URL('../../main/assets/hoshi-web/reader/highlights.js', import.meta.url);
+const sharedSelectionUrl = new URL('../../main/assets/hoshi-web/shared/selection.js', import.meta.url);
 
 function readerTextSemanticsSource() {
     return fs.readFileSync(readerTextSemanticsUrl, 'utf8');
@@ -28,6 +29,10 @@ function readerMediaSemanticsSource() {
 
 function readerHighlightsSource() {
     return fs.readFileSync(readerHighlightsUrl, 'utf8');
+}
+
+function sharedSelectionSource() {
+    return fs.readFileSync(sharedSelectionUrl, 'utf8');
 }
 
 function readerSource() {
@@ -752,12 +757,17 @@ function loadReader(body, options = {}) {
             },
         },
     };
-    vm.runInNewContext(configuredReaderSource(options), {
+    const source = `${options.selectionScript ?? ''}\n${configuredReaderSource(options)}`;
+    vm.runInNewContext(source, {
+        CSS: {},
         document,
         window,
         HoshiReaderImage: imageBridge,
         Node: { ELEMENT_NODE: 1, TEXT_NODE: 3, DOCUMENT_FRAGMENT_NODE: 11 },
         NodeFilter: { SHOW_TEXT: 4, FILTER_ACCEPT: 1, FILTER_REJECT: 2 },
+        getSelection() {
+            return null;
+        },
         setTimeout(callback, delay) {
             timers.push({ callback, delay });
             return timers.length;
@@ -1993,10 +2003,11 @@ test('visual novel Sasayaki e-ink mode renders overlay geometry instead of inlin
 
 test('visual novel Sasayaki e-ink overlay uses VN screen writing direction', async () => {
     const cue = { id: 'cue', start: 0, length: 4 };
-    const { reader, document, sasayakiHighlights } = await initializeReader(bodyWith(p('蒸し暑い')), {
+    const { reader, document, sasayakiHighlights, window } = await initializeReader(bodyWith(p('蒸し暑い')), {
         bodyWritingMode: 'horizontal-tb',
         vnWritingMode: 'vertical-rl',
         revealSpeed: 0,
+        selectionScript: sharedSelectionSource(),
     });
     document.documentElement.style.setProperty('--hoshi-reader-vertical-writing', '1');
     reader.isEInkMode = () => true;
@@ -2005,6 +2016,7 @@ test('visual novel Sasayaki e-ink overlay uses VN screen writing direction', asy
     reader.highlightSasayakiCue(cue, false);
 
     assert.equal(reader.isVertical(), true);
+    assert.equal(window.hoshiRubyGeometry.isVertical(), true);
     assert.equal(sasayakiHighlights.at(-1).verticalWriting, true);
 });
 
