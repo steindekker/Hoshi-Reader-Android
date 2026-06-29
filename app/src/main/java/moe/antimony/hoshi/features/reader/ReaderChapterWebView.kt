@@ -891,6 +891,7 @@ private fun readerSetupScript(
 
 internal data class ReaderViewportCssLayout(
     val pageHeightPx: Int,
+    val visibleHeightPx: Int,
     val pageWidthPx: Int,
     val verticalPaddingBlockPx: Double,
     val verticalPaddingGapPx: Double,
@@ -901,6 +902,7 @@ internal data class ReaderViewportCssLayout(
         """
         :root {
             --page-height: ${pageHeightPx}px;
+            --hoshi-reader-visible-height: ${visibleHeightPx}px;
             --page-width: ${pageWidthPx}px;
             --hoshi-vertical-padding-block: ${verticalPaddingBlockPx.cssNumber()}px;
             --hoshi-vertical-padding-gap: ${verticalPaddingGapPx.cssNumber()}px;
@@ -925,6 +927,7 @@ internal fun readerViewportCssLayout(
     )
     return ReaderViewportCssLayout(
         pageHeightPx = pageHeight,
+        visibleHeightPx = height,
         pageWidthPx = width,
         verticalPaddingBlockPx = height * (settings.verticalPadding / 200.0),
         verticalPaddingGapPx = height * (settings.verticalPadding / 100.0),

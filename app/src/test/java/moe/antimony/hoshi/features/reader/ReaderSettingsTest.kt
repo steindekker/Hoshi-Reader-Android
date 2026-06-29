@@ -131,6 +131,7 @@ class ReaderSettingsTest {
         )
 
         assertEquals(742, layout.pageHeightPx)
+        assertEquals(720, layout.visibleHeightPx)
         assertEquals(360, layout.pageWidthPx)
         assertEquals(36.0, layout.verticalPaddingBlockPx, 0.0)
         assertEquals(72.0, layout.verticalPaddingGapPx, 0.0)
@@ -139,6 +140,7 @@ class ReaderSettingsTest {
 
         val css = layout.cssVariables()
         assertTrue(css.contains("--page-height: 742px;"))
+        assertTrue(css.contains("--hoshi-reader-visible-height: 720px;"))
         assertTrue(css.contains("--page-width: 360px;"))
         assertTrue(css.contains("--hoshi-vertical-padding-block: 36.0px;"))
         assertTrue(css.contains("--hoshi-vertical-padding-gap: 72.0px;"))
@@ -590,7 +592,7 @@ class ReaderSettingsTest {
     }
 
     @Test
-    fun visualNovelReaderCssConstrainsContentToViewportWithoutBottomOverlapPadding() {
+    fun visualNovelReaderCssCentersWithinVisibleViewportInsteadOfPageOverlap() {
         val css = ReaderContentStyles.styleTag(
             ReaderSettings(
                 viewMode = ReaderViewMode.VisualNovel,
@@ -601,20 +603,24 @@ class ReaderSettingsTest {
             ),
         )
 
+        assertTrue(css.contains(".hoshi-vn-stage"))
+        assertTrue(css.contains("height: var(--hoshi-reader-visible-height, var(--page-height, 100vh)) !important;"))
         assertTrue(css.contains(".hoshi-vn-screen"))
         assertTrue(css.contains("display: flex !important;"))
         assertTrue(css.contains("align-items: center !important;"))
         assertTrue(css.contains("justify-content: center !important;"))
+        assertTrue(css.contains("height: 100% !important;"))
         assertTrue(css.contains("padding: var(--hoshi-vertical-padding-block, 4.0vh) 6.0vw !important;"))
         assertTrue(css.contains("padding-bottom: var(--hoshi-vertical-padding-block, 4.0vh) !important;"))
         assertTrue(css.contains(".hoshi-vn-content"))
         assertTrue(css.contains("max-width: 100% !important;"))
-        assertTrue(css.contains("max-height: calc(100% - 28px) !important;"))
+        assertTrue(css.contains("max-height: 100% !important;"))
         assertTrue(css.contains("overflow: visible !important;"))
         assertTrue(css.contains("hanging-punctuation: none !important;"))
         assertTrue(css.contains(".hoshi-vn-content svg"))
         assertTrue(css.contains("width: var(--hoshi-image-max-width, 88vw) !important;"))
         assertTrue(css.contains("height: var(--hoshi-image-max-height, calc(var(--page-height, 100vh) - 28px)) !important;"))
+        assertFalse(css.contains("max-height: calc(100% - 28px) !important;"))
     }
 
     @Test

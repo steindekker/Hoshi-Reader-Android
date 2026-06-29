@@ -31,7 +31,7 @@ function readerSource(url, options = {}) {
         .replace('__HOSHI_READER_DOM_TEXT_SCRIPT__', options.domTextScript ?? readerDomTextSource())
         .replace('__HOSHI_READER_MEDIA_SEMANTICS_SCRIPT__', options.mediaSemanticsScript ?? readerMediaSemanticsSource())
         .replaceAll('__HOSHI_RESTORE_TOKEN_LITERAL__', JSON.stringify('restore-token'))
-        .replaceAll('__HOSHI_BOTTOM_OVERLAP_PX__', '0')
+        .replaceAll('__HOSHI_BOTTOM_OVERLAP_PX__', String(options.bottomOverlapPx ?? 0))
         .replaceAll('__HOSHI_VERTICAL_PADDING_BLOCK_RATIO__', '0')
         .replaceAll('__HOSHI_VERTICAL_PADDING_GAP_RATIO__', '0')
         .replaceAll('__HOSHI_IMAGE_WIDTH_VIEWPORT_RATIO__', '1')
@@ -647,6 +647,23 @@ test('paged and continuous readers use shared media setup', () => {
         assert.equal(window.__mediaSetupCalls[0].hasImageBridge, true);
         assert.equal(window.__mediaSetupCalls[0].waitForImages, true);
     });
+});
+
+test('paged and continuous readers expose visible viewport height separately from page height', () => {
+    const paginatedBody = new TestElement('body');
+    const paginated = loadReader(paginatedBody, readerPaginatedUrl, { bottomOverlapPx: 37 });
+    paginated.reader.initialize();
+
+    assert.equal(paginated.document.documentElement.style.getPropertyValue('--page-height'), '837px');
+    assert.equal(paginated.document.documentElement.style.getPropertyValue('--hoshi-reader-visible-height'), '800px');
+
+    const continuousBody = new TestElement('body');
+    const continuous = loadReader(continuousBody, readerContinuousUrl, { bottomOverlapPx: 37 });
+    continuous.reader.initialize();
+
+    assert.equal(continuous.document.documentElement.style.getPropertyValue('--hoshi-continuous-height'), '800px');
+    assert.equal(continuous.document.documentElement.style.getPropertyValue('--hoshi-reader-visible-height'), '800px');
+    assert.equal(continuous.document.documentElement.style.getPropertyValue('--page-height'), '');
 });
 
 test('paginated restoreProgress at chapter start avoids eager pagination metrics', async () => {

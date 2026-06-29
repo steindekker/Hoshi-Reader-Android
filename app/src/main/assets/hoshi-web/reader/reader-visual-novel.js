@@ -545,7 +545,7 @@ window.hoshiReader = {
     root.style.opacity = '0';
     root.style.pointerEvents = 'none';
     root.style.width = 'var(--page-width, 100vw)';
-    root.style.height = 'var(--page-height, 100vh)';
+    root.style.height = 'var(--hoshi-reader-visible-height, var(--page-height, 100vh))';
     var content = document.createElement('div');
     content.className = 'hoshi-vn-content';
     root.appendChild(content);

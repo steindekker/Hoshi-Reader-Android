@@ -74,7 +74,7 @@ html:not([data-hoshi-reader-eink-mode="true"]) .hoshi-sasayaki-cue.hoshi-sasayak
     background-color: var(--hoshi-sasayaki-background-color) !important;
 }
 .hoshi-vn-stage {
-    height: var(--page-height, 100vh);
+    height: var(--hoshi-reader-visible-height, var(--page-height, 100vh));
     width: var(--page-width, 100vw);
     box-sizing: border-box;
     display: flex;

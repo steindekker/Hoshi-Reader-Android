@@ -1030,6 +1030,21 @@ test('viewport fitting skips precise range layout when scroll bounds already fit
     assert.equal(preciseRangeChecks, 0);
 });
 
+test('visual novel measurement screen uses visible viewport height instead of page overlap height', () => {
+    const { reader } = loadReader(bodyWith(p('seed')), {
+        mode: 'block',
+        revealSpeed: 0,
+    });
+    reader.ensureStage();
+
+    const measurement = reader.createScreenMeasurement();
+
+    assert.equal(measurement.root.classList.contains('hoshi-vn-screen'), true);
+    assert.equal(measurement.root.style.width, 'var(--page-width, 100vw)');
+    assert.equal(measurement.root.style.height, 'var(--hoshi-reader-visible-height, var(--page-height, 100vh))');
+    assert.equal(measurement.content.classList.contains('hoshi-vn-content'), true);
+});
+
 test('viewport fitting rejects vertical screens that overflow the content clipping box', () => {
     const { reader, document } = loadReader(bodyWith(p('seed')), {
         mode: 'block',

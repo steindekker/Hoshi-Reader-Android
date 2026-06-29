@@ -177,11 +177,6 @@ internal object ReaderContentStyles {
             """.trimIndent()
         }
         val generatedLayout = ReaderGeneratedLayout.from(settings)
-        val visualNovelContentMaxHeight = if (settings.verticalWriting && settings.bottomOverlapPx > 0) {
-            "calc(100% - ${settings.bottomOverlapPx}px)"
-        } else {
-            "100%"
-        }
         val layoutCss = when (settings.viewMode) {
             ReaderViewMode.Continuous -> {
                 val hiddenOverflowAxis = if (settings.verticalWriting) "overflow-y" else "overflow-x"
@@ -239,13 +234,17 @@ internal object ReaderContentStyles {
                     $gridCss
                     text-orientation: mixed;
                 }
+                .hoshi-vn-stage {
+                    height: var(--hoshi-reader-visible-height, var(--page-height, 100vh)) !important;
+                    width: var(--page-width, 100vw) !important;
+                }
                 .hoshi-vn-screen {
                     writing-mode: ${settings.writingModeCss} !important;
                     display: flex !important;
                     align-items: center !important;
                     justify-content: center !important;
-                    height: var(--page-height, 100vh) !important;
-                    width: var(--page-width, 100vw) !important;
+                    height: 100% !important;
+                    width: 100% !important;
                     padding: ${settings.pagePaddingCss} !important;
                     padding-bottom: ${settings.verticalPaddingBlockCss} !important;
                 }
@@ -253,7 +252,7 @@ internal object ReaderContentStyles {
                     writing-mode: ${settings.writingModeCss} !important;
                     box-sizing: border-box !important;
                     max-width: 100% !important;
-                    max-height: $visualNovelContentMaxHeight !important;
+                    max-height: 100% !important;
                     overflow: visible !important;
                     hanging-punctuation: none !important;
                 }
