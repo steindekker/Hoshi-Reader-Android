@@ -148,14 +148,17 @@ data class ReaderSettings(
             return "${horizontalPadding}vw"
         }
 
+    val verticalPaddingBlockCss: String
+        get() = "var(--hoshi-vertical-padding-block, ${(verticalPadding / 2.0).cssNumber()}vh)"
+
     val pagePaddingCss: String
-        get() = "var(--hoshi-vertical-padding-block, ${(verticalPadding / 2.0).cssNumber()}vh) ${(horizontalPadding / 2.0).cssNumber()}vw"
+        get() = "$verticalPaddingBlockCss ${(horizontalPadding / 2.0).cssNumber()}vw"
 
     val bottomPaddingCss: String
         get() = if (verticalWriting && bottomOverlapPx > 0) {
-            "calc(var(--hoshi-vertical-padding-block, ${(verticalPadding / 2.0).cssNumber()}vh) + ${bottomOverlapPx}px)"
+            "calc($verticalPaddingBlockCss + ${bottomOverlapPx}px)"
         } else {
-            "var(--hoshi-vertical-padding-block, ${(verticalPadding / 2.0).cssNumber()}vh)"
+            verticalPaddingBlockCss
         }
 
     val imageMaxWidthFallbackCss: String

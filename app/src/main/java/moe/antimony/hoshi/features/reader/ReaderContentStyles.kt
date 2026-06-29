@@ -33,14 +33,13 @@ internal data class ReaderGeneratedLayout(
 ) {
     companion object {
         fun from(settings: ReaderSettings): ReaderGeneratedLayout {
-            val verticalPaddingBlock = "var(--hoshi-vertical-padding-block, ${(settings.verticalPadding / 2.0).cssNumber()}vh)"
             val continuousBodyPadding = if (settings.verticalWriting) {
-                "$verticalPaddingBlock 0"
+                "${settings.verticalPaddingBlockCss} 0"
             } else {
                 "0 ${(settings.horizontalPadding / 2.0).cssNumber()}vw"
             }
             val continuousBottomPadding = if (settings.verticalWriting) {
-                settings.bottomPaddingCss
+                settings.verticalPaddingBlockCss
             } else {
                 "0"
             }
@@ -248,7 +247,7 @@ internal object ReaderContentStyles {
                     height: var(--page-height, 100vh) !important;
                     width: var(--page-width, 100vw) !important;
                     padding: ${settings.pagePaddingCss} !important;
-                    padding-bottom: ${settings.bottomPaddingCss} !important;
+                    padding-bottom: ${settings.verticalPaddingBlockCss} !important;
                 }
                 .hoshi-vn-content {
                     writing-mode: ${settings.writingModeCss} !important;

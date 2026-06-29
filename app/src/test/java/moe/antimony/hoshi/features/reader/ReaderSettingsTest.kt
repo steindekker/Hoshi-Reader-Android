@@ -244,7 +244,7 @@ class ReaderSettingsTest {
     }
 
     @Test
-    fun verticalContinuousLayoutMovesHorizontalPaddingToViewportOnly() {
+    fun verticalContinuousLayoutUsesOnlyConfiguredVerticalBottomPadding() {
         val layout = ReaderGeneratedLayout.from(
             ReaderSettings(
                 viewMode = ReaderViewMode.Continuous,
@@ -258,10 +258,7 @@ class ReaderSettingsTest {
         assertEquals(0.12, layout.viewportHorizontalPaddingRatio, 0.0)
         assertEquals(0.0, layout.viewportVerticalPaddingRatio, 0.0)
         assertEquals("var(--hoshi-vertical-padding-block, 5.0vh) 0", layout.continuousBodyPaddingCss)
-        assertEquals(
-            "calc(var(--hoshi-vertical-padding-block, 5.0vh) + 28px)",
-            layout.continuousBodyBottomPaddingCss,
-        )
+        assertEquals("var(--hoshi-vertical-padding-block, 5.0vh)", layout.continuousBodyBottomPaddingCss)
         assertEquals(1.0, layout.imageWidthViewportRatio, 0.0)
     }
 
@@ -593,7 +590,7 @@ class ReaderSettingsTest {
     }
 
     @Test
-    fun visualNovelReaderCssCentersCurrentScreenContent() {
+    fun visualNovelReaderCssConstrainsContentToViewportWithoutBottomOverlapPadding() {
         val css = ReaderContentStyles.styleTag(
             ReaderSettings(
                 viewMode = ReaderViewMode.VisualNovel,
@@ -609,7 +606,7 @@ class ReaderSettingsTest {
         assertTrue(css.contains("align-items: center !important;"))
         assertTrue(css.contains("justify-content: center !important;"))
         assertTrue(css.contains("padding: var(--hoshi-vertical-padding-block, 4.0vh) 6.0vw !important;"))
-        assertTrue(css.contains("padding-bottom: calc(var(--hoshi-vertical-padding-block, 4.0vh) + 28px) !important;"))
+        assertTrue(css.contains("padding-bottom: var(--hoshi-vertical-padding-block, 4.0vh) !important;"))
         assertTrue(css.contains(".hoshi-vn-content"))
         assertTrue(css.contains("max-width: 100% !important;"))
         assertTrue(css.contains("max-height: calc(100% - 28px) !important;"))
