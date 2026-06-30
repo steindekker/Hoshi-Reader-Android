@@ -44,6 +44,22 @@ def strip_sentence_html(s: str) -> str:
     s = _BR.sub("\n", s)
     s = _RT.sub("", s)
     return _TAG.sub("", s)
+
+
+# Anime-caption speaker label: a parenthetical at the start of a line or right
+# after sentence-final punctuation, e.g. （長嶺）/（エレン）. Two guards keep real
+# text safe: an inline gloss always FOLLOWS its term (国際サッカー連盟（ＦＩＦＡ）,
+# さん（28）), and the trailing-content lookahead (?=\S) spares a whole-sentence
+# aside that IS the parenthetical (（…みたいだな）) — a speaker label is only ever a
+# prefix to the line it labels.
+_SPEAKER = re.compile(r"^[ 　]*[（(][^（）()]*[）)][ 　]*(?=\S)", re.M)
+_AFTER_BREAK = re.compile(r"([。！？])[ 　]*[（(][^（）()]*[）)][ 　]*(?=\S)")
+
+
+def strip_subtitle_labels(s: str) -> str:
+    """Drop subtitle speaker labels (（name）) left by anime mining."""
+    s = _AFTER_BREAK.sub(r"\1", s)
+    return _SPEAKER.sub("", s)
 # Kanji character class (CJK ideograph ranges + 々). Single source of truth;
 # re-exported by ankienrich.jrp_fill.kana.
 KANJI_RE = re.compile(r"[㐀-鿿豈-﫿々\U00020000-\U0002A6DF\U0002A700-\U0002CEAF\U0002CEB0-\U0002EBEF]")

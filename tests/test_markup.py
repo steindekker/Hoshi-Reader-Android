@@ -35,6 +35,37 @@ def test_strip_sentence_html_leaves_plain_untouched():
     assert markup.strip_sentence_html("{猫;1}が歩いた") == "{猫;1}が歩いた"
 
 
+def test_strip_subtitle_labels_drops_leading_speaker():
+    # anime-caption speaker label at the start of the line
+    assert markup.strip_subtitle_labels("（{トール;1}）{カンナ;1}何を") == "{カンナ;1}何を"
+    assert markup.strip_subtitle_labels("（[聖哉|きよちか]）{こいつ;0}ら") == "{こいつ;0}ら"
+    assert markup.strip_subtitle_labels("（マルロ）{[護送|ごそう];0}") == "{[護送|ごそう];0}"
+
+def test_strip_subtitle_labels_drops_after_sentence_break():
+    # a label right after sentence-final punctuation is still a speaker label
+    assert markup.strip_subtitle_labels("言ってみろ！（{トール;1}）はい") == "言ってみろ！はい"
+    # ...including across a <br>-derived newline
+    assert markup.strip_subtitle_labels("一行目\n（エレン）すいません") == "一行目\nすいません"
+
+def test_strip_subtitle_labels_keeps_inline_glosses():
+    # a gloss FOLLOWS its term (not line-start / sentence-break) -> kept
+    assert markup.strip_subtitle_labels(
+        "{[国際|こくさい]サッカー[連盟|れんめい];9}（ＦＩＦＡ）が"
+    ) == "{[国際|こくさい]サッカー[連盟|れんめい];9}（ＦＩＦＡ）が"
+    assert markup.strip_subtitle_labels("「イカゲーム」（SquidGame）が") == "「イカゲーム」（SquidGame）が"
+    assert markup.strip_subtitle_labels("さん（28）は") == "さん（28）は"          # age
+    assert markup.strip_subtitle_labels("{イルカ;0}({[海豚|いるか];0})") == "{イルカ;0}({[海豚|いるか];0})"
+
+def test_strip_subtitle_labels_keeps_whole_sentence_aside():
+    # the parenthetical IS the entire line (no content after) -> not a label;
+    # stripping it would empty the card
+    s = "({ディープ;1}{ステート;2}、{[影|かげ];1}の{[国家|こっか];1}）"
+    assert markup.strip_subtitle_labels(s) == s
+
+def test_strip_subtitle_labels_noop_without_labels():
+    assert markup.strip_subtitle_labels("{猫;1}が歩いた") == "{猫;1}が歩いた"
+
+
 def test_fix_furigana_spacing_splits_particle_off_base():
     # を is a particle, not part of 逃's reading のが -> needs a delimiter space
     assert markup.fix_furigana_spacing("難[なん]を逃[のが]れる") == "難[なん]を 逃[のが]れる"
