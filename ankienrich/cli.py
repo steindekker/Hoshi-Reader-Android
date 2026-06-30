@@ -40,9 +40,10 @@ def _row(label: str, big: str, detail: str = "") -> str:
 
 
 def _sync_line(direction: str, action: str) -> None:
+    if action == "none":            # no transfer — the always-the-same line, skip it
+        return
     text = notify.SYNC_TEXT.get(direction, {}).get(action, action)
-    paint = _dim if action == "none" else _cyan
-    print(_row("sync", paint(f"{direction} — {text}")))
+    print(_row("sync", _cyan(f"{direction} — {text}")))
 
 
 def _render(res: dict, apply: bool) -> None:
