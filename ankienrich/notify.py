@@ -83,7 +83,9 @@ def format_report(res, *, apply, pull_action, push_action=None, error=None) -> s
 
     pitch = steps["pitch"]
     lines.append(_line("pitch", pitch["filled"],
-                       _detail((pitch["not_found"], "not in dict"), (pitch["skipped"], "no reading"))))
+                       _detail((pitch["cleared"], "cleared"),
+                               (pitch["not_found"], "not in dict"),
+                               (pitch["skipped"], "no reading"))))
     lines.append(_line("sentence", steps["sentences"]["filled"]))
     lines.append(_line("furigana", steps["furigana"]["fixed"]))
 

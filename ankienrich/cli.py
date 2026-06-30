@@ -63,7 +63,8 @@ def _render(res: dict, apply: bool) -> None:
         print(_row("audio", _num(audio["will_fill"]), none))
     pitch = steps["pitch"]
     print(_row("pitch", _num(pitch["filled"]),
-               f"{pitch['not_found']} not in dict · {pitch['skipped']} no reading"))
+               f"{pitch['cleared']} cleared · {pitch['not_found']} not in dict · "
+               f"{pitch['skipped']} no reading"))
     print(_row("sentence", _num(steps["sentences"]["filled"]), "JRP markup"))
     print(_row("furigana", _num(steps["furigana"]["fixed"]), "spacing"))
     defs = steps["enrich"]
@@ -150,7 +151,6 @@ def _run(args) -> int:
         else:
             res = pipeline.run(
                 col, apply=args.apply,
-                overwrite_pitch=args.overwrite_pitch or args.overwrite,
                 overwrite_sentences=args.overwrite_sentences or args.overwrite,
                 overwrite_defs=args.overwrite_defs or args.overwrite,
                 overwrite_examples=args.overwrite_examples or args.overwrite,
@@ -199,8 +199,8 @@ def main(argv=None) -> int:
                         choices=["run", "dedupe", "template"])
         ap.add_argument("--apply", action="store_true", help="write + push (else dry run)")
         ap.add_argument("--overwrite", action="store_true",
-                        help="re-assert pitch, sentences, defs, examples AND cloze on every card")
-        ap.add_argument("--overwrite-pitch", action="store_true")
+                        help="re-assert sentences, defs, examples AND cloze on every card "
+                             "(pitch is always re-asserted)")
         ap.add_argument("--overwrite-sentences", action="store_true")
         ap.add_argument("--overwrite-defs", action="store_true")
         ap.add_argument("--overwrite-examples", action="store_true")

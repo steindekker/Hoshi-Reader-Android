@@ -6,7 +6,8 @@ invocation bypasses it and runs the flag-based path unchanged.
 import argparse
 
 
-_FIELDS = ("pitch", "sentences", "defs", "examples", "cloze")
+# pitch is always re-asserted (no per-run toggle), so it's not offered here.
+_FIELDS = ("sentences", "defs", "examples", "cloze")
 
 
 def should_run_wizard(argv: list[str], isatty: bool) -> bool:

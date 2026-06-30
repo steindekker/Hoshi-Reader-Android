@@ -97,7 +97,7 @@ def _step_examples(col, apply: bool, overwrite: bool) -> dict:
         conn.close()
 
 
-def run(col, *, apply=False, overwrite_pitch=False, overwrite_cloze=False,
+def run(col, *, apply=False, overwrite_cloze=False,
         overwrite_sentences=False, overwrite_defs=False, overwrite_examples=False) -> dict:
     def_index = def_build.ensure()
     scanned = len(col.find_notes(collection.notetype_search()))
@@ -109,8 +109,8 @@ def run(col, *, apply=False, overwrite_pitch=False, overwrite_cloze=False,
     steps = [
         ("audio", "audio", lambda: _step_audio(col, apply)),
         ("pitch", "pitch", lambda: (
-            pitch.run_backfill(col, overwrite=overwrite_pitch) if apply
-            else pitch.plan_backfill(col, overwrite=overwrite_pitch)["counts"])),
+            pitch.run_backfill(col) if apply
+            else pitch.plan_backfill(col)["counts"])),
         ("sentences", "sentence", lambda: _step_sentences(col, apply, overwrite_sentences)),
         ("furigana", "furigana", lambda: _step_furigana(col, apply)),
         ("enrich", "defs", lambda: _step_enrich(col, apply, def_index, overwrite_defs)),

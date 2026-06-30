@@ -78,7 +78,7 @@ def test_send_message_posts_via_requests(monkeypatch):
 def _dry_res():
     return {"scanned": 1234, "backup": None, "steps": {
         "audio": {"will_fill": 12, "by_source": {"nhk16": 8, "forvo": 4}, "none": 4, "missing_file": 0},
-        "pitch": {"filled": 8, "not_found": 2, "skipped": 1},
+        "pitch": {"filled": 8, "cleared": 3, "not_found": 2, "skipped": 1},
         "sentences": {"filled": 5},
         "furigana": {"fixed": 3},
         "enrich": {"to_write": 10, "nohit": 1, "terms": ["猫", "犬"]},
@@ -90,7 +90,7 @@ def _dry_res():
 def _apply_res():
     return {"scanned": 1234, "backup": "var/backup.colpkg", "steps": {
         "audio": {"filled": {"nhk16": 9, "forvo": 3}, "errors": 0},
-        "pitch": {"filled": 8, "not_found": 2, "skipped": 1},
+        "pitch": {"filled": 8, "cleared": 3, "not_found": 2, "skipped": 1},
         "sentences": {"filled": 5},
         "furigana": {"fixed": 3},
         "enrich": {"written": 10, "dropped": 0, "terms": ["猫", "犬"]},

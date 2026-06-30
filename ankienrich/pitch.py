@@ -37,59 +37,66 @@ def primary_accent(idx: AccentIndex, term: str, reading: str) -> int | None:
     return positions[0] if positions else None
 
 
-def _iter_targets(col, idx, *, overwrite=False):
-    """Yield (note, action, svg) for every target note that needs a write.
+def _iter_targets(col, idx):
+    """Yield (note, action, value) for every note whose Pitch field needs a write.
 
-    action ∈ {"filled","not_found","skipped"}; svg is set only for "filled".
-    By default notes that already have a graph are left alone (idempotent no-op).
-    With overwrite=True a note with an existing graph is re-rendered from the
-    accent dicts and yielded as "filled" only when the render differs (so an
-    already-correct graph isn't rewritten); a note the dicts can't cover keeps
-    its existing graph untouched (never cleared)."""
+    The field is reconciled to the accent dicts on every run — the invariant is
+    that it holds our own svg graph or nothing:
+
+      filled    value=svg  — the dicts cover the term and the rendered graph
+                             differs from what's there (empty, stale graph, or a
+                             non-graph format like Yomitan span markup).
+      cleared   value=""   — non-graph content the dicts can't replace (e.g. a
+                             "No pitch accent data" placeholder), wiped to empty.
+      not_found value=None — empty field, term not in the dicts (no write).
+      skipped   value=None — no reading to look up (no write).
+
+    An already-correct graph is a silent no-op; our own graph the dicts can't
+    cover is kept (can't be regenerated, so never cleared)."""
     for nid in col.find_notes(notetype_search()):
         note = col.get_note(nid)
-        has_graph = bool(note[_FIELD].strip())
-        if has_graph and not overwrite:
-            continue
+        field = note[_FIELD]
+        has_graph = "<svg" in field
         reading = note[config.READING].strip()
-        if not reading:
-            if not has_graph:
-                yield note, "skipped", None
-            continue
-        accents = accents_for(idx, note[config.TERM], reading)
-        if not accents:
-            if not has_graph:
-                yield note, "not_found", None
-            continue
-        svg = pitch_svg.render_multi(reading, accents)
-        if has_graph and svg == note[_FIELD]:
-            continue                       # already the correct graph
-        yield note, "filled", svg
+        accents = accents_for(idx, note[config.TERM], reading) if reading else None
+        if accents:
+            svg = pitch_svg.render_multi(reading, accents)
+            if svg != field:
+                yield note, "filled", svg
+            continue                       # else already the correct graph
+        if has_graph:
+            continue                       # keep our graph; dicts can't regenerate it
+        if field.strip():
+            yield note, "cleared", ""      # non-graph junk we can't replace
+        elif reading:
+            yield note, "not_found", None
+        else:
+            yield note, "skipped", None
 
 
-def plan_backfill(col, *, overwrite=False) -> dict:
+def plan_backfill(col) -> dict:
     """Read-only: counts + a few (term, reading, svg) samples. No mutation."""
     idx = AccentIndex.load(_INDEX_PATH)
-    counts = {"filled": 0, "not_found": 0, "skipped": 0}
+    counts = {"filled": 0, "cleared": 0, "not_found": 0, "skipped": 0}
     samples = []
-    for note, action, svg in _iter_targets(col, idx, overwrite=overwrite):
+    for note, action, value in _iter_targets(col, idx):
         counts[action] += 1
         if action == "filled" and len(samples) < config.SAMPLE_N:
-            samples.append((note[config.TERM], note[config.READING], svg))
+            samples.append((note[config.TERM], note[config.READING], value))
     return {"counts": counts, "samples": samples}
 
 
-def run_backfill(col, *, overwrite=False) -> dict:
-    """Write SVG graphs into Pitch Accent fields. Returns action counts.
+def run_backfill(col) -> dict:
+    """Reconcile every Pitch field to the accent dicts. Returns action counts.
 
-    overwrite=True re-renders graphs that already exist (clobbering hand-edited
-    or stale ones) where the accent dicts cover the term; otherwise only empty
-    fields are filled."""
+    Always re-asserts: empty fields and non-graph formats are filled where the
+    dicts cover the term, stale/hand-edited graphs are re-rendered, and non-graph
+    content the dicts can't cover is cleared. See _iter_targets."""
     idx = AccentIndex.load(_INDEX_PATH)
-    res = {"filled": 0, "not_found": 0, "skipped": 0}
-    for note, action, svg in _iter_targets(col, idx, overwrite=overwrite):
+    res = {"filled": 0, "cleared": 0, "not_found": 0, "skipped": 0}
+    for note, action, value in _iter_targets(col, idx):
         res[action] += 1
-        if action == "filled":
-            note[_FIELD] = svg
+        if value is not None:
+            note[_FIELD] = value
             col.update_note(note)
     return res
