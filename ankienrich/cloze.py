@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 
-from . import config
+from . import config, markup
 from .collection import notetype_search
 from .jrp_fill.accent import AccentIndex
 from .jrp_fill.kana import hira
@@ -52,8 +52,9 @@ def strip_markup(sentence: str) -> str:
             out.append(_FURI.sub(lambda m: m.group(1), body))
         else:
             out.append(text)
-    # keep <br> and bidi marks so Before+Inside+After reconstructs byte-for-byte.
-    return "".join(out)
+    # keep <br> and bidi marks so Before+Inside+After reconstructs byte-for-byte;
+    # normalize the ideographic space to match the (normalized) Sentence field.
+    return markup.normalize_spaces("".join(out))
 
 
 def locate(term: str, reading: str, plain: str, acc) -> tuple[str, str, str] | None:

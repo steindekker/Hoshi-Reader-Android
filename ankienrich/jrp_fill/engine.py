@@ -44,7 +44,8 @@ def build_plan(col, note_type: str, field: str,
             continue
         # strip presentational HTML first (<br> -> newline) so JRP markup is the
         # only structure the generator/splice and the guard ever see.
-        cleaned = markup.strip_subtitle_labels(markup.strip_sentence_html(old))
+        cleaned = markup.normalize_spaces(
+            markup.strip_subtitle_labels(markup.strip_sentence_html(old)))
         if regenerate:
             surface = markup.jrp_surface(cleaned) if ("{" in cleaned or "[" in cleaned) else cleaned
             new = generate(surface)

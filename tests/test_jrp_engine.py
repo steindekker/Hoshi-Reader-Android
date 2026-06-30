@@ -96,6 +96,17 @@ def test_plan_strips_html_from_sentence(tmp_path):
     col.close()
 
 
+def test_plan_normalizes_fullwidth_space(tmp_path):
+    col, m = _make_col(tmp_path)
+    # ideographic spaces in a freshly-mined sentence -> ASCII space in the fill
+    nid = _add(col, m, "話", "今は　そげな話は　あとじゃ。")
+    plan = engine.build_plan(col, "jidoujisho Kinomoto", "Sentence",
+                             generate=lambda t: t)   # identity: surface passes through
+    by_id = {p.note_id: p for p in plan}
+    assert by_id[nid].new_value == "今は そげな話は あとじゃ。"
+    col.close()
+
+
 def test_plan_html_only_cleanup_still_writes(tmp_path):
     col, m = _make_col(tmp_path)
     # fully-marked sentence wrapped in <b>: no JRP work, but the tags must go

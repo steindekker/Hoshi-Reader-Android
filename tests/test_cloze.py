@@ -26,6 +26,11 @@ def test_strip_markup_drops_jrp_and_furigana_keeps_text():
     assert cloze.strip_markup("{猫;ねこ}が[歩|ある]いた。<br>") == "猫が歩いた。<br>"
 
 
+def test_strip_markup_normalizes_fullwidth_space():
+    # ideographic space -> ASCII space, so cloze never reintroduces it
+    assert cloze.strip_markup("{今;いま}は　そげな[話|はなし]は") == "今は そげな話は"
+
+
 def test_locate_verbatim():
     assert cloze.locate("猫", "ねこ", "猫が歩いた。", None) == ("", "猫", "が歩いた。")
 

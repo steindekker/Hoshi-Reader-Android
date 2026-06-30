@@ -66,6 +66,16 @@ def test_strip_subtitle_labels_noop_without_labels():
     assert markup.strip_subtitle_labels("{猫;1}が歩いた") == "{猫;1}が歩いた"
 
 
+def test_normalize_spaces_fullwidth_to_ascii():
+    # ideographic space (U+3000) -> ASCII space; markup left intact
+    assert markup.normalize_spaces("今は　そげな話は　あとじゃ。") == "今は そげな話は あとじゃ。"
+    assert markup.normalize_spaces("{[今|いま];1}は　{あと;1}じゃ") == "{[今|いま];1}は {あと;1}じゃ"
+    # no other whitespace touched (ASCII space, newline preserved)
+    assert markup.normalize_spaces("a b\nc") == "a b\nc"
+    # idempotent
+    assert markup.normalize_spaces("今は そげな話は") == "今は そげな話は"
+
+
 def test_fix_furigana_spacing_splits_particle_off_base():
     # を is a particle, not part of 逃's reading のが -> needs a delimiter space
     assert markup.fix_furigana_spacing("難[なん]を逃[のが]れる") == "難[なん]を 逃[のが]れる"

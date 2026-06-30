@@ -60,6 +60,17 @@ def strip_subtitle_labels(s: str) -> str:
     """Drop subtitle speaker labels (（name）) left by anime mining."""
     s = _AFTER_BREAK.sub(r"\1", s)
     return _SPEAKER.sub("", s)
+
+
+def normalize_spaces(s: str) -> str:
+    """Ideographic space (U+3000) -> ASCII space. Mined sentences (NHK news,
+    subtitles, graded readers) use full-width spaces as phrase/headline breaks;
+    collapse the glyph to a plain space so the card shows a normal-width gap and
+    the field stays consistent with its cloze. Pitch is unaffected — the space is
+    a non-content token either way."""
+    return s.replace("　", " ")
+
+
 # Kanji character class (CJK ideograph ranges + 々). Single source of truth;
 # re-exported by ankienrich.jrp_fill.kana.
 KANJI_RE = re.compile(r"[㐀-鿿豈-﫿々\U00020000-\U0002A6DF\U0002A700-\U0002CEAF\U0002CEB0-\U0002EBEF]")
