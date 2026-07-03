@@ -16,6 +16,9 @@ PITCH = "Pitch Accent"
 CLOZE_BEFORE = "Cloze Before"
 CLOZE_INSIDE = "Cloze Inside"
 CLOZE_AFTER = "Cloze After"
+# Cloze whose text genuinely differs from its Sentence (different subtitle line at
+# mining time) — can't be auto-repaired from Sentence, so it's flagged for review.
+CLOZE_MISMATCH_TAG = "ankienrich::cloze-mismatch"
 ORIGINAL_MEANING = "Original Meaning"
 DEFINITION_SOURCE = "Definition Source"
 EXPANDED_MEANING = "Expanded Meaning"

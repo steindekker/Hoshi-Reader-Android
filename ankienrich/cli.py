@@ -90,7 +90,11 @@ def _render(res: dict, apply: bool) -> None:
     else:
         print(_row("examples", _num(examples["to_write"]), f"{examples['none']} no-example"))
     cloze = steps["cloze"]
-    print(_row("cloze", _num(cloze["filled"]), f"{cloze['skipped']} unlocatable"))
+    detail = " · ".join(part for part in (
+        f"{cloze['resynced']} resynced" if cloze.get("resynced") else "",
+        f"{cloze['skipped']} unlocatable",
+        f"{cloze['mismatched']} flagged" if cloze.get("mismatched") else "") if part)
+    print(_row("cloze", _num(cloze["filled"]), detail))
     terms = defs.get("terms") or []
     if terms:
         print()

@@ -31,6 +31,36 @@ def test_strip_markup_normalizes_fullwidth_space():
     assert cloze.strip_markup("{今;いま}は　そげな[話|はなし]は") == "今は そげな話は"
 
 
+def test_resync_strips_speaker_label():
+    # Sentence lost its （name）label (subtitle step); reproject drops it from cloze too
+    assert cloze.resync("（長嶺）わっぜ ", "功を焦った", "のう。",
+                        "わっぜ功を焦ったのう。") == ("わっぜ", "功を焦った", "のう。")
+
+
+def test_resync_normalizes_ideographic_space():
+    # cloze keeps U+3000; Sentence normalized it to ASCII — adopt the Sentence's space
+    assert cloze.resync("＜奥越を", "手中に収めた", "　聖夷軍は➨",
+                        "＜奥越を手中に収めた 聖夷軍は➨") == ("＜奥越を", "手中に収めた", " 聖夷軍は➨")
+
+
+def test_resync_drops_ruby_html():
+    # cloze carries <ruby> furigana; the plain (markup-stripped) Sentence does not
+    assert cloze.resync(
+        "あの時話し", "そびれた",
+        "件……<ruby>聞<rt>き</rt></ruby>かせてくれる<ruby>気<rt>き</rt></ruby>になったのか",
+        "あの時話しそびれた件……聞かせてくれる気になったのか",
+    ) == ("あの時話し", "そびれた", "件……聞かせてくれる気になったのか")
+
+
+def test_resync_content_mismatch_returns_none():
+    # cloze text is a different subtitle line — no way to reproject onto Sentence
+    assert cloze.resync("", "しかるべき", "処置を", "ダルの実力は折り紙付きだ") is None
+
+
+def test_resync_already_synced_roundtrips():
+    assert cloze.resync("猫が", "歩", "いた。", "猫が歩いた。") == ("猫が", "歩", "いた。")
+
+
 def test_locate_verbatim():
     assert cloze.locate("猫", "ねこ", "猫が歩いた。", None) == ("", "猫", "が歩いた。")
 
@@ -74,7 +104,7 @@ def test_run_fills_only_empty_verbatim(col):
     # object() sentinel: tokenizer (which would need the AccentIndex) is never
     # reached because the term is found verbatim.
     res = cloze.run(col, apply=True, acc=object())
-    assert res == {"filled": 1, "skipped": 0}
+    assert res == {"filled": 1, "resynced": 0, "skipped": 0, "mismatched": 0}
     n = _by_term(col, "猫")
     assert (n[config.CLOZE_BEFORE], n[config.CLOZE_INSIDE], n[config.CLOZE_AFTER]) == ("", "猫", "が歩いた。")
     assert _by_term(col, "犬")[config.CLOZE_INSIDE] == "犬"     # untouched
@@ -82,7 +112,8 @@ def test_run_fills_only_empty_verbatim(col):
 
 def test_run_idempotent(col):
     cloze.run(col, apply=True, acc=object())
-    assert cloze.run(col, apply=True, acc=object()) == {"filled": 0, "skipped": 0}
+    assert cloze.run(col, apply=True, acc=object()) == {
+        "filled": 0, "resynced": 0, "skipped": 0, "mismatched": 0}
 
 
 def test_overwrite_resplits_stale_only(col):
@@ -101,3 +132,51 @@ def test_overwrite_resplits_stale_only(col):
     assert cloze.run(col, apply=True, acc=object(), overwrite=True)["filled"] == 1
     n2 = _by_term(col, "犬")
     assert (n2[config.CLOZE_BEFORE], n2[config.CLOZE_INSIDE], n2[config.CLOZE_AFTER]) == ("", "犬", "だ。")
+
+
+def test_run_resyncs_normalization_desync(col):
+    # existing cloze that reconstructs the SAME sentence but carries a stripped
+    # speaker label + full-width space is re-projected onto the plain Sentence,
+    # even in default (non-overwrite) mode — no locate() needed.
+    m = col.models.by_name(config.NOTETYPE)
+    n = col.new_note(m)
+    n[config.TERM], n[config.READING] = "歩く", "あるく"
+    n[config.SENTENCE] = "{猫;ねこ}が[歩|ある]いた。"          # plain -> 猫が歩いた。
+    n[config.CLOZE_BEFORE] = "（誰か）猫が　"                  # label + U+3000
+    n[config.CLOZE_INSIDE] = "歩"
+    n[config.CLOZE_AFTER] = "いた。"
+    col.add_note(n, col.decks.id("言葉文章"))
+
+    res = cloze.run(col, apply=True, acc=object())
+    assert res["resynced"] == 1 and res["mismatched"] == 0
+    got = _by_term(col, "歩く")
+    assert (got[config.CLOZE_BEFORE], got[config.CLOZE_INSIDE], got[config.CLOZE_AFTER]) == (
+        "猫が", "歩", "いた。")
+    assert not got.has_tag(config.CLOZE_MISMATCH_TAG)
+    # idempotent: a second pass is a no-op
+    assert cloze.run(col, apply=True, acc=object())["resynced"] == 0
+
+
+def test_run_flags_and_unflags_source_mismatch(col):
+    # cloze text is a genuinely different line from the Sentence -> flag for review
+    m = col.models.by_name(config.NOTETYPE)
+    n = col.new_note(m)
+    n[config.TERM], n[config.READING] = "然るべき", "しかるべき"
+    n[config.SENTENCE] = "ダルの実力は折り紙付きだ"
+    n[config.CLOZE_BEFORE] = ""
+    n[config.CLOZE_INSIDE] = "しかるべき"
+    n[config.CLOZE_AFTER] = "処置を行う"
+    col.add_note(n, col.decks.id("言葉文章"))
+    nid = n.id
+
+    res = cloze.run(col, apply=True, acc=object())
+    assert res["mismatched"] == 1 and res["resynced"] == 0
+    flagged = col.get_note(nid)
+    assert flagged.has_tag(config.CLOZE_MISMATCH_TAG)
+    assert (flagged[config.CLOZE_INSIDE]) == "しかるべき"        # left untouched
+
+    # fix the Sentence so it now matches; the flag self-heals
+    flagged[config.SENTENCE] = "しかるべき処置を行う"
+    col.update_note(flagged)
+    cloze.run(col, apply=True, acc=object())
+    assert not col.get_note(nid).has_tag(config.CLOZE_MISMATCH_TAG)

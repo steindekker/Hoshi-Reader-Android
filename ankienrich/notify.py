@@ -114,7 +114,10 @@ def format_report(res, *, apply, pull_action, push_action=None, error=None) -> s
         lines.append(_line("examples", examples["to_write"], _detail((examples["none"], "none"))))
 
     cloze = steps["cloze"]
-    lines.append(_line("cloze", cloze["filled"], _detail((cloze["skipped"], "unlocatable"))))
+    lines.append(_line("cloze", cloze["filled"], _detail(
+        (cloze.get("resynced", 0), "resynced"),
+        (cloze["skipped"], "unlocatable"),
+        (cloze.get("mismatched", 0), "flagged"))))
 
     terms = steps.get("enrich", {}).get("terms") or []
     if terms:
