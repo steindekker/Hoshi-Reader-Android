@@ -11,7 +11,9 @@ reading-matches first, then by source priority, then source name. (We add one fi
 tiebreak — exact-expression — so homograph collisions in the same source resolve to
 the right word; Hoshi leaves that to DB order.)
 
-Fills empty `Term Audio` on in-scope Kinomoto notes. No `aqt`, no add-on coupling.
+Fills empty `Term Audio` on in-scope Kinomoto notes; `overwrite=True` instead
+re-asserts store audio over every card, mined clips included. No `aqt`, no
+add-on coupling.
 """
 import os
 import re
@@ -30,7 +32,7 @@ SOURCE_PRIORITY = ["nhk16", "daijisen", "shinmeikai8", "jpod", "jpod_alternate",
 SUPPORTED_EXT = {"mp3", "opus", "ogg"}
 
 _TAG = re.compile(r"<[^>]+>")
-_SOUND = re.compile(r"\[sound:[^\]]+\]")
+_SOUND = re.compile(r"\[sound:([^\]]+)\]")  # group 1 = the media filename
 
 
 def _clean(s: str) -> str:
@@ -117,25 +119,46 @@ def media_name(pick: Pick) -> str:
 
 # --- collection-level pass (anki, no aqt) ---------------------------------------
 
-def select_targets(col) -> list:
-    """In-scope Kinomoto note ids with an empty Term Audio field."""
+def select_targets(col, *, overwrite: bool = False) -> list:
+    """In-scope Kinomoto note ids with an empty Term Audio field — or every
+    in-scope note when `overwrite`, so store audio supersedes mined clips."""
     if col.models.by_name(config.NOTETYPE) is None:
         return []
+    if overwrite:
+        return list(col.find_notes(notetype_search()))
     # `"Term Audio:"` matches notes whose Term Audio field is empty.
     return list(col.find_notes(f'{notetype_search()} "{config.TERM_AUDIO}:"'))
 
 
-def plan_backfill(col, conn) -> dict:
+def already_picked(note, pick) -> bool:
+    """True when Term Audio already holds exactly this pick's clip.
+
+    Accepts the `norm_` form too: the loudness pass renames a clip after we
+    write it, so without this an overwrite re-run would rewrite every card
+    forever, each run undoing the last one's levelling.
+    """
+    clips = _SOUND.findall(note[config.TERM_AUDIO] or "")
+    if len(clips) != 1:
+        return False
+    name = clips[0]
+    if name.startswith(config.AUDIO_NORM_PREFIX):
+        name = name[len(config.AUDIO_NORM_PREFIX):]
+    return name == media_name(pick)
+
+
+def plan_backfill(col, conn, *, overwrite: bool = False) -> dict:
     """Read-only. For every target note, resolve a Pick and classify it.
 
     Returns {'total', 'by_source', 'filled', 'nothing', 'missing_file',
     'samples', 'picks'}. `missing_file` counts picks whose clip blob is absent.
+    `nothing` counts notes the store cannot serve — under `overwrite` those keep
+    whatever audio they already have rather than being blanked.
     """
     by_source = Counter()
     nothing = missing_file = 0
     samples = []
     picks = {}
-    for nid in select_targets(col):
+    for nid in select_targets(col, overwrite=overwrite):
         note = col.get_note(nid)
         term, reading = note[config.TERM], note[config.READING]
         pick = lookup(conn, term, reading)
@@ -160,19 +183,30 @@ def plan_backfill(col, conn) -> dict:
     }
 
 
-def run_backfill(col, conn) -> dict:
+def run_backfill(col, conn, *, overwrite: bool = False) -> dict:
     """Write each picked recording's bytes into collection.media and set
-    `[sound:...]` on the note's Term Audio. Caller backs up first. Only writes
-    notes still empty (re-run safe). Per-card error isolation.
-    Returns {'filled': {src: n}, 'errors': [(nid, repr)]}.
+    `[sound:...]` on the note's Term Audio. Caller backs up first.
+
+    Without `overwrite` only empty fields are filled (re-run safe). With it,
+    store audio supersedes what is there: the field is *set*, not appended, so a
+    card carrying several mined clips collapses to the one store recording. A
+    note the store cannot serve keeps its existing audio — there is no clip to
+    swap in, and blanking it would only lose the card its sound.
+    Per-card error isolation.
+    Returns {'filled': {src: n}, 'unchanged': n, 'errors': [(nid, repr)]}.
     """
-    plan = plan_backfill(col, conn)
+    plan = plan_backfill(col, conn, overwrite=overwrite)
     filled = Counter()
+    unchanged = 0
     errors = []
     for nid, pick in plan["picks"].items():
         try:
             note = col.get_note(nid)
-            if _SOUND.search(note[config.TERM_AUDIO] or ""):
+            if overwrite:
+                if already_picked(note, pick):
+                    unchanged += 1
+                    continue
+            elif _SOUND.search(note[config.TERM_AUDIO] or ""):
                 continue  # already has audio (race / re-run)
             data = read_clip(conn, pick)
             fname = col.media.write_data(media_name(pick), data)
@@ -181,4 +215,4 @@ def run_backfill(col, conn) -> dict:
             filled[pick.source] += 1
         except Exception as e:
             errors.append((nid, repr(e)))
-    return {"filled": filled, "errors": errors}
+    return {"filled": filled, "unchanged": unchanged, "errors": errors}

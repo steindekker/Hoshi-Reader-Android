@@ -58,7 +58,10 @@ def _render(res: dict, apply: bool) -> None:
         print(_row("audio", _dim("    —"), f"skipped: {audio['skipped']}"))
     elif apply:
         filled = sum(audio["filled"].values())
-        print(_row("audio", _num(filled), f"{audio['errors']} errors" if audio["errors"] else ""))
+        detail = " · ".join(part for part in (
+            f"{audio['unchanged']} already store audio" if audio.get("unchanged") else "",
+            f"{audio['errors']} errors" if audio["errors"] else "") if part)
+        print(_row("audio", _num(filled), detail))
     else:
         none = _red(f"{audio['none']} no match") if audio["none"] else _dim(f"{audio['none']} no match")
         print(_row("audio", _num(audio["will_fill"]), none))
@@ -166,6 +169,8 @@ def _run(args) -> int:
         else:
             res = pipeline.run(
                 col, apply=args.apply,
+                # not folded into --overwrite: see the flag's definition
+                overwrite_audio=getattr(args, "overwrite_audio", False),
                 overwrite_sentences=args.overwrite_sentences or args.overwrite,
                 overwrite_defs=args.overwrite_defs or args.overwrite,
                 overwrite_examples=args.overwrite_examples or args.overwrite,
@@ -215,7 +220,14 @@ def main(argv=None) -> int:
         ap.add_argument("--apply", action="store_true", help="write + push (else dry run)")
         ap.add_argument("--overwrite", action="store_true",
                         help="re-assert sentences, defs, examples AND cloze on every card "
-                             "(pitch is always re-asserted)")
+                             "(pitch is always re-asserted; audio is NOT — see "
+                             "--overwrite-audio)")
+        # Deliberately outside --overwrite: this replaces mined audio on every
+        # card, re-encodes each new clip, and re-uploads the media to AnkiWeb.
+        # Too expensive and too destructive to ride along on a blanket flag.
+        ap.add_argument("--overwrite-audio", action="store_true",
+                        help="re-assert store audio over EVERY card, replacing mined clips "
+                             "(cards the store cannot serve keep their audio)")
         ap.add_argument("--overwrite-sentences", action="store_true")
         ap.add_argument("--overwrite-defs", action="store_true")
         ap.add_argument("--overwrite-examples", action="store_true")

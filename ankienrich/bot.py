@@ -17,9 +17,11 @@ HELP_BUTTON = "❓ Help"
 HELP_TEXT = "▶️ Run → pick the fields to overwrite, then Apply."
 
 # Fields the pipeline can re-assert (overwrite), in canonical display/flag order.
-# Audio has no overwrite flag and pitch is always re-asserted, so neither is
-# offered here. Note "sentence" maps to the plural CLI flag. The keys are
-# internal (callback data + CLI flags); display labels live in FIELD_LABELS.
+# Pitch is always re-asserted, so it isn't offered. Audio is deliberately absent
+# too: --overwrite-audio replaces mined clips on every card, re-encodes them and
+# re-uploads the media — not something a stray phone tap should start. It stays
+# CLI-only. Note "sentence" maps to the plural CLI flag. The keys are internal
+# (callback data + CLI flags); display labels live in FIELD_LABELS.
 OVERWRITE_FIELDS = ["sentence", "defs", "examples", "cloze"]
 OVERWRITE_FLAGS = {
     "sentence": "--overwrite-sentences",

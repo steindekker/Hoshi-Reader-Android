@@ -19,16 +19,17 @@ class PipelineError(Exception):
         self.original = original
 
 
-def _step_audio(col, apply: bool) -> dict:
+def _step_audio(col, apply: bool, overwrite: bool) -> dict:
     state = audio_build.ensure()
     if state == "no-source":
         return {"skipped": "audio.sqlite missing — place the android.db store at var/audio.sqlite"}
     conn = audio_index.open_index()
     try:
         if apply:
-            res = audio.run_backfill(col, conn)
-            return {"filled": dict(res["filled"]), "errors": len(res.get("errors", []))}
-        plan = audio.plan_backfill(col, conn)
+            res = audio.run_backfill(col, conn, overwrite=overwrite)
+            return {"filled": dict(res["filled"]), "unchanged": res["unchanged"],
+                    "errors": len(res.get("errors", []))}
+        plan = audio.plan_backfill(col, conn, overwrite=overwrite)
         return {"will_fill": plan["filled"], "by_source": dict(plan["by_source"]),
                 "none": plan["nothing"], "missing_file": plan["missing_file"]}
     finally:
@@ -109,7 +110,7 @@ def _step_examples(col, apply: bool, overwrite: bool) -> dict:
         conn.close()
 
 
-def run(col, *, apply=False, overwrite_cloze=False,
+def run(col, *, apply=False, overwrite_cloze=False, overwrite_audio=False,
         overwrite_sentences=False, overwrite_defs=False, overwrite_examples=False) -> dict:
     def_index = def_build.ensure()
     scanned = len(col.find_notes(collection.notetype_search()))
@@ -119,7 +120,7 @@ def run(col, *, apply=False, overwrite_cloze=False,
         out["backup"] = collection.backup(col)
 
     steps = [
-        ("audio", "audio", lambda: _step_audio(col, apply)),
+        ("audio", "audio", lambda: _step_audio(col, apply, overwrite_audio)),
         ("loudness", "loudness", lambda: _step_loudness(col, apply)),
         ("pitch", "pitch", lambda: (
             pitch.run_backfill(col) if apply

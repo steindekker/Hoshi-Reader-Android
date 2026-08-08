@@ -220,6 +220,77 @@ def test_run_backfill_is_rerun_safe(col, laudio):
     assert audio.run_backfill(c, laudio)["filled"] == {}
 
 
+# --- overwrite: store audio supersedes mined clips ---------------------------------
+
+def test_select_targets_overwrite_takes_every_note(col, laudio):
+    c, ids = col
+    assert set(audio.select_targets(c, overwrite=True)) == set(ids.values())
+
+
+def test_overwrite_replaces_existing_mined_audio(col, laudio):
+    """The whole point: a card mined with its own clip gets the store recording."""
+    c, ids = col
+    n = c.get_note(ids["filled"])
+    n[config.TERM] = "橋"; n[config.READING] = "はし"
+    c.update_note(n)
+
+    res = audio.run_backfill(c, laudio, overwrite=True)
+
+    value = c.get_note(ids["filled"])[config.TERM_AUDIO]
+    assert value != "[sound:cat.mp3]"
+    fname = _re.search(r"\[sound:([^\]]+)\]", value).group(1)
+    with open(os.path.join(c.media.dir(), fname), "rb") as fh:
+        assert fh.read() == b"MP3-nhk"
+    assert res["filled"]["nhk16"] >= 1
+
+
+def test_overwrite_collapses_a_multi_clip_field_to_one(col, laudio):
+    c, ids = col
+    n = c.get_note(ids["filled"])
+    n[config.TERM] = "橋"; n[config.READING] = "はし"
+    n[config.TERM_AUDIO] = "[sound:a.mp3][sound:b.mp3][sound:c.mp3]"
+    c.update_note(n)
+
+    audio.run_backfill(c, laudio, overwrite=True)
+
+    value = c.get_note(ids["filled"])[config.TERM_AUDIO]
+    assert len(_re.findall(r"\[sound:", value)) == 1
+
+
+def test_overwrite_keeps_audio_the_store_cannot_serve(col, laudio):
+    """No store hit means no clip to swap in — blanking would only lose the
+    card its sound."""
+    c, ids = col
+    n = c.get_note(ids["filled"])          # 猫/ねこ is not in the fixture store
+    assert audio.lookup(laudio, "猫", "ねこ") is None
+    audio.run_backfill(c, laudio, overwrite=True)
+    assert c.get_note(ids["filled"])[config.TERM_AUDIO] == "[sound:cat.mp3]"
+
+
+def test_overwrite_is_idempotent_across_the_loudness_rename(col, laudio):
+    """The loudness pass renames our clip to `norm_…`; a second overwrite must
+    recognise that as already-ours, or the two passes fight every run."""
+    c, ids = col
+    audio.run_backfill(c, laudio, overwrite=True)
+    n = c.get_note(ids["empty_nhk"])
+    bare = _re.search(r"\[sound:([^\]]+)\]", n[config.TERM_AUDIO]).group(1)
+    n[config.TERM_AUDIO] = f"[sound:{config.AUDIO_NORM_PREFIX}{bare}]"
+    c.update_note(n)
+
+    res = audio.run_backfill(c, laudio, overwrite=True)
+
+    assert res["unchanged"] >= 1
+    assert n.id not in dict(res.get("errors", []))
+    assert c.get_note(ids["empty_nhk"])[config.TERM_AUDIO] == \
+        f"[sound:{config.AUDIO_NORM_PREFIX}{bare}]"
+
+
+def test_non_overwrite_still_leaves_filled_cards_alone(col, laudio):
+    c, ids = col
+    audio.run_backfill(c, laudio)
+    assert c.get_note(ids["filled"])[config.TERM_AUDIO] == "[sound:cat.mp3]"
+
+
 def test_run_backfill_one_bad_card_does_not_strand_batch(col, laudio, monkeypatch):
     c, ids = col
     real_write = c.media.write_data

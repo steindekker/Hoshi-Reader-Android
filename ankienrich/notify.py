@@ -77,7 +77,9 @@ def format_report(res, *, apply, pull_action, push_action=None, error=None) -> s
         lines.append(_skipped("audio", audio["skipped"]))
     elif apply:
         filled = sum(audio["filled"].values())
-        lines.append(_line("audio", filled, _detail((audio["errors"], "errors"))))
+        lines.append(_line("audio", filled, _detail(
+            (audio.get("unchanged", 0), "already store audio"),
+            (audio["errors"], "errors"))))
     else:
         lines.append(_line("audio", audio["will_fill"],
                            _detail((audio["none"], "no match"))))
