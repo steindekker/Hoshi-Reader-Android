@@ -78,6 +78,7 @@ def test_send_message_posts_via_requests(monkeypatch):
 def _dry_res():
     return {"scanned": 1234, "backup": None, "steps": {
         "audio": {"will_fill": 12, "by_source": {"nhk16": 8, "forvo": 4}, "none": 4, "missing_file": 0},
+        "loudness": {"to_normalize": 15, "notes": 14},
         "pitch": {"filled": 8, "cleared": 3, "not_found": 2, "skipped": 1},
         "sentences": {"filled": 5},
         "furigana": {"fixed": 3},
@@ -90,6 +91,8 @@ def _dry_res():
 def _apply_res():
     return {"scanned": 1234, "backup": "var/backup.colpkg", "steps": {
         "audio": {"filled": {"nhk16": 9, "forvo": 3}, "errors": 0},
+        "loudness": {"normalized": 15, "notes": 14, "unchanged": 2, "missing": 0,
+                     "median_gain": 3.4, "errors": 0},
         "pitch": {"filled": 8, "cleared": 3, "not_found": 2, "skipped": 1},
         "sentences": {"filled": 5},
         "furigana": {"fixed": 3},
@@ -137,6 +140,15 @@ def test_format_report_apply_has_verdict_and_sync():
     assert "applied + pushed" in out
     assert "<b>12</b>" in out  # 9 + 3 audio filled
     assert "uploaded changes" in out  # push action rendered in sync footer
+    assert "loudness" in out and "+3.4 dB median" in out
+
+
+def test_format_report_omits_gain_when_nothing_was_levelled():
+    res = _apply_res()
+    res["steps"]["loudness"] = {"normalized": 0, "notes": 0, "unchanged": 0,
+                                "missing": 0, "median_gain": 0.0, "errors": 0}
+    out = notify.format_report(res, apply=True, pull_action="none", push_action="none")
+    assert "dB median" not in out
 
 
 def test_format_report_drops_zero_detail():

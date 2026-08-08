@@ -36,6 +36,13 @@ tiny and intentionally omits implementation detail.
   reading-match first, then source priority
   (nhk16→daijisen→shinmeikai8→jpod→…→forvo_ext2). Absent the store the step is
   skipped, not failed.
+- Loudness leveling runs right after, over *every* clip on a card (most Term
+  Audio is mined on the phone and never sees the store). ffmpeg measures EBU
+  R128, then applies one linear gain toward -16 LUFS, clamped under -1 dBTP —
+  no limiting, so the pitch contour survives. The levelled clip gets a `norm_`
+  name and the note is repointed; that prefix is the "already done" marker, so
+  the pass is idempotent and stays correct across a swapped audio store. Needs
+  ffmpeg on PATH (installed in the image); absent it the step is skipped.
 
 ## The Telegram bot
 

@@ -1,5 +1,7 @@
-"""Term-audio enrichment package. Runtime lives in `enrich`; the prebuilt store is
-located by `build` and opened by `index`."""
+"""Term-audio enrichment package. Backfill from the prebuilt store lives in
+`enrich` (the store is located by `build`, opened by `index`); `loudness` levels
+the volume of whatever ends up on the card, whatever its origin."""
+from . import loudness
 from .enrich import (
     SOURCE_PRIORITY, SUPPORTED_EXT, Pick,
     lookup, read_clip, media_name,
@@ -10,4 +12,5 @@ __all__ = [
     "SOURCE_PRIORITY", "SUPPORTED_EXT", "Pick",
     "lookup", "read_clip", "media_name",
     "plan_backfill", "run_backfill", "select_targets",
+    "loudness",
 ]

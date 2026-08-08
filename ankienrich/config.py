@@ -51,6 +51,27 @@ EX_LABELS = {"jitendex": "Jitendex", "tatoeba": "Tatoeba", "saito": "斎藤", "y
 EXAMPLES_TAG = "ankienrich::examples"
 NO_EXAMPLE_TAG = "ankienrich::no-example"
 
+# Term-audio loudness leveling (audio/loudness.py). Clips reach a card from
+# several places — mined by jidoujisho on the phone, pulled from the local-audio
+# store, the odd ogg — and nobody masters them together, so their integrated
+# loudness spans ~9 LU and review volume lurches from card to card.
+# -16 LUFS is the mono-speech convention; the 1 dBTP ceiling leaves room for the
+# intersample overshoot a lossy re-encode can add.
+AUDIO_TARGET_LUFS = -16.0
+AUDIO_PEAK_CEILING_DBTP = -1.0
+# Below this much gain a clip is already fine, and re-encoding it would spend a
+# generation of quality on an inaudible change — keep the original bytes instead.
+AUDIO_NORM_TOLERANCE_DB = 0.5
+# Leveled clips are written under this prefix and the note repointed at them.
+# The prefix IS the "already leveled" marker, so the state lives in the
+# collection: re-runs measure nothing, and a restored backup stays consistent
+# with its media. Changing any constant above will NOT re-level existing clips.
+AUDIO_NORM_PREFIX = "norm_"
+# ffmpeg is a subprocess, so threads scale it; clips are held in memory between
+# the parallel encode and the serial collection write, hence the batch cap.
+AUDIO_NORM_WORKERS = 8
+AUDIO_NORM_BATCH = 128
+
 # Delimits the generated, scoped dictionary CSS appended to the notetype styling.
 # template.apply (authoritative design) and defs.enrich.apply_dict_styles both
 # split on this exact string to refresh the block in place — keep it singular.

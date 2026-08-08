@@ -54,8 +54,9 @@ def test_dry_run_reports_steps(tmp_path, monkeypatch):
     col = _kino_col(str(tmp_path))
     try:
         res = pipeline.run(col, apply=False)
-        assert set(res["steps"]) == {"audio", "pitch", "sentences", "furigana",
-                                     "enrich", "frequency", "examples", "cloze"}
+        assert set(res["steps"]) == {"audio", "loudness", "pitch", "sentences",
+                                     "furigana", "enrich", "frequency", "examples",
+                                     "cloze"}
         assert "skipped" in res["steps"]["audio"]
         assert "skipped" in res["steps"]["enrich"]
         assert "skipped" in res["steps"]["frequency"]

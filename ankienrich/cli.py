@@ -62,6 +62,16 @@ def _render(res: dict, apply: bool) -> None:
     else:
         none = _red(f"{audio['none']} no match") if audio["none"] else _dim(f"{audio['none']} no match")
         print(_row("audio", _num(audio["will_fill"]), none))
+    loud = steps["loudness"]
+    if "skipped" in loud:
+        print(_row("loudness", _dim("    —"), f"skipped: {loud['skipped']}"))
+    elif apply:
+        print(_row("loudness", _num(loud["normalized"]),
+                   f"{loud['median_gain']:+.1f} dB median · {loud['unchanged']} already level"
+                   + (f" · {loud['errors']} errors" if loud["errors"] else "")))
+    else:
+        print(_row("loudness", _num(loud["to_normalize"]),
+                   f"clips on {loud['notes']} cards"))
     pitch = steps["pitch"]
     print(_row("pitch", _num(pitch["filled"]),
                f"{pitch['cleared']} cleared · {pitch['not_found']} not in dict · "

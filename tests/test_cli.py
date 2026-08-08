@@ -25,7 +25,7 @@ def test_overwrite_fans_out(monkeypatch):
     def fake_run(col, **kw):
         captured.update(kw)
         return {"scanned": 0, "backup": None, "steps": {
-            "audio": {"skipped": "x"}, "pitch": {"filled": 0, "cleared": 0, "not_found": 0, "skipped": 0},
+            "audio": {"skipped": "x"}, "loudness": {"skipped": "x"}, "pitch": {"filled": 0, "cleared": 0, "not_found": 0, "skipped": 0},
             "sentences": {"filled": 0}, "furigana": {"fixed": 0}, "enrich": {"skipped": "x"}, "frequency": {"skipped": "x"},
             "examples": {"skipped": "x"}, "cloze": {"filled": 0, "skipped": 0}}}
 
@@ -70,7 +70,7 @@ def test_wizard_drives_main_when_triggered(monkeypatch):
     def fake_run(col, **kw):
         captured["called"] = True
         return {"scanned": 0, "backup": None, "steps": {
-            "audio": {"skipped": "x"}, "pitch": {"filled": 0, "cleared": 0, "not_found": 0, "skipped": 0},
+            "audio": {"skipped": "x"}, "loudness": {"skipped": "x"}, "pitch": {"filled": 0, "cleared": 0, "not_found": 0, "skipped": 0},
             "sentences": {"filled": 0}, "furigana": {"fixed": 0}, "enrich": {"skipped": "x"}, "frequency": {"skipped": "x"},
             "examples": {"skipped": "x"}, "cloze": {"filled": 0, "skipped": 0}}}
 
@@ -105,7 +105,7 @@ def test_wizard_quit_is_clean_noop(monkeypatch):
 
 def _ok_res():
     return {"scanned": 0, "backup": None, "steps": {
-        "audio": {"skipped": "x"}, "pitch": {"filled": 0, "cleared": 0, "not_found": 0, "skipped": 0},
+        "audio": {"skipped": "x"}, "loudness": {"skipped": "x"}, "pitch": {"filled": 0, "cleared": 0, "not_found": 0, "skipped": 0},
         "sentences": {"filled": 0}, "furigana": {"fixed": 0}, "enrich": {"skipped": "x"}, "frequency": {"skipped": "x"},
         "examples": {"skipped": "x"}, "cloze": {"filled": 0, "skipped": 0}}}
 

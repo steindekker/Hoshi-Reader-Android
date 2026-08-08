@@ -1,6 +1,6 @@
-"""Headless enrichment suite. Order: audio -> pitch -> sentences -> furigana
--> definitions -> frequency -> examples -> cloze. Dedupe is destructive and lives
-in its own command, not here.
+"""Headless enrichment suite. Order: audio -> loudness -> pitch -> sentences ->
+furigana -> definitions -> frequency -> examples -> cloze. Dedupe is destructive
+and lives in its own command, not here.
 
 Dry-run unless apply=True; a verified backup is taken before any write."""
 from . import audio, cloze, config, collection, furigana, pitch
@@ -33,6 +33,18 @@ def _step_audio(col, apply: bool) -> dict:
                 "none": plan["nothing"], "missing_file": plan["missing_file"]}
     finally:
         conn.close()
+
+
+def _step_loudness(col, apply: bool) -> dict:
+    """Levels every clip sitting on a card, not just what the backfill wrote —
+    most Term Audio is mined on the phone and never passes through the store.
+    Runs after the backfill so this run's new clips are levelled too."""
+    if not audio.loudness.available():
+        return {"skipped": "ffmpeg/ffprobe not on PATH"}
+    if apply:
+        res = audio.loudness.run_backfill(col)
+        return {**res, "errors": len(res["errors"])}
+    return audio.loudness.plan_backfill(col)
 
 
 def _step_sentences(col, apply: bool, overwrite: bool) -> dict:
@@ -108,6 +120,7 @@ def run(col, *, apply=False, overwrite_cloze=False,
 
     steps = [
         ("audio", "audio", lambda: _step_audio(col, apply)),
+        ("loudness", "loudness", lambda: _step_loudness(col, apply)),
         ("pitch", "pitch", lambda: (
             pitch.run_backfill(col) if apply
             else pitch.plan_backfill(col)["counts"])),

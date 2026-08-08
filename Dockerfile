@@ -4,10 +4,11 @@ FROM python:3.11-slim
 # uv from the official distroless image
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# ca-certificates: AnkiWeb sync is HTTPS. No build toolchain needed —
-# anki, sudachipy, protobuf all ship manylinux wheels.
+# ca-certificates: AnkiWeb sync is HTTPS. ffmpeg: the loudness pass shells out
+# to ffmpeg/ffprobe (absent them it skips, so the image stays runnable without).
+# No build toolchain needed — anki, sudachipy, protobuf all ship manylinux wheels.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -37,8 +37,9 @@ SYNC_TEXT = {
 
 
 # Per-pass glyphs. One emoji a line — enough to scan on a phone, not a parade.
-_EMOJI = {"audio": "🔊", "pitch": "📈", "sentence": "📝", "furigana": "🔤",
-          "defs": "📖", "frequency": "🔢", "examples": "💬", "cloze": "🧩"}
+_EMOJI = {"audio": "🔊", "loudness": "🎚", "pitch": "📈", "sentence": "📝",
+          "furigana": "🔤", "defs": "📖", "frequency": "🔢", "examples": "💬",
+          "cloze": "🧩"}
 
 # Newly-defined terms listed inline; cap so a first bulk run can't flood the chat.
 _TERM_CAP = 20
@@ -80,6 +81,19 @@ def format_report(res, *, apply, pull_action, push_action=None, error=None) -> s
     else:
         lines.append(_line("audio", audio["will_fill"],
                            _detail((audio["none"], "no match"))))
+
+    loud = steps["loudness"]
+    if "skipped" in loud:
+        lines.append(_skipped("loudness", loud["skipped"]))
+    elif apply:
+        lines.append(_line("loudness", loud["normalized"], _detail(
+            # 0 is _detail's "drop this fragment" sentinel — no gain, no line noise
+            (f"{loud['median_gain']:+.1f} dB" if loud["median_gain"] else 0, "median"),
+            (loud["unchanged"], "already level"),
+            (loud["errors"], "errors"))))
+    else:
+        lines.append(_line("loudness", loud["to_normalize"],
+                           _detail((loud["notes"], "cards"))))
 
     pitch = steps["pitch"]
     lines.append(_line("pitch", pitch["filled"],
