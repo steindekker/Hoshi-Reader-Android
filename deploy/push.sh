@@ -80,11 +80,13 @@ say "Building image and (re)starting the bot"
 ssh "$REMOTE" "cd '$DEST' && docker compose up -d --build"
 
 # --- Install / refresh the nightly timer -----------------------------------
+# /etc/systemd/system is root-owned, so this block needs sudo even though the
+# rest of the deploy runs as the unprivileged deploy user.
 say "Installing systemd units + enabling the nightly timer"
 ssh "$REMOTE" "
-  cp '$DEST'/deploy/anki-enrich.service '$DEST'/deploy/anki-enrich.timer /etc/systemd/system/ &&
-  systemctl daemon-reload &&
-  systemctl enable --now anki-enrich.timer &&
+  sudo cp '$DEST'/deploy/anki-enrich.service '$DEST'/deploy/anki-enrich.timer /etc/systemd/system/ &&
+  sudo systemctl daemon-reload &&
+  sudo systemctl enable --now anki-enrich.timer &&
   systemctl list-timers anki-enrich.timer --no-pager
 "
 
