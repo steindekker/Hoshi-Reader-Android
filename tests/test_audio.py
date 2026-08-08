@@ -267,22 +267,64 @@ def test_overwrite_keeps_audio_the_store_cannot_serve(col, laudio):
     assert c.get_note(ids["filled"])[config.TERM_AUDIO] == "[sound:cat.mp3]"
 
 
-def test_overwrite_is_idempotent_across_the_loudness_rename(col, laudio):
-    """The loudness pass renames our clip to `norm_…`; a second overwrite must
-    recognise that as already-ours, or the two passes fight every run."""
+@pytest.fixture
+def levelling(monkeypatch):
+    """Pretend ffmpeg is present and levels every clip, so the naming rules can
+    be tested without depending on a real encoder."""
+    from ankienrich.audio import loudness
+    monkeypatch.setattr(loudness, "available", lambda: True)
+    monkeypatch.setattr(loudness, "normalize_clip",
+                        lambda data, ext: (data + b"-levelled", 3.0))
+
+
+def test_store_clip_is_levelled_on_the_way_in_as_one_file(col, laudio, levelling):
+    """No second file, no repointing: the clip is levelled while we still hold
+    its bytes and written straight under its levelled name."""
+    c, ids = col
+    audio.run_backfill(c, laudio)
+    value = c.get_note(ids["empty_nhk"])[config.TERM_AUDIO]
+    fname = _re.search(r"\[sound:([^\]]+)\]", value).group(1)
+    assert fname == f"{config.AUDIO_NORM_PREFIX}la_nhk16_n.mp3"
+    with open(os.path.join(c.media.dir(), fname), "rb") as fh:
+        assert fh.read() == b"MP3-nhk-levelled"
+    # the unlevelled name was never created
+    assert not c.media.have("la_nhk16_n.mp3")
+
+
+def test_overwrite_leaves_its_own_levelled_clip_alone(col, laudio, levelling):
     c, ids = col
     audio.run_backfill(c, laudio, overwrite=True)
-    n = c.get_note(ids["empty_nhk"])
-    bare = _re.search(r"\[sound:([^\]]+)\]", n[config.TERM_AUDIO]).group(1)
-    n[config.TERM_AUDIO] = f"[sound:{config.AUDIO_NORM_PREFIX}{bare}]"
-    c.update_note(n)
+    before = c.get_note(ids["empty_nhk"])[config.TERM_AUDIO]
 
     res = audio.run_backfill(c, laudio, overwrite=True)
 
     assert res["unchanged"] >= 1
-    assert n.id not in dict(res.get("errors", []))
+    assert c.get_note(ids["empty_nhk"])[config.TERM_AUDIO] == before
+
+
+def test_overwrite_repairs_an_unlevelled_leftover(col, laudio, levelling):
+    """A bare `la_…` is what an interrupted overwrite leaves behind; the next
+    run must redo it rather than mistake it for finished work."""
+    c, ids = col
+    n = c.get_note(ids["empty_nhk"])
+    n[config.TERM_AUDIO] = "[sound:la_nhk16_n.mp3]"
+    c.update_note(n)
+
+    audio.run_backfill(c, laudio, overwrite=True)
+
     assert c.get_note(ids["empty_nhk"])[config.TERM_AUDIO] == \
-        f"[sound:{config.AUDIO_NORM_PREFIX}{bare}]"
+        f"[sound:{config.AUDIO_NORM_PREFIX}la_nhk16_n.mp3]"
+
+
+def test_unlevellable_clip_keeps_the_bare_name(col, laudio, monkeypatch):
+    """ffmpeg present but the clip unreadable: the file must not be filed under
+    a name claiming it was levelled."""
+    from ankienrich.audio import loudness
+    monkeypatch.setattr(loudness, "available", lambda: True)
+    monkeypatch.setattr(loudness, "normalize_clip", lambda data, ext: None)
+    c, ids = col
+    audio.run_backfill(c, laudio)
+    assert c.get_note(ids["empty_nhk"])[config.TERM_AUDIO] == "[sound:la_nhk16_n.mp3]"
 
 
 def test_non_overwrite_still_leaves_filled_cards_alone(col, laudio):

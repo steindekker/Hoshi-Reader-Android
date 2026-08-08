@@ -18,10 +18,12 @@ add-on coupling.
 import os
 import re
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import jaconv
 
+from . import loudness
 from .. import config
 from ..collection import notetype_search
 
@@ -130,20 +132,26 @@ def select_targets(col, *, overwrite: bool = False) -> list:
     return list(col.find_notes(f'{notetype_search()} "{config.TERM_AUDIO}:"'))
 
 
-def already_picked(note, pick) -> bool:
-    """True when Term Audio already holds exactly this pick's clip.
+def final_name(pick) -> str:
+    """The media filename this pick ends up under.
 
-    Accepts the `norm_` form too: the loudness pass renames a clip after we
-    write it, so without this an overwrite re-run would rewrite every card
-    forever, each run undoing the last one's levelling.
+    Store clips are levelled before they are written, so the levelled name is
+    the only name they ever get — no second file, no repointing. Without ffmpeg
+    the raw clip is the best we can do, and the bare name is its final form.
+    """
+    return loudness.norm_name(media_name(pick)) if loudness.available() \
+        else media_name(pick)
+
+
+def already_picked(note, pick) -> bool:
+    """True when Term Audio already holds this pick's clip in its final form.
+
+    A bare `la_…` where ffmpeg is available is deliberately NOT a match: it is
+    an unlevelled leftover (an interrupted overwrite, or a clip written before
+    levelling existed), so saying no here is what repairs it on the next run.
     """
     clips = _SOUND.findall(note[config.TERM_AUDIO] or "")
-    if len(clips) != 1:
-        return False
-    name = clips[0]
-    if name.startswith(config.AUDIO_NORM_PREFIX):
-        name = name[len(config.AUDIO_NORM_PREFIX):]
-    return name == media_name(pick)
+    return len(clips) == 1 and clips[0] == final_name(pick)
 
 
 def plan_backfill(col, conn, *, overwrite: bool = False) -> dict:
@@ -183,22 +191,45 @@ def plan_backfill(col, conn, *, overwrite: bool = False) -> dict:
     }
 
 
+def _level(job):
+    """Level one store clip's bytes. Runs in a worker thread — pure bytes in,
+    bytes out, no sqlite and no collection access. Reports whether levelling
+    actually happened, so the clip is never filed under a name claiming more
+    than was done to it; an unlevellable clip keeps the bare name and is retried
+    on the next run."""
+    nid, pick, data = job
+    levelled = loudness.normalize_clip(data, _ext(pick.file))
+    if levelled is None:
+        return nid, pick, data, False
+    return nid, pick, levelled[0], True
+
+
 def run_backfill(col, conn, *, overwrite: bool = False) -> dict:
     """Write each picked recording's bytes into collection.media and set
     `[sound:...]` on the note's Term Audio. Caller backs up first.
+
+    The clip is levelled on the way in, while we still hold its bytes, and
+    written under its levelled name — so a store clip lands as exactly one media
+    file and the loudness pass has nothing left to do with it. (Clips already on
+    disk, mined elsewhere, are a different story: that pass has to read, level,
+    rename and repoint, because there is no earlier point to intercept.)
 
     Without `overwrite` only empty fields are filled (re-run safe). With it,
     store audio supersedes what is there: the field is *set*, not appended, so a
     card carrying several mined clips collapses to the one store recording. A
     note the store cannot serve keeps its existing audio — there is no clip to
     swap in, and blanking it would only lose the card its sound.
-    Per-card error isolation.
+
+    ffmpeg is a subprocess, so levelling is threaded a batch at a time; media
+    and note writes stay on this thread. Per-card error isolation.
     Returns {'filled': {src: n}, 'unchanged': n, 'errors': [(nid, repr)]}.
     """
     plan = plan_backfill(col, conn, overwrite=overwrite)
     filled = Counter()
     unchanged = 0
     errors = []
+
+    pending = []
     for nid, pick in plan["picks"].items():
         try:
             note = col.get_note(nid)
@@ -208,11 +239,31 @@ def run_backfill(col, conn, *, overwrite: bool = False) -> dict:
                     continue
             elif _SOUND.search(note[config.TERM_AUDIO] or ""):
                 continue  # already has audio (race / re-run)
-            data = read_clip(conn, pick)
-            fname = col.media.write_data(media_name(pick), data)
-            note[config.TERM_AUDIO] = f"[sound:{fname}]"
-            col.update_note(note)
-            filled[pick.source] += 1
+            pending.append((nid, pick, read_clip(conn, pick)))
         except Exception as e:
             errors.append((nid, repr(e)))
+
+    for batch in [pending[i:i + config.AUDIO_NORM_BATCH]
+                  for i in range(0, len(pending), config.AUDIO_NORM_BATCH)]:
+        if loudness.available():
+            with ThreadPoolExecutor(max_workers=config.AUDIO_NORM_WORKERS) as pool:
+                batch = list(pool.map(_level, batch))
+        else:
+            batch = [(nid, pick, data, False) for nid, pick, data in batch]
+        for nid, pick, data, levelled in batch:
+            try:
+                name = loudness.norm_name(media_name(pick)) if levelled \
+                    else media_name(pick)
+                fname = col.media.write_data(name, data)
+                note = col.get_note(nid)
+                value = f"[sound:{fname}]"
+                if note[config.TERM_AUDIO] == value:
+                    unchanged += 1     # retried clip landed where it already was
+                    continue
+                note[config.TERM_AUDIO] = value
+                col.update_note(note)
+                filled[pick.source] += 1
+            except Exception as e:
+                errors.append((nid, repr(e)))
+
     return {"filled": filled, "unchanged": unchanged, "errors": errors}
