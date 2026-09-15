@@ -201,6 +201,28 @@ class TtuBookDataConverterTest {
     }
 
     @Test
+    fun importBookDataPreservesLongTitleWhileUsingByteSafePhysicalNames() = runBlocking {
+        val repository = BookRepository(tempFolder.root)
+        val title = "長".repeat(86)
+        val source = tempFolder.newFile("long-title-bookdata.zip")
+        writeTtuBookDataFixture(source, title)
+        val converter = TtuBookDataConverter(repository, EpubBookParser(), tempFolder.root)
+
+        val first = converter.importBookData(source)
+        val duplicate = converter.importBookData(source)
+        val metadata = requireNotNull(repository.loadMetadata(first.root))
+
+        assertEquals(first.root.canonicalFile, duplicate.root.canonicalFile)
+        assertEquals(title, metadata.title)
+        assertEquals(first.root.name, metadata.folder)
+        assertEquals("${first.root.name}.epub", metadata.epub)
+        assertTrue(first.root.name.toByteArray(Charsets.UTF_8).size <= 250)
+        assertTrue(metadata.epub!!.toByteArray(Charsets.UTF_8).size <= 255)
+        assertTrue(first.root.resolve(metadata.epub).isFile)
+        assertTrue(tempFolder.root.resolve("ImportTemp").listFiles().orEmpty().isEmpty())
+    }
+
+    @Test
     fun importBookDataGeneratesSafeUniqueOpfIdsForUnsafeTtuNames() = runBlocking {
         val repository = BookRepository(tempFolder.root)
         val source = tempFolder.newFile("unsafe-opf-names-bookdata.zip")
@@ -273,13 +295,13 @@ class TtuBookDataConverterTest {
         assertFalse(tempFolder.root.resolve("escape.xhtml").exists())
     }
 
-    private fun writeTtuBookDataFixture(destination: File) {
+    private fun writeTtuBookDataFixture(destination: File, title: String = "Imported Book") {
         ZipOutputStream(destination.outputStream()).use { zip ->
             zip.writeTextEntry(
                 "staticdata.json",
                 """
                 {
-                  "title": "Imported Book",
+                  "title": "$title",
                   "styleSheet": "body { color: black; }",
                   "elementHtml": "<div id=\"ttu-chapter-1\"><div class=\"ttu-book-html-wrapper html-class\" data-extra=\"1\"><div class=\"ttu-book-body-wrapper body-class\" data-extra=\"2\">\\n<div class=\"main\">\\n<p>First<br class=\"clear\"><hr data-x=\"1\"><img src=\"../image/pic.png\"></p>\\n</div>\\n</div></div></div><div id=\"ttu-chapter-2\"><p>No wrappers</p></div>",
                   "sections": [

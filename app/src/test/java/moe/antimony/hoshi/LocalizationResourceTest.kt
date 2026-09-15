@@ -91,6 +91,7 @@ class LocalizationResourceTest {
 
     @Test
     fun simplifiedChineseUsesRequestedTerminology() {
+        val defaultResources = readStringResources(File(resDir, "values/strings.xml"))
         val zhResources = readStringResources(File(resDir, "values-zh-rCN/strings.xml"))
         val forbiddenTerms = listOf("音高", "音高重音", "词典")
         val forbiddenUsages = zhResources.strings
@@ -113,12 +114,29 @@ class LocalizationResourceTest {
         assertEquals("未匹配", zhResources.strings.getValue("sasayaki_no_subtitle_match").value)
         assertEquals("自动翻页", zhResources.strings.getValue("sasayaki_auto_scroll").value)
         assertEquals("标注", zhResources.strings.getValue("reader_highlight_action").value)
+        assertEquals("Contents", defaultResources.strings.getValue("reader_go_to").value)
+        assertEquals("内容", zhResources.strings.getValue("reader_go_to").value)
         assertEquals("复制", zhResources.strings.getValue("action_copy").value)
         assertEquals("分享", zhResources.strings.getValue("action_share").value)
         assertEquals("将使用 %1\$s", zhResources.strings.getValue("bookshelf_profile_automatic_uses_format").value)
+        assertEquals("Top Safe Area", defaultResources.strings.getValue("reader_appearance_top_safe_area").value)
+        assertEquals("顶部安全区", zhResources.strings.getValue("reader_appearance_top_safe_area").value)
         assertEquals("段落间距", zhResources.strings.getValue("reader_appearance_paragraph_spacing").value)
+        assertEquals("System Serif", defaultResources.strings.getValue("reader_appearance_font_system_serif").value)
+        assertEquals("System Sans Serif", defaultResources.strings.getValue("reader_appearance_font_system_sans_serif").value)
+        assertEquals("系统衬线体", zhResources.strings.getValue("reader_appearance_font_system_serif").value)
+        assertEquals("系统无衬线体", zhResources.strings.getValue("reader_appearance_font_system_sans_serif").value)
+        assertEquals("变体", zhResources.strings.getValue("reader_appearance_font_variant").value)
         assertEquals("Profile", zhResources.strings.getValue("settings_profiles").value)
         assertEquals("Profile", zhResources.strings.getValue("profiles_title").value)
+        assertEquals(
+            "{selected-glossary} Fallback",
+            defaultResources.strings.getValue("anki_selected_glossary_fallback").value,
+        )
+        assertEquals(
+            "{selected-glossary} Fallback",
+            zhResources.strings.getValue("anki_selected_glossary_fallback").value,
+        )
         assertEquals(
             "新 Profile 会基于当前启用 Profile 拷贝一份设置。",
             zhResources.strings.getValue("profiles_create_copy_settings_note").value,
@@ -147,6 +165,87 @@ class LocalizationResourceTest {
         assertEquals("每屏句数", zhResources.strings.getValue("reader_visual_novel_sentences_per_screen").value)
         assertEquals("对话保持同屏", zhResources.strings.getValue("reader_visual_novel_preserve_dialogue").value)
         assertEquals("点击空白处前进", zhResources.strings.getValue("reader_visual_novel_click_advance").value)
+    }
+
+    @Test
+    fun bookCoverVendorIntegrationSectionIsLocalized() {
+        val defaultResources = readStringResources(File(resDir, "values/strings.xml"))
+        val zhResources = readStringResources(File(resDir, "values-zh-rCN/strings.xml"))
+
+        assertEquals(
+            "E-Ink Device Integrations",
+            defaultResources.strings.getValue("book_cover_wallpaper_vendor_integrations").value,
+        )
+        assertEquals(
+            "Options tailored to selected E-Ink device manufacturers. More integrations may be added here.",
+            defaultResources.strings.getValue("book_cover_wallpaper_vendor_integrations_summary").value,
+        )
+        assertEquals(
+            "墨水屏厂商适配",
+            zhResources.strings.getValue("book_cover_wallpaper_vendor_integrations").value,
+        )
+        assertEquals(
+            "这里的选项专门适配部分墨水屏厂商，后续可能增加更多厂商。",
+            zhResources.strings.getValue("book_cover_wallpaper_vendor_integrations_summary").value,
+        )
+    }
+
+    @Test
+    fun statisticsDurationUnitsUseFullWords() {
+        val defaultResources = readStringResources(File(resDir, "values/strings.xml"))
+        val zhResources = readStringResources(File(resDir, "values-zh-rCN/strings.xml"))
+
+        assertEquals("%1\$d day", defaultResources.plurals.getValue("statistics_days_value").items.getValue("one"))
+        assertEquals("%1\$d days", defaultResources.plurals.getValue("statistics_days_value").items.getValue("other"))
+        assertEquals("%1\$d week", defaultResources.plurals.getValue("statistics_weeks_value").items.getValue("one"))
+        assertEquals("%1\$d weeks", defaultResources.plurals.getValue("statistics_weeks_value").items.getValue("other"))
+        assertEquals("%1\$d 天", zhResources.plurals.getValue("statistics_days_value").items.getValue("one"))
+        assertEquals("%1\$d 天", zhResources.plurals.getValue("statistics_days_value").items.getValue("other"))
+        assertEquals("%1\$d 周", zhResources.plurals.getValue("statistics_weeks_value").items.getValue("one"))
+        assertEquals("%1\$d 周", zhResources.plurals.getValue("statistics_weeks_value").items.getValue("other"))
+    }
+
+    @Test
+    fun statisticsCurrentRangeTitleNamesSelectedRange() {
+        val defaultResources = readStringResources(File(resDir, "values/strings.xml"))
+        val zhResources = readStringResources(File(resDir, "values-zh-rCN/strings.xml"))
+
+        assertEquals("Selected Range", defaultResources.strings.getValue("statistics_current_range").value)
+        assertEquals("所选范围", zhResources.strings.getValue("statistics_current_range").value)
+    }
+
+    @Test
+    fun statisticsStandaloneEnglishDayAndWeekCountsUsePlurals() {
+        val defaultResources = readStringResources(File(resDir, "values/strings.xml"))
+
+        val fixedCounts = defaultResources.strings
+            .filterValues { string ->
+                StandaloneEnglishDayOrWeekCountPattern.containsMatchIn(string.value)
+            }
+            .keys
+            .toList()
+
+        assertEquals(emptyList<String>(), fixedCounts)
+    }
+
+    @Test
+    fun statisticsSyncModeLabelsAreLocalized() {
+        val defaultResources = readStringResources(File(resDir, "values/strings.xml"))
+        val zhResources = readStringResources(File(resDir, "values-zh-rCN/strings.xml"))
+
+        assertEquals("Merge", defaultResources.strings["reader_statistics_sync_mode_merge"]?.value)
+        assertEquals("Replace", defaultResources.strings["reader_statistics_sync_mode_replace"]?.value)
+        assertEquals("合并", zhResources.strings["reader_statistics_sync_mode_merge"]?.value)
+        assertEquals("替换", zhResources.strings["reader_statistics_sync_mode_replace"]?.value)
+    }
+
+    @Test
+    fun statisticsResetTimeLabelIsLocalized() {
+        val defaultResources = readStringResources(File(resDir, "values/strings.xml"))
+        val zhResources = readStringResources(File(resDir, "values-zh-rCN/strings.xml"))
+
+        assertEquals("Reset Time", defaultResources.strings["reader_statistics_reset_time"]?.value)
+        assertEquals("重置时间", zhResources.strings["reader_statistics_reset_time"]?.value)
     }
 
     @Test
@@ -227,5 +326,6 @@ class LocalizationResourceTest {
 
     private companion object {
         val FormatArgumentPattern = Regex("%\\d+\\$[sdDfFeEgG]")
+        val StandaloneEnglishDayOrWeekCountPattern = Regex("""%\d+[$]d (days|weeks)""")
     }
 }

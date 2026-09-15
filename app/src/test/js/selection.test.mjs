@@ -123,6 +123,67 @@ function loadSharedSelectionWithoutPolicy() {
     return window.hoshiSelection;
 }
 
+function loadAdjacentExpressionTags() {
+    const expressionElement = (text) => ({
+        nodeType: 1,
+        textContent: text,
+        closest(selector) {
+            return selector.split(',').map((item) => item.trim()).includes('.expr-tag') ? this : null;
+        },
+        querySelectorAll() {
+            return [];
+        },
+    });
+    const firstExpression = expressionElement('猫');
+    const secondExpression = expressionElement('犬');
+    const firstNode = { nodeType: 3, textContent: '猫', parentElement: firstExpression };
+    const secondNode = { nodeType: 3, textContent: '犬', parentElement: secondExpression };
+    const body = {
+        nodeType: 1,
+        textContent: '猫犬',
+        querySelectorAll() {
+            return [];
+        },
+    };
+    const document = {
+        body,
+        documentElement: {},
+        createTreeWalker(root) {
+            if (root === firstExpression) return treeWalker([firstNode]);
+            if (root === secondExpression) return treeWalker([secondNode]);
+            return treeWalker([firstNode, secondNode]);
+        },
+        elementFromPoint() {
+            return hitElement([]);
+        },
+        addEventListener() {},
+    };
+    const window = {
+        getComputedStyle() {
+            return { writingMode: 'horizontal-tb' };
+        },
+    };
+
+    vm.runInNewContext(selectionSource(), {
+        CSS: {},
+        document,
+        getSelection() {
+            return null;
+        },
+        Node: { TEXT_NODE: 3 },
+        NodeFilter: { SHOW_TEXT: 4, FILTER_ACCEPT: 1, FILTER_REJECT: 2 },
+        window,
+    });
+
+    const selection = window.hoshiSelection;
+    selection.clearSelection = () => {};
+    selection.getCharacterAtPoint = () => ({ node: firstNode, offset: 0 });
+    selection.getSelectionRect = () => ({ x: 0, y: 0, width: 1, height: 1 });
+    selection.postTextSelected = () => {};
+    window.scanNonJapaneseText = false;
+    return selection;
+}
+
 function scanTextFromOffset(text, offset, configureOptions = {}) {
     const { document, selection, textNode, window } = loadSelection(text);
     document.pointElement = hitElement([]);
@@ -190,6 +251,22 @@ test('reader selection trims leading unmatched opening quote brackets from mined
     assert.equal(context.sentenceOffset, 0);
 });
 
+test('reader selection leaves ellipses and periods after the selected sentence', () => {
+    const ellipsisContext = sentenceContext('選択。…次。', '選択');
+    assert.equal(ellipsisContext.sentence, '選択。');
+    assert.equal(ellipsisContext.sentenceOffset, 0);
+
+    const periodContext = sentenceContext('選択！.次。', '選択');
+    assert.equal(periodContext.sentence, '選択！');
+    assert.equal(periodContext.sentenceOffset, 0);
+});
+
+test('recursive lookup scanning stays inside one expression tag', () => {
+    const selection = loadAdjacentExpressionTags();
+
+    assert.equal(selection.selectText(1, 1, 80), '猫');
+});
+
 test('shared selection posts popup payloads through the webkit bridge', () => {
     const { selection, window } = loadSelection('猫');
     let posted = null;
@@ -230,6 +307,100 @@ test('shared selection can preserve reader link and image tap tokens', () => {
 
     assert.equal(selection.linkTapResult(), 'link');
     assert.equal(selection.imageTapResult(), 'image');
+});
+
+test('shared selection reads semantic text while keeping projected visible ranges', () => {
+    const sourceText = '現在激しい抵抗を見せていた。';
+    const { document, selection, textNode: sourceNode, window } = loadSelection(sourceText);
+    const renderedNode = {
+        nodeType: 3,
+        textContent: '激',
+        parentElement: null,
+    };
+    let projectedRanges = null;
+    let posted = null;
+    document.pointElement = hitElement([]);
+    window.getSelection = () => null;
+    selection.getCharacterAtPoint = () => ({ node: renderedNode, offset: 0 });
+    selection.postTextSelected = (payload) => {
+        posted = payload;
+    };
+    selection.configure({
+        textProjection: {
+            toSemanticHit(renderedHit) {
+                assert.equal(renderedHit.node, renderedNode);
+                return { node: sourceNode, offset: sourceText.indexOf('激') };
+            },
+            normalizedOffsetForHit() {
+                return 314;
+            },
+            visibleRangesForSemanticRanges(ranges) {
+                projectedRanges = ranges;
+                return [{ node: renderedNode, start: 0, end: 1 }];
+            },
+        },
+    });
+    window.scanNonJapaneseText = false;
+
+    const selected = selection.selectText(1, 1, 80);
+
+    assert.equal(selected, '激しい抵抗を見せていた');
+    assert.equal(posted.text, '激しい抵抗を見せていた');
+    assert.equal(posted.sentence, sourceText);
+    assert.equal(posted.sentenceOffset, sourceText.indexOf('激'));
+    assert.equal(posted.normalizedOffset, 314);
+    assert.equal(projectedRanges.length, 1);
+    assert.equal(projectedRanges[0].node, sourceNode);
+    assert.equal(selection.selection.ranges[0].node, renderedNode);
+});
+
+test('shared selection fails closed when a configured text projection cannot map the hit', () => {
+    const { document, selection, textNode, window } = loadSelection('激');
+    document.pointElement = hitElement([]);
+    window.getSelection = () => null;
+    selection.getCharacterAtPoint = () => ({ node: textNode, offset: 0 });
+    selection.configure({
+        textProjection: {
+            toSemanticHit() {
+                return null;
+            },
+        },
+    });
+    window.scanNonJapaneseText = false;
+
+    assert.equal(selection.selectText(1, 1, 80), null);
+    assert.equal(selection.selection, null);
+});
+
+test('english selection can start before the visible clone fragment and continue in source text', () => {
+    const sourceText = 'A difficult resistance.';
+    const { document, selection, textNode: sourceNode, window } = loadSelection(sourceText);
+    const renderedNode = {
+        nodeType: 3,
+        textContent: 'A diff',
+        parentElement: null,
+    };
+    document.pointElement = hitElement([]);
+    window.getSelection = () => null;
+    selection.getCharacterAtPoint = () => ({ node: renderedNode, offset: 5 });
+    selection.configure({
+        language: 'en',
+        textProjection: {
+            toSemanticHit() {
+                return { node: sourceNode, offset: 5 };
+            },
+            normalizedOffsetForHit() {
+                return 5;
+            },
+            visibleRangesForSemanticRanges() {
+                return [{ node: renderedNode, start: 2, end: 6 }];
+            },
+        },
+    });
+
+    assert.equal(selection.selectText(1, 1, 80), 'difficult resistance');
+    assert.equal(selection.selection.startOffset, 2);
+    assert.equal(selection.selection.ranges[0].node, renderedNode);
 });
 
 test('shared selection treats missing language policy as a no-scan boundary', () => {
@@ -453,6 +624,62 @@ test('shared ruby geometry does not cascade a vertical single-character base rec
     assert.equal(rubyAware.y, 455);
     assert.equal(rubyAware.width, 37);
     assert.equal(rubyAware.height, 21);
+});
+
+test('shared selection clips vertical ruby annotation rects to partial base selections', () => {
+    const { document, selection, textNode, window } = loadSelection('小型誘導弾');
+    window.getComputedStyle = () => ({ writingMode: 'vertical-rl' });
+    selection.configure({ rubyAwareRects: true });
+
+    const rect = (x, y, width, height) => ({
+        x,
+        y,
+        width,
+        height,
+        left: x,
+        top: y,
+        right: x + width,
+        bottom: y + height,
+    });
+    const ruby = {
+        querySelectorAll(selector) {
+            return selector === 'rt' ? [{ getClientRects: () => [rect(130, 0, 10, 100)] }] : [];
+        },
+    };
+    textNode.parentElement = {
+        closest(selector) {
+            return selector === 'ruby' ? ruby : null;
+        },
+    };
+    document.createRange = () => ({
+        startContainer: null,
+        startOffset: 0,
+        endOffset: 0,
+        setStart(node, offset) {
+            this.startContainer = node;
+            this.startOffset = offset;
+        },
+        setEnd(_node, offset) {
+            this.endOffset = offset;
+        },
+        getClientRects() {
+            return [rect(100, this.startOffset * 20, 30, (this.endOffset - this.startOffset) * 20)];
+        },
+        getBoundingClientRect() {
+            return rect(100, this.startOffset * 20, 30, (this.endOffset - this.startOffset) * 20);
+        },
+    });
+    selection.selection = {
+        ranges: [{ node: textNode, start: 2, end: 5 }],
+        text: '誘導弾',
+    };
+
+    const rects = selection.selectionRects(3);
+
+    assert.equal(
+        JSON.stringify(rects),
+        JSON.stringify([{ x: 100, y: 40, width: 40, height: 60 }]),
+    );
 });
 
 test('shared selection keeps vertical lookup rects split when adjacent ruby-aware columns barely overlap', () => {

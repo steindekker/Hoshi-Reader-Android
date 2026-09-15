@@ -43,7 +43,9 @@ class ShelfManagementDialogTest {
                     ShelfManagementDialog(
                         shelves = shelves,
                         showReading = true,
+                        coverMode = BookshelfCoverMode.Show,
                         onShowReadingChange = {},
+                        onCoverModeChange = {},
                         onCreateShelf = {},
                         onDeleteShelf = {},
                         onRenameShelf = { _, _ -> },
@@ -104,7 +106,9 @@ class ShelfManagementDialogTest {
                     ShelfManagementDialog(
                         shelves = shelves,
                         showReading = true,
+                        coverMode = BookshelfCoverMode.Show,
                         onShowReadingChange = {},
+                        onCoverModeChange = {},
                         onCreateShelf = {},
                         onDeleteShelf = {},
                         onRenameShelf = { _, _ -> },

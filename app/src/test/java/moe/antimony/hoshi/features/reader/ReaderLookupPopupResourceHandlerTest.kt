@@ -63,4 +63,29 @@ class ReaderLookupPopupResourceHandlerTest {
         assertEquals("application/javascript", response?.mimeType)
         assertEquals("window.hoshiLanguageUtilities = {};", response?.content)
     }
+
+    @Test
+    fun popupAssetContentIncludesReducedMotionGestures() {
+        val response = lookupPopupAssetResponse(
+            name = "popup-gestures.js",
+            assets = LookupPopupAssets(
+                popupJs = "",
+                popupCss = "",
+                popupGesturesJs = "window.hoshiPopupGesturesLoaded = true;",
+            ),
+        )
+
+        assertEquals("application/javascript", response?.mimeType)
+        assertEquals("window.hoshiPopupGesturesLoaded = true;", response?.content)
+    }
+
+    @Test
+    fun fontRequestPathPreservesManagedSystemSubdirectory() {
+        assertEquals(
+            "System/NotoSansJP-wght.ttf",
+            readerLookupPopupFontPath("/fonts/System/NotoSansJP-wght.ttf"),
+        )
+        assertEquals("Klee One.woff2", readerLookupPopupFontPath("/fonts/Klee One.woff2"))
+        assertNull(readerLookupPopupFontPath("/popup/NotoSansJP-wght.ttf"))
+    }
 }

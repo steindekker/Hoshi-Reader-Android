@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -137,6 +138,7 @@ fun DictionaryView(
     var destination by remember { mutableStateOf<DictionaryDestination?>(null) }
     var showUpdateConfirmation by remember { mutableStateOf(false) }
     var showDownloadConfirmation by remember { mutableStateOf(false) }
+    var showStrokeOrderFontConfirmation by remember { mutableStateOf(false) }
     var intervalMenuExpanded by remember { mutableStateOf(false) }
     val recommendedDictionaries = remember(profileState.effectiveContentLanguageProfile.dictionaryLanguageId) {
         recommendedDictionariesForLanguage(profileState.effectiveContentLanguageProfile.dictionaryLanguageId)
@@ -169,7 +171,10 @@ fun DictionaryView(
     val selectedType = uiState.selectedType
     val currentDictionaries = uiState.currentDictionaries
     val settings = uiState.settings
-    val isBusy = uiState.isMutationInProgress || uiState.isImporting || uiState.isUpdating
+    val isBusy = uiState.isMutationInProgress ||
+        uiState.isImporting ||
+        uiState.isUpdating ||
+        uiState.isInstallingStrokeOrderFont
     val lastDictionaryUpdateText = settings.lastDictionaryUpdateEpochMillis
         ?.let { millis ->
             remember(millis) {
@@ -427,6 +432,33 @@ fun DictionaryView(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                         )
                         Spacer(modifier = Modifier.height(18.dp))
+                        if (uiState.showStrokeOrderFontDownload) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(24.dp),
+                                color = colorScheme.surface,
+                                border = BorderStroke(1.dp, colorScheme.outlineVariant),
+                                tonalElevation = 0.dp,
+                            ) {
+                                ListItem(
+                                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                    headlineContent = {
+                                        Text(
+                                            text = stringResource(R.string.dictionary_download_stroke_order_font),
+                                            color = if (uiState.canDownloadStrokeOrderFont) {
+                                                colorScheme.primary
+                                            } else {
+                                                colorScheme.onSurface.copy(alpha = 0.38f)
+                                            },
+                                        )
+                                    },
+                                    modifier = Modifier.clickable(enabled = uiState.canDownloadStrokeOrderFont) {
+                                        showStrokeOrderFontConfirmation = true
+                                    },
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(18.dp))
+                        }
                         if (uiState.updatableDictionaries.isNotEmpty()) {
                             Text(
                                 text = stringResource(R.string.dictionary_updates_section),
@@ -591,6 +623,7 @@ fun DictionaryView(
                                         inactiveContentColor = colorScheme.onSurface,
                                         inactiveBorderColor = colorScheme.outline,
                                     ),
+                                    contentPadding = PaddingValues(horizontal = 0.dp),
                                     icon = {},
                                 ) {
                                     Text(stringResource(type.displayNameRes))
@@ -673,7 +706,11 @@ fun DictionaryView(
                     }
                 }
             }
-            if (uiState.showBlockingProgress || uiState.isImporting || uiState.isUpdating) {
+            if (uiState.showBlockingProgress ||
+                uiState.isImporting ||
+                uiState.isUpdating ||
+                uiState.isInstallingStrokeOrderFont
+            ) {
                 HoshiBlockingProgressOverlay(
                     message = uiState.currentImportMessage?.asString() ?: stringResource(R.string.loading),
                     modifier = Modifier
@@ -772,6 +809,28 @@ fun DictionaryView(
             },
         )
     }
+    if (showStrokeOrderFontConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showStrokeOrderFontConfirmation = false },
+            title = { Text(stringResource(R.string.dictionary_stroke_order_font_dialog_title)) },
+            text = { Text(stringResource(R.string.dictionary_stroke_order_font_dialog_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showStrokeOrderFontConfirmation = false
+                        dictionaryViewModel.installStrokeOrderFont()
+                    },
+                ) {
+                    Text(stringResource(R.string.action_download))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStrokeOrderFontConfirmation = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
 }
 
 private enum class DictionaryDestination {
@@ -784,6 +843,7 @@ private val DictionaryType.displayNameRes: Int
         DictionaryType.Term -> R.string.dictionary_type_term
         DictionaryType.Frequency -> R.string.dictionary_type_frequency
         DictionaryType.Pitch -> R.string.dictionary_type_pitch
+        DictionaryType.Kanji -> R.string.dictionary_type_kanji
     }
 
 private enum class DictionarySwipeRevealValue {
@@ -1265,9 +1325,11 @@ private fun DictionaryCustomCssView(
 ) {
     BackHandler(onBack = onClose)
     val colorScheme = MaterialTheme.colorScheme
-    val fontNames = remember(fontManager) { fontManager.allFontNames() }
+    val fontLibraryState by fontManager.libraryState.collectAsStateWithLifecycle()
+    val fontNames = remember(fontManager, fontLibraryState.revision) { fontManager.allFontNames() }
     var fontMenuExpanded by remember { mutableStateOf(false) }
     var selectorMenuExpanded by remember { mutableStateOf(false) }
+    var customCssResetState by remember { mutableStateOf(DictionaryCustomCssResetState()) }
     var cssFieldValue by remember {
         mutableStateOf(
             TextFieldValue(
@@ -1284,6 +1346,45 @@ private fun DictionaryCustomCssView(
                 selection = TextRange(settings.customCSS.length),
             )
         }
+    }
+
+    fun dispatchCustomCssReset(action: DictionaryCustomCssResetAction) {
+        val nextState = dictionaryCustomCssResetStateAfter(customCssResetState, action)
+        customCssResetState = nextState
+        if (!nextState.shouldClearCss) return
+
+        customCssResetState = nextState.copy(shouldClearCss = false)
+        val clearedValue = TextFieldValue(text = "", selection = TextRange.Zero)
+        cssFieldValue = clearedValue
+        onSettingsChange { it.copy(customCSS = clearedValue.text) }
+    }
+
+    if (customCssResetState.isConfirmationVisible) {
+        AlertDialog(
+            onDismissRequest = {
+                dispatchCustomCssReset(DictionaryCustomCssResetAction.Dismiss)
+            },
+            title = { Text(stringResource(R.string.dictionary_custom_css_reset_title)) },
+            text = { Text(stringResource(R.string.dictionary_custom_css_reset_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        dispatchCustomCssReset(DictionaryCustomCssResetAction.Confirm)
+                    },
+                ) {
+                    Text(stringResource(R.string.action_reset))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        dispatchCustomCssReset(DictionaryCustomCssResetAction.Dismiss)
+                    },
+                ) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
     }
 
     fun insertCssText(text: String) {
@@ -1306,7 +1407,11 @@ private fun DictionaryCustomCssView(
                 title = { Text(stringResource(R.string.dictionary_custom_css)) },
                 navigationIcon = { HoshiIconBackButton(onClose) },
                 actions = {
-                    TextButton(onClick = { onSettingsChange { it.copy(customCSS = "") } }) {
+                    TextButton(
+                        onClick = {
+                            dispatchCustomCssReset(DictionaryCustomCssResetAction.RequestConfirmation)
+                        },
+                    ) {
                         Text(stringResource(R.string.action_reset))
                     }
                 },

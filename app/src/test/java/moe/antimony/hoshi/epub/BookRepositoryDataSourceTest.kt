@@ -4,11 +4,47 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
+import java.io.ByteArrayInputStream
 import java.nio.file.Files
 import java.util.zip.ZipFile
 
 class BookRepositoryDataSourceTest {
+    @Test
+    fun importDataSourceImportsLongTitleWithoutLeavingTemporaryFiles() = runBlocking {
+        val filesDir = Files.createTempDirectory("hoshi-long-import").toFile()
+        val source = filesDir.resolve("source-fixture.epub")
+        val title = "長".repeat(86)
+        writeMinimalEpubArchive(source, title = title)
+        val dataSource = BookImportDataSource(filesDir, BookFileDataSource(filesDir))
+
+        val root = source.inputStream().use { input ->
+            dataSource.importBook(displayName = "A.epub", input = input)
+        }
+
+        assertTrue(root.name.toByteArray(Charsets.UTF_8).size <= 250)
+        assertTrue(root.resolve("${root.name}.epub").isFile)
+        assertTrue(filesDir.resolve("ImportTemp").listFiles().orEmpty().isEmpty())
+    }
+
+    @Test
+    fun importDataSourceCleansTemporaryFilesWhenArchiveIsInvalid() {
+        val filesDir = Files.createTempDirectory("hoshi-invalid-import").toFile()
+        val dataSource = BookImportDataSource(filesDir, BookFileDataSource(filesDir))
+
+        assertThrows(Exception::class.java) {
+            runBlocking {
+                dataSource.importBook(
+                    displayName = "invalid.epub",
+                    input = ByteArrayInputStream("not an epub".toByteArray()),
+                )
+            }
+        }
+
+        assertTrue(filesDir.resolve("ImportTemp").listFiles().orEmpty().isEmpty())
+    }
+
     @Test
     fun fileDataSourceRejectsPathTraversalBookFolders() = runBlocking {
         val filesDir = Files.createTempDirectory("hoshi-book-files").toFile()
@@ -50,6 +86,32 @@ class BookRepositoryDataSourceTest {
         assertEquals(bookmark, repository.loadBookmark(bookRoot))
         assertEquals(bookInfo, repository.loadBookInfo(bookRoot))
         assertEquals(0.25, repository.loadReadingProgress(bookRoot), 0.0)
+    }
+
+    @Test
+    fun legacyBookInfoWithoutReaderFactsRemainsReadable() = runBlocking {
+        val repository = BookRepository(Files.createTempDirectory("hoshi-legacy-book-info").toFile())
+        val bookRoot = repository.createBookDirectory("legacy")
+        bookRoot.resolve("bookinfo.json").writeText(
+            """
+            {
+                "characterCount": 10,
+                "chapterInfo": {
+                    "chapter.xhtml": {
+                        "spineIndex": 0,
+                        "currentTotal": 0,
+                        "chapterCount": 10
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val bookInfo = repository.loadBookInfo(bookRoot)
+
+        assertEquals(10, bookInfo?.characterCount)
+        assertEquals(null, bookInfo?.images)
+        assertEquals(null, bookInfo?.chapterInfo?.get("chapter.xhtml")?.fragmentOffsets)
     }
 
     @Test

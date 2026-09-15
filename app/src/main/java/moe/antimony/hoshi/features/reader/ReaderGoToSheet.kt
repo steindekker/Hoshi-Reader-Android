@@ -38,17 +38,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -71,11 +72,13 @@ import moe.antimony.hoshi.epub.EpubBook
 import moe.antimony.hoshi.epub.ReaderHighlight
 import moe.antimony.hoshi.ui.hoshiSingleLineTextFieldLineLimits
 import moe.antimony.hoshi.ui.hoshiTextFieldCursorBrush
+import moe.antimony.hoshi.ui.rememberInitiallyCenteredLazyListState
 import moe.antimony.hoshi.ui.rememberSyncedTextFieldState
 
 internal enum class ReaderGoToTab {
     Chapters,
     Highlights,
+    Gallery,
     Search,
 }
 
@@ -89,14 +92,16 @@ internal fun ReaderGoToSheet(
     currentPosition: ReaderChapterPosition,
     progressDisplay: ReaderProgressDisplay,
     highlights: List<ReaderHighlight>,
+    selectedTab: ReaderGoToTab,
+    onSelectedTabChange: (ReaderGoToTab) -> Unit,
     onChapterJump: (ReaderChapterPosition, String?) -> Unit,
     onCharacterJump: (Int) -> Unit,
     onSearchResultJump: (ReaderSearchResult) -> Unit,
     onHighlightJump: (ReaderHighlight) -> Unit,
     onHighlightDelete: (ReaderHighlight) -> Unit,
+    onGalleryImageSelected: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var selectedTab by remember { mutableStateOf(readerGoToDefaultTab()) }
     var showJumpDialog by remember { mutableStateOf(false) }
     val coverBitmap = remember(book) { book.decodeCoverImageBitmap() }
     val searchState = remember(book) { ReaderSearchSheetState() }
@@ -141,7 +146,7 @@ internal fun ReaderGoToSheet(
         )
         ReaderGoToTabs(
             selectedTab = selectedTab,
-            onSelectedTabChange = { selectedTab = it },
+            onSelectedTabChange = onSelectedTabChange,
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 10.dp),
         )
         when (selectedTab) {
@@ -164,6 +169,11 @@ internal fun ReaderGoToSheet(
                 progressDisplay = progressDisplay,
                 totalCharacters = book.bookInfo.characterCount,
                 onJump = onSearchResultJump,
+                modifier = Modifier.weight(1f),
+            )
+            ReaderGoToTab.Gallery -> ReaderGalleryTab(
+                book = book,
+                onImageSelected = onGalleryImageSelected,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -235,6 +245,7 @@ private fun ReaderGoToTabs(
                 ReaderGoToTab.Search -> stringResource(R.string.reader_search)
                 ReaderGoToTab.Chapters -> stringResource(R.string.reader_chapters)
                 ReaderGoToTab.Highlights -> stringResource(R.string.reader_highlights)
+                ReaderGoToTab.Gallery -> stringResource(R.string.reader_gallery)
             }
             Box(
                 modifier = Modifier
@@ -517,10 +528,18 @@ private fun ReaderGoToChaptersTab(
     onJump: (ReaderChapterPosition, String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val rows = remember(book, currentPosition.index) { book.chapterRows(currentPosition.index) }
+    val currentCharacter = book.characterCountAt(currentPosition.index, currentPosition.progress)
+    val rows = remember(book, currentCharacter) { book.chapterRows(currentCharacter) }
+    val centeredListState = rememberInitiallyCenteredLazyListState(
+        targetIndex = readerCurrentChapterRowIndex(rows),
+        itemCount = rows.size,
+    )
     LazyColumn(
+        state = centeredListState.listState,
+        userScrollEnabled = centeredListState.contentVisible,
         modifier = modifier
             .fillMaxWidth()
+            .alpha(if (centeredListState.contentVisible) 1f else 0f)
             .padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
     ) {
         items(rows) { row ->
@@ -535,6 +554,9 @@ private fun ReaderGoToChaptersTab(
         }
     }
 }
+
+internal fun readerCurrentChapterRowIndex(rows: List<ReaderChapterRow>): Int? =
+    rows.indexOfFirst(ReaderChapterRow::isCurrent).takeIf { it >= 0 }
 
 @Composable
 private fun ReaderGoToHighlightsTab(

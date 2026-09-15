@@ -3,44 +3,56 @@
 This document tracks open Android work after checking iOS upstream `develop`.
 
 - Source: `reference/Hoshi-Reader-iOS`
-- Baseline for this refresh: `cfc1e509a4b1f92a9d02dbf8c950cb392c0f25d9`
-- Latest checked: `origin/develop` at `24e356f00cfc3b74675d5610d2ffeeb52516301c`
-- Checked on: 2026-06-20
+- Baseline for this refresh: `24e356f00cfc3b74675d5610d2ffeeb52516301c`
+- Latest checked: `origin/develop` at `c31c9d0ce376ff83bf6a91d908bf9f8e0fb4947b`
+- Checked on: 2026-08-01
+- Upstream history note: `develop` was force-updated. The previous tip
+  `24e356f00cfc3b74675d5610d2ffeeb52516301c` is no longer an ancestor of the
+  current tip; its project-only commit has no Android action. All commits newly
+  reachable from the current `develop` tip were audited against Android code.
 
 ## Current Queue
 
-### 1. Reader route open-failure fallback
+### 1. Reader furigana reveal mode
 
 Status: pending Android sync.
 
 Commits:
 
-- `53fdb72` - show book open failure.
+- `15d4a6e` - add Off, Toggle, and Hidden furigana modes.
+- `23e0764` - migrate the legacy hide-furigana preference.
 
 Dependency/value reasoning:
 
-- This is a small reader-route reliability slice. It keeps corrupted, missing, or unparsable books from leaving the user on a dead reader surface.
+- This is a self-contained reader setting, but it touches shared selection and
+  all reader modes, so its state and tap semantics should land together.
 
 iOS behavior to mirror:
 
-- If the reader loader cannot produce a `ReaderView`, iOS shows a neutral full-screen failure view with "Couldn't open book" and a Close button that dismisses the reader route.
+- Off shows furigana normally. Hidden removes it. Toggle initially hides ruby
+  annotations with a dotted base-text indicator and reveals one ruby annotation
+  when tapped without opening lookup for that tap.
+- Existing hide-furigana users migrate to the equivalent final mode.
 
 Android current gap:
 
-- `ReaderRouteStateHolder.load()` in `app/src/main/java/moe/antimony/hoshi/navigation/ReaderRouteStateHolder.kt` returns `ReaderRouteLoadState.Error(error.localizedMessage ?: "Failed to open EPUB.")`, so route-load failures can expose raw exception text such as "Book not found.".
-- `ReaderRouteDestination()` in `app/src/main/java/moe/antimony/hoshi/navigation/ReaderRouteDestination.kt` renders only `Text(state.message)` for `ReaderRouteRenderState.Error`; it does not expose a Close action that routes through the normal reader close path.
-- `BookshelfViewModel.openBook()` already reports pre-route open failures through `R.string.bookshelf_open_failed`, so the remaining gap is the Reader route load-failure state.
+- `ReaderSettings` stores only `hideFurigana: Boolean`; `ReaderAppearanceView.kt`
+  exposes a switch rather than a three-state mode.
+- `ReaderContentStyles.kt` removes/hides ruby globally and shared
+  `selection.js` has no `ruby.furigana-hidden` reveal tap result. Paginated,
+  continuous, and VN therefore cannot reveal individual annotations.
 
 Suggested slice:
 
-- Replace route-load error rendering with a localized generic message and Close action.
-- Keep the error state inside the existing route lifecycle and call the same `onClose` path used by reader chrome.
-- Add focused state/render tests for missing book or parser failure.
+- Replace the boolean with a compatible enum migration, add the segmented
+  setting, and implement the same reveal marker and tap interception through the
+  shared reader selection/text semantics used by all modes.
 
 Validation:
 
-- Open a book that is missing from storage or fails parsing and confirm the Reader shows a localized failure view with a working Close action.
-- Confirm normal reader open/close and Android Back still preserve bookshelf state and bookmark refresh behavior.
+- Verify Off/Toggle/Hidden in paginated, continuous, and VN modes, horizontal
+  and vertical writing, with lookup, highlights, Sasayaki, restore, and ruby
+  split across styled nodes.
 
 ### 2. Lookup popup two-column layout and visual sizing
 
@@ -49,110 +61,115 @@ Status: pending Android sync.
 Commits:
 
 - `ed25036` - masonry layout and popup visual redesign.
+- `8d1442e` - add Yomitan danger/success theme variables.
 
 Dependency/value reasoning:
 
-- This is the largest user-visible UI delta in the refresh. The storage/settings toggle must land before the popup HTML/JS/CSS can reliably render the new layout in Reader, Dictionary tab, and Process Text flows.
+- This is a shared popup asset/settings slice used by Reader, Dictionary tab,
+  and Process Text. Land persistence and bootstrap values before JS/CSS layout.
 
 iOS behavior to mirror:
 
-- Dictionary settings add a `Two-Column Layout` toggle with explanatory copy.
-- Popup rendering receives `twoColumnLayout` and arranges multi-dictionary glossary sections in two columns, using native masonry when available or a measured fallback.
-- Glossary groups get card-like padding, border, and dark-mode treatment; popup body padding is tightened.
-- Definition image canvas rendering uses a larger maximum canvas size.
-- Popup height setting can go up to 800.
+- Dictionary settings add a Two-Column Layout toggle. Multi-dictionary glossary
+  cards use masonry/two-column layout when enabled and keep one column otherwise.
+- Popup cards, padding, theme accents, and definition image canvas sizing match
+  the refreshed design; popup height can reach 800.
 
 Android current gap:
 
-- `DictionarySettings` and `DictionarySettingsRepository` in `app/src/main/java/moe/antimony/hoshi/features/dictionary/DictionarySettings.kt` persist `compactGlossaries`, `showExpressionTags`, and pitch/frequency options, but no `twoColumnLayout`.
-- `DictionaryView.kt` only exposes the Compact Glossaries toggle in the Behaviour section.
-- `LookupPopupHtml.kt` injects `window.compactGlossaries`, but no `window.twoColumnLayout`.
-- `app/src/main/assets/hoshi-web/popup/popup.js` appends each `glossary-group` directly under the entry and has no masonry layout, `ResizeObserver`, or two-column style injection.
-- `app/src/main/assets/hoshi-web/popup/popup.css` still uses 10px body padding, simple glossary group spacing, and `maxCanvasSize = 128` in `popup.js`.
-- `ReaderAppearanceView.kt` keeps popup height at `100f..500f`.
+- `DictionarySettings`/repository and `DictionaryView.kt` have no
+  `twoColumnLayout` setting.
+- `LookupPopupHtml.kt` injects compact glossary and pitch options but no two-
+  column flag. `popup.js` has no masonry/ResizeObserver path, uses
+  `maxCanvasSize = 128`, and `popup.css` lacks the refreshed cards and danger/
+  success variables.
+- `ReaderAppearanceView.kt` still constrains popup height to 500.
 
 Suggested slice:
 
-- Add `twoColumnLayout` to dictionary settings, profile-aware persistence, tests, and localized strings.
-- Inject `window.twoColumnLayout` in the popup bootstrap used by Reader, Dictionary tab, and Process Text.
-- Port the popup JS/CSS layout behavior into `app/src/main/assets/hoshi-web/popup`, keeping Android bridge calls intact.
-- Raise the popup height setting range to 800 and update focused settings tests.
+- Add profile-aware setting persistence and bootstrap injection, port the final
+  asset behavior while preserving Android bridge calls, and raise the height
+  range with focused tests.
 
 Validation:
 
-- Reader lookup popup, Dictionary tab iframe popup, recursive popup lookup, and Process Text popup with one dictionary and multiple dictionaries.
-- Full-width/larger popup with two-column layout enabled and disabled, including collapsed dictionary sections and long glossary content.
-- Dark, light, e-ink, reduced-motion popup scrolling, Anki mining buttons, audio buttons, image glossary rendering, and outside-tap dismissal.
-- `node --test app/src/test/js/*.test.mjs`, focused popup/settings unit tests, localization test, and `./gradlew lint` for resource changes.
+- Reader, Dictionary tab, recursive lookup, and Process Text with one/multiple
+  dictionaries, collapsed sections, long glossaries, images, mining/audio
+  buttons, dark/e-ink themes, reduced motion, and outside dismissal.
+- Run `node --test app/src/test/js/*.test.mjs`, focused settings tests,
+  localization tests, and lint.
 
-### 3. Google Drive timeout and automatic-refresh error suppression
+### 3. Reader route open-failure fallback
 
 Status: pending Android sync.
 
 Commits:
 
-- `4dae37c` - time out Drive requests after 10s and suppress timeout errors.
+- `53fdb72` - show a closeable book-open failure view.
 
 Dependency/value reasoning:
 
-- This affects Bookshelf remote-books refresh and sync perceived reliability. It should stay behind the existing Drive repository/data-source boundary.
+- This is a small route reliability slice independent of reader runtime work.
 
 iOS behavior to mirror:
 
-- Google OAuth token and Drive API requests use a 10-second timeout.
-- Automatic remote bookshelf refresh suppresses transient offline, timed-out, and network-lost errors instead of surfacing a user-facing failure.
+- If loading cannot produce a Reader view, show a neutral full-screen
+  "Couldn't open book" state with a Close action that dismisses Reader.
 
 Android current gap:
 
-- `DeviceCodeDriveAuthorizer` uses `RequestTimeoutMillis = 15_000`; `GoogleDriveClient` uses `HttpConnectTimeoutMillis = 15_000` and `HttpReadTimeoutMillis = 30_000`.
-- `BookshelfViewModel.isOfflineRemoteLoadError()` suppresses only `GoogleDriveApiException.NoInternetConnectionMessage` during automatic remote refresh; `SocketTimeoutException`, read timeouts, and connection-lost IO failures are not normalized into that path.
-- `DeviceCodeAuthorizationPollingTest` covers transient polling failures for device-code auth, but there is no matching repository/ViewModel coverage for remote bookshelf refresh suppression.
+- `ReaderRouteStateHolder.load()` returns raw localized exception text such as
+  `Book not found.` through `ReaderRouteLoadState.Error`.
+- `ReaderRouteDestination()` renders only `Text(state.message)` and offers no
+  Close action through the normal `onClose` route path.
 
 Suggested slice:
 
-- Normalize Drive timeout and transient network failures at the Drive data-source or repository boundary.
-- Use Android networking APIs according to current Android/Jetpack guidance for timeouts and connectivity checks when implementing this slice.
-- Suppress transient timeout/network-lost errors only for automatic remote refresh paths; keep user-triggered import/export/delete errors visible.
-- Add tests around `BookshelfViewModel.reloadRemoteBookEntries()` or its repository boundary for timeout suppression.
+- Use localized generic error UI and the same close path as reader chrome, with
+  state/render tests for missing and unparsable books.
 
 Validation:
 
-- Automatic Bookshelf remote refresh with no network, slow token request, slow Drive list request, and mid-request connection loss.
-- Manual Google Drive connect, refresh, import, export, and delete still show actionable errors when user-triggered.
-- Existing Google Drive sync, remote cover cache, stale-cache retry, and device-code polling tests.
+- Missing/corrupt book, working Close, normal Reader open/close, Android Back,
+  bookshelf state preservation, and bookmark refresh.
 
-### 4. Bookshelf cover decode pressure
+### 4. Google Drive timeout and automatic-refresh error suppression
 
 Status: pending Android sync.
 
 Commits:
 
-- `b928010` - decode covers one at a time.
+- `4dae37c` - use 10-second Drive timeouts and suppress transient automatic
+  refresh errors.
 
 Dependency/value reasoning:
 
-- This is a performance and memory-pressure slice for large libraries. It is independent of the Drive and popup work.
+- This belongs behind the existing Drive data-source/repository boundary and is
+  independent of reader work.
 
 iOS behavior to mirror:
 
-- Cover thumbnail decoding is serialized through a shared actor so multiple visible covers do not decode concurrently.
-- Decoded thumbnails remain bounded to the existing maximum pixel size.
+- OAuth and Drive requests time out after 10 seconds. Automatic remote bookshelf
+  refresh suppresses offline, timeout, and connection-lost failures while
+  explicit user operations still report failures.
 
 Android current gap:
 
-- `BookCoverBitmapCache.load()` in `app/src/main/java/moe/antimony/hoshi/features/bookshelf/BookshelfView.kt` dispatches every cache miss to `Dispatchers.IO`; visible `BookCoverCard` instances can decode multiple `BitmapFactory.decodeFile()` calls concurrently.
-- The cache bounds decoded bitmap memory with `LruCache` and samples to 768px, but there is no decode mutex, semaphore, or limited-parallelism dispatcher for cover bitmap decode.
+- `DeviceCodeDriveAuthorizer` uses 15 seconds; `GoogleDriveClient` uses 15-second
+  connect and 30-second read timeouts.
+- `BookshelfViewModel.isOfflineRemoteLoadError()` suppresses only the normalized
+  no-internet message, not socket/read timeout or connection-lost IO failures.
 
 Suggested slice:
 
-- Serialize or tightly limit cover decode concurrency behind `BookCoverBitmapCache`, without blocking Compose main-thread rendering.
-- Preserve cache-key behavior, sampled decode, and `prepareToDraw()`.
-- Add focused tests around any extracted decode scheduler or cache behavior where feasible.
+- Normalize transient failures at the Drive boundary using current Android
+  networking guidance; suppress them only for automatic refresh and test manual
+  operation errors separately.
 
 Validation:
 
-- Bookshelf with many local and remote covers, fast scrolling, tab switching, and refresh after returning from Reader.
-- Memory/jank spot check on a large library before and after if this slice is implemented as a performance fix.
+- Automatic refresh offline, slow token/list requests, and connection loss;
+  manual connect/refresh/import/export/delete must still show actionable errors.
 
 ### 5. Reader WebView line-box CSS parity
 
@@ -160,58 +177,143 @@ Status: pending Android sync.
 
 Commits:
 
-- `bdf71a6` - remove WebKit line-box property.
+- `bdf71a6` - remove the WebKit line-box property.
 
 Dependency/value reasoning:
 
-- This is a small reader layout parity change. It should be validated with ruby, replaced elements, cover pages, and vertical writing before removal.
+- Small independent layout parity change, but it needs device validation across
+  writing modes and replaced elements.
 
 iOS behavior to mirror:
 
-- Reader CSS no longer injects `-webkit-line-box-contain: block glyphs replaced;` in paginated or scroll readers.
+- Reader CSS no longer sets
+  `-webkit-line-box-contain: block glyphs replaced;`.
 
 Android current gap:
 
-- `app/src/main/assets/hoshi-web/reader/reader.css` still contains `-webkit-line-box-contain: block glyphs replaced;`.
-- `ReaderSettingsTest` currently asserts that the generated reader CSS contains this property, so Android tests would preserve the old behavior.
+- `app/src/main/assets/hoshi-web/reader/reader.css` still sets the property and
+  `ReaderSettingsTest` explicitly preserves it.
 
 Suggested slice:
 
-- Remove the property from Android reader assets if WebView validation confirms the iOS final behavior is correct on Android.
-- Update tests to assert the final CSS behavior rather than preserving the removed property.
+- Remove it only after Android WebView comparison, then update tests to assert
+  the final CSS behavior.
 
 Validation:
 
-- Paginated and continuous reader in horizontal and vertical writing.
-- Ruby text, images, cover pages, multi-image pages, line-height changes, and page progress/restore around image-heavy pages.
-- Focused reader asset/unit tests and reader JS tests if touched.
+- Paginated/continuous horizontal and vertical writing, ruby, cover and
+  multi-image pages, line height, progress, and restore.
 
 ## Open Commit Inventory
 
 | Commit | Date | iOS summary | Android status |
 | --- | --- | --- | --- |
-| `53fdb72` | 2026-06-15 | Show a closeable book-open failure view | Pending route error UI |
-| `ed25036` | 2026-06-14 | Add popup two-column layout, visual refresh, and 800px height range | Pending settings and popup asset sync |
-| `4dae37c` | 2026-06-13 | Add 10s Drive timeout and suppress transient timeout errors | Pending Drive timeout/error normalization |
-| `b928010` | 2026-06-15 | Serialize cover thumbnail decoding | Pending cover decode concurrency limit |
-| `bdf71a6` | 2026-06-07 | Remove reader WebKit line-box CSS property | Pending reader CSS parity validation |
+| `15d4a6e`, `23e0764` | 2026-06-15 / 2026-06-20 | Three-state revealable furigana mode and migration | Pending enum, migration, and tap semantics |
+| `ed25036`, `8d1442e` | 2026-06-14 / 2026-07-01 | Popup masonry redesign and theme accents | Pending settings/assets/height range |
+| `53fdb72` | 2026-06-15 | Closeable Reader open-failure view | Pending route error UI |
+| `4dae37c` | 2026-06-13 | Drive timeouts and transient refresh suppression | Pending timeout/error normalization |
+| `bdf71a6` | 2026-06-07 | Remove Reader WebKit line-box property | Pending Android WebView validation |
 
 ## Suggested Implementation Order
 
-1. Reader route open-failure fallback.
+1. Reader furigana reveal mode.
 2. Lookup popup two-column layout and visual sizing.
-3. Google Drive timeout and automatic-refresh error suppression.
-4. Bookshelf cover decode pressure.
+3. Reader route open-failure fallback.
+4. Google Drive timeout and automatic-refresh error suppression.
 5. Reader WebView line-box CSS parity.
 
 ## Covered Or No Android Action
 
-- `17f6574`: GitHub issue templates only.
-- `29cccb3`: Android AnkiConnect settings now store an optional API key and
-  send it as the top-level `"key"` field on AnkiConnect requests when non-empty.
-- `9e191af`: Android settings already use Nav3 typed routes through `AppShell`, `SettingsDetailRoute`, and independent tab back stacks.
-- `5764c5c`: Android audio-source toggles update by `AudioSource` identity through `AudioSettings.withAudioSourceEnabled(source, enabled)`, not stale list indices.
-- `35c928e`: iOS AVAudioSession deactivation threading has no direct Android analogue; Android Sasayaki owns playback through a Media3 `MediaSessionService`.
-- `f4e9684`: iPad safe-area/focus workaround is platform-specific; Android reader chrome uses WindowInsets and already has focus-mode inset tests.
-- `3f174c3`: Android does not run iOS document migrations or eager WebView preloading from Activity initialization; legacy book migration happens through the repository on IO with progress state.
-- `929c6a6`, `387b6bb`, `20fa179`, `544aeb5`, `8c0e305`, `24e356f`: iOS release, warning, compiler setting, or Xcode project maintenance only.
+- `c6b29c8`, `1db2cd3`: Android now stores the first EPUB creator as optional
+  compatible book metadata, renders deterministic title/author fallback artwork,
+  and applies persisted Show/Blur/Hide privacy modes across local, remote,
+  expanded, and collapsed bookshelf covers. Android 8-11 safely maps Blur to the
+  hidden fallback because the platform blur effect starts on Android 12.
+- `eb86431`, `c31c9d0`, `ff86caa`: the paragraph fragmenter and explicit font
+  request are WKWebView-specific selection/layout workarounds. Android's
+  paginated reader already locks Chromium WebView scrolling during native
+  selection and awaits used fonts before restore; copying the DOM fragmenter
+  would add offset, highlight, progress, and Sasayaki mapping risk without a
+  reproduced Android behavior gap.
+- `947898c`, `4a5cfde`, `a9a0747`: no Android product action. Android's
+  `SasayakiCueAudioExporter` emits platform-supported AAC/ADTS clips that both
+  Anki backends already consume; adding an MP3 encoder only to match an iOS
+  filename is not justified. Media3 keeps previous/next cue navigation separate
+  from Reader skip-by-seconds controls, and the supported `.srt`, `.mp3`, and
+  `.m4b` import set intentionally excludes generic `.txt` and `.mp4` aliases.
+- `9eff7dd`, `67fc9e8`, `3cd8294`: Android now persists term-dictionary
+  categories, supports Kanji dictionaries, and renders numeric/H/L pitch plus
+  1-based nasal/devoice popup indicators. The iOS Anki pitch SVG generator does
+  not encode nasal/devoice indicators, so Android's exported SVGs require no
+  additional platform action.
+- `119fb5b`, `bd85c9b`, `c943171`, `395218a`, `8464a2c`, `f1bc74b`,
+  `2c86ed6`, `47683d9`, `2702e31`: Android now has three independent Anki
+  formats, show-notes routing for both backends, guards for invalid formats,
+  precise cloze and pitch graph handlebars, and category-aware monolingual/
+  bilingual definition variants resolved from persisted dictionary order.
+- `d7fe3f2`: Android Sasayaki now exposes -4...4-second delay and 0.5...3x
+  playback-speed sliders with the existing 0.05 step size.
+- `4940ab7`, `6655ffd`, `3bff390`: Android now removes numeric HTML entities
+  before shared matchable character counting, leaves trailing ellipses and
+  periods outside the selected lookup sentence, and scopes recursive lookup to
+  the active `.expr-tag`.
+- `b928010`: Android now serializes original-cover derivative generation in
+  `BookCoverThumbnailStore` and bounds Coil bitmap decoding in the shared
+  process-wide image loader.
+- `fd124d4`, `bcbef64`, `2e1c958`, `51cb994`: Android now persists the
+  first-appearance Reader image inventory and TOC fragment offsets, uses one
+  true TOC range for Contents/chrome/statistics, and opens Gallery items in the
+  existing fullscreen viewer.
+- `f403c99`, `b4e6edd`, `54fab15`: Android now persists a minute-level
+  statistics reset time, uses the adjusted local date in Reader and the
+  Statistics dashboard, and pauses tracking across Reader sheets and fullscreen
+  images without losing the active tracking state.
+- `24e356f`: orphaned Xcode project fix from the previous force-updated tip; no
+  Android behavior.
+- `e63cb91`, `f09664d`, `ff31274`, `262df07`, `a90a83f`, `ede061f`,
+  `f5c62d8`, `6cfb7b8`, `b02da68`, `d175c93`, `9fdd19b`, `25e57c5`,
+  `b43c690`, and `b41ed09`: iOS release/version metadata only.
+- `98f0ef4`: merge-only history integration; its reachable behavior commits are
+  classified individually above.
+- `e833279`, `e7b08b8`, `1992872`, `c1e4e57`: intermediate hoshidicts bumps are
+  superseded by the final dictionary behavior audited above; only the missing
+  final bridge capabilities remain queued.
+- `77a7eaa`, `19bd095`: iOS cleanup and unwrap removal do not define additional
+  Android-visible behavior.
+- `188284b`: iOS local-audio launch/actor initialization fix has no direct
+  Android analogue; Android local audio is repository-backed and Media3-owned.
+- `0f8a3ac`, `6a1ad82`, `c842f0a`: iOS safe-area capture/fullscreen inset
+  mechanics are platform-specific. Android uses persisted top/bottom safe-area
+  settings, WindowInsets, and a full-screen Compose image overlay.
+- `b717c57`: iOS CSS Highlight object reuse is an implementation optimization;
+  no distinct Android behavior was found.
+- `5c33790`, `61a8c9d`: Android `TtuBookDataConverter.rewriteImages()` already
+  resolves and normalizes relative chapter image paths before writing TTU data.
+- `e1d4b3b`: `reader-media-semantics.js` already resolves promises for complete
+  failed images and `onerror`, so failed images do not block Reader setup.
+- `f54b55f`: Android `LocalAudioResolver` already ranks exact expression and
+  reading matches first, with released behavior and tests.
+- `489895d`: Android popup glossary rows already carry `data-dictionary`, and
+  frequency/pitch labels use dedicated spans.
+- `236ca72`: AnkiMobile callback notification timing is iOS-specific; Android
+  uses AnkiDroid or AnkiConnect backends.
+- `7617784`: Android shared Reader/VN tests and runtime already preserve
+  cross-node Sasayaki punctuation highlighting.
+- `be88af1`: Android restores previous-chapter Sasayaki cues to cue-relative
+  progress through `readerProgressForCue()` and the dedicated previous-cue fix.
+- `e69aee7`, `50169c0`: Android provides an always-visible, opt-in pinned Reader
+  playback control row in the bottom safe area; it has no collapsible state, so
+  the iOS floating control-bar expansion option needs no separate Android flag.
+- `ede999c`: Android implements configurable Sasayaki image holds through shared
+  reader media semantics and `ReaderSasayakiAutoPage`, including fullscreen and
+  continuous-mode fixes.
+- `e969056`, `83eb319`: Android cue display actions distinguish reveal requests
+  from passive paused position updates and explicitly reveal the target when a
+  playback/seek command resumes.
+- `47b0bba`: `DictionaryLookupQueryService` serializes rebuilds and atomically
+  swaps complete sessions under read/write locks, preventing stale concurrent
+  rebuilds from replacing the active query.
+- `89feebd`, `44f47c3`, `0da83dd`, `9f94c32`: iOS-native search field,
+  autocorrection, and touch-tolerance implementation changes have no direct
+  Compose/WebView parity action beyond Android's existing IME and configurable
+  popup swipe handling.

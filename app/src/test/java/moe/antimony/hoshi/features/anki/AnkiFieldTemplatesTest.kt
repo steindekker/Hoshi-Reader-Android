@@ -50,7 +50,6 @@ class AnkiFieldTemplatesTest {
                 "Frequency" to "{frequencies}",
                 "FreqSort" to "{frequency-harmonic-rank}",
                 "MiscInfo" to "{document-title}",
-                "IsWordAndSentenceCard" to "x",
             ),
             AnkiFieldTemplates.defaultMappings(noteType),
         )
@@ -81,7 +80,6 @@ class AnkiFieldTemplatesTest {
                 "SentenceAudio" to "{sasayaki-audio}",
                 "Picture" to "{image}",
                 "Frequency" to "{frequencies}",
-                "IsWordAndSentenceCard" to "x",
             ),
             AnkiFieldTemplates.defaultMappings(noteType),
         )
@@ -122,8 +120,7 @@ class AnkiFieldTemplatesTest {
             mapOf(
                 "word" to "{expression}",
                 "reading" to "{reading}",
-                "sentence" to "{sentence}",
-                "sentenceCard" to "x",
+                "sentence" to "<span class=\"group\">{cloze-prefix}<span class=\"highlight\">{cloze-body}</span>{cloze-suffix}</span>",
                 "selectionText" to "{popup-selection-text}",
                 "definition" to "{glossary-first}",
                 "wordAudio" to "{audio}",

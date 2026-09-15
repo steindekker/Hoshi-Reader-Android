@@ -24,6 +24,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.sync.StatisticsSyncMode
@@ -34,13 +36,32 @@ internal const val ReaderPopupScaleMin = 0.8
 internal const val ReaderPopupScaleMax = 2.0
 internal const val ReaderPopupScaleStep = 0.05
 internal const val ReaderPopupScaleSliderSteps = 23
+internal const val ReaderTopSafeAreaDefaultDp = 30
+internal const val ReaderTopSafeAreaMinDp = ReaderTopSafeAreaDefaultDp
+internal const val ReaderTopSafeAreaMaxDp = 72
+internal const val ReaderTopSafeAreaStepDp = 2
 internal const val ReaderBottomSafeAreaDefaultDp = 18
 internal const val ReaderBottomSafeAreaMinDp = ReaderBottomSafeAreaDefaultDp
 internal const val ReaderBottomSafeAreaMaxDp = 72
 internal const val ReaderBottomSafeAreaStepDp = 2
+internal const val ReaderPageSwipeThresholdDefaultPx = 72
+internal const val ReaderPageSwipeThresholdMinPx = 0
+internal const val ReaderPageSwipeThresholdMaxPx = 360
+internal const val ReaderPageSwipeThresholdStepPx = 18
 
 internal fun Double.coerceReaderPopupScale(): Double =
     coerceIn(ReaderPopupScaleMin, ReaderPopupScaleMax)
+
+internal fun Int.coerceReaderPageSwipeThresholdPx(): Int =
+    coerceIn(ReaderPageSwipeThresholdMinPx, ReaderPageSwipeThresholdMaxPx)
+
+internal fun Int.coerceReaderTopSafeAreaDp(): Int {
+    val clamped = coerceIn(ReaderTopSafeAreaMinDp, ReaderTopSafeAreaMaxDp)
+    val offset = clamped - ReaderTopSafeAreaMinDp
+    val lower = ReaderTopSafeAreaMinDp + (offset / ReaderTopSafeAreaStepDp) * ReaderTopSafeAreaStepDp
+    val upper = (lower + ReaderTopSafeAreaStepDp).coerceAtMost(ReaderTopSafeAreaMaxDp)
+    return if (clamped - lower < upper - clamped) lower else upper
+}
 
 internal fun Int.coerceReaderBottomSafeAreaDp(): Int {
     val clamped = coerceIn(ReaderBottomSafeAreaMinDp, ReaderBottomSafeAreaMaxDp)
@@ -61,6 +82,9 @@ data class ReaderSettings(
     val customInfoColor: Long = 0xFF999999,
     val verticalWriting: Boolean = true,
     val selectedFont: String = ReaderFontManager.defaultMinchoFont,
+    val selectedFontFamilyId: String? = null,
+    val selectedFontVariantId: String? = null,
+    val fontVariantSelections: Map<String, String> = emptyMap(),
     val fontSize: Int = 22,
     val hideFurigana: Boolean = false,
     val viewMode: ReaderViewMode = ReaderViewMode.Paginated,
@@ -71,15 +95,19 @@ data class ReaderSettings(
     val visualNovelClickAdvance: Boolean = false,
     val visualNovelMergeCrossScreenSasayakiCues: Boolean = false,
     val enableStatistics: Boolean = false,
+    val showStatisticsTab: Boolean = true,
     val statisticsAutostartMode: StatisticsAutostartMode = StatisticsAutostartMode.Off,
+    val statisticsResetMinutes: Int = 0,
     val statisticsSyncEnabled: Boolean = false,
     val statisticsSyncMode: StatisticsSyncMode = StatisticsSyncMode.Merge,
     val showStatisticsToggle: Boolean = false,
     val showReadingSpeed: Boolean = false,
     val showReadingTime: Boolean = false,
     val chapterSwipeDistance: Int = 20,
+    val pageSwipeThresholdPx: Int = ReaderPageSwipeThresholdDefaultPx,
     val horizontalPadding: Int = 5,
     val verticalPadding: Int = 0,
+    val topSafeAreaDp: Int = ReaderTopSafeAreaDefaultDp,
     val bottomSafeAreaDp: Int = ReaderBottomSafeAreaDefaultDp,
     val avoidPageBreak: Boolean = false,
     val justifyText: Boolean = false,
@@ -89,13 +117,15 @@ data class ReaderSettings(
     val characterSpacing: Double = 0.0,
     val paragraphSpacing: Double = 0.0,
     val showTitle: Boolean = true,
+    val showProgress: Boolean = true,
+    val showChapterProgress: Boolean = false,
     val showCharacters: Boolean = true,
     val showPercentage: Boolean = true,
     val alwaysShowProgress: Boolean = true,
     val showProgressTop: Boolean = true,
     val showReaderBackButton: Boolean = true,
-    val popupWidth: Int = 320,
-    val popupHeight: Int = 250,
+    val popupWidth: Int = 500,
+    val popupHeight: Int = 500,
     val popupScale: Double = 1.0,
     val popupActionBar: Boolean = false,
     val popupFullWidth: Boolean = false,
@@ -105,6 +135,7 @@ data class ReaderSettings(
     val popupReducedMotionScrollPercent: Int = 100,
     val popupReducedMotionSwipeThreshold: Int = 40,
     val volumeKeysTurnPages: Boolean = false,
+    val volumeKeysNavigatePopupTerms: Boolean = false,
     val volumeKeysSeekSasayaki: Boolean = false,
     val reverseVolumeKeyDirection: Boolean = false,
     val keepScreenOnWhileReading: Boolean = false,
@@ -215,6 +246,31 @@ data class ReaderSettings(
     }
 }
 
+internal fun ReaderSettings.withFontSelection(
+    family: ReaderFontFamily,
+    variant: ReaderFontVariant,
+): ReaderSettings {
+    val legacyName = if (family.source == ReaderFontSource.PUBLISHER) {
+        ReaderFontManager.publisherFont
+    } else {
+        family.displayName
+    }
+    return copy(
+        selectedFont = legacyName,
+        selectedFontFamilyId = family.id,
+        selectedFontVariantId = variant.id,
+        fontVariantSelections = fontVariantSelections + (family.id to variant.id),
+    )
+}
+
+internal fun ReaderSettings.withDefaultFont(): ReaderSettings = copy(
+    selectedFont = ReaderFontManager.defaultMinchoFont,
+    selectedFontFamilyId = ReaderFontManager.systemMinchoFamilyId,
+    selectedFontVariantId = "wght-400-normal",
+    fontVariantSelections = fontVariantSelections +
+        (ReaderFontManager.systemMinchoFamilyId to "wght-400-normal"),
+)
+
 enum class ReaderTheme(val label: String) {
     System("System"),
     Light("Light"),
@@ -310,6 +366,11 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
         customInfoColor = preferences.getLong("customInfoColor", 0xFF999999),
         verticalWriting = preferences.getBoolean("verticalWriting", true),
         selectedFont = preferences.getString("selectedFont", null) ?: ReaderFontManager.defaultMinchoFont,
+        selectedFontFamilyId = preferences.getString("selectedFontFamilyId", null),
+        selectedFontVariantId = preferences.getString("selectedFontVariantId", null),
+        fontVariantSelections = preferences.getString("fontVariantSelections", null)
+            ?.let { runCatching { Json.decodeFromString<Map<String, String>>(it) }.getOrNull() }
+            .orEmpty(),
         fontSize = preferences.getInt("fontSize", 22),
         hideFurigana = preferences.getBoolean("readerHideFurigana", false),
         viewMode = ReaderViewMode.fromStorage(
@@ -326,6 +387,7 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
             false,
         ),
         enableStatistics = preferences.getBoolean("enableStatistics", false),
+        showStatisticsTab = preferences.getBoolean("showStatisticsTab", true),
         statisticsAutostartMode = StatisticsAutostartMode.fromRawValue(
             preferences.getString("statisticsAutostartMode", null),
         ),
@@ -335,8 +397,14 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
         showReadingSpeed = preferences.getBoolean("readerShowReadingSpeed", false),
         showReadingTime = preferences.getBoolean("readerShowReadingTime", false),
         chapterSwipeDistance = preferences.getInt("chapterSwipeDistance", 20).coerceIn(10, 60),
+        pageSwipeThresholdPx = preferences.getInt(
+            "pageSwipeThresholdPx",
+            ReaderPageSwipeThresholdDefaultPx,
+        ).coerceReaderPageSwipeThresholdPx(),
         horizontalPadding = preferences.getInt("layoutHorizontalPadding", 5),
         verticalPadding = preferences.getInt("layoutVerticalPadding", 0),
+        topSafeAreaDp = preferences.getInt("readerTopSafeAreaDp", ReaderTopSafeAreaDefaultDp)
+            .coerceReaderTopSafeAreaDp(),
         bottomSafeAreaDp = preferences.getInt("readerBottomSafeAreaDp", ReaderBottomSafeAreaDefaultDp)
             .coerceReaderBottomSafeAreaDp(),
         avoidPageBreak = preferences.getBoolean("avoidPageBreak", false),
@@ -347,13 +415,15 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
         characterSpacing = preferences.getFloat("characterSpacing", 0f).toDouble(),
         paragraphSpacing = preferences.getFloat("paragraphSpacing", 0f).toDouble(),
         showTitle = preferences.getBoolean("readerShowTitle", true),
+        showProgress = preferences.getBoolean("readerShowProgress", true),
+        showChapterProgress = preferences.getBoolean("readerShowChapterProgress", false),
         showCharacters = preferences.getBoolean("readerShowCharacters", true),
         showPercentage = preferences.getBoolean("readerShowPercentage", true),
         alwaysShowProgress = preferences.getBoolean("readerAlwaysShowProgress", true),
         showProgressTop = preferences.getBoolean("readerShowProgressTop", true),
         showReaderBackButton = preferences.getBoolean("readerShowBackButton", true),
-        popupWidth = preferences.getInt("popupWidth", 320),
-        popupHeight = preferences.getInt("popupHeight", 250),
+        popupWidth = preferences.getInt("popupWidth", 500),
+        popupHeight = preferences.getInt("popupHeight", 500),
         popupScale = preferences.getFloat("popupScale", 1.0f).toDouble().coerceReaderPopupScale(),
         popupActionBar = preferences.getBoolean("popupActionBar", false),
         popupFullWidth = preferences.getBoolean("popupFullWidth", false),
@@ -363,6 +433,7 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
         popupReducedMotionScrollPercent = preferences.getInt("popupReducedMotionScrollPercent", 100).coerceIn(40, 100),
         popupReducedMotionSwipeThreshold = preferences.getInt("popupReducedMotionSwipeThreshold", 40).coerceIn(0, 100),
         volumeKeysTurnPages = preferences.getBoolean("volumeKeysTurnPages", false),
+        volumeKeysNavigatePopupTerms = preferences.getBoolean("volumeKeysNavigatePopupTerms", false),
         volumeKeysSeekSasayaki = preferences.getBoolean("volumeKeysSeekSasayaki", false),
         reverseVolumeKeyDirection = preferences.getBoolean("reverseVolumeKeyDirection", false),
         keepScreenOnWhileReading = preferences.getBoolean("keepScreenOnWhileReading", false),
@@ -382,6 +453,9 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
             .putLong("customInfoColor", settings.customInfoColor)
             .putBoolean("verticalWriting", settings.verticalWriting)
             .putString("selectedFont", settings.selectedFont)
+            .putString("selectedFontFamilyId", settings.selectedFontFamilyId)
+            .putString("selectedFontVariantId", settings.selectedFontVariantId)
+            .putString("fontVariantSelections", Json.encodeToString(settings.fontVariantSelections))
             .putInt("fontSize", settings.fontSize)
             .putBoolean("readerHideFurigana", settings.hideFurigana)
             .putString("readerViewMode", settings.viewMode.rawValue)
@@ -393,6 +467,7 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
             .putBoolean("visualNovelClickAdvance", settings.visualNovelClickAdvance)
             .putBoolean("visualNovelMergeCrossScreenSasayakiCues", settings.visualNovelMergeCrossScreenSasayakiCues)
             .putBoolean("enableStatistics", settings.enableStatistics)
+            .putBoolean("showStatisticsTab", settings.showStatisticsTab)
             .putString("statisticsAutostartMode", settings.statisticsAutostartMode.rawValue)
             .putBoolean("statisticsEnableSync", settings.statisticsSyncEnabled)
             .putString("statisticsSyncMode", settings.statisticsSyncMode.rawValue)
@@ -400,8 +475,10 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
             .putBoolean("readerShowReadingSpeed", settings.showReadingSpeed)
             .putBoolean("readerShowReadingTime", settings.showReadingTime)
             .putInt("chapterSwipeDistance", settings.chapterSwipeDistance)
+            .putInt("pageSwipeThresholdPx", settings.pageSwipeThresholdPx.coerceReaderPageSwipeThresholdPx())
             .putInt("layoutHorizontalPadding", settings.horizontalPadding)
             .putInt("layoutVerticalPadding", settings.verticalPadding)
+            .putInt("readerTopSafeAreaDp", settings.topSafeAreaDp.coerceReaderTopSafeAreaDp())
             .putInt("readerBottomSafeAreaDp", settings.bottomSafeAreaDp.coerceReaderBottomSafeAreaDp())
             .putBoolean("avoidPageBreak", settings.avoidPageBreak)
             .putBoolean("justifyText", settings.justifyText)
@@ -411,6 +488,8 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
             .putFloat("characterSpacing", settings.characterSpacing.toFloat())
             .putFloat("paragraphSpacing", settings.paragraphSpacing.toFloat())
             .putBoolean("readerShowTitle", settings.showTitle)
+            .putBoolean("readerShowProgress", settings.showProgress)
+            .putBoolean("readerShowChapterProgress", settings.showChapterProgress)
             .putBoolean("readerShowCharacters", settings.showCharacters)
             .putBoolean("readerShowPercentage", settings.showPercentage)
             .putBoolean("readerAlwaysShowProgress", settings.alwaysShowProgress)
@@ -427,6 +506,7 @@ class ReaderSettingsStore(context: Context) : ReaderSettingsLegacySource {
             .putInt("popupReducedMotionScrollPercent", settings.popupReducedMotionScrollPercent)
             .putInt("popupReducedMotionSwipeThreshold", settings.popupReducedMotionSwipeThreshold)
             .putBoolean("volumeKeysTurnPages", settings.volumeKeysTurnPages)
+            .putBoolean("volumeKeysNavigatePopupTerms", settings.volumeKeysNavigatePopupTerms)
             .putBoolean("volumeKeysSeekSasayaki", settings.volumeKeysSeekSasayaki)
             .putBoolean("reverseVolumeKeyDirection", settings.reverseVolumeKeyDirection)
             .putBoolean("keepScreenOnWhileReading", settings.keepScreenOnWhileReading)
@@ -522,6 +602,11 @@ class ReaderSettingsRepository(
             customInfoColor = this[KEY_CUSTOM_INFO_COLOR] ?: 0xFF999999,
             verticalWriting = this[KEY_VERTICAL_WRITING] ?: true,
             selectedFont = this[KEY_SELECTED_FONT] ?: ReaderFontManager.defaultMinchoFont,
+            selectedFontFamilyId = this[KEY_SELECTED_FONT_FAMILY_ID],
+            selectedFontVariantId = this[KEY_SELECTED_FONT_VARIANT_ID],
+            fontVariantSelections = this[KEY_FONT_VARIANT_SELECTIONS]
+                ?.let { runCatching { json.decodeFromString<Map<String, String>>(it) }.getOrNull() }
+                .orEmpty(),
             fontSize = this[KEY_FONT_SIZE] ?: 22,
             hideFurigana = this[KEY_HIDE_FURIGANA] ?: false,
             viewMode = ReaderViewMode.fromStorage(
@@ -535,15 +620,22 @@ class ReaderSettingsRepository(
             visualNovelClickAdvance = this[KEY_VISUAL_NOVEL_CLICK_ADVANCE] ?: false,
             visualNovelMergeCrossScreenSasayakiCues = this[KEY_VISUAL_NOVEL_MERGE_CROSS_SCREEN_SASAYAKI_CUES] ?: false,
             enableStatistics = this[KEY_ENABLE_STATISTICS] ?: false,
+            showStatisticsTab = this[KEY_SHOW_STATISTICS_TAB] ?: true,
             statisticsAutostartMode = StatisticsAutostartMode.fromRawValue(this[KEY_STATISTICS_AUTOSTART_MODE]),
+            statisticsResetMinutes = this[KEY_STATISTICS_RESET_MINUTES] ?: 0,
             statisticsSyncEnabled = this[KEY_STATISTICS_SYNC_ENABLED] ?: false,
             statisticsSyncMode = StatisticsSyncMode.fromRawValue(this[KEY_STATISTICS_SYNC_MODE]),
             showStatisticsToggle = this[KEY_SHOW_STATISTICS_TOGGLE] ?: false,
             showReadingSpeed = this[KEY_SHOW_READING_SPEED] ?: false,
             showReadingTime = this[KEY_SHOW_READING_TIME] ?: false,
             chapterSwipeDistance = (this[KEY_CHAPTER_SWIPE_DISTANCE] ?: 20).coerceIn(10, 60),
+            pageSwipeThresholdPx = (
+                this[KEY_PAGE_SWIPE_THRESHOLD_PX] ?: ReaderPageSwipeThresholdDefaultPx
+            ).coerceReaderPageSwipeThresholdPx(),
             horizontalPadding = this[KEY_HORIZONTAL_PADDING] ?: 5,
             verticalPadding = this[KEY_VERTICAL_PADDING] ?: 0,
+            topSafeAreaDp = (this[KEY_TOP_SAFE_AREA_DP] ?: ReaderTopSafeAreaDefaultDp)
+                .coerceReaderTopSafeAreaDp(),
             bottomSafeAreaDp = (this[KEY_BOTTOM_SAFE_AREA_DP] ?: ReaderBottomSafeAreaDefaultDp)
                 .coerceReaderBottomSafeAreaDp(),
             avoidPageBreak = this[KEY_AVOID_PAGE_BREAK] ?: false,
@@ -554,13 +646,15 @@ class ReaderSettingsRepository(
             characterSpacing = (this[KEY_CHARACTER_SPACING] ?: 0f).toDouble(),
             paragraphSpacing = (this[KEY_PARAGRAPH_SPACING] ?: 0f).toDouble(),
             showTitle = this[KEY_SHOW_TITLE] ?: true,
+            showProgress = this[KEY_SHOW_PROGRESS] ?: true,
+            showChapterProgress = this[KEY_SHOW_CHAPTER_PROGRESS] ?: false,
             showCharacters = this[KEY_SHOW_CHARACTERS] ?: true,
             showPercentage = this[KEY_SHOW_PERCENTAGE] ?: true,
             alwaysShowProgress = this[KEY_ALWAYS_SHOW_PROGRESS] ?: true,
             showProgressTop = this[KEY_SHOW_PROGRESS_TOP] ?: true,
             showReaderBackButton = this[KEY_SHOW_READER_BACK_BUTTON] ?: true,
-            popupWidth = this[KEY_POPUP_WIDTH] ?: 320,
-            popupHeight = this[KEY_POPUP_HEIGHT] ?: 250,
+            popupWidth = this[KEY_POPUP_WIDTH] ?: 500,
+            popupHeight = this[KEY_POPUP_HEIGHT] ?: 500,
             popupScale = (this[KEY_POPUP_SCALE] ?: 1.0f).toDouble().coerceReaderPopupScale(),
             popupActionBar = this[KEY_POPUP_ACTION_BAR] ?: false,
             popupFullWidth = this[KEY_POPUP_FULL_WIDTH] ?: false,
@@ -570,6 +664,7 @@ class ReaderSettingsRepository(
             popupReducedMotionScrollPercent = (this[KEY_POPUP_REDUCED_MOTION_SCROLL_PERCENT] ?: 100).coerceIn(40, 100),
             popupReducedMotionSwipeThreshold = (this[KEY_POPUP_REDUCED_MOTION_SWIPE_THRESHOLD] ?: 40).coerceIn(0, 100),
             volumeKeysTurnPages = this[KEY_VOLUME_KEYS_TURN_PAGES] ?: false,
+            volumeKeysNavigatePopupTerms = this[KEY_VOLUME_KEYS_NAVIGATE_POPUP_TERMS] ?: false,
             volumeKeysSeekSasayaki = this[KEY_VOLUME_KEYS_SEEK_SASAYAKI] ?: false,
             reverseVolumeKeyDirection = this[KEY_REVERSE_VOLUME_KEY_DIRECTION] ?: false,
             keepScreenOnWhileReading = this[KEY_KEEP_SCREEN_ON_WHILE_READING] ?: false,
@@ -588,6 +683,11 @@ class ReaderSettingsRepository(
         this[KEY_CUSTOM_INFO_COLOR] = settings.customInfoColor
         this[KEY_VERTICAL_WRITING] = settings.verticalWriting
         this[KEY_SELECTED_FONT] = settings.selectedFont
+        settings.selectedFontFamilyId?.let { this[KEY_SELECTED_FONT_FAMILY_ID] = it }
+            ?: remove(KEY_SELECTED_FONT_FAMILY_ID)
+        settings.selectedFontVariantId?.let { this[KEY_SELECTED_FONT_VARIANT_ID] = it }
+            ?: remove(KEY_SELECTED_FONT_VARIANT_ID)
+        this[KEY_FONT_VARIANT_SELECTIONS] = json.encodeToString(settings.fontVariantSelections)
         this[KEY_FONT_SIZE] = settings.fontSize
         this[KEY_HIDE_FURIGANA] = settings.hideFurigana
         this[KEY_READER_VIEW_MODE] = settings.viewMode.rawValue
@@ -599,15 +699,19 @@ class ReaderSettingsRepository(
         this[KEY_VISUAL_NOVEL_CLICK_ADVANCE] = settings.visualNovelClickAdvance
         this[KEY_VISUAL_NOVEL_MERGE_CROSS_SCREEN_SASAYAKI_CUES] = settings.visualNovelMergeCrossScreenSasayakiCues
         this[KEY_ENABLE_STATISTICS] = settings.enableStatistics
+        this[KEY_SHOW_STATISTICS_TAB] = settings.showStatisticsTab
         this[KEY_STATISTICS_AUTOSTART_MODE] = settings.statisticsAutostartMode.rawValue
+        this[KEY_STATISTICS_RESET_MINUTES] = settings.statisticsResetMinutes
         this[KEY_STATISTICS_SYNC_ENABLED] = settings.statisticsSyncEnabled
         this[KEY_STATISTICS_SYNC_MODE] = settings.statisticsSyncMode.rawValue
         this[KEY_SHOW_STATISTICS_TOGGLE] = settings.showStatisticsToggle
         this[KEY_SHOW_READING_SPEED] = settings.showReadingSpeed
         this[KEY_SHOW_READING_TIME] = settings.showReadingTime
         this[KEY_CHAPTER_SWIPE_DISTANCE] = settings.chapterSwipeDistance
+        this[KEY_PAGE_SWIPE_THRESHOLD_PX] = settings.pageSwipeThresholdPx.coerceReaderPageSwipeThresholdPx()
         this[KEY_HORIZONTAL_PADDING] = settings.horizontalPadding
         this[KEY_VERTICAL_PADDING] = settings.verticalPadding
+        this[KEY_TOP_SAFE_AREA_DP] = settings.topSafeAreaDp.coerceReaderTopSafeAreaDp()
         this[KEY_BOTTOM_SAFE_AREA_DP] = settings.bottomSafeAreaDp.coerceReaderBottomSafeAreaDp()
         this[KEY_AVOID_PAGE_BREAK] = settings.avoidPageBreak
         this[KEY_JUSTIFY_TEXT] = settings.justifyText
@@ -617,6 +721,8 @@ class ReaderSettingsRepository(
         this[KEY_CHARACTER_SPACING] = settings.characterSpacing.toFloat()
         this[KEY_PARAGRAPH_SPACING] = settings.paragraphSpacing.toFloat()
         this[KEY_SHOW_TITLE] = settings.showTitle
+        this[KEY_SHOW_PROGRESS] = settings.showProgress
+        this[KEY_SHOW_CHAPTER_PROGRESS] = settings.showChapterProgress
         this[KEY_SHOW_CHARACTERS] = settings.showCharacters
         this[KEY_SHOW_PERCENTAGE] = settings.showPercentage
         this[KEY_ALWAYS_SHOW_PROGRESS] = settings.alwaysShowProgress
@@ -633,6 +739,7 @@ class ReaderSettingsRepository(
         this[KEY_POPUP_REDUCED_MOTION_SCROLL_PERCENT] = settings.popupReducedMotionScrollPercent
         this[KEY_POPUP_REDUCED_MOTION_SWIPE_THRESHOLD] = settings.popupReducedMotionSwipeThreshold
         this[KEY_VOLUME_KEYS_TURN_PAGES] = settings.volumeKeysTurnPages
+        this[KEY_VOLUME_KEYS_NAVIGATE_POPUP_TERMS] = settings.volumeKeysNavigatePopupTerms
         this[KEY_VOLUME_KEYS_SEEK_SASAYAKI] = settings.volumeKeysSeekSasayaki
         this[KEY_REVERSE_VOLUME_KEY_DIRECTION] = settings.reverseVolumeKeyDirection
         this[KEY_KEEP_SCREEN_ON_WHILE_READING] = settings.keepScreenOnWhileReading
@@ -642,10 +749,13 @@ class ReaderSettingsRepository(
 
     private fun MutablePreferences.writeGlobalReaderSettings(settings: ReaderSettings) {
         this[KEY_ENABLE_STATISTICS] = settings.enableStatistics
+        this[KEY_SHOW_STATISTICS_TAB] = settings.showStatisticsTab
         this[KEY_STATISTICS_AUTOSTART_MODE] = settings.statisticsAutostartMode.rawValue
+        this[KEY_STATISTICS_RESET_MINUTES] = settings.statisticsResetMinutes
         this[KEY_STATISTICS_SYNC_ENABLED] = settings.statisticsSyncEnabled
         this[KEY_STATISTICS_SYNC_MODE] = settings.statisticsSyncMode.rawValue
         this[KEY_VOLUME_KEYS_TURN_PAGES] = settings.volumeKeysTurnPages
+        this[KEY_VOLUME_KEYS_NAVIGATE_POPUP_TERMS] = settings.volumeKeysNavigatePopupTerms
         this[KEY_VOLUME_KEYS_SEEK_SASAYAKI] = settings.volumeKeysSeekSasayaki
         this[KEY_REVERSE_VOLUME_KEY_DIRECTION] = settings.reverseVolumeKeyDirection
         this[KEY_KEEP_SCREEN_ON_WHILE_READING] = settings.keepScreenOnWhileReading
@@ -697,6 +807,9 @@ class ReaderSettingsRepository(
         private val KEY_CUSTOM_INFO_COLOR = longPreferencesKey("customInfoColor")
         private val KEY_VERTICAL_WRITING = booleanPreferencesKey("verticalWriting")
         private val KEY_SELECTED_FONT = stringPreferencesKey("selectedFont")
+        private val KEY_SELECTED_FONT_FAMILY_ID = stringPreferencesKey("selectedFontFamilyId")
+        private val KEY_SELECTED_FONT_VARIANT_ID = stringPreferencesKey("selectedFontVariantId")
+        private val KEY_FONT_VARIANT_SELECTIONS = stringPreferencesKey("fontVariantSelections")
         private val KEY_FONT_SIZE = intPreferencesKey("fontSize")
         private val KEY_HIDE_FURIGANA = booleanPreferencesKey("readerHideFurigana")
         private val KEY_READER_VIEW_MODE = stringPreferencesKey("readerViewMode")
@@ -710,15 +823,19 @@ class ReaderSettingsRepository(
         private val KEY_VISUAL_NOVEL_MERGE_CROSS_SCREEN_SASAYAKI_CUES =
             booleanPreferencesKey("visualNovelMergeCrossScreenSasayakiCues")
         private val KEY_ENABLE_STATISTICS = booleanPreferencesKey("enableStatistics")
+        private val KEY_SHOW_STATISTICS_TAB = booleanPreferencesKey("showStatisticsTab")
         private val KEY_STATISTICS_AUTOSTART_MODE = stringPreferencesKey("statisticsAutostartMode")
+        private val KEY_STATISTICS_RESET_MINUTES = intPreferencesKey("statisticsResetMinutes")
         private val KEY_STATISTICS_SYNC_ENABLED = booleanPreferencesKey("statisticsEnableSync")
         private val KEY_STATISTICS_SYNC_MODE = stringPreferencesKey("statisticsSyncMode")
         private val KEY_SHOW_STATISTICS_TOGGLE = booleanPreferencesKey("readerShowStatisticsToggle")
         private val KEY_SHOW_READING_SPEED = booleanPreferencesKey("readerShowReadingSpeed")
         private val KEY_SHOW_READING_TIME = booleanPreferencesKey("readerShowReadingTime")
         private val KEY_CHAPTER_SWIPE_DISTANCE = intPreferencesKey("chapterSwipeDistance")
+        private val KEY_PAGE_SWIPE_THRESHOLD_PX = intPreferencesKey("pageSwipeThresholdPx")
         private val KEY_HORIZONTAL_PADDING = intPreferencesKey("layoutHorizontalPadding")
         private val KEY_VERTICAL_PADDING = intPreferencesKey("layoutVerticalPadding")
+        private val KEY_TOP_SAFE_AREA_DP = intPreferencesKey("readerTopSafeAreaDp")
         private val KEY_BOTTOM_SAFE_AREA_DP = intPreferencesKey("readerBottomSafeAreaDp")
         private val KEY_AVOID_PAGE_BREAK = booleanPreferencesKey("avoidPageBreak")
         private val KEY_JUSTIFY_TEXT = booleanPreferencesKey("justifyText")
@@ -728,6 +845,8 @@ class ReaderSettingsRepository(
         private val KEY_CHARACTER_SPACING = floatPreferencesKey("characterSpacing")
         private val KEY_PARAGRAPH_SPACING = floatPreferencesKey("paragraphSpacing")
         private val KEY_SHOW_TITLE = booleanPreferencesKey("readerShowTitle")
+        private val KEY_SHOW_PROGRESS = booleanPreferencesKey("readerShowProgress")
+        private val KEY_SHOW_CHAPTER_PROGRESS = booleanPreferencesKey("readerShowChapterProgress")
         private val KEY_SHOW_CHARACTERS = booleanPreferencesKey("readerShowCharacters")
         private val KEY_SHOW_PERCENTAGE = booleanPreferencesKey("readerShowPercentage")
         private val KEY_ALWAYS_SHOW_PROGRESS = booleanPreferencesKey("readerAlwaysShowProgress")
@@ -744,6 +863,7 @@ class ReaderSettingsRepository(
         private val KEY_POPUP_REDUCED_MOTION_SCROLL_PERCENT = intPreferencesKey("popupReducedMotionScrollPercent")
         private val KEY_POPUP_REDUCED_MOTION_SWIPE_THRESHOLD = intPreferencesKey("popupReducedMotionSwipeThreshold")
         private val KEY_VOLUME_KEYS_TURN_PAGES = booleanPreferencesKey("volumeKeysTurnPages")
+        private val KEY_VOLUME_KEYS_NAVIGATE_POPUP_TERMS = booleanPreferencesKey("volumeKeysNavigatePopupTerms")
         private val KEY_VOLUME_KEYS_SEEK_SASAYAKI = booleanPreferencesKey("volumeKeysSeekSasayaki")
         private val KEY_REVERSE_VOLUME_KEY_DIRECTION = booleanPreferencesKey("reverseVolumeKeyDirection")
         private val KEY_KEEP_SCREEN_ON_WHILE_READING = booleanPreferencesKey("keepScreenOnWhileReading")
@@ -770,6 +890,9 @@ private data class ProfileReaderAppearanceSettings(
     val customInfoColor: Long = 0xFF999999,
     val verticalWriting: Boolean = true,
     val selectedFont: String = ReaderFontManager.defaultMinchoFont,
+    val selectedFontFamilyId: String? = null,
+    val selectedFontVariantId: String? = null,
+    val fontVariantSelections: Map<String, String> = emptyMap(),
     val fontSize: Int = 22,
     val hideFurigana: Boolean = false,
     val viewMode: ReaderViewMode? = null,
@@ -784,8 +907,10 @@ private data class ProfileReaderAppearanceSettings(
     val showReadingSpeed: Boolean = false,
     val showReadingTime: Boolean = false,
     val chapterSwipeDistance: Int = 20,
+    val pageSwipeThresholdPx: Int = ReaderPageSwipeThresholdDefaultPx,
     val horizontalPadding: Int = 5,
     val verticalPadding: Int = 0,
+    val topSafeAreaDp: Int = ReaderTopSafeAreaDefaultDp,
     val bottomSafeAreaDp: Int = ReaderBottomSafeAreaDefaultDp,
     val avoidPageBreak: Boolean = false,
     val justifyText: Boolean = false,
@@ -795,13 +920,15 @@ private data class ProfileReaderAppearanceSettings(
     val characterSpacing: Double = 0.0,
     val paragraphSpacing: Double = 0.0,
     val showTitle: Boolean = true,
+    val showProgress: Boolean = true,
+    val showChapterProgress: Boolean = false,
     val showCharacters: Boolean = true,
     val showPercentage: Boolean = true,
     val alwaysShowProgress: Boolean = true,
     val showProgressTop: Boolean = true,
     val showReaderBackButton: Boolean = true,
-    val popupWidth: Int = 320,
-    val popupHeight: Int = 250,
+    val popupWidth: Int = 500,
+    val popupHeight: Int = 500,
     val popupScale: Double = 1.0,
     val popupActionBar: Boolean = false,
     val popupFullWidth: Boolean = false,
@@ -824,6 +951,9 @@ private fun ReaderSettings.toProfileAppearanceSettings(): ProfileReaderAppearanc
         customInfoColor = customInfoColor,
         verticalWriting = verticalWriting,
         selectedFont = selectedFont,
+        selectedFontFamilyId = selectedFontFamilyId,
+        selectedFontVariantId = selectedFontVariantId,
+        fontVariantSelections = fontVariantSelections,
         fontSize = fontSize,
         hideFurigana = hideFurigana,
         viewMode = viewMode,
@@ -838,8 +968,10 @@ private fun ReaderSettings.toProfileAppearanceSettings(): ProfileReaderAppearanc
         showReadingSpeed = showReadingSpeed,
         showReadingTime = showReadingTime,
         chapterSwipeDistance = chapterSwipeDistance,
+        pageSwipeThresholdPx = pageSwipeThresholdPx.coerceReaderPageSwipeThresholdPx(),
         horizontalPadding = horizontalPadding,
         verticalPadding = verticalPadding,
+        topSafeAreaDp = topSafeAreaDp.coerceReaderTopSafeAreaDp(),
         bottomSafeAreaDp = bottomSafeAreaDp.coerceReaderBottomSafeAreaDp(),
         avoidPageBreak = avoidPageBreak,
         justifyText = justifyText,
@@ -849,6 +981,8 @@ private fun ReaderSettings.toProfileAppearanceSettings(): ProfileReaderAppearanc
         characterSpacing = characterSpacing,
         paragraphSpacing = paragraphSpacing,
         showTitle = showTitle,
+        showProgress = showProgress,
+        showChapterProgress = showChapterProgress,
         showCharacters = showCharacters,
         showPercentage = showPercentage,
         alwaysShowProgress = alwaysShowProgress,
@@ -878,6 +1012,9 @@ private fun ReaderSettings.withProfileAppearance(appearance: ProfileReaderAppear
         customInfoColor = appearance.customInfoColor,
         verticalWriting = appearance.verticalWriting,
         selectedFont = appearance.selectedFont,
+        selectedFontFamilyId = appearance.selectedFontFamilyId,
+        selectedFontVariantId = appearance.selectedFontVariantId,
+        fontVariantSelections = appearance.fontVariantSelections,
         fontSize = appearance.fontSize,
         hideFurigana = appearance.hideFurigana,
         viewMode = appearance.viewMode ?: if (appearance.continuousMode) {
@@ -895,8 +1032,10 @@ private fun ReaderSettings.withProfileAppearance(appearance: ProfileReaderAppear
         showReadingSpeed = appearance.showReadingSpeed,
         showReadingTime = appearance.showReadingTime,
         chapterSwipeDistance = appearance.chapterSwipeDistance.coerceIn(10, 60),
+        pageSwipeThresholdPx = appearance.pageSwipeThresholdPx.coerceReaderPageSwipeThresholdPx(),
         horizontalPadding = appearance.horizontalPadding,
         verticalPadding = appearance.verticalPadding,
+        topSafeAreaDp = appearance.topSafeAreaDp.coerceReaderTopSafeAreaDp(),
         bottomSafeAreaDp = appearance.bottomSafeAreaDp.coerceReaderBottomSafeAreaDp(),
         avoidPageBreak = appearance.avoidPageBreak,
         justifyText = appearance.justifyText,
@@ -906,6 +1045,8 @@ private fun ReaderSettings.withProfileAppearance(appearance: ProfileReaderAppear
         characterSpacing = appearance.characterSpacing,
         paragraphSpacing = appearance.paragraphSpacing,
         showTitle = appearance.showTitle,
+        showProgress = appearance.showProgress,
+        showChapterProgress = appearance.showChapterProgress,
         showCharacters = appearance.showCharacters,
         showPercentage = appearance.showPercentage,
         alwaysShowProgress = appearance.alwaysShowProgress,

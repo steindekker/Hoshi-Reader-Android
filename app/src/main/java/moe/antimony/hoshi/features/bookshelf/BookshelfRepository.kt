@@ -42,6 +42,7 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import moe.antimony.hoshi.features.sync.resolveTtuCharacterPosition
 import java.io.File
+import kotlin.coroutines.cancellation.CancellationException
 import java.text.Collator
 import java.util.Locale
 import java.util.UUID
@@ -52,6 +53,7 @@ internal interface BookshelfRepository {
         sortOption: BookSortOption,
         onLegacyBookMigrationProgress: (LegacyBookMigrationProgress) -> Unit = {},
     ): BookshelfLoadResult
+    suspend fun loadBookProgress(entries: List<BookEntry>): Map<String, Double>
     suspend fun loadRemoteBooks(localEntries: List<BookEntry>): RemoteBookshelfLoadResult
     suspend fun openBook(entry: BookEntry): String
     suspend fun importBook(uri: Uri): String
@@ -67,6 +69,7 @@ internal interface BookshelfRepository {
     suspend fun deleteBooks(entries: Collection<BookEntry>)
     suspend fun moveBooks(bookIds: Set<String>, shelfName: String?)
     suspend fun createShelf(name: String)
+    suspend fun createShelfAndMoveBooks(name: String, bookIds: Set<String>): List<BookShelf>?
     suspend fun deleteShelf(name: String)
     suspend fun renameShelf(oldName: String, newName: String)
     suspend fun moveShelf(fromIndex: Int, toIndex: Int)
@@ -75,6 +78,7 @@ internal interface BookshelfRepository {
     suspend fun setBookProfile(entry: BookEntry, profileId: String?)
     suspend fun changeSort(sortOption: BookSortOption)
     suspend fun changeShowReading(showReading: Boolean)
+    suspend fun changeCoverMode(coverMode: BookshelfCoverMode)
     suspend fun rebuildLookupQuery()
     suspend fun syncBook(
         entry: BookEntry,
@@ -97,6 +101,7 @@ internal class AndroidBookshelfRepository @Inject constructor(
     private val driveAuthorizer: DriveAuthorizer,
     private val ttuBookDataConverter: TtuBookDataConverter,
     private val bookParser: EpubBookParser,
+    private val bookCoverThumbnailStore: BookCoverThumbnailStore,
     @param:CacheDir private val cacheDir: File,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : BookshelfRepository {
@@ -113,6 +118,10 @@ internal class AndroidBookshelfRepository @Inject constructor(
             shelves = shelves,
             settings = settingsRepository.settings.first(),
         )
+    }
+
+    override suspend fun loadBookProgress(entries: List<BookEntry>): Map<String, Double> = withContext(ioDispatcher) {
+        loadBookProgressById(entries, bookRepository)
     }
 
     override suspend fun loadRemoteBooks(localEntries: List<BookEntry>): RemoteBookshelfLoadResult = withContext(ioDispatcher) {
@@ -147,6 +156,7 @@ internal class AndroidBookshelfRepository @Inject constructor(
         val parsedBook = bookParser.parse(root)
         saveMetadata(root, parsedBook, bookRepository.loadMetadata(root))
         saveBookInfo(root, parsedBook)
+        prewarmBookCover(root)
         readerBookId(root)
     }
 
@@ -173,6 +183,7 @@ internal class AndroidBookshelfRepository @Inject constructor(
             }
             val imported = ttuBookDataConverter.importBookData(tempRoot)
             importRemoteSidecars(imported, entry, syncStats, syncAudioBook)
+            prewarmBookCover(imported.root)
             readerBookId(imported.root)
         } finally {
             tempRoot.delete()
@@ -211,6 +222,19 @@ internal class AndroidBookshelfRepository @Inject constructor(
         if (shelves.none { it.name == trimmed }) {
             bookRepository.saveShelves(shelves + BookShelf(trimmed, emptyList()))
         }
+    }
+
+    override suspend fun createShelfAndMoveBooks(
+        name: String,
+        bookIds: Set<String>,
+    ): List<BookShelf>? = withContext(ioDispatcher) {
+        val updatedShelves = createShelfAndMoveBooksList(
+            shelves = bookRepository.loadShelves(),
+            name = name,
+            bookIds = bookIds,
+        ) ?: return@withContext null
+        bookRepository.saveShelves(updatedShelves)
+        updatedShelves
     }
 
     override suspend fun deleteShelf(name: String) = withContext(ioDispatcher) {
@@ -270,6 +294,10 @@ internal class AndroidBookshelfRepository @Inject constructor(
         settingsRepository.update { it.copy(showReading = showReading) }
     }
 
+    override suspend fun changeCoverMode(coverMode: BookshelfCoverMode) {
+        settingsRepository.update { it.copy(coverMode = coverMode) }
+    }
+
     override suspend fun rebuildLookupQuery() {
         dictionaryRepository.rebuildLookupQuery()
     }
@@ -303,12 +331,25 @@ internal class AndroidBookshelfRepository @Inject constructor(
             epub = bookRepository.epubFile(root, previous)?.name ?: previous?.epub,
             profileId = previous?.profileId,
             bookLanguage = previous?.bookLanguage ?: parsedBook.language,
+            author = parsedBook.author ?: previous?.author,
         )
         bookRepository.saveMetadata(root, metadata)
     }
 
     private suspend fun saveBookInfo(root: File, parsedBook: EpubBook) {
         bookRepository.saveBookInfo(root, parsedBook.bookInfo)
+    }
+
+    private suspend fun prewarmBookCover(root: File) {
+        try {
+            val metadata = bookRepository.loadMetadata(root) ?: return
+            val cover = bookRepository.coverFile(BookEntry(root, metadata)) ?: return
+            bookCoverThumbnailStore.thumbnail(cover.toBookCoverSource(), requestedMaxDimensionPx = 768)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Cover prewarming is opportunistic and must not make a successful import fail.
+        }
     }
 
     private suspend fun loadRemoteBookEntries(localEntries: List<BookEntry>): List<RemoteBookEntry> {
@@ -395,6 +436,21 @@ internal fun renameShelfList(
             shelf
         }
     }
+}
+
+internal fun createShelfAndMoveBooksList(
+    shelves: List<BookShelf>,
+    name: String,
+    bookIds: Set<String>,
+): List<BookShelf>? {
+    val trimmedName = name.trim()
+    if (trimmedName.isEmpty() || bookIds.isEmpty() || shelves.any { it.name == trimmedName }) {
+        return null
+    }
+    val updatedShelves = shelves.map { shelf ->
+        shelf.copy(bookIds = shelf.bookIds.filterNot { it in bookIds })
+    }
+    return updatedShelves + BookShelf(name = trimmedName, bookIds = bookIds.toList())
 }
 
 private val remoteJson = Json {

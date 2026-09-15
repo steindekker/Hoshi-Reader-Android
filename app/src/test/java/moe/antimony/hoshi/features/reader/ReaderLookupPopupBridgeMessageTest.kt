@@ -77,10 +77,10 @@ class ReaderLookupPopupBridgeMessageTest {
             ReaderLookupPopupBridgeMessage.DuplicateCheck(
                 popupId = "child",
                 messageId = "42",
-                expression = "猫",
+                valuesByHandlebar = mapOf("{expression}" to "猫", "{reading}" to "ねこ"),
             ),
             ReaderLookupPopupBridgeMessage.fromJson(
-                """{"name":"duplicateCheck","id":"42","popupId":"child","body":"猫"}""",
+                """{"name":"duplicateCheck","id":"42","popupId":"child","body":{"{expression}":"猫","{reading}":"ねこ"}}""",
             ),
         )
         assertEquals(
@@ -91,6 +91,25 @@ class ReaderLookupPopupBridgeMessageTest {
             ),
             ReaderLookupPopupBridgeMessage.fromJson(
                 """{"name":"lookupRedirect","id":"43","popupId":"child","body":"犬"}""",
+            ),
+        )
+        assertEquals(
+            ReaderLookupPopupBridgeMessage.KanjiRedirect(
+                popupId = "child",
+                messageId = "kanji-1",
+                kanji = "星",
+            ),
+            ReaderLookupPopupBridgeMessage.fromJson(
+                """{"name":"kanjiRedirect","id":"kanji-1","popupId":"child","body":"星"}""",
+            ),
+        )
+        assertEquals(
+            ReaderLookupPopupBridgeMessage.KanjiRedirectCommitted(
+                popupId = "child",
+                messageId = null,
+            ),
+            ReaderLookupPopupBridgeMessage.fromJson(
+                """{"name":"kanjiRedirectCommitted","popupId":"child"}""",
             ),
         )
         assertEquals(
@@ -107,10 +126,22 @@ class ReaderLookupPopupBridgeMessageTest {
             ReaderLookupPopupBridgeMessage.MineEntry(
                 popupId = "child",
                 messageId = "45",
+                formatId = "format-a",
                 payloadJson = """{"expression":"猫"}""",
             ),
             ReaderLookupPopupBridgeMessage.fromJson(
-                """{"name":"mineEntry","id":"45","popupId":"child","body":{"expression":"猫"}}""",
+                """{"name":"mineEntry","id":"45","popupId":"child","body":{"formatId":"format-a","payload":{"expression":"猫"}}}""",
+            ),
+        )
+        assertEquals(
+            ReaderLookupPopupBridgeMessage.ShowNotes(
+                popupId = "child",
+                messageId = "46",
+                formatId = "format-a",
+                valuesByHandlebar = mapOf("{expression}" to "猫"),
+            ),
+            ReaderLookupPopupBridgeMessage.fromJson(
+                """{"name":"showNotes","id":"46","popupId":"child","body":{"formatId":"format-a","values":{"{expression}":"猫"}}}""",
             ),
         )
         assertEquals(

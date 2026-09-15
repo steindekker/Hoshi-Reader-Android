@@ -21,3 +21,12 @@ test('reader text semantics normalizes matchable text while preserving raw count
     assert.equal(semantics.isMatchableChar('一'), true);
     assert.equal(semantics.isMatchableChar('、'), false);
 });
+
+test('reader text semantics classifies Japanese characters used for ruby-adjacent wrapping', () => {
+    const semantics = loadTextSemantics();
+
+    assert.equal(semantics.isJapaneseBreakCharacter('貴'), true);
+    assert.equal(semantics.isJapaneseBreakCharacter('、'), true);
+    assert.equal(semantics.isJapaneseBreakCharacter('A'), false);
+    assert.equal(semantics.isJapaneseBreakCharacter(' '), false);
+});

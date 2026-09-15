@@ -2,8 +2,9 @@ package moe.antimony.hoshi.features.reader
 
 import moe.antimony.hoshi.epub.ReadingStatistics
 import moe.antimony.hoshi.epub.deduplicateReadingStatistics
+import moe.antimony.hoshi.features.statistics.StatisticsDateProvider
+import moe.antimony.hoshi.features.statistics.SystemStatisticsDateProvider
 import java.time.LocalDate
-import java.time.ZoneId
 import kotlin.math.abs
 
 data class ReaderStatisticsState(
@@ -13,32 +14,32 @@ data class ReaderStatisticsState(
     val allTime: ReadingStatistics,
 )
 
-interface ReaderStatisticsClock {
+internal interface ReaderStatisticsClock {
     fun currentTimeMillis(): Long
-    fun currentDate(): LocalDate
 }
 
-object SystemReaderStatisticsClock : ReaderStatisticsClock {
+internal object SystemReaderStatisticsClock : ReaderStatisticsClock {
     override fun currentTimeMillis(): Long = System.currentTimeMillis()
-
-    override fun currentDate(): LocalDate = LocalDate.now(ZoneId.systemDefault())
 }
 
-class ReaderStatisticsTracker(
+internal class ReaderStatisticsTracker(
     private val title: String,
     initialStatistics: List<ReadingStatistics>,
     private val enabled: Boolean,
+    private val resetMinutes: Int = 0,
     private val clock: ReaderStatisticsClock = SystemReaderStatisticsClock,
+    private val dateProvider: StatisticsDateProvider = SystemStatisticsDateProvider(),
 ) {
     private var statistics = initialStatistics.deduplicateReadingStatistics()
     private var lastTimestampMillis: Long = clock.currentTimeMillis()
     private var lastCharacterCount: Int = 0
     private var hasUpdated = false
+    private var isModalPaused = false
 
     var state: ReaderStatisticsState = ReaderStatisticsState(
         isTracking = false,
-        session = defaultStatistic(clock.currentDate()),
-        today = statisticForDate(clock.currentDate()),
+        session = defaultStatistic(currentDate()),
+        today = statisticForDate(currentDate()),
         allTime = allTimeStatistic(statistics),
     )
         private set
@@ -67,7 +68,7 @@ class ReaderStatisticsTracker(
     }
 
     fun update(currentCharacter: Int) {
-        if (!enabled || !state.isTracking) return
+        if (!enabled || !state.isTracking || isModalPaused) return
         rollTodayIfNeeded()
         val now = clock.currentTimeMillis()
         val timeDiff = (now - lastTimestampMillis).toDouble() / 1000.0
@@ -95,6 +96,17 @@ class ReaderStatisticsTracker(
         lastTimestampMillis = clock.currentTimeMillis()
     }
 
+    fun setModalPaused(paused: Boolean, currentCharacter: Int) {
+        if (paused == isModalPaused) return
+        if (paused && state.isTracking) {
+            update(currentCharacter)
+        }
+        isModalPaused = paused
+        if (!paused && state.isTracking) {
+            resetBaseline(currentCharacter)
+        }
+    }
+
     fun statisticsForPersistenceOrNull(): List<ReadingStatistics>? =
         if (enabled && (hasUpdated || statistics.isNotEmpty())) statisticsForPersistence() else null
 
@@ -112,7 +124,7 @@ class ReaderStatisticsTracker(
     }
 
     private fun rollTodayIfNeeded() {
-        val currentDate = clock.currentDate()
+        val currentDate = currentDate()
         val currentDateKey = currentDate.toString()
         if (state.today.dateKey == currentDateKey) return
         statisticsForPersistence()
@@ -125,8 +137,10 @@ class ReaderStatisticsTracker(
     private fun defaultStatistic(date: LocalDate): ReadingStatistics =
         ReadingStatistics(title = title, dateKey = date.toString())
 
+    private fun currentDate(): LocalDate = dateProvider.currentDate(resetMinutes)
+
     private fun allTimeStatistic(statistics: List<ReadingStatistics>): ReadingStatistics {
-        val base = defaultStatistic(clock.currentDate())
+        val base = defaultStatistic(currentDate())
         return statistics.fold(base) { total, statistic ->
             val readingTime = total.readingTime + statistic.readingTime
             val charactersRead = total.charactersRead + statistic.charactersRead

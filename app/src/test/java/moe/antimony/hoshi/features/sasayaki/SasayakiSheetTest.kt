@@ -12,9 +12,9 @@ import org.junit.Test
 
 class SasayakiSheetTest {
     @Test
-    fun playbackSpeedSliderAllowsTwoTimesSpeedWithExistingStepSize() {
+    fun playbackSpeedSliderAllowsThreeTimesSpeedWithExistingStepSize() {
         assertEquals(0.5f, SasayakiSpeedSliderRange.start, 0.0f)
-        assertEquals(2.0f, SasayakiSpeedSliderRange.endInclusive, 0.0f)
+        assertEquals(3.0f, SasayakiSpeedSliderRange.endInclusive, 0.0f)
 
         val intervalCount = SasayakiSpeedSliderSteps + 1
         val stepSize = (SasayakiSpeedSliderRange.endInclusive - SasayakiSpeedSliderRange.start) / intervalCount
@@ -70,6 +70,45 @@ class SasayakiSheetTest {
     }
 
     @Test
+    fun acceptedSubtitleSelectionStartsMatchingImmediately() {
+        val transition = SasayakiSubtitleMatchUiState(
+            errorMessage = "previous error",
+        ).acceptFile("book.srt")
+
+        assertTrue(transition.shouldStartMatching)
+        assertEquals("book.srt", transition.state.selectedFileName)
+        assertTrue(transition.state.isMatching)
+        assertNull(transition.state.errorMessage)
+    }
+
+    @Test
+    fun subtitleSelectionCannotStartAnotherMatchWhileOneIsRunning() {
+        val current = SasayakiSubtitleMatchUiState(
+            selectedFileName = "first.srt",
+            isMatching = true,
+        )
+
+        val transition = current.acceptFile("second.srt")
+
+        assertFalse(transition.shouldStartMatching)
+        assertEquals(current, transition.state)
+    }
+
+    @Test
+    fun subtitleMatchCompletionAllowsTheNextFileSelection() {
+        val completed = SasayakiSubtitleMatchUiState(
+            selectedFileName = "first.srt",
+            isMatching = true,
+        ).finishMatching(errorMessage = null)
+
+        val transition = completed.acceptFile("second.srt")
+
+        assertTrue(transition.shouldStartMatching)
+        assertEquals("second.srt", transition.state.selectedFileName)
+        assertTrue(transition.state.isMatching)
+    }
+
+    @Test
     fun audiobookCoverUsesSquareArtworkFrame() {
         assertEquals(SasayakiAudiobookCoverWidthDp, SasayakiAudiobookCoverHeightDp)
     }
@@ -87,6 +126,23 @@ class SasayakiSheetTest {
 
         assertEquals("Chapter 2", info.title)
         assertEquals("1:05", formatSasayakiChapterRowTime(info.startSeconds))
+    }
+
+    @Test
+    fun currentChapterListIndexUsesTheChapterIdInsteadOfAssumingASequentialIndex() {
+        val chapters = listOf(
+            SasayakiAudiobookChapter(10, "Chapter 1", 0.0, 60.0),
+            SasayakiAudiobookChapter(20, "Chapter 2", 60.0, 120.0),
+        )
+
+        assertEquals(1, sasayakiCurrentChapterListIndex(chapters, chapters[1]))
+        assertNull(
+            sasayakiCurrentChapterListIndex(
+                chapters,
+                SasayakiAudiobookChapter(30, "Missing", 120.0, null),
+            ),
+        )
+        assertNull(sasayakiCurrentChapterListIndex(chapters, null))
     }
 
     @Test
@@ -156,5 +212,13 @@ class SasayakiSheetTest {
         )
 
         assertEquals("Reader Book", info.title)
+    }
+
+    @Test
+    fun playbackDurationUsesInspectedDurationUntilPlayerReportsAValidValue() {
+        assertEquals(321.0, sasayakiPlaybackDuration(playerDuration = 0.0, inspectedDuration = 321.0), 0.0)
+        assertEquals(321.0, sasayakiPlaybackDuration(playerDuration = Double.NaN, inspectedDuration = 321.0), 0.0)
+        assertEquals(322.0, sasayakiPlaybackDuration(playerDuration = 322.0, inspectedDuration = 321.0), 0.0)
+        assertEquals(0.0, sasayakiPlaybackDuration(playerDuration = 0.0, inspectedDuration = null), 0.0)
     }
 }

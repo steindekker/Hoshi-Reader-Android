@@ -10,6 +10,8 @@ data class ReaderChromeState(
     val title: String,
     val currentCharacter: Int,
     val totalCharacters: Int,
+    val chapterCurrentCharacter: Int = 0,
+    val chapterTotalCharacters: Int = 0,
     val backTargetCharacter: Int? = null,
     val forwardTargetCharacter: Int? = null,
     val statistics: ReaderStatisticsChromeState? = null,
@@ -18,16 +20,37 @@ data class ReaderChromeState(
         settings: ReaderSettings,
         progressDisplay: ReaderProgressDisplay = ReaderProgressDisplay.characters(),
     ): String {
+        val lines = mutableListOf<String>()
+        if (settings.showProgress) {
+            progressLine(currentCharacter, totalCharacters, settings, progressDisplay)
+                .takeIf { it.isNotEmpty() }
+                ?.let(lines::add)
+        }
+        if (settings.showChapterProgress) {
+            progressLine(chapterCurrentCharacter, chapterTotalCharacters, settings, progressDisplay)
+                .takeIf { it.isNotEmpty() }
+                ?.let { lines += "($it)" }
+        }
+        val separator = if (settings.alwaysShowProgress || settings.showProgressTop) " " else "\n"
+        return lines.joinToString(separator)
+    }
+
+    private fun progressLine(
+        current: Int,
+        total: Int,
+        settings: ReaderSettings,
+        progressDisplay: ReaderProgressDisplay,
+    ): String {
         val parts = mutableListOf<String>()
         if (settings.showCharacters) {
-            parts += progressDisplay.countText(currentCharacter)
-            if (totalCharacters > 0) {
-                parts[parts.lastIndex] = progressDisplay.rangeText(currentCharacter, totalCharacters)
+            parts += progressDisplay.countText(current)
+            if (total > 0) {
+                parts[parts.lastIndex] = progressDisplay.rangeText(current, total)
             }
         }
         if (settings.showPercentage) {
-            val percent = if (totalCharacters > 0) {
-                currentCharacter.toDouble() / totalCharacters.toDouble() * 100.0
+            val percent = if (total > 0) {
+                current.toDouble() / total.toDouble() * 100.0
             } else {
                 0.0
             }
@@ -80,7 +103,6 @@ data class ReaderChromeLayout(
     val showProgressInBottomBar: Boolean,
     val showStatisticsInBottomBar: Boolean,
     val bottomCenterLineCount: Int,
-    val bottomCenterMaxHeightDp: Int,
 )
 
 data class ReaderContentChromeInsets(
@@ -145,14 +167,8 @@ data class ReaderTopTitlePaddingDp(
 
 data class ReaderBottomChromeMetrics(
     val buttonSizeDp: Int,
-    val topSasayakiButtonSizeDp: Int,
-    val topStatisticsButtonSizeDp: Int,
-    val topButtonOffsetYDp: Int,
-    val topButtonHorizontalInsetDp: Int,
     val primaryIconSizeDp: Int,
     val secondaryIconSizeDp: Int,
-    val topSasayakiIconSizeDp: Int,
-    val topStatisticsIconSizeDp: Int,
     val horizontalPaddingDp: Int,
     val bottomPaddingDp: Int,
     val bottomSafeAreaDp: Int,
@@ -167,6 +183,17 @@ data class ReaderBottomChromeMetrics(
 ) {
     val menuBottomOffsetDp: Int = buttonSizeDp + bottomPaddingDp + bottomSafeAreaDp + menuButtonGapDp
 }
+
+data class ReaderTopChromeMetrics(
+    val topSafeAreaDp: Int,
+    val topSasayakiButtonSizeDp: Int,
+    val topStatisticsButtonSizeDp: Int,
+    val topButtonOffsetYDp: Int,
+    val topButtonHorizontalInsetDp: Int,
+    val topSasayakiIconSizeDp: Int,
+    val topStatisticsIconSizeDp: Int,
+    val topJumpHistoryIconSizeDp: Int,
+)
 
 fun readerChromeLayout(
     state: ReaderChromeState,
@@ -183,8 +210,9 @@ fun readerChromeLayout(
     return ReaderChromeLayout(
         showProgressInBottomBar = showProgressInBottomBar,
         showStatisticsInBottomBar = showStatisticsInBottomBar,
-        bottomCenterLineCount = listOf(showStatisticsInBottomBar, showProgressInBottomBar).count { it },
-        bottomCenterMaxHeightDp = ReaderBottomChromeButtonSizeDp,
+        bottomCenterLineCount =
+            (if (showStatisticsInBottomBar) 1 else 0) +
+                (if (showProgressInBottomBar) progress.lineSequence().count() else 0),
     )
 }
 
@@ -209,20 +237,23 @@ fun readerContentChromeInsets(
     topSystemInsetDp: Int = 0,
 ): ReaderContentChromeInsets =
     ReaderContentChromeInsets(
-        topDp = ReaderContentTopReservedSpaceDp + ReaderWebViewTopPaddingDp,
+        topDp = (settings?.topSafeAreaDp ?: ReaderTopSafeAreaDefaultDp).coerceReaderTopSafeAreaDp() +
+            ReaderWebViewTopPaddingDp,
         bottomDp = (settings?.bottomSafeAreaDp ?: ReaderBottomSafeAreaDefaultDp).coerceReaderBottomSafeAreaDp(),
     )
 
 fun readerTopInfoOverlayPaddingDp(
     topSystemInsetDp: Int,
     focusMode: Boolean,
+    settings: ReaderSettings = ReaderSettings(),
 ): Int =
     if (focusMode) {
         ReaderFocusTopOverlayPaddingDp
-    } else if (topSystemInsetDp > 0) {
-        topSystemInsetDp
     } else {
-        ReaderTopInfoFallbackPaddingDp
+        maxOf(
+            if (topSystemInsetDp > 0) topSystemInsetDp else ReaderTopInfoFallbackPaddingDp,
+            settings.topSafeAreaDp.coerceReaderTopSafeAreaDp(),
+        )
     }
 
 fun readerShouldShowTitleAndProgress(
@@ -268,14 +299,8 @@ fun readerBottomChromeMetrics(
 ): ReaderBottomChromeMetrics =
     ReaderBottomChromeMetrics(
         buttonSizeDp = ReaderBottomChromeButtonSizeDp,
-        topSasayakiButtonSizeDp = ReaderTopButtonSizeDp,
-        topStatisticsButtonSizeDp = ReaderTopButtonSizeDp,
-        topButtonOffsetYDp = ReaderTopButtonOffsetYDp,
-        topButtonHorizontalInsetDp = ReaderTopButtonHorizontalInsetDp,
         primaryIconSizeDp = 28,
         secondaryIconSizeDp = 28,
-        topSasayakiIconSizeDp = ReaderTopButtonIconSizeDp,
-        topStatisticsIconSizeDp = ReaderTopButtonIconSizeDp,
         horizontalPaddingDp = 22,
         bottomPaddingDp = 2,
         bottomSafeAreaDp = bottomSafeAreaDp.coerceReaderBottomSafeAreaDp(),
@@ -288,6 +313,29 @@ fun readerBottomChromeMetrics(
         menuItemIconBoxSizeDp = 24,
         menuItemSpacingDp = 12,
     )
+
+fun readerTopChromeMetrics(
+    topSafeAreaDp: Int = ReaderTopSafeAreaDefaultDp,
+): ReaderTopChromeMetrics {
+    val safeAreaDp = topSafeAreaDp.coerceReaderTopSafeAreaDp()
+    val iconSizeDp = readerTopQuickIconSizeDp(safeAreaDp)
+    return ReaderTopChromeMetrics(
+        topSafeAreaDp = safeAreaDp,
+        topSasayakiButtonSizeDp = safeAreaDp,
+        topStatisticsButtonSizeDp = safeAreaDp,
+        topButtonOffsetYDp = ReaderTopButtonOffsetYDp,
+        topButtonHorizontalInsetDp = ReaderTopButtonHorizontalInsetDp,
+        topSasayakiIconSizeDp = iconSizeDp,
+        topStatisticsIconSizeDp = iconSizeDp,
+        topJumpHistoryIconSizeDp = readerTopJumpHistoryIconSizeDp(safeAreaDp),
+    )
+}
+
+private fun readerTopQuickIconSizeDp(topSafeAreaDp: Int): Int =
+    (topSafeAreaDp / 2 + 7).coerceIn(22, 40)
+
+private fun readerTopJumpHistoryIconSizeDp(topSafeAreaDp: Int): Int =
+    (topSafeAreaDp / 3 + 6).coerceIn(16, 28)
 
 fun readerBottomMenuVisualOrder(
     showStatistics: Boolean,
@@ -479,12 +527,9 @@ private fun ReaderStatisticsChromeState.readingTimeText(): String {
 
 private const val ReaderBottomChromeButtonSizeDp = 44
 private const val ReaderMenuButtonGapDp = 8
-private const val ReaderContentTopReservedSpaceDp = 30
 private const val ReaderTopInfoFallbackPaddingDp = 52
 private const val ReaderWebViewTopPaddingDp = 4
 private const val ReaderFocusTopOverlayPaddingDp = 0
-private const val ReaderTopButtonSizeDp = 30
-private const val ReaderTopButtonIconSizeDp = 22
 private const val ReaderTopButtonOffsetYDp = 4
 private const val ReaderTopButtonHorizontalInsetDp = 8
 private const val ReaderTopTitleControlPaddingDp = 42

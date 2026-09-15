@@ -5,6 +5,22 @@ import moe.antimony.hoshi.epub.BookShelf
 import moe.antimony.hoshi.epub.BookSortOption
 import moe.antimony.hoshi.ui.UiText
 
+sealed interface ShelfCreationMoveStatus {
+    data object Idle : ShelfCreationMoveStatus
+    data object Submitting : ShelfCreationMoveStatus
+    data class Succeeded(
+        val shelfName: String,
+        val bookCount: Int,
+    ) : ShelfCreationMoveStatus
+    data class Failed(val message: UiText) : ShelfCreationMoveStatus
+}
+
+data class ShelfCreationMoveDialogState(
+    val bookIds: Set<String>,
+    val clearSelectionOnSuccess: Boolean,
+    val name: String = "",
+)
+
 data class BookshelfUiState(
     val bookEntries: List<BookEntry> = emptyList(),
     val remoteBookEntries: List<RemoteBookEntry> = emptyList(),
@@ -18,6 +34,7 @@ data class BookshelfUiState(
     val sections: List<BookshelfSectionModel> = emptyList(),
     val sortOption: BookSortOption = BookSortOption.Recent,
     val showReading: Boolean = false,
+    val coverMode: BookshelfCoverMode = BookshelfCoverMode.Show,
     val isSelecting: Boolean = false,
     val selectedBookIds: Set<String> = emptySet(),
     val shelfExpansionState: Map<String, Boolean> = emptyMap(),
@@ -27,6 +44,8 @@ data class BookshelfUiState(
     val statusMessage: UiText? = null,
     val errorMessage: UiText? = null,
     val openReaderBookId: String? = null,
+    val shelfCreationMoveStatus: ShelfCreationMoveStatus = ShelfCreationMoveStatus.Idle,
+    val shelfCreationMoveDialog: ShelfCreationMoveDialogState? = null,
 )
 
 data class RemoteBookEntry(

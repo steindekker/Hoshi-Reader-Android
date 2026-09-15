@@ -15,6 +15,12 @@ import moe.antimony.hoshi.features.dictionary.AndroidDictionarySearchRepository
 import moe.antimony.hoshi.features.dictionary.AndroidDictionaryViewModelRepository
 import moe.antimony.hoshi.features.dictionary.DictionarySearchRepository
 import moe.antimony.hoshi.features.dictionary.DictionaryViewModelRepository
+import moe.antimony.hoshi.features.reader.HttpReaderFontRemoteDataSource
+import moe.antimony.hoshi.features.reader.ReaderFontRemoteDataSource
+import moe.antimony.hoshi.features.statistics.AndroidStatisticsRepository
+import moe.antimony.hoshi.features.statistics.StatisticsDateProvider
+import moe.antimony.hoshi.features.statistics.StatisticsRepository
+import moe.antimony.hoshi.features.statistics.SystemStatisticsDateProvider
 import moe.antimony.hoshi.features.sync.DeviceCodeDriveAuthorizer
 import moe.antimony.hoshi.features.sync.DriveAccessTokenProvider
 import moe.antimony.hoshi.features.sync.DriveAuthorizer
@@ -28,6 +34,10 @@ import moe.antimony.hoshi.features.update.UpdateDownloadController
 @Module
 @InstallIn(SingletonComponent::class)
 internal interface HoshiBindingsModule {
+    @Binds
+    @Singleton
+    fun bindReaderFontRemoteDataSource(dataSource: HttpReaderFontRemoteDataSource): ReaderFontRemoteDataSource
+
     @Binds
     @Singleton
     fun bindDriveAuthorizer(authorizer: DeviceCodeDriveAuthorizer): DriveAuthorizer
@@ -51,6 +61,13 @@ internal interface HoshiBindingsModule {
     @Binds
     @Singleton
     fun bindDictionarySearchRepository(repository: AndroidDictionarySearchRepository): DictionarySearchRepository
+
+    @Binds
+    @Singleton
+    fun bindStatisticsRepository(repository: AndroidStatisticsRepository): StatisticsRepository
+
+    @Binds
+    fun bindStatisticsDateProvider(provider: SystemStatisticsDateProvider): StatisticsDateProvider
 
     @Binds
     @Singleton

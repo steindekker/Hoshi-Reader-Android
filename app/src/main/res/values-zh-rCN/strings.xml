@@ -38,7 +38,7 @@
     <string name="dialog_error_title">错误</string>
     <string name="import_select_epub_book">请选择 .epub EPUB 书籍文件。</string>
     <string name="import_select_srt_subtitle">请选择 .srt 字幕文件。</string>
-    <string name="import_select_audiobook">请选择 .mp3 或 .m4b 有声书文件。</string>
+    <string name="import_select_audiobook">请选择 .mp3、.m4b 或 .opus 有声书文件。</string>
     <string name="import_select_audio_database">请选择 .db 音频数据库文件。</string>
     <string name="import_select_dictionary_archive">请选择 .zip 辞典压缩包文件。</string>
     <string name="import_select_hoshi_backup">请选择 .hoshi Hoshi 备份文件。</string>
@@ -46,7 +46,87 @@
     <string name="import_select_font">请选择 .ttf、.otf、.woff 或 .woff2 字体文件。</string>
     <string name="main_tab_books" comment="Main navigation tab label, intentionally matching the backup Books section.">书库</string>
     <string name="main_tab_dictionary">查词</string>
+    <string name="main_tab_statistics" comment="Main navigation tab label, intentionally matching statistics page titles.">统计</string>
     <string name="main_tab_settings" comment="Main navigation tab label, intentionally matching settings page titles.">设置</string>
+    <string name="statistics_title" comment="Statistics page title, intentionally matching the main tab label.">统计</string>
+    <string name="statistics_today" comment="Statistics dashboard section title, intentionally matching reader statistics today label.">今天</string>
+    <string name="statistics_this_week">本周</string>
+    <string name="statistics_target_format">目标 %1$s</string>
+    <string name="statistics_reading_duration" comment="Dashboard metric label, intentionally matching the duration legend and target type label.">时长</string>
+    <string name="statistics_characters_read" comment="Dashboard metric label, intentionally matching the characters legend and target type label.">字数</string>
+    <string name="statistics_average_speed" comment="Dashboard metric label, intentionally matching the Sasayaki speed setting noun.">速度</string>
+    <string name="statistics_streak">连续</string>
+    <string name="statistics_target_days">达标天数</string>
+    <string name="statistics_daily_average_characters">日均字数</string>
+    <string name="statistics_daily_average_duration">日均时长</string>
+    <string name="statistics_week_goal_days" comment="Weekly dashboard section label, intentionally matching the current-range goal progress metric.">目标进度</string>
+    <string name="statistics_week_status_format">本周 %1$d/7</string>
+    <string name="statistics_reading_calendar">阅读日历</string>
+    <string name="statistics_recent_year">最近一年</string>
+    <string name="statistics_range_year">年</string>
+    <string name="statistics_range_month">月</string>
+    <string name="statistics_range_week">周</string>
+    <string name="statistics_range_day">日</string>
+    <string name="statistics_selected_range_format">已选择：%1$s</string>
+    <string name="statistics_current_range">所选范围</string>
+    <string name="statistics_tab_overview">概览</string>
+    <string name="statistics_tab_trend">趋势</string>
+    <string name="statistics_tab_distribution">分布</string>
+    <string name="statistics_target_progress" comment="Current-range metric label, intentionally matching the weekly dashboard goal progress label.">目标进度</string>
+    <string name="statistics_monthly_trend">每月趋势</string>
+    <string name="statistics_daily_trend">每日趋势</string>
+    <string name="statistics_duration" comment="Trend legend label, intentionally matching duration target type label.">时长</string>
+    <string name="statistics_characters" comment="Trend legend label, intentionally matching characters target type label.">字数</string>
+    <string name="statistics_daily_target">每日目标</string>
+    <string name="statistics_current_target">当前目标</string>
+    <string name="statistics_weekly_target">每周目标</string>
+    <string name="statistics_week_status">阅读天数</string>
+    <string name="statistics_target_type_characters" comment="Daily target type option, intentionally matching statistics characters legend label.">字</string>
+    <string name="statistics_target_type_duration" comment="Daily target type option, intentionally matching statistics duration legend label.">时长</string>
+    <string name="statistics_no_reading_records">暂无阅读记录</string>
+    <string name="statistics_no_trend_data">暂无趋势数据</string>
+    <string name="statistics_partial_unavailable">部分统计数据暂时无法读取。</string>
+    <string name="statistics_target_met">已达标</string>
+    <string name="statistics_target_not_met">未达标</string>
+    <string name="statistics_calendar_heatmap_semantics">阅读日历热力图</string>
+    <string name="statistics_empty_goal_value">-</string>
+    <string name="statistics_trend_legend_format">%1$s / %2$s</string>
+    <string name="statistics_character_target_format" comment="Daily character target value, intentionally matching generic statistics character value format.">%1$s 字</string>
+    <string name="statistics_duration_target_format">%1$s</string>
+    <string name="statistics_characters_value_format" comment="Generic character metric value, intentionally matching daily character target value.">%1$s 字</string>
+    <string name="statistics_speed_value_format">%1$s/h</string>
+    <string name="statistics_percent_format">%1$d%%</string>
+    <string name="statistics_duration_minutes_format">%1$dm</string>
+    <string name="statistics_duration_hours_format">%1$dh</string>
+    <string name="statistics_duration_hours_minutes_format">%1$dh %2$dm</string>
+    <string name="statistics_range_fixed_year_format">%1$d 年</string>
+    <string name="statistics_range_month_title_format">%1$d 年 %2$d 月</string>
+    <string name="statistics_range_week_title_format">%1$d月%2$d日-%3$d月%4$d日</string>
+    <string name="statistics_range_day_title_format">%1$d月%2$d日 %3$s</string>
+    <string name="statistics_distribution_meta_format">%1$s · %2$s</string>
+    <string name="statistics_distribution_cover_placeholder">书籍封面占位</string>
+    <string name="statistics_weekday_monday_short">一</string>
+    <string name="statistics_weekday_tuesday_short" comment="Single-character Tuesday label.">二</string>
+    <string name="statistics_weekday_wednesday_short">三</string>
+    <string name="statistics_weekday_thursday_short" comment="Single-character Thursday label.">四</string>
+    <string name="statistics_weekday_friday_short">五</string>
+    <string name="statistics_weekday_saturday_short" comment="Single-character Saturday label.">六</string>
+    <string name="statistics_weekday_sunday_short" comment="Single-character Sunday label.">日</string>
+    <string name="statistics_weekday_monday">星期一</string>
+    <string name="statistics_weekday_tuesday">星期二</string>
+    <string name="statistics_weekday_wednesday">星期三</string>
+    <string name="statistics_weekday_thursday">星期四</string>
+    <string name="statistics_weekday_friday">星期五</string>
+    <string name="statistics_weekday_saturday">星期六</string>
+    <string name="statistics_weekday_sunday">星期日</string>
+    <plurals name="statistics_days_value">
+        <item quantity="one">%1$d 天</item>
+        <item quantity="other">%1$d 天</item>
+    </plurals>
+    <plurals name="statistics_weeks_value">
+        <item quantity="one">%1$d 周</item>
+        <item quantity="other">%1$d 周</item>
+    </plurals>
     <string name="settings_dictionaries" comment="Settings row label, intentionally matching the backup Dictionaries section.">辞典</string>
     <string name="settings_anki">Anki</string>
     <string name="settings_profiles" comment="Settings row label, intentionally matching the Profiles screen title.">Profile</string>
@@ -98,9 +178,16 @@
     <string name="bookshelf_sort_title" comment="Sort option label, intentionally matching the title text-field label.">标题</string>
     <string name="bookshelf_select_books">选择书籍</string>
     <string name="bookshelf_move_selected_books">移动所选书籍</string>
+    <string name="bookshelf_new_shelf">新建书架…</string>
+    <string name="bookshelf_create_shelf">新建书架</string>
+    <string name="bookshelf_create_and_move">创建并移动</string>
     <string name="bookshelf_no_shelf" comment="Shelf picker empty value, intentionally matching generic none.">无</string>
     <string name="bookshelf_delete_selected_books">删除所选书籍</string>
     <string name="bookshelf_manage_shelves">管理书架</string>
+    <string name="bookshelf_covers">封面</string>
+    <string name="bookshelf_cover_mode_show">显示</string>
+    <string name="bookshelf_cover_mode_blur">模糊</string>
+    <string name="bookshelf_cover_mode_hide">隐藏</string>
     <string name="bookshelf_import_epub">导入 EPUB</string>
     <string name="bookshelf_sync">同步</string>
     <string name="bookshelf_move">移动</string>
@@ -116,6 +203,7 @@
     <string name="bookshelf_save_shelf_name">保存书架名称</string>
     <string name="bookshelf_delete_shelf">删除书架</string>
     <string name="bookshelf_shelf_name_exists">已存在同名书架。</string>
+    <string name="bookshelf_create_shelf_failed">无法创建书架，请重试。</string>
     <string name="bookshelf_shelf_name">书架名称</string>
     <string name="bookshelf_add_shelf">添加书架</string>
     <string name="bookshelf_empty_title">没有书籍</string>
@@ -126,6 +214,10 @@
     <plurals name="bookshelf_bulk_delete_title">
         <item quantity="one">删除 %1$d 本书？</item>
         <item quantity="other">删除 %1$d 本书？</item>
+    </plurals>
+    <plurals name="bookshelf_created_shelf_and_moved_books">
+        <item quantity="one">已创建“%1$s”并移动 %2$d 本书。</item>
+        <item quantity="other">已创建“%1$s”并移动 %2$d 本书。</item>
     </plurals>
     <string name="dictionary_select_zip_archive">请选择 .zip 辞典压缩包。</string>
     <string name="dictionary_download_failed">无法下载辞典。</string>
@@ -139,7 +231,12 @@
     <string name="dictionary_importing_named_format">正在导入 %1$s</string>
     <string name="dictionary_importing_default">正在导入辞典</string>
     <string name="dictionary_download_recommended">下载推荐辞典</string>
-    <string name="dictionary_supported_archive_types">支持 Yomitan 词条、词频和音调辞典（.zip）</string>
+    <string name="dictionary_download_stroke_order_font">下载笔顺字体</string>
+    <string name="dictionary_stroke_order_font_dialog_title">下载字体</string>
+    <string name="dictionary_stroke_order_font_dialog_message">这将下载并自动导入汉字笔顺字体（17 MB）。</string>
+    <string name="dictionary_stroke_order_font_downloading">正在下载并导入笔顺字体…</string>
+    <string name="dictionary_stroke_order_font_download_failed">无法下载并导入笔顺字体，请检查网络连接后重试。</string>
+    <string name="dictionary_supported_archive_types">支持 Yomitan 词条、词频、音调和汉字辞典（.zip）</string>
     <string name="dictionary_default_tab">默认打开查词标签页</string>
     <string name="dictionary_empty_type_format">没有%1$s辞典</string>
     <string name="dictionary_updates_section" comment="Dictionary settings section label for installed dictionary update controls; intentionally matches the About update section label.">更新</string>
@@ -159,7 +256,16 @@
     <string name="dictionary_type_term">词条</string>
     <string name="dictionary_type_frequency">词频</string>
     <string name="dictionary_type_pitch">音调</string>
+    <string name="dictionary_type_kanji">汉字</string>
+    <string name="dictionary_category_none" comment="Dictionary category for uncategorized term dictionaries, intentionally matching generic none.">无</string>
+    <string name="dictionary_category_monolingual">单语</string>
+    <string name="dictionary_category_bilingual">双语</string>
+    <string name="dictionary_category_exclude">排除</string>
+    <string name="dictionary_category_update_failed">更新辞典分类失败。</string>
+    <string name="anki_categorize_dictionaries">辞典分类</string>
     <string name="dictionary_custom_css">自定义 CSS</string>
+    <string name="dictionary_custom_css_reset_title">重置自定义 CSS？</string>
+    <string name="dictionary_custom_css_reset_message">这将清空你的自定义 CSS。</string>
     <string name="dictionary_import_action">导入辞典</string>
     <string name="dictionary_delete_action">删除辞典</string>
     <string name="dictionary_reorder_action">重新排序辞典</string>
@@ -212,6 +318,7 @@
     <string name="bookshelf_profile_automatic">自动</string>
     <string name="bookshelf_profile_automatic_uses_format">将使用 %1$s</string>
     <string name="reader_behavior_volume_keys_turn_pages">音量键翻页</string>
+    <string name="reader_behavior_volume_keys_navigate_popup_terms">音量键跳转弹窗词条</string>
     <string name="reader_behavior_volume_keys_seek_sasayaki">音量键跳转有声书</string>
     <string name="reader_behavior_reverse_volume_key_direction">反转音量键方向</string>
     <string name="reader_behavior_keep_screen_on">保持屏幕常亮</string>
@@ -223,8 +330,8 @@
     <string name="reader_jump_back">返回上一个跳转位置</string>
     <string name="reader_jump_forward">返回后一个跳转位置</string>
     <string name="reader_menu">阅读器菜单</string>
-    <string name="reader_go_to">跳转</string>
-    <string name="reader_search" comment="Reader Go to panel tab label, distinct from dictionary search placeholder.">搜索</string>
+    <string name="reader_go_to">内容</string>
+    <string name="reader_search" comment="Reader Contents panel tab label, distinct from dictionary search placeholder.">搜索</string>
     <string name="reader_search_in_book">在书中搜索</string>
     <string name="reader_search_empty_prompt">输入文本搜索本书</string>
     <string name="reader_searching">正在搜索...</string>
@@ -239,6 +346,9 @@
     <string name="reader_image_saved">已保存图片。</string>
     <string name="reader_image_save_failed">无法保存图片。</string>
     <string name="reader_chapters" comment="Reader chapter-list label; Sasayaki intentionally reuses the same visible label for audiobook chapters.">章节</string>
+    <string name="reader_gallery">图库</string>
+    <string name="reader_gallery_image">图库图片</string>
+    <string name="reader_no_images">没有图片</string>
     <string name="reader_highlights">标注</string>
     <string name="reader_statistics" comment="Reader menu label, intentionally matching advanced statistics.">统计</string>
     <string name="reader_untitled_chapter">未命名</string>
@@ -251,7 +361,7 @@
     <string name="reader_delete_highlight">删除标注</string>
     <string name="reader_highlight_action">标注</string>
     <string name="reader_statistics_session">本次</string>
-    <string name="reader_statistics_today">今天</string>
+    <string name="reader_statistics_today" comment="Reader statistics section title, intentionally matching dashboard today label.">今天</string>
     <string name="reader_statistics_all_time">全部</string>
     <string name="reader_statistics_time_to_finish_book">读完本书还需：</string>
     <string name="reader_statistics_time_to_finish_chapter">读完本章还需：</string>
@@ -259,18 +369,23 @@
     <string name="reader_statistics_words_read">已读单词：</string>
     <string name="reader_statistics_reading_speed">阅读速度：</string>
     <string name="reader_statistics_reading_time">阅读时间：</string>
+    <string name="reader_statistics_show_tab">显示统计标签页</string>
     <string name="reader_statistics_autostart">自动开始</string>
+    <string name="reader_statistics_reset_time">重置时间</string>
     <string name="reader_statistics_autostart_off" comment="Reader statistics autostart setting value; intentionally matches other off labels.">关闭</string>
     <string name="reader_statistics_autostart_page_turn">翻页时</string>
     <string name="reader_statistics_autostart_on">开启</string>
     <string name="reader_statistics_sync_behaviour">同步行为</string>
+    <string name="reader_statistics_sync_mode_merge">合并</string>
+    <string name="reader_statistics_sync_mode_replace">替换</string>
     <string name="reader_statistics_settings_hint">可从阅读器菜单访问统计。</string>
     <string name="reader_appearance_theme">主题</string>
     <string name="reader_appearance_text">文本</string>
     <string name="reader_appearance_layout">布局</string>
     <string name="reader_appearance_display">显示</string>
+    <string name="reader_appearance_progress">进度</string>
     <string name="reader_appearance_popup">弹窗</string>
-    <string name="reader_appearance_theme_system">跟随系统</string>
+    <string name="reader_appearance_theme_system" comment="Reader theme option, distinct from the font-library System section label.">跟随系统</string>
     <string name="reader_appearance_theme_light">浅色</string>
     <string name="reader_appearance_theme_dark">深色</string>
     <string name="reader_appearance_theme_sepia">护眼色</string>
@@ -292,8 +407,22 @@
     <string name="reader_appearance_vertical">竖排</string>
     <string name="reader_appearance_horizontal">横排</string>
     <string name="reader_appearance_font" comment="Reader font setting, intentionally matching dictionary custom CSS font.">字体</string>
-    <string name="reader_appearance_font_publisher">出版社</string>
-    <string name="reader_appearance_font_file" comment="Fallback filename label, intentionally matching font setting labels.">字体</string>
+    <string name="reader_appearance_font_publisher">出版方字体</string>
+    <string name="reader_appearance_font_system_serif">系统衬线体</string>
+    <string name="reader_appearance_font_system_sans_serif">系统无衬线体</string>
+    <string name="reader_appearance_font_imported">已导入</string>
+    <string name="reader_appearance_font_variant">变体</string>
+    <string name="reader_appearance_font_variant_publisher">由出版方决定</string>
+    <string name="reader_appearance_font_variant_format">%1$s（%2$d）</string>
+    <string name="reader_appearance_font_download_size_format">下载 · %1$s</string>
+    <string name="reader_appearance_font_downloading_item_format">%1$s · 正在下载 %2$d%%</string>
+    <string name="reader_appearance_font_download_failed">无法下载并校验该字体，请检查网络后重试。</string>
+    <string name="reader_appearance_font_import_failed">无法导入该字体，请使用有效的 TTF、OTF、WOFF 或 WOFF2 文件。</string>
+    <string name="reader_appearance_font_category_serif">明朝／衬线</string>
+    <string name="reader_appearance_font_category_sans">黑体／无衬线</string>
+    <string name="reader_appearance_font_category_rounded">圆体</string>
+    <string name="reader_appearance_font_category_handwriting">楷书／手写正文</string>
+    <string name="reader_appearance_font_retry">重试</string>
     <string name="reader_appearance_import_font">导入字体</string>
     <string name="reader_appearance_importing" comment="Generic import progress label, intentionally shared with ッツ backup import.">正在导入...</string>
     <string name="reader_appearance_font_size">字号</string>
@@ -312,8 +441,12 @@
     <string name="reader_visual_novel_click_advance">点击空白处前进</string>
     <string name="reader_visual_novel_merge_cross_screen_sasayaki_cues">字幕文本同屏</string>
     <string name="reader_appearance_chapter_swipe_distance">章节滑动距离</string>
+    <string name="reader_appearance_page_swipe_threshold">翻页滑动阈值</string>
+    <string name="reader_appearance_page_swipe_threshold_value">%1$d px</string>
+    <string name="reader_appearance_page_swipe_disabled" comment="分页和 VN 阅读器的滑动阈值状态；有意与其他关闭标签使用相同文案。">关闭</string>
     <string name="reader_appearance_horizontal_padding">水平边距</string>
     <string name="reader_appearance_vertical_padding">垂直边距</string>
+    <string name="reader_appearance_top_safe_area">顶部安全区</string>
     <string name="reader_appearance_bottom_safe_area">底部安全区</string>
     <string name="reader_appearance_avoid_page_break">避免分页断开</string>
     <string name="reader_appearance_justify_text">两端对齐</string>
@@ -322,6 +455,8 @@
     <string name="reader_appearance_character_spacing">字距</string>
     <string name="reader_appearance_paragraph_spacing">段落间距</string>
     <string name="reader_appearance_show_title">显示标题</string>
+    <string name="reader_appearance_show_progress">显示进度</string>
+    <string name="reader_appearance_show_chapter_progress">显示章节进度</string>
     <string name="reader_appearance_show_character_count">显示字符数</string>
     <string name="reader_appearance_show_word_count">显示单词数</string>
     <string name="reader_appearance_show_percentage">显示百分比</string>
@@ -444,9 +579,10 @@
     <string name="audio_move_source_up">上移来源</string>
     <string name="audio_move_source_down">下移来源</string>
     <string name="audio_delete_source">删除来源</string>
-    <string name="audio_local_source_order">本地数据库来源顺序</string>
+    <string name="audio_local_source_order">本地数据库来源</string>
     <string name="audio_move_local_source_up">上移本地音频来源</string>
     <string name="audio_move_local_source_down">下移本地音频来源</string>
+    <string name="audio_local_source_save_failed">无法保存本地音频来源设置。</string>
     <string name="anki_fetch_decks_ankiconnect">从 AnkiConnect 获取牌组和笔记类型。</string>
     <string name="anki_fetch_decks_ankidroid">从 AnkiDroid 获取牌组和笔记类型。</string>
     <string name="anki_open_app_settings">打开应用设置</string>
@@ -457,11 +593,31 @@
     <string name="anki_check_duplicates_all_models">跨所有模板检查重复</string>
     <string name="anki_duplicate_check_scope">重复检查范围</string>
     <string name="anki_compact_glossaries">紧凑释义</string>
+    <string name="anki_embed_media">嵌入媒体</string>
     <string name="anki_droid_force_sync">添加卡片后同步 AnkiDroid</string>
     <string name="anki_droid_force_sync_description">添加卡片成功后启动 AnkiDroid 同步。AnkiDroid 可能会忽略 5 分钟内重复触发的同步。</string>
     <string name="anki_fields">字段</string>
     <string name="anki_tags">标签</string>
     <string name="anki_handlebar">占位符</string>
+    <string name="anki_format">卡片格式</string>
+    <string name="anki_format_default_name">格式 %1$d</string>
+    <string name="anki_add_format">添加卡片格式</string>
+    <string name="anki_duplicate_format">复制此格式</string>
+    <string name="anki_delete_format_title">删除“%1$s”？</string>
+    <string name="anki_delete_format_confirmation">这会从 Hoshi 中永久删除该卡片格式及其字段映射。</string>
+    <string name="anki_format_name">格式名称</string>
+    <string name="anki_format_icon">图标</string>
+    <string name="anki_icon_square">方形</string>
+    <string name="anki_icon_square_small">小方形</string>
+    <string name="anki_icon_circle">圆形</string>
+    <string name="anki_icon_circle_small">小圆形</string>
+    <string name="anki_icon_diamond">菱形</string>
+    <string name="anki_icon_diamond_small">小菱形</string>
+    <string name="anki_disable_show_notes">隐藏笔记搜索按钮</string>
+    <string name="anki_selected_glossary_fallback">{selected-glossary} Fallback</string>
+    <string name="anki_show_all_handlebars">显示全部占位符</string>
+    <string name="anki_fetch_confirm_title">重置卡片格式？</string>
+    <string name="anki_fetch_confirm_message">获取牌组和模板会将每个卡片格式重置为默认牌组、首个模板及其默认字段映射。名称、图标和标签会保留。</string>
     <string name="anki_duplicate_scope_collection">全库</string>
     <string name="anki_duplicate_scope_deck" comment="Duplicate scope label, intentionally matching Anki deck selector label.">牌组</string>
     <string name="anki_duplicate_scope_deck_root">牌组根级</string>
@@ -471,6 +627,8 @@
     <string name="anki_connect_api_key_configured">已配置</string>
     <string name="anki_connect_use">使用 AnkiConnect</string>
     <string name="anki_connect_use_description">这会用 AnkiConnect JSON 请求替代 AnkiDroid 请求。</string>
+    <string name="anki_connect_setup_warning_title">绝大多数用户不需要 AnkiConnect</string>
+    <string name="anki_connect_setup_warning_message">Hoshi 可以直接通过 AnkiDroid 获取牌组和笔记类型并制卡，无需额外设置。\n\nAnkiConnect 仅适合已经自行部署并了解其配置方式的用户。开启后，它会替代 AnkiDroid；如果没有正确配置，将导致无法获取牌组和笔记类型，也无法制卡。除非你确定需要它，否则请保持关闭。</string>
     <string name="anki_connect_address_help">互联网主机请使用 HTTPS。HTTP 仅允许 localhost 和私有网络地址。</string>
     <string name="anki_connect_connection">连接</string>
     <string name="anki_connect_connected" comment="AnkiConnect connection state, intentionally matching sync connection state.">已连接</string>
@@ -552,7 +710,7 @@
     <string name="sasayaki_copy_audiobook_to_storage">复制有声书到应用存储</string>
     <string name="sasayaki_copy_audiobook_to_storage_help">保留私有副本，而不是链接到所选外部媒体文件</string>
     <string name="sasayaki_delay">延迟</string>
-    <string name="sasayaki_speed">速度</string>
+    <string name="sasayaki_speed" comment="Sasayaki setting label, intentionally matching the statistics speed metric noun.">速度</string>
     <string name="sasayaki_reader_controls">阅读器控制</string>
     <string name="sasayaki_show_bottom_playback_controls">固定播放控制到底部安全区</string>
     <string name="sasayaki_show_bottom_playback_controls_help">在底部安全区显示后退、播放或暂停和快进控制。</string>
@@ -577,7 +735,7 @@
     <string name="sasayaki_remove_audio">移除</string>
     <string name="sasayaki_storage_copied">已复制到应用存储。原始有声书文件可以删除。</string>
     <string name="sasayaki_storage_linked">已链接到外部有声书文件。请保留原始文件可用。</string>
-    <string name="sasayaki_storage_select_audio">选择 .mp3 或 .m4b 有声书</string>
+    <string name="sasayaki_storage_select_audio">选择 .mp3、.m4b 或 .opus 有声书</string>
     <string name="sasayaki_subtitle_match">字幕匹配</string>
     <string name="sasayaki_no_subtitle_match">未匹配</string>
     <string name="sasayaki_no_chapters">这个有声书没有可用章节。</string>
@@ -585,15 +743,13 @@
     <string name="sasayaki_current_chapter">当前章节</string>
     <string name="sasayaki_skip_cue">1 句</string>
     <string name="sasayaki_skip_seconds_format">%1$d 秒</string>
-    <string name="sasayaki_settings_description">在阅读器的有声书菜单中载入 .mp3 或 .m4b 有声书。如果有对应的 .srt 字幕文件，可以在资源页进行字幕匹配。</string>
+    <string name="sasayaki_settings_description">在阅读器的有声书菜单中载入 .mp3、.m4b 或 .opus 有声书。如果有对应的 .srt 字幕文件，可以在资源页进行字幕匹配。</string>
     <string name="sasayaki_select_srt_file">请选择 .srt 字幕文件。</string>
     <string name="sasayaki_selected_srt">已选择 SRT</string>
     <string name="sasayaki_open_srt_failed">无法打开所选 SRT。</string>
     <string name="sasayaki_match_failed">无法匹配有声书字幕。</string>
-    <string name="sasayaki_match_title">匹配</string>
     <string name="sasayaki_file">文件</string>
     <string name="sasayaki_no_file_selected">未选择文件</string>
-    <string name="sasayaki_search_window">搜索窗口</string>
     <string name="sasayaki_matching">正在匹配...</string>
     <string name="mine_with_options_title">按选项制卡</string>
     <string name="mine_with_options_sentence_section">句子</string>
@@ -606,4 +762,31 @@
     <string name="mine_with_options_image_none">无</string>
     <string name="mine_with_options_image_cover">封面</string>
     <string name="mine_with_options_no_images">未找到图片</string>
+    <string name="settings_book_cover_wallpaper">书籍封面锁屏</string>
+    <string name="settings_book_cover_wallpaper_subtitle">锁屏或休眠时显示当前书籍封面</string>
+    <string name="book_cover_wallpaper_lock_screen">更新锁屏壁纸</string>
+    <string name="book_cover_wallpaper_lock_screen_summary">每次打开书籍时，将当前封面设为 Android 锁屏壁纸。部分墨水屏设备可能不生效。</string>
+    <string name="book_cover_wallpaper_not_supported">此设备不支持锁屏壁纸。</string>
+    <string name="book_cover_wallpaper_not_allowed">设备策略不允许此应用更改壁纸。</string>
+    <string name="book_cover_wallpaper_ireader">更新 iReader 书籍封面屏保</string>
+    <string name="book_cover_wallpaper_ireader_summary">每次打开书籍时，更新 iReader 内建的“书籍封面”屏保。</string>
+    <string name="book_cover_wallpaper_ireader_select_system_option">请先用 iReader 内建阅读器打开任意书籍，再到设备的屏保设置中选择“书籍封面”并点击“应用”，然后返回 Hoshi。</string>
+    <string name="book_cover_wallpaper_ireader_not_supported">此设备或固件不支持 iReader 私有屏保集成。</string>
+    <string name="book_cover_wallpaper_ireader_not_selected_error">无法更新 iReader 屏保。请先用内建阅读器打开任意书籍，再到设备的屏保设置中选择“书籍封面”并点击“应用”。</string>
+    <string name="book_cover_wallpaper_vendor_integrations">墨水屏厂商适配</string>
+    <string name="book_cover_wallpaper_vendor_integrations_summary">这里的选项专门适配部分墨水屏厂商，后续可能增加更多厂商。</string>
+    <string name="book_cover_wallpaper_export">导出固定封面图片</string>
+    <string name="book_cover_wallpaper_export_summary">每次打开书籍时覆盖同一个 PNG 文件。请在阅读器的休眠屏幕设置中选择该文件。</string>
+    <string name="book_cover_wallpaper_export_file">导出文件</string>
+    <string name="book_cover_wallpaper_export_file_none">未选择封面文件</string>
+    <string name="book_cover_wallpaper_export_file_failed">无法获得所选文件的写入权限，请选择其他文件。</string>
+    <string name="book_cover_wallpaper_change_file">更改文件</string>
+    <string name="book_cover_wallpaper_publish_failed">书籍已打开，但无法发布当前书籍封面。</string>
+    <string name="book_cover_scale_mode">封面缩放</string>
+    <string name="book_cover_scale_fit">适应</string>
+    <string name="book_cover_scale_fit_summary">完整显示封面，未使用的区域填充为白色。</string>
+    <string name="book_cover_scale_fill">填充</string>
+    <string name="book_cover_scale_fill_summary">保持原始比例填满屏幕，并裁切超出的部分。</string>
+    <string name="book_cover_scale_stretch">拉伸</string>
+    <string name="book_cover_scale_stretch_summary">不保持封面原始比例，直接填满屏幕。</string>
 </resources>

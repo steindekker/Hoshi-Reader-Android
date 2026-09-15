@@ -31,13 +31,15 @@
     });
   }
 
+  function textSemantics() {
+    if (!global.hoshiReaderTextSemantics) {
+      throw new Error('hoshiReaderTextSemantics is required for reader DOM text normalization');
+    }
+    return global.hoshiReaderTextSemantics;
+  }
+
   function isJapaneseBreakCharacter(text) {
-    var code = (text || '').codePointAt(0);
-    return (code >= 0x3000 && code <= 0x303f) ||
-      (code >= 0x3040 && code <= 0x30ff) ||
-      (code >= 0x3400 && code <= 0x9fff) ||
-      (code >= 0xf900 && code <= 0xfaff) ||
-      (code >= 0xff00 && code <= 0xffef);
+    return textSemantics().isJapaneseBreakCharacter(text);
   }
 
   function stabilizeRubyAdjacentTextNodes(context, root) {

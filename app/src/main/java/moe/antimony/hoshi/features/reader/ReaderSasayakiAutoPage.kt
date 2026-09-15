@@ -4,6 +4,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import moe.antimony.hoshi.features.sasayaki.SasayakiCueRevealSource
 
+internal const val ReaderSasayakiFullscreenImageDismissPollMillis = 50L
+
 internal fun cancelReaderSasayakiAutoPage(
     job: Job?,
     clearAutoPageJob: () -> Unit,
@@ -20,14 +22,23 @@ internal fun openReaderFullscreenImage(
     sourceUrl: String,
     imageResourceForUrl: (String) -> ReaderWebResource?,
     closeLookupPopupsAndSelection: () -> Unit,
-    cancelAutoPage: () -> Unit,
     showFullscreenImage: (ReaderFullscreenImage) -> Unit,
 ): Boolean {
     val resource = imageResourceForUrl(sourceUrl) ?: return false
-    cancelAutoPage()
     closeLookupPopupsAndSelection()
     showFullscreenImage(ReaderFullscreenImage(sourceUrl, resource))
     return true
+}
+
+internal suspend fun awaitReaderSasayakiImageHold(
+    imageHoldMillis: Long,
+    isFullscreenImageVisible: () -> Boolean,
+    delayMillis: suspend (Long) -> Unit = { delay(it) },
+) {
+    delayMillis(imageHoldMillis)
+    while (isFullscreenImageVisible()) {
+        delayMillis(ReaderSasayakiFullscreenImageDismissPollMillis)
+    }
 }
 
 internal suspend fun awaitReaderSasayakiChapterReady(

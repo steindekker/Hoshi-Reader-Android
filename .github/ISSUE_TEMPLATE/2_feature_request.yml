@@ -3,11 +3,6 @@ description: Request an Android-specific feature or change
 title: '[Feature Request]: '
 labels: ["enhancement"]
 body:
-  - type: markdown
-    attributes:
-      value: >-
-        General, non-Android-specific feature requests should be opened in the
-        iOS repository first: https://github.com/Manhhao/Hoshi-Reader/issues
   - type: textarea
     id: description
     attributes:
@@ -25,11 +20,4 @@ body:
         - label: >-
             I have searched the existing issues and this is NOT a duplicate of
             an already open or closed issue.
-          required: true
-        - label: >-
-            This request is Android-specific, or cannot be implemented on iOS
-            because of system limitations. General feature requests should be
-            submitted to the
-            [iOS repository](https://github.com/Manhhao/Hoshi-Reader/issues)
-            first.
           required: true

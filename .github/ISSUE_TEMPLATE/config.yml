@@ -1,7 +1,1 @@
 blank_issues_enabled: false
-contact_links:
-  - name: General feature requests
-    url: https://github.com/Manhhao/Hoshi-Reader/issues
-    about: >-
-      For non-Android-specific feature requests, open an issue in the iOS
-      repository first.

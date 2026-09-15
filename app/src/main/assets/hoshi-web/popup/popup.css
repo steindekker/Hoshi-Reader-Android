@@ -30,7 +30,7 @@ body {
     --background-color-dark1: #eeeeee;
     color: var(--text-color);
     background-color: transparent;
-    font-family: var(--hoshi-content-font-family, "Noto Sans CJK JP", "NotoSansCJKJP-Regular", sans-serif) !important;
+    font-family: Arial, var(--hoshi-content-font-family, "Noto Sans CJK JP", "NotoSansCJKJP-Regular", sans-serif) !important;
     overscroll-behavior-y: contain;
     touch-action: pan-y;
 }
@@ -74,6 +74,25 @@ body {
     -webkit-user-select: none;
 }
 
+.kanji-char {
+    cursor: pointer;
+}
+
+.kanji {
+    font-size: 120px;
+    line-height: 1;
+    font-family: "KanjiStrokeOrders_v4.005", "KanjiStrokeOrders", "YuKyo-Medium", var(--hoshi-content-font-family, "Noto Sans CJK JP", sans-serif);
+}
+
+.kanji-separator {
+    margin: 6px 0;
+}
+
+.kanji-reading-label {
+    opacity: 0.6;
+    margin-right: 6px;
+}
+
 .header-buttons {
     display: flex;
     align-items: center;
@@ -87,6 +106,36 @@ body {
     width: 28px;
     height: 28px;
     -webkit-user-select: none;
+}
+
+.anki-format-actions {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+}
+
+.anki-format-actions[data-notes-placement="leading"] {
+    width: auto;
+    gap: 2px;
+}
+
+.button-slot[data-kind="notes"] {
+    width: 14px;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.button-slot[data-kind="notes"][data-placement="above"] {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% - 2px);
+    transform: translateX(-50%);
+    width: 22px;
+    height: 16px;
+    padding: 0 3px;
 }
 
 button.button-slot {
@@ -124,6 +173,10 @@ button.button-slot:disabled {
     -webkit-mask-size: contain;
     mask-size: contain;
     pointer-events: none;
+}
+
+.button-slot-small .button-slot-icon {
+    transform: scale(0.76);
 }
 
 .entry-tags {
@@ -408,20 +461,18 @@ a {
 }
 
 .pitch-dict-label {
+    display: inline-block;
     background-color: var(--pitch-tag-color, #94a6eb);
     color: #fff;
     padding: 2px 4px;
     border-radius: 4px;
+    white-space: nowrap;
 }
 
 .pitch-entries {
     list-style: circle inside;
     margin: 2px 0 0 0;
     padding: 0;
-}
-
-.pitch-group + .pitch-group {
-    margin-top: 5px;
 }
 
 /* https://github.com/yomidevs/yomitan/blob/master/ext/css/display-pronunciation.css */
@@ -446,6 +497,46 @@ a {
 .pronunciation-mora[data-pitch="high"][data-pitch-next="low"] {
     padding-right: 1px;
     margin-right: 1px;
+}
+
+.pronunciation-devoice-indicator {
+    display: block;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 1.125em;
+    height: 1.125em;
+    border: 1px dotted #c83c28;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.pronunciation-nasal-indicator {
+    display: block;
+    position: absolute;
+    right: -0.125em;
+    top: 0.125em;
+    width: 0.375em;
+    height: 0.375em;
+    border: 1px solid #c83c28;
+    border-radius: 50%;
+}
+
+.pronunciation-nasal-diacritic {
+    position: absolute;
+    width: 0;
+    height: 0;
+    opacity: 0;
+}
+
+.pronunciation-character-group {
+    display: inline-block;
+    position: relative;
+}
+
+html[data-hoshi-eink-mode="true"] .pronunciation-devoice-indicator,
+html[data-hoshi-eink-mode="true"] .pronunciation-nasal-indicator {
+    border-color: currentColor;
 }
 
 ::highlight(hoshi-selection) {

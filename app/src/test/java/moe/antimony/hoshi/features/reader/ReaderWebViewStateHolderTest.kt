@@ -3,9 +3,14 @@ package moe.antimony.hoshi.features.reader
 import androidx.compose.ui.unit.IntSize
 import kotlin.io.path.createTempDirectory
 import moe.antimony.hoshi.content.ContentLanguageProfile
+import moe.antimony.hoshi.epub.BookInfo
+import moe.antimony.hoshi.epub.EpubBook
+import moe.antimony.hoshi.epub.EpubChapter
 import moe.antimony.hoshi.epub.ReadingStatistics
+import moe.antimony.hoshi.epub.SasayakiMatch
 import moe.antimony.hoshi.features.dictionary.LookupPopupItem
 import moe.antimony.hoshi.features.dictionary.LookupPopupState
+import moe.antimony.hoshi.features.sasayaki.SasayakiSheetTab
 import moe.antimony.hoshi.features.sasayaki.SasayakiSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -251,14 +256,14 @@ class ReaderWebViewStateHolderTest {
     fun sasayakiChapterLoadResetsStatisticsBaselineAfterSavingHiddenJumpTarget() {
         val events = mutableListOf<String>()
         val statistics = listOf(ReadingStatistics(title = "Book", dateKey = "2026-06-24", charactersRead = 12))
-        val target = ReaderChapterPosition(index = 3, progress = 0.0)
+        val target = ReaderChapterPosition(index = 3, progress = 0.75)
 
         val saved = readerSasayakiChapterLoadPosition(
             saveStatistics = {
                 events += "flush"
                 statistics
             },
-            jumpToChapterStart = {
+            jumpToTarget = {
                 events += "jump"
                 target
             },
@@ -271,7 +276,52 @@ class ReaderWebViewStateHolderTest {
         )
 
         assertEquals(target, saved)
-        assertEquals(listOf("flush", "jump", "save 3:0.0 12", "reset"), events)
+        assertEquals(listOf("flush", "jump", "save 3:0.75 12", "reset"), events)
+    }
+
+    @Test
+    fun sasayakiCueProgressUsesCueStartWithinTargetChapter() {
+        val book = sasayakiProgressBook(chapterCount = 1_000)
+
+        assertEquals(0.75, readerSasayakiCueProgress(book, sasayakiProgressCue(start = 750)), 0.0)
+    }
+
+    @Test
+    fun sasayakiCueProgressClampsCueStartToChapterBounds() {
+        val book = sasayakiProgressBook(chapterCount = 1_000)
+
+        assertEquals(0.0, readerSasayakiCueProgress(book, sasayakiProgressCue(start = -1)), 0.0)
+        assertEquals(1.0, readerSasayakiCueProgress(book, sasayakiProgressCue(start = 1_001)), 0.0)
+    }
+
+    @Test
+    fun sasayakiCueProgressFallsBackWithoutUsableChapterMetadata() {
+        val zeroCountBook = sasayakiProgressBook(chapterCount = 0)
+        val missingInfoBook = zeroCountBook.copy(
+            bookInfo = BookInfo(characterCount = 0, chapterInfo = emptyMap()),
+        )
+        val missingChapterCue = sasayakiProgressCue(start = 10).copy(chapterIndex = 2)
+
+        assertEquals(0.0, readerSasayakiCueProgress(zeroCountBook, sasayakiProgressCue(start = 10)), 0.0)
+        assertEquals(0.0, readerSasayakiCueProgress(missingInfoBook, sasayakiProgressCue(start = 10)), 0.0)
+        assertEquals(0.0, readerSasayakiCueProgress(zeroCountBook, missingChapterCue), 0.0)
+    }
+
+    @Test
+    fun sasayakiCrossChapterInitialProgressTargetsCueOnlyWhenJumpingBackward() {
+        val book = sasayakiProgressBook(chapterCount = 1_000)
+        val cue = sasayakiProgressCue(start = 750)
+
+        assertEquals(
+            0.75,
+            readerSasayakiCrossChapterInitialProgress(book, cue, currentChapterIndex = 1),
+            0.0,
+        )
+        assertEquals(
+            0.0,
+            readerSasayakiCrossChapterInitialProgress(book, cue, currentChapterIndex = -1),
+            0.0,
+        )
     }
 
     @Test
@@ -476,63 +526,6 @@ class ReaderWebViewStateHolderTest {
     }
 
     @Test
-    fun readerChapterHtmlInjectsSingleEarlyViewportMetaBeforeBodyContent() {
-        val html = """
-            <!doctype html>
-            <html>
-            <head>
-                <title>Chapter</title>
-                <meta name="viewport" content="width=320">
-            </head>
-            <body><p>Reader text</p></body>
-            </html>
-        """.trimIndent()
-
-        val prepared = readerHtmlWithEarlyViewport(html)
-
-        assertEquals(1, Regex("""<meta\s+name=["']viewport["']""").findAll(prepared).count())
-        assertTrue(
-            prepared.indexOf("width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no") <
-                prepared.indexOf("<body>"),
-        )
-        assertTrue(prepared.contains("<p>Reader text</p>"))
-    }
-
-    @Test
-    fun readerChapterHtmlKeepsXmlDeclarationAtDocumentStart() {
-        val html = """
-
-              <?xml version="1.0" encoding="UTF-8"?>
-              <html xmlns="http://www.w3.org/1999/xhtml">
-              <head><title>Reader</title></head>
-              <body><p>Reader text</p></body>
-              </html>
-        """.trimIndent()
-
-        val prepared = readerHtmlWithEarlyViewport(html)
-
-        assertTrue(prepared.startsWith("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"))
-        assertFalse(prepared.startsWith("\n"))
-        assertFalse(prepared.startsWith(" "))
-        assertTrue(prepared.contains("<meta name=\"viewport\""))
-    }
-
-    @Test
-    fun readerChapterHtmlDoesNotFabricateHeadForMalformedXhtmlLikeIos() {
-        val html = """
-            <html>
-            <body><p>Reader text</p></body>
-            </html>
-        """.trimIndent()
-
-        val prepared = readerHtmlWithEarlyViewport(html)
-
-        assertFalse(prepared.contains("<head>"))
-        assertFalse(prepared.contains("<meta name=\"viewport\""))
-        assertTrue(prepared.contains("<p>Reader text</p>"))
-    }
-
-    @Test
     fun sasayakiTopToggleSpaceIsReservedBeforeSidecarsAreParsed() {
         val root = createTempDirectory("hoshi-sasayaki-sidecar").toFile()
         try {
@@ -622,6 +615,14 @@ class ReaderWebViewStateHolderTest {
         )
 
         assertEquals(base.readerContentReloadKey(), popupOnly.readerContentReloadKey())
+    }
+
+    @Test
+    fun readerContentReloadKeyIgnoresChromeSafeAreaSettings() {
+        val base = ReaderSettings(viewMode = ReaderViewMode.Continuous)
+
+        assertEquals(base.readerContentReloadKey(), base.copy(topSafeAreaDp = 72).readerContentReloadKey())
+        assertEquals(base.readerContentReloadKey(), base.copy(bottomSafeAreaDp = 72).readerContentReloadKey())
     }
 
     @Test
@@ -715,6 +716,18 @@ class ReaderWebViewStateHolderTest {
             readerAppearanceUpdateKey(base, systemDark = false, sasayakiTextColor = 0xFF111111, sasayakiBackgroundColor = 0xFFFFFFFF) ==
                 readerAppearanceUpdateKey(textChanged, systemDark = false, sasayakiTextColor = 0xFF111111, sasayakiBackgroundColor = 0xFFFFFFFF),
         )
+    }
+
+    @Test
+    fun readerAppearanceUpdateKeyTracksCustomTextColorWithoutReloadingContent() {
+        val blue = ReaderSettings(theme = ReaderTheme.Custom, customTextColor = 0xFF5F8FFF)
+        val red = blue.copy(customTextColor = 0xFFFF0000)
+        val blueKey = readerAppearanceUpdateKey(blue, false, 0xFF111111, 0xFFFFFFFF)
+        val redKey = readerAppearanceUpdateKey(red, false, 0xFF111111, 0xFFFFFFFF)
+
+        assertEquals(blue.readerContentReloadKey(), red.readerContentReloadKey())
+        assertEquals("#5f8fff", blueKey.textColorCss)
+        assertEquals("#ff0000", redKey.textColorCss)
     }
 
     @Test
@@ -891,9 +904,82 @@ class ReaderWebViewStateHolderTest {
 
         holder.dismissGoTo()
         holder.showReaderMenu()
-        holder.openSasayakiFromMenu()
+        holder.openSasayakiFromMenu(SasayakiSheetTab.Resources)
         assertFalse(holder.showReaderMenu)
         assertTrue(holder.showSasayaki)
+    }
+
+    @Test
+    fun contentsTabSelectionSurvivesSheetDismissalWithinReaderSession() {
+        val holder = stateHolder()
+
+        assertEquals(ReaderGoToTab.Chapters, holder.selectedGoToTab)
+        holder.openGoToFromMenu()
+        holder.selectGoToTab(ReaderGoToTab.Gallery)
+        holder.dismissGoTo()
+        holder.openGoToFromMenu()
+
+        assertEquals(ReaderGoToTab.Gallery, holder.selectedGoToTab)
+
+        holder.selectGoToTab(ReaderGoToTab.Search)
+        holder.dismissGoTo()
+        holder.openGoToFromMenu()
+
+        assertEquals(ReaderGoToTab.Search, holder.selectedGoToTab)
+    }
+
+    @Test
+    fun sasayakiFirstOpenUsesCurrentDefaultAndLaterOpensKeepExplicitSelection() {
+        val holder = stateHolder()
+
+        holder.openSasayakiFromMenu(SasayakiSheetTab.Chapters)
+        assertEquals(SasayakiSheetTab.Chapters, holder.selectedSasayakiTab)
+
+        holder.selectSasayakiTab(SasayakiSheetTab.Settings)
+        holder.dismissSasayaki()
+        holder.openSasayakiFromMenu(SasayakiSheetTab.Resources)
+
+        assertEquals(SasayakiSheetTab.Settings, holder.selectedSasayakiTab)
+    }
+
+    @Test
+    fun sasayakiDataChangesDoNotReplaceFirstOpenTabSelection() {
+        val holder = stateHolder()
+
+        holder.openSasayakiFromMenu(SasayakiSheetTab.Resources)
+        holder.openSasayakiFromMenu(SasayakiSheetTab.Chapters)
+
+        assertEquals(SasayakiSheetTab.Resources, holder.selectedSasayakiTab)
+    }
+
+    @Test
+    fun newReaderSessionResetsRememberedSheetTabs() {
+        val previousSession = stateHolder()
+        previousSession.selectGoToTab(ReaderGoToTab.Highlights)
+        previousSession.openSasayakiFromMenu(SasayakiSheetTab.Chapters)
+        previousSession.selectSasayakiTab(SasayakiSheetTab.Settings)
+
+        val newSession = stateHolder()
+
+        assertEquals(ReaderGoToTab.Chapters, newSession.selectedGoToTab)
+        newSession.openSasayakiFromMenu(SasayakiSheetTab.Resources)
+        assertEquals(SasayakiSheetTab.Resources, newSession.selectedSasayakiTab)
+    }
+
+    @Test
+    fun statisticsBlockingSheetStaysVisibleUntilEveryOpenSheetIsDismissed() {
+        val holder = stateHolder()
+
+        assertFalse(holder.hasStatisticsBlockingSheet)
+        holder.openAppearanceFromMenu()
+        holder.openGoToFromMenu()
+        assertTrue(holder.hasStatisticsBlockingSheet)
+
+        holder.dismissAppearance()
+        assertTrue(holder.hasStatisticsBlockingSheet)
+
+        holder.dismissGoTo()
+        assertFalse(holder.hasStatisticsBlockingSheet)
     }
 
     @Test
@@ -917,6 +1003,40 @@ class ReaderWebViewStateHolderTest {
                 index = initialIndex,
                 progress = initialProgress,
             ),
+        )
+
+    private fun sasayakiProgressBook(chapterCount: Int): EpubBook {
+        val chapter = EpubChapter(
+            id = "chapter-1",
+            href = "chapter-1.xhtml",
+            mediaType = "application/xhtml+xml",
+            html = "<p>chapter</p>",
+        )
+        return EpubBook(
+            title = "Book",
+            chapters = listOf(chapter),
+            bookInfo = BookInfo(
+                characterCount = chapterCount,
+                chapterInfo = mapOf(
+                    chapter.href to BookInfo.ChapterInfo(
+                        spineIndex = 0,
+                        currentTotal = 0,
+                        chapterCount = chapterCount,
+                    ),
+                ),
+            ),
+        )
+    }
+
+    private fun sasayakiProgressCue(start: Int): SasayakiMatch =
+        SasayakiMatch(
+            id = "cue",
+            startTime = 10.0,
+            endTime = 12.0,
+            text = "cue",
+            chapterIndex = 0,
+            start = start,
+            length = 3,
         )
 
     private fun lookupPopup(): LookupPopupItem =

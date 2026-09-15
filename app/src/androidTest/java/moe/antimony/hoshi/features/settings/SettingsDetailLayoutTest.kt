@@ -90,6 +90,32 @@ class SettingsDetailLayoutTest {
         )
     }
 
+    @Test
+    fun dictionaryFrequencyLabelStaysOnOneLineAtCompactWidth() {
+        composeRule.setContent {
+            MaterialTheme {
+                Box(
+                    modifier = Modifier
+                        .requiredSize(width = 360.dp, height = 780.dp)
+                        .testTag(RootTag),
+                ) {
+                    DictionaryView(
+                        onClose = {},
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+        }
+
+        val frequencyBounds = composeRule.onNodeWithText("Frequency")
+            .getUnclippedBoundsInRoot()
+
+        assertTrue(
+            "Frequency should stay on one line at compact width, but was $frequencyBounds",
+            frequencyBounds.bottom - frequencyBounds.top < 30.dp,
+        )
+    }
+
     private companion object {
         const val RootTag = "settings-detail-root"
     }

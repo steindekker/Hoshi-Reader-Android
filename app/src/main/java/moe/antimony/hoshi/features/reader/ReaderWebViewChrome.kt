@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -76,7 +75,7 @@ internal fun ReaderTopInfo(
     onSasayakiToggle: (() -> Unit)?,
     sasayakiPlaying: Boolean,
     visibility: ReaderChromeVisibility,
-    metrics: ReaderBottomChromeMetrics,
+    metrics: ReaderTopChromeMetrics,
     modifier: Modifier = Modifier,
 ) {
     val progress = state.progressText(settings, progressDisplay)
@@ -212,6 +211,7 @@ internal fun ReaderTopInfo(
                         contentDescription = stringResource(R.string.reader_jump_back),
                         colors = colors,
                         heightDp = metrics.topStatisticsButtonSizeDp,
+                        iconSizeDp = metrics.topJumpHistoryIconSizeDp,
                         onClick = requireNotNull(onJumpBack),
                     )
                 }
@@ -238,6 +238,7 @@ internal fun ReaderTopInfo(
                         contentDescription = stringResource(R.string.reader_jump_forward),
                         colors = colors,
                         heightDp = metrics.topSasayakiButtonSizeDp,
+                        iconSizeDp = metrics.topJumpHistoryIconSizeDp,
                         onClick = requireNotNull(onJumpForward),
                     )
                 }
@@ -276,6 +277,7 @@ private fun ReaderJumpHistoryButton(
     contentDescription: String,
     colors: ReaderChromeColors,
     heightDp: Int,
+    iconSizeDp: Int,
     onClick: () -> Unit,
 ) {
     Row(
@@ -290,7 +292,7 @@ private fun ReaderJumpHistoryButton(
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(iconSizeDp.dp),
                 tint = Color(colors.infoText),
             )
         }
@@ -303,7 +305,7 @@ private fun ReaderJumpHistoryButton(
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(iconSizeDp.dp),
                 tint = Color(colors.infoText),
             )
         }
@@ -386,8 +388,18 @@ internal fun BoxScope.ReaderBottomChrome(
     metrics: ReaderBottomChromeMetrics,
     modifier: Modifier = Modifier,
 ) {
-    val controlsHeightDp = metrics.buttonSizeDp
-    val bottomChromeHeightDp = 8 + controlsHeightDp + metrics.bottomPaddingDp + metrics.bottomSafeAreaDp
+    val bubbleMetrics = readerInfoBubbleMetrics()
+    val progressLineHeight = with(LocalDensity.current) {
+        MaterialTheme.typography.labelMedium.lineHeight.toDp()
+    }
+    val controlsHeight = maxOf(
+        metrics.buttonSizeDp.dp,
+        progressLineHeight * layout.bottomCenterLineCount +
+            bubbleMetrics.verticalPaddingDp.dp * 2 +
+            2.dp,
+    )
+    val bottomChromeHeight =
+        8.dp + controlsHeight + metrics.bottomPaddingDp.dp + metrics.bottomSafeAreaDp.dp
     if (menuExpanded) {
         Box(
             modifier = Modifier
@@ -410,7 +422,7 @@ internal fun BoxScope.ReaderBottomChrome(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(bottomChromeHeightDp.dp)
+            .height(bottomChromeHeight)
             .padding(
                 start = metrics.horizontalPaddingDp.dp,
                 end = metrics.horizontalPaddingDp.dp,
@@ -420,15 +432,13 @@ internal fun BoxScope.ReaderBottomChrome(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(top = 8.dp)
-                .height(controlsHeightDp.dp)
+                .height(controlsHeight)
                 .fillMaxWidth(),
         ) {
             if (layout.bottomCenterLineCount > 0) {
-                val bubbleMetrics = readerInfoBubbleMetrics()
                 Surface(
                     modifier = Modifier
                         .align(Alignment.Center)
-                        .heightIn(max = layout.bottomCenterMaxHeightDp.dp)
                         .readerChromeShadow(
                             elevationDp = colors.bubbleShadowElevationDp,
                             shadowColor = Color(colors.bubbleShadowColor),
@@ -469,7 +479,9 @@ internal fun BoxScope.ReaderBottomChrome(
                                 text = state.progressText(settings, progressDisplay),
                                 color = Color(colors.infoText),
                                 style = MaterialTheme.typography.labelMedium,
-                                maxLines = 1,
+                                maxLines = 2,
+                                softWrap = false,
+                                textAlign = TextAlign.Center,
                             )
                         }
                     }

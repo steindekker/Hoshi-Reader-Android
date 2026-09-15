@@ -15,12 +15,15 @@ import moe.antimony.hoshi.epub.writeMinimalExtractedEpub
 import moe.antimony.hoshi.profiles.ProfileRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
+import java.text.Normalizer
 import java.time.Instant
 import java.time.ZoneId
 import java.util.UUID
@@ -99,6 +102,90 @@ class HoshiBackupRepositoryTest {
 
         assertFalse(booksDir.resolve("old/metadata.json").exists())
         assertEquals("""{"id":"book-a"}""", booksDir.resolve("book-a/metadata.json").readText())
+    }
+
+    @Test
+    fun restoreBooksReconcilesSafeIosUnicodeMetadataPathsAndPreservesOtherMetadata() = runBlocking {
+        val filesDir = Files.createTempDirectory("hoshi-books-backup-unicode-paths").toFile()
+        val nfcFolder = "ビブリア"
+        val nfcEpub = "ビブリア.epub"
+        val nfcCover = "カバー.jpg"
+        val nfdFolder = Normalizer.normalize(nfcFolder, Normalizer.Form.NFD)
+        val nfdEpub = Normalizer.normalize(nfcEpub, Normalizer.Form.NFD)
+        val nfdCover = Normalizer.normalize(nfcCover, Normalizer.Form.NFD)
+        val unsafeFolder = "unsafe-book"
+        val unsafeMetadata =
+            """{"id":"00000000-0000-0000-0000-000000000002","title":"Unsafe","cover":"Books/../outside.jpg","folder":"unsafe-book","lastAccess":0.0,"epub":"unsafe.epub"}"""
+        val invalidMetadata = "not-json"
+        val missingMetadata =
+            """{"id":"00000000-0000-0000-0000-000000000003","title":"Missing","cover":"Books/missing-book/missing.jpg","folder":"missing-book","lastAccess":0.0,"epub":"missing.epub"}"""
+        val exactMetadata =
+            """{"id":"00000000-0000-0000-0000-000000000004","title":"Exact","cover":"Books/exact-book/cover.jpg","folder":"exact-book","lastAccess":0.0,"epub":"exact.epub","futureField":"keep"}"""
+        val crossBookMetadata =
+            """{"id":"00000000-0000-0000-0000-000000000005","title":"Cross book","cover":"Books/unsafe-book/outside.jpg","folder":"cross-book","lastAccess":0.0,"epub":"cross.epub"}"""
+        val archive = zipBytes(
+            "$nfcFolder/metadata.json" to
+                """
+                {
+                  "id": "00000000-0000-0000-0000-000000000001",
+                  "title": "ビブリア",
+                  "cover": "Books/$nfdFolder/$nfdCover",
+                  "folder": "$nfdFolder",
+                  "lastAccess": 0.0,
+                  "epub": "$nfdEpub",
+                  "futureField": {"keep": true}
+                }
+                """.trimIndent().toByteArray(),
+            "$nfcFolder/$nfcEpub" to byteArrayOf(1, 2, 3),
+            "$nfcFolder/$nfcCover" to byteArrayOf(4, 5, 6),
+            "$unsafeFolder/metadata.json" to unsafeMetadata.toByteArray(),
+            "$unsafeFolder/unsafe.epub" to byteArrayOf(7),
+            "$unsafeFolder/outside.jpg" to byteArrayOf(8),
+            "invalid-book/metadata.json" to invalidMetadata.toByteArray(),
+            "missing-book/metadata.json" to missingMetadata.toByteArray(),
+            "missing-book/missing.epub" to byteArrayOf(9),
+            "exact-book/metadata.json" to exactMetadata.toByteArray(),
+            "exact-book/exact.epub" to byteArrayOf(10),
+            "exact-book/cover.jpg" to byteArrayOf(11),
+            "cross-book/metadata.json" to crossBookMetadata.toByteArray(),
+            "cross-book/cross.epub" to byteArrayOf(12),
+        )
+
+        HoshiBackupRepository(filesDir).restoreBooks(ByteArrayInputStream(archive))
+
+        val restoredRoot = filesDir.resolve("Books/$nfcFolder")
+        val metadata = Json.parseToJsonElement(restoredRoot.resolve("metadata.json").readText()).jsonObject
+        assertEquals(nfcFolder, metadata.getValue("folder").jsonPrimitive.content)
+        assertEquals(nfcEpub, metadata.getValue("epub").jsonPrimitive.content)
+        assertEquals("Books/$nfcFolder/$nfcCover", metadata.getValue("cover").jsonPrimitive.content)
+        assertEquals("""{"keep":true}""", metadata.getValue("futureField").toString())
+        assertEquals(unsafeMetadata, filesDir.resolve("Books/$unsafeFolder/metadata.json").readText())
+        assertEquals(invalidMetadata, filesDir.resolve("Books/invalid-book/metadata.json").readText())
+        assertEquals(missingMetadata, filesDir.resolve("Books/missing-book/metadata.json").readText())
+        assertEquals(exactMetadata, filesDir.resolve("Books/exact-book/metadata.json").readText())
+        assertEquals(crossBookMetadata, filesDir.resolve("Books/cross-book/metadata.json").readText())
+
+        val entry = BookRepository(filesDir).loadBookEntries().single { it.metadata.id.endsWith("1") }
+        assertEquals(restoredRoot.resolve(nfcEpub).canonicalFile, BookRepository(filesDir).epubFile(entry)?.canonicalFile)
+        assertEquals(restoredRoot.resolve(nfcCover).canonicalFile, BookRepository(filesDir).coverFile(entry)?.canonicalFile)
+    }
+
+    @Test
+    fun restoredPathComponentResolutionPrefersExactAndRejectsUnsafeMissingOrAmbiguousMatches() {
+        val precomposed = "ấ.epub"
+        val fullyDecomposed = "a\u0302\u0301.epub"
+        val partiallyDecomposed = "â\u0301.epub"
+
+        assertEquals(
+            fullyDecomposed,
+            resolveRestoredPathComponent(fullyDecomposed, listOf(precomposed, fullyDecomposed)),
+        )
+        assertEquals(precomposed, resolveRestoredPathComponent(fullyDecomposed, listOf(precomposed)))
+        assertNull(resolveRestoredPathComponent(precomposed, listOf(fullyDecomposed, partiallyDecomposed)))
+        assertNull(resolveRestoredPathComponent("missing.epub", listOf(precomposed)))
+        assertNull(resolveRestoredPathComponent("../$precomposed", listOf(precomposed)))
+        assertNull(resolveRestoredPathComponent("folder/$precomposed", listOf(precomposed)))
+        assertNull(resolveRestoredPathComponent("folder\\$precomposed", listOf(precomposed)))
     }
 
     @Test
@@ -236,7 +323,10 @@ class HoshiBackupRepositoryTest {
         val sourceDir = Files.createTempDirectory("hoshi-dictionaries-backup-source").toFile()
         sourceDir.resolve("Dictionaries/Term/JMdict").mkdirs()
         sourceDir.resolve("Dictionaries/Term/JMdict/index.json").writeText("""{"title":"JMdict"}""")
-        sourceDir.resolve("Dictionaries/config.json").writeText("""{"termDictionaries":[]}""")
+        sourceDir.resolve("Dictionaries/Kanji/KANJIDIC").mkdirs()
+        sourceDir.resolve("Dictionaries/Kanji/KANJIDIC/index.json").writeText("""{"title":"KANJIDIC"}""")
+        val config = """{"termDictionaries":[{"fileName":"JMdict","isEnabled":true,"order":0,"category":"exclude"}],"frequencyDictionaries":[],"pitchDictionaries":[],"kanjiDictionaries":[{"fileName":"KANJIDIC","isEnabled":true,"order":0,"category":"none"}]}"""
+        sourceDir.resolve("Dictionaries/config.json").writeText(config)
         val output = ByteArrayOutputStream()
         HoshiBackupRepository(sourceDir).exportDictionaries(output)
         val targetDir = Files.createTempDirectory("hoshi-dictionaries-backup-target").toFile()
@@ -249,7 +339,8 @@ class HoshiBackupRepositoryTest {
 
         assertFalse(targetDir.resolve("Dictionaries/old/index.json").exists())
         assertEquals("""{"title":"JMdict"}""", targetDir.resolve("Dictionaries/Term/JMdict/index.json").readText())
-        assertEquals("""{"termDictionaries":[]}""", targetDir.resolve("Dictionaries/config.json").readText())
+        assertEquals("""{"title":"KANJIDIC"}""", targetDir.resolve("Dictionaries/Kanji/KANJIDIC/index.json").readText())
+        assertEquals(config, targetDir.resolve("Dictionaries/config.json").readText())
         assertFalse(zipEntryNames(output.toByteArray()).any { it == "Dictionaries/" || it.startsWith("Dictionaries/") })
     }
 
@@ -505,6 +596,72 @@ class HoshiBackupRepositoryTest {
         assertEquals(2, bookFolders.size)
         assertTrue("Same Title" in bookFolders)
         assertEquals(2, entries.count { it.endsWith("/cover_1_6.jpg") })
+    }
+
+    @Test
+    fun exportTtuBookDataDisambiguatesDuplicateLongTitlesWithinByteLimit() = runBlocking {
+        val sourceDir = Files.createTempDirectory("hoshi-ttu-backup-duplicate-long-title").toFile()
+        val sourceRepository = BookRepository(sourceDir)
+        val longTitle = "長".repeat(86)
+        val first = sourceRepository.createPackedTestBook("First Long Book")
+        val second = sourceRepository.createPackedTestBook("Second Long Book")
+        listOf(first, second).forEach { entry ->
+            sourceRepository.saveMetadata(entry.root, entry.metadata.copy(renamedTitle = longTitle))
+        }
+        val output = ByteArrayOutputStream()
+
+        HoshiBackupRepository(sourceDir).exportTtuBookData(output)
+
+        val bookFolders = zipEntryNames(output.toByteArray())
+            .filter { it.contains("/bookdata_") }
+            .map { it.substringBefore('/') }
+            .distinct()
+        assertEquals(2, bookFolders.size)
+        assertTrue(bookFolders.all { it.toByteArray(Charsets.UTF_8).size <= 255 })
+    }
+
+    @Test
+    fun exportAndRestoreTtuBookDataKeepsLongTitleWithByteSafeArchiveFolder() = runBlocking {
+        val sourceDir = Files.createTempDirectory("hoshi-ttu-backup-long-title").toFile()
+        val sourceRepository = BookRepository(sourceDir)
+        val title = "長".repeat(86)
+        val sourceEntry = sourceRepository.createPackedTestBook("Long Title Source")
+        sourceRepository.saveMetadata(sourceEntry.root, sourceEntry.metadata.copy(title = title))
+        val output = ByteArrayOutputStream()
+
+        HoshiBackupRepository(sourceDir).exportTtuBookData(output)
+
+        val bookDataEntry = zipEntryNames(output.toByteArray()).single { it.contains("/bookdata_") }
+        assertTrue(bookDataEntry.substringBefore('/').toByteArray(Charsets.UTF_8).size <= 255)
+
+        val targetDir = Files.createTempDirectory("hoshi-ttu-backup-long-title-target").toFile()
+        val restored = HoshiBackupRepository(targetDir).restoreTtuBookData(ByteArrayInputStream(output.toByteArray()))
+        val restoredEntry = BookRepository(targetDir).loadBookEntries().single()
+
+        assertEquals(1, restored)
+        assertEquals(title, restoredEntry.metadata.title)
+        assertTrue(restoredEntry.root.name.toByteArray(Charsets.UTF_8).size <= 250)
+    }
+
+    @Test
+    fun ttuRestoreEntryNameCapsIosStyleLongTopLevelFolder() {
+        val rawFolder = "長".repeat(86)
+
+        val mapped = remapTtuRestoreEntryName("$rawFolder/bookdata_1_6_1_2_3.zip")
+
+        assertTrue(mapped.substringBefore('/').toByteArray(Charsets.UTF_8).size <= 255)
+        assertTrue(mapped.substringBefore('/').substringAfterLast('-').matches(Regex("[0-9a-f]{16}")))
+        assertEquals("bookdata_1_6_1_2_3.zip", mapped.substringAfter('/'))
+    }
+
+    @Test
+    fun ttuRestoreEntryNameRejectsParentTraversalBeforeMapping() {
+        assertThrows(IllegalArgumentException::class.java) {
+            remapTtuRestoreEntryName("../bookdata_1_6_1_2_3.zip")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            remapTtuRestoreEntryName("/Long Book/bookdata_1_6_1_2_3.zip")
+        }
     }
 
     @Test

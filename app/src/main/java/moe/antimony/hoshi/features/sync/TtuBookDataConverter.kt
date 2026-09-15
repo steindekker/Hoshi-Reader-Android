@@ -77,9 +77,8 @@ class TtuBookDataConverter @Inject constructor(
         try {
             unzipInto(bookData, tempRoot)
             val staticData = json.decodeFromString(TtuStaticData.serializer(), tempRoot.resolve("staticdata.json").readText())
-            val folderName = staticData.title.sanitizeImportedBookFolderName()
-            require(folderName.isNotBlank()) { "TTU book title is empty." }
             val root = bookRepository.createBookDirectoryForImportedTitle(staticData.title)
+            val folderName = root.name
             val existingMetadata = bookRepository.loadMetadata(root)
             if (root.listFiles()?.isNotEmpty() == true) {
                 return@withContext BookEntry(

@@ -9,6 +9,19 @@ import java.io.File
 
 class ReaderSettingsTest {
     @Test
+    fun selectingFontVariantUpdatesStableIdsAndPerFamilyMemory() {
+        val family = ReaderRecommendedFontCatalog.families.first { it.id == "recommended:kleeone" }
+        val variant = family.variants.first { it.weight == 600 }
+
+        val selected = ReaderSettings().withFontSelection(family, variant)
+
+        assertEquals("Klee One", selected.selectedFont)
+        assertEquals(family.id, selected.selectedFontFamilyId)
+        assertEquals(variant.id, selected.selectedFontVariantId)
+        assertEquals(variant.id, selected.fontVariantSelections[family.id])
+    }
+
+    @Test
     fun defaultsMatchIosUserConfigFirstRunValuesWithAndroidFontPreset() {
         val settings = ReaderSettings()
 
@@ -17,6 +30,7 @@ class ReaderSettingsTest {
         assertEquals(22, settings.fontSize)
         assertEquals(5, settings.horizontalPadding)
         assertEquals(0, settings.verticalPadding)
+        assertEquals(30, settings.topSafeAreaDp)
         assertEquals(18, settings.bottomSafeAreaDp)
         assertEquals(1.65, settings.lineHeight, 0.0)
         assertEquals(0.0, settings.paragraphSpacing, 0.0)
@@ -30,14 +44,35 @@ class ReaderSettingsTest {
         assertFalse(settings.continuousMode)
         assertFalse(settings.blurImages)
         assertFalse(settings.enableStatistics)
+        assertTrue(settings.showStatisticsTab)
         assertEquals(StatisticsAutostartMode.Off, settings.statisticsAutostartMode)
         assertFalse(settings.showStatisticsToggle)
         assertFalse(settings.showReadingSpeed)
         assertFalse(settings.showReadingTime)
+        assertTrue(settings.showProgress)
+        assertFalse(settings.showChapterProgress)
         assertEquals(20, settings.chapterSwipeDistance)
+        assertEquals(72, settings.pageSwipeThresholdPx)
         assertTrue(settings.popupSwipeToDismiss)
         assertEquals(30, settings.popupSwipeThreshold)
         assertFalse(settings.openLastReadBookOnLaunch)
+    }
+
+    @Test
+    fun topSafeAreaCoercesToConfiguredRangeAndStep() {
+        assertEquals(30, 29.coerceReaderTopSafeAreaDp())
+        assertEquals(30, 30.coerceReaderTopSafeAreaDp())
+        assertEquals(32, 31.coerceReaderTopSafeAreaDp())
+        assertEquals(40, 39.coerceReaderTopSafeAreaDp())
+        assertEquals(72, 73.coerceReaderTopSafeAreaDp())
+    }
+
+    @Test
+    fun pageSwipeThresholdKeepsLegacyDefaultAndAllowsDisabledValue() {
+        assertEquals(0, (-1).coerceReaderPageSwipeThresholdPx())
+        assertEquals(0, 0.coerceReaderPageSwipeThresholdPx())
+        assertEquals(72, 72.coerceReaderPageSwipeThresholdPx())
+        assertEquals(360, 500.coerceReaderPageSwipeThresholdPx())
     }
 
     @Test
@@ -79,6 +114,19 @@ class ReaderSettingsTest {
         assertFalse(enabled.showStatisticsToggle)
         assertFalse(enabled.showReadingSpeed)
         assertFalse(enabled.showReadingTime)
+    }
+
+    @Test
+    fun statisticsTabVisibilityRemainsUserControlledWhenEnablingStatistics() {
+        val settings = ReaderSettings(
+            enableStatistics = false,
+            showStatisticsTab = false,
+        )
+
+        val enabled = settings.withStatisticsEnabled(true)
+
+        assertTrue(enabled.enableStatistics)
+        assertFalse(enabled.showStatisticsTab)
     }
 
     @Test
@@ -224,6 +272,70 @@ class ReaderSettingsTest {
         assertFalse(css.contains("font-family:"))
         assertTrue(css.contains("font-size: 22px !important;"))
         assertTrue(css.contains("writing-mode: vertical-rl !important;"))
+    }
+
+    @Test
+    fun readerCssUsesRealFacesAndSelectedVariableWeight() {
+        val spec = ReaderFontRenderSpec(
+            familyId = "recommended:notosansjp",
+            variantId = "wght-600-normal",
+            cssFamily = "hoshi-font-recommended-notosansjp",
+            displayName = "Noto Sans JP",
+            weight = 600,
+            italic = false,
+            variationSettings = mapOf("wght" to 600f),
+            faces = listOf(
+                ReaderFontFace(
+                    url = "https://appassets.androidplatform.net/fonts/System/NotoSansJP-wght.ttf",
+                    weight = 400,
+                    italic = false,
+                    variableWeightRange = 100..900,
+                ),
+                ReaderFontFace(
+                    url = "https://appassets.androidplatform.net/fonts/System/NotoSansJP-wght.ttf",
+                    weight = 600,
+                    italic = false,
+                    variableWeightRange = 100..900,
+                ),
+            ),
+        )
+
+        val css = ReaderContentStyles.styleTag(
+            settings = ReaderSettings(
+                selectedFont = "Noto Sans JP",
+                selectedFontFamilyId = spec.familyId,
+                selectedFontVariantId = spec.variantId,
+            ),
+            fontRenderSpec = spec,
+        )
+
+        assertTrue(css.contains("font-family: 'hoshi-font-recommended-notosansjp';"))
+        assertTrue(css.contains("font-weight: 100 900;"))
+        assertEquals(1, css.windowed("@font-face".length).count { it == "@font-face" })
+        assertTrue(css.contains("font-weight: 600 !important;"))
+        assertTrue(css.contains("font-variation-settings: 'wght' 600 !important;"))
+    }
+
+    @Test
+    fun publisherRenderSpecLeavesFamilyStyleAndWeightUntouched() {
+        val spec = ReaderFontRenderSpec(
+            familyId = ReaderFontManager.publisherFamilyId,
+            variantId = ReaderFontManager.publisherVariantId,
+            cssFamily = null,
+            displayName = ReaderFontManager.publisherFont,
+            weight = 400,
+            italic = false,
+            publisherFont = true,
+        )
+
+        val css = ReaderContentStyles.styleTag(
+            settings = ReaderSettings(selectedFont = ReaderFontManager.publisherFont),
+            fontRenderSpec = spec,
+        )
+
+        assertFalse(css.contains("font-family:"))
+        assertFalse(css.contains("font-weight:"))
+        assertFalse(css.contains("font-style:"))
     }
 
     @Test
@@ -527,6 +639,28 @@ class ReaderSettingsTest {
     }
 
     @Test
+    fun readerGaijiUsesReaderTextColorMaskForEverySemanticClass() {
+        val contentCss = ReaderContentStyles.styleTag(
+            settings = ReaderSettings(
+                theme = ReaderTheme.Custom,
+                uiTheme = ReaderInterfaceTheme.Light,
+                customBackgroundColor = 0xFFD0B2CA,
+                customTextColor = 0xFF5F8FFF,
+            ),
+        )
+
+        assertEquals("#5f8fff", cssCustomProperty(contentCss, "--hoshi-text-color"))
+        listOf("img[class*=\"gaiji\" i]", "img.hoshi-text-color-image").forEach { selector ->
+            val declarations = cssDeclarationsForSelector(contentCss, selector)
+            assertEquals(
+                "url(\"#hoshi-gaiji-text-color-filter\") !important",
+                declarations["filter"],
+            )
+            assertEquals("normal !important", declarations["mix-blend-mode"])
+        }
+    }
+
+    @Test
     fun eInkModeOverridesCustomThemeContentColors() {
         val settings = ReaderSettings(
             theme = ReaderTheme.Custom,
@@ -707,11 +841,15 @@ class ReaderSettingsTest {
     }
 
     private fun cssDeclarationsForSelector(css: String, selector: String): Map<String, String> {
-        val escapedSelector = Regex.escape(selector)
-        val block = Regex("""$escapedSelector\s*\{([^}]*)}""")
-            .find(css)
+        val block = Regex("""([^{}]+)\{([^{}]*)}""")
+            .findAll(css)
+            .firstOrNull { match ->
+                match.groupValues[1]
+                    .split(",")
+                    .any { it.trim() == selector }
+            }
             ?.groupValues
-            ?.get(1)
+            ?.get(2)
             ?: return emptyMap()
         return block
             .split(";")
@@ -724,4 +862,11 @@ class ReaderSettingsTest {
             }
             .toMap()
     }
+
+    private fun cssCustomProperty(css: String, property: String): String? =
+        Regex("""${Regex.escape(property)}\s*:\s*([^;]+);""")
+            .find(css)
+            ?.groupValues
+            ?.get(1)
+            ?.trim()
 }
