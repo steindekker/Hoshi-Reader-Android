@@ -8,6 +8,9 @@ internal fun writeMinimalExtractedEpub(
     root: File,
     title: String = "Sample Book",
     language: String? = null,
+    author: String? = null,
+    coverId: String = "cover",
+    coverProperties: String? = "cover-image",
     firstChapterHtml: String = "<html><body><p>First</p></body></html>",
     secondChapterHtml: String = "<html><body><p>Second</p></body></html>",
 ) {
@@ -31,6 +34,8 @@ internal fun writeMinimalExtractedEpub(
     root.resolve("OPS/styles/book.css").writeText("body {}")
     root.resolve("OPS/images/cover.jpg").writeBytes(byteArrayOf(1, 2, 3))
     val languageElement = language?.let { "<dc:language>$it</dc:language>" }.orEmpty()
+    val authorElement = author?.let { "<dc:creator>$it</dc:creator>" }.orEmpty()
+    val coverPropertiesAttribute = coverProperties?.let { " properties=\"$it\"" }.orEmpty()
     root.resolve("OPS/package.opf").writeText(
         """
         <?xml version="1.0" encoding="UTF-8"?>
@@ -38,12 +43,13 @@ internal fun writeMinimalExtractedEpub(
           <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
               <dc:title>$title</dc:title>
               $languageElement
+              $authorElement
           </metadata>
           <manifest>
             <item id="chapter-1" href="text/chapter-1.xhtml" media-type="application/xhtml+xml"/>
             <item id="chapter-2" href="text/chapter-2.xhtml" media-type="application/xhtml+xml"/>
             <item id="style" href="styles/book.css" media-type="text/css"/>
-            <item id="cover" href="images/cover.jpg" media-type="image/jpeg" properties="cover-image"/>
+            <item id="$coverId" href="images/cover.jpg" media-type="image/jpeg"$coverPropertiesAttribute/>
           </manifest>
           <spine>
             <itemref idref="chapter-1"/>

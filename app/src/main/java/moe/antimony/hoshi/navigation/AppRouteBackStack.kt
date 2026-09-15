@@ -12,6 +12,12 @@ internal fun MutableList<NavKey>.popAppRoute(
     notifyReaderRouteRemoved(hadReaderRoute, onReaderRouteRemoved)
 }
 
+internal fun MutableList<NavKey>.returnFromAnkiFormatDuplicate() {
+    if (lastOrNull() is AppRoute.AnkiCardFormatRoute) {
+        removeAt(lastIndex)
+    }
+}
+
 internal fun MutableList<NavKey>.replaceWithTopLevelRoute(
     route: AppRoute,
     onReaderRouteRemoved: () -> Unit = {},
@@ -28,6 +34,14 @@ internal fun MutableList<NavKey>.replaceWithTopLevelRoute(
 internal fun MutableList<NavKey>.openReaderRoute(bookId: String) {
     replaceWithTopLevelRoute(AppRoute.BooksRoute)
     add(AppRoute.ReaderRoute(bookId))
+}
+
+internal fun MutableList<NavKey>.removeReaderRoutes(
+    onReaderRouteRemoved: () -> Unit = {},
+) {
+    val hadReaderRoute = containsReaderRoute()
+    removeAll { route -> route is AppRoute.ReaderRoute }
+    notifyReaderRouteRemoved(hadReaderRoute, onReaderRouteRemoved)
 }
 
 internal fun MutableList<NavKey>.routeExternalBookImport(

@@ -15,12 +15,23 @@ sealed interface AppRoute : NavKey {
     data object DictionaryRoute : AppRoute
 
     @Serializable
+    data object StatisticsRoute : AppRoute
+
+    @Serializable
     data object SettingsRoute : AppRoute
 
     @Serializable
     data class SettingsDetailRoute(
         val section: SettingsDetailSection,
     ) : AppRoute
+
+    @Serializable
+    data class AnkiCardFormatRoute(
+        val formatId: String,
+    ) : AppRoute
+
+    @Serializable
+    data object AnkiAdvancedRoute : AppRoute
 
     @Serializable
     data class ReaderRoute(

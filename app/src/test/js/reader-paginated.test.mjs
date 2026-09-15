@@ -5,6 +5,7 @@ import vm from 'node:vm';
 
 const readerPaginatedUrl = new URL('../../main/assets/hoshi-web/reader/reader-paginated.js', import.meta.url);
 const readerContinuousUrl = new URL('../../main/assets/hoshi-web/reader/reader-continuous.js', import.meta.url);
+const readerViewportUrl = new URL('../../main/assets/hoshi-web/reader/reader-viewport.js', import.meta.url);
 const readerSasayakiUrl = new URL('../../main/assets/hoshi-web/reader/reader-sasayaki.js', import.meta.url);
 const readerTextSemanticsUrl = new URL('../../main/assets/hoshi-web/reader/reader-text-semantics.js', import.meta.url);
 const readerDomTextUrl = new URL('../../main/assets/hoshi-web/reader/reader-dom-text.js', import.meta.url);
@@ -26,10 +27,15 @@ function readerSource(url, options = {}) {
     const readerSasayaki = fs.readFileSync(readerSasayakiUrl, 'utf8');
     return fs.readFileSync(url, 'utf8')
         .replace('__HOSHI_HIGHLIGHTS_SCRIPT__', options.highlightsScript ?? '')
+        .replace('__HOSHI_READER_VIEWPORT_SCRIPT__', fs.readFileSync(readerViewportUrl, 'utf8'))
         .replace('__HOSHI_READER_SASAYAKI_SCRIPT__', readerSasayaki)
         .replace('__HOSHI_READER_TEXT_SEMANTICS_SCRIPT__', options.textSemanticsScript ?? readerTextSemanticsSource())
         .replace('__HOSHI_READER_DOM_TEXT_SCRIPT__', options.domTextScript ?? readerDomTextSource())
         .replace('__HOSHI_READER_MEDIA_SEMANTICS_SCRIPT__', options.mediaSemanticsScript ?? readerMediaSemanticsSource())
+        .replace(
+            '__HOSHI_READER_LAYOUT_SEMANTICS_SCRIPT__',
+            options.layoutSemanticsScript ?? 'window.hoshiReaderLayoutSemantics = { sanitizeInlineBlocks: function() {} };',
+        )
         .replaceAll('__HOSHI_RESTORE_TOKEN_LITERAL__', JSON.stringify('restore-token'))
         .replaceAll('__HOSHI_BOTTOM_OVERLAP_PX__', String(options.bottomOverlapPx ?? 0))
         .replaceAll('__HOSHI_VERTICAL_PADDING_BLOCK_RATIO__', '0')
@@ -405,7 +411,7 @@ function loadReader(body, sourceUrl = readerPaginatedUrl, options = {}) {
         body,
         head: documentHead,
         documentElement,
-        fonts: { ready: Promise.resolve() },
+        fonts: { ready: options.fontsReady ?? Promise.resolve() },
         readyState: 'loading',
         createDocumentFragment() {
             return new TestFragment();
@@ -700,12 +706,16 @@ test('paginated restoreProgress at chapter start avoids eager pagination metrics
     assert.equal(builtMetrics, 0);
 });
 
-test('reader initialization waits for image setup before offsets and restore scripts', async () => {
+test('reader initialization waits for fonts and images before sanitizing layout, offsets, and restore scripts', async () => {
     for (const sourceUrl of [readerPaginatedUrl, readerContinuousUrl]) {
         const body = new TestElement('body');
         body.appendChild(new TestText('本文'));
         const events = [];
+        let resolveFonts;
         let resolveImages;
+        const fontsReady = new Promise((resolve) => {
+            resolveFonts = resolve;
+        });
         const mediaSemanticsScript = `
           window.hoshiReaderMediaSemantics = {
             setupReaderImages: function() {
@@ -716,9 +726,18 @@ test('reader initialization waits for image setup before offsets and restore scr
             }
           };
         `;
+        const layoutSemanticsScript = `
+          window.hoshiReaderLayoutSemantics = {
+            sanitizeInlineBlocks: function(scope, vertical) {
+              window.__events.push(scope === document && vertical ? 'sanitize-vertical' : 'sanitize-horizontal');
+            }
+          };
+        `;
         const restoreScripts = "window.__events.push('restore'); window.hoshiReader.restoreProgress(0);";
         const { reader, window } = loadReader(body, sourceUrl, {
             mediaSemanticsScript,
+            layoutSemanticsScript,
+            fontsReady,
             restoreScripts,
             restoreMessages: [],
         });
@@ -734,11 +753,17 @@ test('reader initialization waits for image setup before offsets and restore scr
         assert.deepEqual(events, ['setup']);
 
         resolveImages();
-        for (let i = 0; i < 5; i += 1) {
+        for (let i = 0; i < 3; i += 1) {
+            await Promise.resolve();
+        }
+        assert.deepEqual(events, ['setup']);
+
+        resolveFonts();
+        for (let i = 0; i < 10; i += 1) {
             await Promise.resolve();
         }
 
-        assert.deepEqual(events.slice(0, 3), ['setup', 'offsets', 'restore']);
+        assert.deepEqual(events.slice(0, 4), ['setup', 'sanitize-vertical', 'offsets', 'restore']);
     }
 });
 
@@ -924,7 +949,7 @@ test('reader initialization completes when an image has already failed loading',
         };
 
         reader.initialize();
-        for (let i = 0; i < 5; i += 1) {
+        for (let i = 0; i < 10; i += 1) {
             await Promise.resolve();
         }
 
@@ -1077,6 +1102,48 @@ test('paginated Sasayaki media stop plan lists every image page before target cu
     );
 });
 
+test('paginated Sasayaki media stop plan ignores wide inline gaiji', () => {
+    const body = new TestElement('body');
+    body.scrollHeight = 2_400;
+    body.scrollWidth = 480;
+    body.scrollTop = 0;
+    body.scrollLeft = 0;
+    body.appendChild(new TestText('一'));
+    const gaijiWide = imgAt(900, 1_000);
+    gaijiWide.classList.add('gaiji-wide');
+    body.appendChild(gaijiWide);
+    const target = new TestText('二三');
+    target.rects = [testRect(1_700, 1_730)];
+    body.appendChild(target);
+    const { reader } = loadReader(body, readerPaginatedUrl);
+    reader.pageHeight = 800;
+
+    const stops = reader.sasayakiMediaStopsBeforeCue({ id: 'cue', start: 1, length: 2 });
+
+    assert.deepEqual(Array.from(stops), []);
+});
+
+test('paginated Sasayaki media stop plan ignores every class token containing gaiji', () => {
+    const body = new TestElement('body');
+    body.scrollHeight = 2_400;
+    body.scrollWidth = 480;
+    body.scrollTop = 0;
+    body.scrollLeft = 0;
+    body.appendChild(new TestText('一'));
+    const gaijiVariant = imgAt(900, 1_000);
+    gaijiVariant.classList.add('publisher-GaIjI-tall');
+    body.appendChild(gaijiVariant);
+    const target = new TestText('二三');
+    target.rects = [testRect(1_700, 1_730)];
+    body.appendChild(target);
+    const { reader } = loadReader(body, readerPaginatedUrl);
+    reader.pageHeight = 800;
+
+    const stops = reader.sasayakiMediaStopsBeforeCue({ id: 'cue', start: 1, length: 2 });
+
+    assert.deepEqual(Array.from(stops), []);
+});
+
 test('paginated Sasayaki media stop plan includes the current image page before target cue', () => {
     const body = new TestElement('body');
     body.scrollHeight = 2_400;
@@ -1141,6 +1208,20 @@ test('continuous Sasayaki media stop plan uses scroll targets for the current im
     );
     assert.equal(reader.showSasayakiMediaStop(stops[0]), reader.calculateProgress());
     assert.equal(document.documentElement.scrollTop, 0);
+});
+
+test('continuous Sasayaki media stop plan skips a visible image when the target cue is already visible', () => {
+    const body = new TestElement('body');
+    body.appendChild(imgAt(0, 800, 320, 480));
+    body.appendChild(new TestText('二三'));
+    const { reader, document } = loadReader(body, readerContinuousUrl, { writingMode: 'vertical-rl' });
+    document.documentElement.scrollLeft = 0.35;
+
+    reader.applySasayakiCues([{ id: 'cue', start: 0, length: 2 }]);
+    reader.cueWrappers.get('cue')[0].rect = testRect(120, 150, 160, 190);
+    const stops = reader.sasayakiMediaStopsBeforeCue({ id: 'cue', start: 0, length: 2 });
+
+    assert.deepEqual(Array.from(stops), []);
 });
 
 test('continuous vertical Sasayaki chapter-end media stop plan follows forward scroll direction', () => {

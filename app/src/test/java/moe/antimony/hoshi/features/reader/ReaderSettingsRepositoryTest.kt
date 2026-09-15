@@ -57,6 +57,9 @@ class ReaderSettingsRepositoryTest {
             assertEquals(0xFF999999L, settings.customInfoColor)
             assertTrue(settings.verticalWriting)
             assertEquals(ReaderFontManager.defaultMinchoFont, settings.selectedFont)
+            assertEquals(null, settings.selectedFontFamilyId)
+            assertEquals(null, settings.selectedFontVariantId)
+            assertTrue(settings.fontVariantSelections.isEmpty())
             assertEquals(22, settings.fontSize)
             assertFalse(settings.hideFurigana)
             assertEquals(ReaderViewMode.Paginated, settings.viewMode)
@@ -69,13 +72,17 @@ class ReaderSettingsRepositoryTest {
             assertFalse(settings.visualNovelMergeCrossScreenSasayakiCues)
             assertFalse(settings.blurImages)
             assertFalse(settings.enableStatistics)
+            assertTrue(settings.showStatisticsTab)
             assertEquals(StatisticsAutostartMode.Off, settings.statisticsAutostartMode)
+            assertEquals(0, settings.statisticsResetMinutes)
             assertFalse(settings.showStatisticsToggle)
             assertFalse(settings.showReadingSpeed)
             assertFalse(settings.showReadingTime)
             assertEquals(20, settings.chapterSwipeDistance)
+            assertEquals(72, settings.pageSwipeThresholdPx)
             assertEquals(5, settings.horizontalPadding)
             assertEquals(0, settings.verticalPadding)
+            assertEquals(30, settings.topSafeAreaDp)
             assertEquals(18, settings.bottomSafeAreaDp)
             assertFalse(settings.avoidPageBreak)
             assertFalse(settings.justifyText)
@@ -84,19 +91,22 @@ class ReaderSettingsRepositoryTest {
             assertEquals(0.0, settings.characterSpacing, 0.0)
             assertEquals(0.0, settings.paragraphSpacing, 0.0)
             assertTrue(settings.showTitle)
+            assertTrue(settings.showProgress)
+            assertFalse(settings.showChapterProgress)
             assertTrue(settings.showCharacters)
             assertTrue(settings.showPercentage)
             assertTrue(settings.alwaysShowProgress)
             assertTrue(settings.showProgressTop)
             assertTrue(settings.showReaderBackButton)
-            assertEquals(320, settings.popupWidth)
-            assertEquals(250, settings.popupHeight)
+            assertEquals(500, settings.popupWidth)
+            assertEquals(500, settings.popupHeight)
             assertEquals(1.0, settings.popupScale, 0.000001)
             assertFalse(settings.popupActionBar)
             assertFalse(settings.popupFullWidth)
             assertTrue(settings.popupSwipeToDismiss)
             assertEquals(30, settings.popupSwipeThreshold)
             assertFalse(settings.volumeKeysTurnPages)
+            assertFalse(settings.volumeKeysNavigatePopupTerms)
             assertFalse(settings.volumeKeysSeekSasayaki)
             assertFalse(settings.reverseVolumeKeyDirection)
             assertFalse(settings.keepScreenOnWhileReading)
@@ -119,11 +129,14 @@ class ReaderSettingsRepositoryTest {
                 fontSize = 29,
                 viewMode = ReaderViewMode.Continuous,
                 chapterSwipeDistance = 120,
+                pageSwipeThresholdPx = 500,
+                topSafeAreaDp = 100,
                 bottomSafeAreaDp = 100,
                 lineHeight = 1.9,
                 paragraphSpacing = 2.2,
                 popupSwipeThreshold = 120,
                 volumeKeysTurnPages = true,
+                volumeKeysNavigatePopupTerms = true,
                 volumeKeysSeekSasayaki = true,
                 keepScreenOnWhileReading = true,
                 lockCurrentOrientation = true,
@@ -145,11 +158,14 @@ class ReaderSettingsRepositoryTest {
             assertEquals(ReaderViewMode.Continuous, migrated.viewMode)
             assertTrue(migrated.continuousMode)
             assertEquals(60, migrated.chapterSwipeDistance)
+            assertEquals(360, migrated.pageSwipeThresholdPx)
+            assertEquals(72, migrated.topSafeAreaDp)
             assertEquals(72, migrated.bottomSafeAreaDp)
             assertEquals(1.9, migrated.lineHeight, 0.000001)
             assertEquals(2.2, migrated.paragraphSpacing, 0.000001)
             assertEquals(60, migrated.popupSwipeThreshold)
             assertTrue(migrated.volumeKeysTurnPages)
+            assertTrue(migrated.volumeKeysNavigatePopupTerms)
             assertTrue(migrated.volumeKeysSeekSasayaki)
             assertTrue(migrated.keepScreenOnWhileReading)
             assertTrue(migrated.lockCurrentOrientation)
@@ -175,6 +191,12 @@ class ReaderSettingsRepositoryTest {
                     customInfoColor = 0xFF708090,
                     verticalWriting = false,
                     selectedFont = ReaderFontManager.defaultGothicFont,
+                    selectedFontFamilyId = ReaderFontManager.systemGothicFamilyId,
+                    selectedFontVariantId = "wght-600-normal",
+                    fontVariantSelections = mapOf(
+                        ReaderFontManager.systemGothicFamilyId to "wght-600-normal",
+                        "recommended:kleeone" to "wght-400-normal",
+                    ),
                     fontSize = 24,
                     hideFurigana = true,
                     viewMode = ReaderViewMode.VisualNovel,
@@ -186,13 +208,16 @@ class ReaderSettingsRepositoryTest {
                     visualNovelMergeCrossScreenSasayakiCues = true,
                     blurImages = true,
                     enableStatistics = true,
+                    showStatisticsTab = false,
                     statisticsAutostartMode = StatisticsAutostartMode.PageTurn,
                     showStatisticsToggle = true,
                     showReadingSpeed = true,
                     showReadingTime = true,
                     chapterSwipeDistance = 35,
+                    pageSwipeThresholdPx = 108,
                     horizontalPadding = 12,
                     verticalPadding = 6,
+                    topSafeAreaDp = 40,
                     bottomSafeAreaDp = 40,
                     avoidPageBreak = true,
                     justifyText = true,
@@ -201,6 +226,8 @@ class ReaderSettingsRepositoryTest {
                     characterSpacing = 0.03,
                     paragraphSpacing = 1.7,
                     showTitle = false,
+                    showProgress = false,
+                    showChapterProgress = true,
                     showCharacters = false,
                     showPercentage = false,
                     alwaysShowProgress = false,
@@ -214,6 +241,7 @@ class ReaderSettingsRepositoryTest {
                     popupSwipeToDismiss = false,
                     popupSwipeThreshold = 35,
                     volumeKeysTurnPages = true,
+                    volumeKeysNavigatePopupTerms = true,
                     volumeKeysSeekSasayaki = true,
                     reverseVolumeKeyDirection = true,
                     keepScreenOnWhileReading = true,
@@ -233,6 +261,9 @@ class ReaderSettingsRepositoryTest {
             assertEquals(0xFF708090, saved.customInfoColor)
             assertFalse(saved.verticalWriting)
             assertEquals(ReaderFontManager.defaultGothicFont, saved.selectedFont)
+            assertEquals(ReaderFontManager.systemGothicFamilyId, saved.selectedFontFamilyId)
+            assertEquals("wght-600-normal", saved.selectedFontVariantId)
+            assertEquals("wght-400-normal", saved.fontVariantSelections["recommended:kleeone"])
             assertEquals(24, saved.fontSize)
             assertTrue(saved.hideFurigana)
             assertEquals(ReaderViewMode.VisualNovel, saved.viewMode)
@@ -245,13 +276,16 @@ class ReaderSettingsRepositoryTest {
             assertTrue(saved.visualNovelMergeCrossScreenSasayakiCues)
             assertTrue(saved.blurImages)
             assertTrue(saved.enableStatistics)
+            assertFalse(saved.showStatisticsTab)
             assertEquals(StatisticsAutostartMode.PageTurn, saved.statisticsAutostartMode)
             assertTrue(saved.showStatisticsToggle)
             assertTrue(saved.showReadingSpeed)
             assertTrue(saved.showReadingTime)
             assertEquals(35, saved.chapterSwipeDistance)
+            assertEquals(108, saved.pageSwipeThresholdPx)
             assertEquals(12, saved.horizontalPadding)
             assertEquals(6, saved.verticalPadding)
+            assertEquals(40, saved.topSafeAreaDp)
             assertEquals(40, saved.bottomSafeAreaDp)
             assertTrue(saved.avoidPageBreak)
             assertTrue(saved.justifyText)
@@ -260,6 +294,8 @@ class ReaderSettingsRepositoryTest {
             assertEquals(0.03, saved.characterSpacing, 0.000001)
             assertEquals(1.7, saved.paragraphSpacing, 0.000001)
             assertFalse(saved.showTitle)
+            assertFalse(saved.showProgress)
+            assertTrue(saved.showChapterProgress)
             assertFalse(saved.showCharacters)
             assertFalse(saved.showPercentage)
             assertFalse(saved.alwaysShowProgress)
@@ -273,6 +309,7 @@ class ReaderSettingsRepositoryTest {
             assertFalse(saved.popupSwipeToDismiss)
             assertEquals(35, saved.popupSwipeThreshold)
             assertTrue(saved.volumeKeysTurnPages)
+            assertTrue(saved.volumeKeysNavigatePopupTerms)
             assertTrue(saved.volumeKeysSeekSasayaki)
             assertTrue(saved.reverseVolumeKeyDirection)
             assertTrue(saved.keepScreenOnWhileReading)
@@ -289,6 +326,15 @@ class ReaderSettingsRepositoryTest {
             val saved = repository.settings.first()
 
             assertEquals(2.0, saved.popupScale, 0.000001)
+        }
+    }
+
+    @Test
+    fun statisticsResetMinutesPersistAsMinuteOfDay() = runBlocking {
+        repository().use { repository ->
+            repository.update { it.copy(statisticsResetMinutes = 105) }
+
+            assertEquals(105, repository.settings.first().statisticsResetMinutes)
         }
     }
 
@@ -322,9 +368,13 @@ class ReaderSettingsRepositoryTest {
                     theme = ReaderTheme.Dark,
                     fontSize = 30,
                     popupWidth = 440,
+                    pageSwipeThresholdPx = 96,
+                    topSafeAreaDp = 46,
                     bottomSafeAreaDp = 44,
                     visualNovelMergeCrossScreenSasayakiCues = true,
+                    showStatisticsTab = false,
                     volumeKeysTurnPages = true,
+                    volumeKeysNavigatePopupTerms = true,
                     lockCurrentOrientation = true,
                     openLastReadBookOnLaunch = true,
                 )
@@ -336,9 +386,13 @@ class ReaderSettingsRepositoryTest {
             assertEquals(ReaderTheme.Dark, inherited.theme)
             assertEquals(30, inherited.fontSize)
             assertEquals(440, inherited.popupWidth)
+            assertEquals(96, inherited.pageSwipeThresholdPx)
+            assertEquals(46, inherited.topSafeAreaDp)
             assertEquals(44, inherited.bottomSafeAreaDp)
             assertTrue(inherited.visualNovelMergeCrossScreenSasayakiCues)
+            assertFalse(inherited.showStatisticsTab)
             assertTrue(inherited.volumeKeysTurnPages)
+            assertTrue(inherited.volumeKeysNavigatePopupTerms)
             assertTrue(inherited.lockCurrentOrientation)
             assertTrue(inherited.openLastReadBookOnLaunch)
 
@@ -347,9 +401,13 @@ class ReaderSettingsRepositoryTest {
                     theme = ReaderTheme.Light,
                     fontSize = 18,
                     popupWidth = 280,
+                    pageSwipeThresholdPx = 120,
+                    topSafeAreaDp = 58,
                     bottomSafeAreaDp = 60,
                     visualNovelMergeCrossScreenSasayakiCues = false,
+                    showStatisticsTab = true,
                     volumeKeysTurnPages = false,
+                    volumeKeysNavigatePopupTerms = false,
                     lockCurrentOrientation = false,
                     openLastReadBookOnLaunch = false,
                 )
@@ -360,9 +418,13 @@ class ReaderSettingsRepositoryTest {
             assertEquals(ReaderTheme.Dark, japanese.theme)
             assertEquals(30, japanese.fontSize)
             assertEquals(440, japanese.popupWidth)
+            assertEquals(96, japanese.pageSwipeThresholdPx)
+            assertEquals(46, japanese.topSafeAreaDp)
             assertEquals(44, japanese.bottomSafeAreaDp)
             assertTrue(japanese.visualNovelMergeCrossScreenSasayakiCues)
+            assertTrue(japanese.showStatisticsTab)
             assertFalse(japanese.volumeKeysTurnPages)
+            assertFalse(japanese.volumeKeysNavigatePopupTerms)
             assertFalse(japanese.lockCurrentOrientation)
             assertFalse(japanese.openLastReadBookOnLaunch)
         }

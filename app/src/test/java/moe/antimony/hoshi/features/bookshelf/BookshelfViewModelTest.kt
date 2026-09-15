@@ -43,7 +43,11 @@ class BookshelfViewModelTest {
             progressById = mapOf("book-a" to 0.25),
             coverSourcesById = mapOf("book-a" to coverSource),
             shelves = listOf(BookShelf("Manga", listOf("book-a"))),
-            settings = BookshelfSettings(sortOption = BookSortOption.Title, showReading = true),
+            settings = BookshelfSettings(
+                sortOption = BookSortOption.Title,
+                showReading = true,
+                coverMode = BookshelfCoverMode.Blur,
+            ),
         )
         val viewModel = BookshelfViewModel(repository, testScope())
 
@@ -55,9 +59,24 @@ class BookshelfViewModelTest {
         assertEquals(listOf(BookShelf("Manga", listOf("book-a"))), viewModel.uiState.value.shelves)
         assertEquals(BookSortOption.Title, viewModel.uiState.value.sortOption)
         assertTrue(viewModel.uiState.value.showReading)
+        assertEquals(BookshelfCoverMode.Blur, viewModel.uiState.value.coverMode)
         assertTrue(viewModel.uiState.value.hasLoadedBooks)
         assertFalse(viewModel.uiState.value.isLoading)
         assertNull(viewModel.uiState.value.errorMessage.testString())
+    }
+
+    @Test
+    fun changeCoverModePersistsAndPublishesState() {
+        val persistenceGate = CompletableDeferred<Unit>()
+        val repository = FakeBookshelfRepository(coverModeGate = persistenceGate)
+        val viewModel = BookshelfViewModel(repository, testScope())
+
+        viewModel.changeCoverMode(BookshelfCoverMode.Hide)
+
+        assertEquals(listOf(BookshelfCoverMode.Hide), repository.coverModeUpdates)
+        assertEquals(BookshelfCoverMode.Hide, viewModel.uiState.value.coverMode)
+
+        persistenceGate.complete(Unit)
     }
 
     @Test
@@ -491,7 +510,7 @@ class BookshelfViewModelTest {
             error("bad epub")
         }
 
-        assertEquals("bad epub", viewModel.uiState.value.errorMessage.testString())
+        assertEquals("Failed to import EPUB.", viewModel.uiState.value.errorMessage.testString())
         assertFalse(viewModel.uiState.value.isLoading)
         assertNull(viewModel.uiState.value.blockingProgressMessage.testString())
 
@@ -700,6 +719,153 @@ class BookshelfViewModelTest {
     }
 
     @Test
+    fun createShelfAndMoveSelectedBooksClearsSelectionAndExpandsNewShelfOnSuccess() {
+        val first = bookEntry("book-a")
+        val second = bookEntry("book-b")
+        val repository = FakeBookshelfRepository(entries = listOf(first, second))
+        val viewModel = BookshelfViewModel(repository, testScope())
+        viewModel.reloadBookEntries()
+        viewModel.startSelecting()
+        viewModel.toggleSelectedBook(first)
+        viewModel.toggleSelectedBook(second)
+
+        viewModel.beginShelfCreationMoveForSelectedBooks()
+        viewModel.updateShelfCreationMoveName("  New Shelf  ")
+        viewModel.confirmShelfCreationMove()
+
+        assertEquals(
+            listOf(Triple("New Shelf", setOf("book-a", "book-b"), true)),
+            repository.createdShelvesWithBooks,
+        )
+        assertFalse(viewModel.uiState.value.isSelecting)
+        assertEquals(emptySet<String>(), viewModel.uiState.value.selectedBookIds)
+        assertEquals(true, viewModel.uiState.value.shelfExpansionState["shelf:New Shelf"])
+        assertEquals(
+            ShelfCreationMoveStatus.Succeeded(shelfName = "New Shelf", bookCount = 2),
+            viewModel.uiState.value.shelfCreationMoveStatus,
+        )
+    }
+
+    @Test
+    fun createShelfAndMoveSingleBookUsesTheSameOperationWithoutChangingSelectionMode() {
+        val entry = bookEntry("book-a")
+        val repository = FakeBookshelfRepository(entries = listOf(entry))
+        val viewModel = BookshelfViewModel(repository, testScope())
+
+        viewModel.beginShelfCreationMoveForBook(entry)
+        viewModel.updateShelfCreationMoveName("New Shelf")
+        viewModel.confirmShelfCreationMove()
+
+        assertEquals(
+            listOf(Triple("New Shelf", setOf("book-a"), true)),
+            repository.createdShelvesWithBooks,
+        )
+        assertFalse(viewModel.uiState.value.isSelecting)
+        assertEquals(
+            ShelfCreationMoveStatus.Succeeded(shelfName = "New Shelf", bookCount = 1),
+            viewModel.uiState.value.shelfCreationMoveStatus,
+        )
+    }
+
+    @Test
+    fun duplicateShelfDuringCreateAndMoveKeepsBatchSelection() {
+        val entry = bookEntry("book-a")
+        val repository = FakeBookshelfRepository(
+            entries = listOf(entry),
+            createShelfAndMoveResult = false,
+        )
+        val viewModel = BookshelfViewModel(repository, testScope())
+        viewModel.reloadBookEntries()
+        viewModel.startSelecting()
+        viewModel.toggleSelectedBook(entry)
+
+        viewModel.beginShelfCreationMoveForSelectedBooks()
+        viewModel.updateShelfCreationMoveName("Manga")
+        viewModel.confirmShelfCreationMove()
+
+        assertTrue(viewModel.uiState.value.isSelecting)
+        assertEquals(setOf("book-a"), viewModel.uiState.value.selectedBookIds)
+        assertEquals(
+            "A shelf with this name already exists.",
+            (viewModel.uiState.value.shelfCreationMoveStatus as ShelfCreationMoveStatus.Failed).message.testString(),
+        )
+    }
+
+    @Test
+    fun createShelfAndMoveIgnoresRepeatedSubmissionWhileTheFirstIsRunning() {
+        val continueCreation = CompletableDeferred<Unit>()
+        val entry = bookEntry("book-a")
+        val repository = FakeBookshelfRepository(
+            entries = listOf(entry),
+            createShelfAndMoveGate = continueCreation,
+        )
+        val viewModel = BookshelfViewModel(repository, testScope())
+
+        viewModel.beginShelfCreationMoveForBook(entry)
+        viewModel.updateShelfCreationMoveName("New Shelf")
+        viewModel.confirmShelfCreationMove()
+        viewModel.confirmShelfCreationMove()
+
+        assertEquals(1, repository.createdShelvesWithBooks.size)
+        continueCreation.complete(Unit)
+    }
+
+    @Test
+    fun shelfCreationMoveTargetAndDraftRemainInViewModelWhileSubmitting() {
+        val continueCreation = CompletableDeferred<Unit>()
+        val entry = bookEntry("book-a")
+        val repository = FakeBookshelfRepository(
+            entries = listOf(entry),
+            createShelfAndMoveGate = continueCreation,
+        )
+        val viewModel = BookshelfViewModel(repository, testScope())
+        viewModel.reloadBookEntries()
+        viewModel.startSelecting()
+        viewModel.toggleSelectedBook(entry)
+
+        viewModel.beginShelfCreationMoveForSelectedBooks()
+        viewModel.updateShelfCreationMoveName("  New Shelf  ")
+        viewModel.confirmShelfCreationMove()
+        viewModel.consumeShelfCreationMoveStatus()
+
+        assertEquals(
+            ShelfCreationMoveDialogState(
+                bookIds = setOf("book-a"),
+                clearSelectionOnSuccess = true,
+                name = "  New Shelf  ",
+            ),
+            viewModel.uiState.value.shelfCreationMoveDialog,
+        )
+        assertEquals(ShelfCreationMoveStatus.Submitting, viewModel.uiState.value.shelfCreationMoveStatus)
+        assertEquals(1, repository.createdShelvesWithBooks.size)
+        continueCreation.complete(Unit)
+    }
+
+    @Test
+    fun createShelfAndMoveFailureKeepsBatchSelectionAndShowsStableError() {
+        val entry = bookEntry("book-a")
+        val repository = FakeBookshelfRepository(
+            entries = listOf(entry),
+            createShelfAndMoveError = IllegalStateException("disk details"),
+        )
+        val viewModel = BookshelfViewModel(repository, testScope())
+        viewModel.reloadBookEntries()
+        viewModel.startSelecting()
+        viewModel.toggleSelectedBook(entry)
+
+        viewModel.beginShelfCreationMoveForSelectedBooks()
+        viewModel.updateShelfCreationMoveName("Manga")
+        viewModel.confirmShelfCreationMove()
+
+        assertTrue(viewModel.uiState.value.isSelecting)
+        assertEquals(setOf("book-a"), viewModel.uiState.value.selectedBookIds)
+        assertEquals(
+            "Failed to create the shelf. Try again.",
+            (viewModel.uiState.value.shelfCreationMoveStatus as ShelfCreationMoveStatus.Failed).message.testString(),
+        )
+    }
+
+    @Test
     fun createDeleteAndMoveShelfDelegateToRepositoryAndReload() {
         val repository = FakeBookshelfRepository()
         val viewModel = BookshelfViewModel(repository, testScope())
@@ -742,6 +908,45 @@ class BookshelfViewModelTest {
         assertEquals(shelves, renameShelfList(shelves, oldName = "Manga", newName = "   "))
         assertEquals(shelves, renameShelfList(shelves, oldName = "Manga", newName = "Novels"))
         assertEquals(shelves, renameShelfList(shelves, oldName = "Missing", newName = "Mystery"))
+    }
+
+    @Test
+    fun createShelfAndMoveBooksListMovesMembershipIntoTrimmedNewShelf() {
+        val shelves = listOf(
+            BookShelf(name = "Manga", bookIds = listOf("book-a", "book-b")),
+            BookShelf(name = "Novels", bookIds = listOf("book-c")),
+        )
+
+        assertEquals(
+            listOf(
+                BookShelf(name = "Manga", bookIds = listOf("book-a")),
+                BookShelf(name = "Novels", bookIds = emptyList()),
+                BookShelf(name = "New Shelf", bookIds = listOf("book-b", "book-c")),
+            ),
+            createShelfAndMoveBooksList(
+                shelves = shelves,
+                name = "  New Shelf  ",
+                bookIds = linkedSetOf("book-b", "book-c"),
+            ),
+        )
+    }
+
+    @Test
+    fun createShelfAndMoveBooksListRejectsBlankAndDuplicateNames() {
+        val shelves = listOf(BookShelf(name = "Manga", bookIds = listOf("book-a")))
+
+        assertNull(createShelfAndMoveBooksList(shelves, name = "   ", bookIds = setOf("book-a")))
+        assertNull(createShelfAndMoveBooksList(shelves, name = " Manga ", bookIds = setOf("book-a")))
+        assertNull(createShelfAndMoveBooksList(shelves, name = "Novels", bookIds = emptySet()))
+    }
+
+    @Test
+    fun newShelfNameValidationDistinguishesBlankDuplicateAndValidNames() {
+        val shelves = listOf(BookShelf(name = "Manga", bookIds = emptyList()))
+
+        assertEquals(NewShelfNameValidation.Blank, validateNewShelfName("   ", shelves))
+        assertEquals(NewShelfNameValidation.Duplicate, validateNewShelfName(" Manga ", shelves))
+        assertEquals(NewShelfNameValidation.Valid, validateNewShelfName(" Novels ", shelves))
     }
 
     @Test
@@ -814,6 +1019,101 @@ class BookshelfViewModelTest {
     }
 
     @Test
+    fun manualSyncKeepsLoadedShelfMountedWithoutReloadingBooksLikeIos() {
+        val entry = bookEntry("book-a")
+        val continueSync = CompletableDeferred<Unit>()
+        val repository = FakeBookshelfRepository(
+            entries = listOf(entry),
+            syncGate = continueSync,
+        )
+        val viewModel = BookshelfViewModel(repository, testScope())
+        viewModel.reloadBookEntries()
+        repository.loadRequests.clear()
+
+        viewModel.syncBook(
+            entry = entry,
+            direction = SyncDirection.ExportToTtu,
+            syncStats = false,
+            statsSyncMode = StatisticsSyncMode.Merge,
+            syncAudioBook = false,
+        )
+
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertEquals(listOf(entry), viewModel.uiState.value.bookEntries)
+        assertEquals("Syncing...", viewModel.uiState.value.blockingProgressMessage.testString())
+
+        continueSync.complete(Unit)
+
+        assertTrue(repository.loadRequests.isEmpty())
+        assertTrue(repository.progressLoadRequests.isEmpty())
+        assertNull(viewModel.uiState.value.blockingProgressMessage.testString())
+    }
+
+    @Test
+    fun importedSyncRefreshesProgressWithoutReloadingBooksLikeIos() {
+        val entry = bookEntry("book-a")
+        val repository = FakeBookshelfRepository(
+            entries = listOf(entry),
+            progressById = mapOf("book-a" to 0.0),
+            settings = BookshelfSettings(showReading = true),
+            syncResult = SyncResult.Imported("book-a", characterCount = 100),
+        )
+        val viewModel = BookshelfViewModel(repository, testScope())
+        viewModel.reloadBookEntries()
+        repository.loadRequests.clear()
+        repository.progressById = mapOf("book-a" to 0.75)
+
+        viewModel.syncBook(
+            entry = entry,
+            direction = SyncDirection.ImportFromTtu,
+            syncStats = false,
+            statsSyncMode = StatisticsSyncMode.Merge,
+            syncAudioBook = false,
+        )
+
+        assertEquals(mapOf("book-a" to 0.75), viewModel.uiState.value.bookProgressById)
+        assertTrue(repository.loadRequests.isEmpty())
+        assertEquals(listOf(listOf("book-a")), repository.progressLoadRequests)
+        assertEquals(
+            listOf(entry),
+            viewModel.uiState.value.sections.single { it.isReading }.books,
+        )
+    }
+
+    @Test
+    fun importedSyncProgressRefreshDoesNotDropBooksAddedByConcurrentReload() {
+        val first = bookEntry("book-a")
+        val second = bookEntry("book-b")
+        val continueProgressLoad = CompletableDeferred<Unit>()
+        val repository = FakeBookshelfRepository(
+            entries = listOf(first),
+            progressById = mapOf("book-a" to 0.25),
+            syncResult = SyncResult.Imported("book-a", characterCount = 100),
+            progressLoadGate = continueProgressLoad,
+        )
+        val viewModel = BookshelfViewModel(repository, testScope())
+        viewModel.reloadBookEntries()
+
+        viewModel.syncBook(
+            entry = first,
+            direction = SyncDirection.ImportFromTtu,
+            syncStats = false,
+            statsSyncMode = StatisticsSyncMode.Merge,
+            syncAudioBook = false,
+        )
+        repository.entries = listOf(first, second)
+        repository.progressById = mapOf("book-a" to 0.75, "book-b" to 0.5)
+        viewModel.reloadBookEntries()
+
+        continueProgressLoad.complete(Unit)
+
+        assertEquals(
+            mapOf("book-a" to 0.75, "book-b" to 0.5),
+            viewModel.uiState.value.bookProgressById,
+        )
+    }
+
+    @Test
     fun errorFeedbackCanBeDismissedAfterFailure() {
         val viewModel = BookshelfViewModel(FakeBookshelfRepository(), testScope())
 
@@ -824,7 +1124,7 @@ class BookshelfViewModelTest {
             error("bad epub")
         }
 
-        assertEquals("bad epub", viewModel.uiState.value.errorMessage.testString())
+        assertEquals("Failed to import EPUB.", viewModel.uiState.value.errorMessage.testString())
 
         viewModel.consumeErrorMessage()
 
@@ -898,6 +1198,13 @@ class BookshelfViewModelTest {
         val remoteDeleteGate: CompletableDeferred<Unit>? = null,
         val remoteImportProgress: List<Double> = emptyList(),
         val migrationProgressEvents: List<LegacyBookMigrationProgress> = emptyList(),
+        val syncGate: CompletableDeferred<Unit>? = null,
+        val syncResult: SyncResult? = null,
+        val progressLoadGate: CompletableDeferred<Unit>? = null,
+        val createShelfAndMoveResult: Boolean = true,
+        val createShelfAndMoveGate: CompletableDeferred<Unit>? = null,
+        val createShelfAndMoveError: Throwable? = null,
+        val coverModeGate: CompletableDeferred<Unit>? = null,
         private val loadPlans: ArrayDeque<LoadPlan> = ArrayDeque(),
     ) : BookshelfRepository {
         data class LoadPlan(
@@ -906,10 +1213,12 @@ class BookshelfViewModelTest {
         )
 
         val loadRequests = mutableListOf<BookSortOption>()
+        val progressLoadRequests = mutableListOf<List<String>>()
         val remoteLoadRequests = mutableListOf<List<String>>()
         val deletedEntries = mutableListOf<BookEntry>()
         val movedBooks = mutableListOf<Pair<Set<String>, String?>>()
         val createdShelves = mutableListOf<String>()
+        val createdShelvesWithBooks = mutableListOf<Triple<String, Set<String>, Boolean>>()
         val deletedShelves = mutableListOf<String>()
         val renamedShelves = mutableListOf<Pair<String, String>>()
         val movedShelves = mutableListOf<Pair<Int, Int>>()
@@ -918,6 +1227,7 @@ class BookshelfViewModelTest {
         val deletedRemoteEntries = mutableListOf<RemoteBookEntry>()
         val exportedBooks = mutableListOf<BookEntry>()
         val showReadingUpdates = mutableListOf<Boolean>()
+        val coverModeUpdates = mutableListOf<BookshelfCoverMode>()
         val renamedBooks = mutableListOf<Pair<BookEntry, String?>>()
         val profiledBooks = mutableListOf<Pair<BookEntry, String?>>()
 
@@ -936,6 +1246,12 @@ class BookshelfViewModelTest {
                 shelves = shelves,
                 settings = settings,
             )
+        }
+
+        override suspend fun loadBookProgress(entries: List<BookEntry>): Map<String, Double> {
+            progressLoadRequests += entries.map { it.metadata.id }
+            progressLoadGate?.await()
+            return entries.associate { it.metadata.id to progressById.getValue(it.metadata.id) }
         }
 
         override suspend fun loadRemoteBooks(localEntries: List<BookEntry>): RemoteBookshelfLoadResult {
@@ -992,6 +1308,14 @@ class BookshelfViewModelTest {
             createdShelves += name
         }
 
+        override suspend fun createShelfAndMoveBooks(name: String, bookIds: Set<String>): List<BookShelf>? {
+            createdShelvesWithBooks += Triple(name, bookIds, createShelfAndMoveResult)
+            createShelfAndMoveGate?.await()
+            createShelfAndMoveError?.let { throw it }
+            if (!createShelfAndMoveResult) return null
+            return createShelfAndMoveBooksList(shelves, name, bookIds)
+        }
+
         override suspend fun deleteShelf(name: String) {
             deletedShelves += name
         }
@@ -1025,6 +1349,12 @@ class BookshelfViewModelTest {
             showReadingUpdates += showReading
         }
 
+        override suspend fun changeCoverMode(coverMode: BookshelfCoverMode) {
+            coverModeUpdates += coverMode
+            coverModeGate?.await()
+            settings = settings.copy(coverMode = coverMode)
+        }
+
         override suspend fun rebuildLookupQuery() = Unit
 
         override suspend fun syncBook(
@@ -1033,7 +1363,10 @@ class BookshelfViewModelTest {
             syncStats: Boolean,
             statsSyncMode: StatisticsSyncMode,
             syncAudioBook: Boolean,
-        ): SyncResult = SyncResult.Synced(entry.metadata.title.orEmpty())
+        ): SyncResult {
+            syncGate?.await()
+            return syncResult ?: SyncResult.Synced(entry.metadata.title.orEmpty())
+        }
     }
 }
 
@@ -1045,14 +1378,18 @@ private fun UiText?.testString(): String? =
             R.string.bookshelf_importing_named_format -> "Importing ${args[0]}..."
             R.string.bookshelf_importing_progress_format -> "Importing ${args[0]} / ${args[1]}..."
             R.string.bookshelf_legacy_migration_progress_format -> "Preparing older books ${args[0]} / ${args[1]}..."
+            R.string.bookshelf_import_failed -> "Failed to import EPUB."
             R.string.bookshelf_import_failed_list_format -> "Failed to import:\n${args[0]}"
             R.string.bookshelf_scanning_folder -> "Scanning folder..."
             R.string.bookshelf_no_epub_files_found -> "No EPUB files found."
+            R.string.bookshelf_syncing -> "Syncing..."
             R.string.bookshelf_already_synced_format -> "${args[0]} is already synced"
             R.string.bookshelf_exported_epub_format -> "Exported ${args[0]}."
             R.string.bookshelf_remote_books_load_failed -> "Failed to fetch books from Google Drive."
             R.string.bookshelf_remote_book_import_failed -> "Failed to import book from Google Drive."
             R.string.bookshelf_remote_book_delete_failed -> "Failed to delete book from Google Drive."
+            R.string.bookshelf_shelf_name_exists -> "A shelf with this name already exists."
+            R.string.bookshelf_create_shelf_failed -> "Failed to create the shelf. Try again."
             else -> "resource:$id:${args.joinToString()}"
         }
         is UiText.Plural -> "plural:$id:$quantity:${args.joinToString()}"

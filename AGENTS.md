@@ -8,6 +8,11 @@ Hoshi Reader Android 是 Hoshi Reader 的 Android/Kotlin/Jetpack Compose 原生�
 - 修复问题时不要叠补丁。先对齐 iOS 行为和状态流；只有平台差异确实需要时，才加入最小 Android 侧适配。
 - 涉及 Android 平台能力、权限、SAF、WebView、Media3、WorkManager、Google/Jetpack API、打包、安装或后台行为时，优先查 Android/Google/Jetpack 官方文档确认当前推荐做法。
 
+## 工作区与规划产物
+
+- 除非用户明确要求，不得创建或使用 Git worktree；直接在用户提供的当前工作区和分支内完成任务。
+- 除非用户明确要求，不得创建、强制跟踪或提交设计/计划文档（包括 `docs/superpowers/specs` 和 `docs/superpowers/plans`），也不得为此创建独立文档提交；默认将计划保留在对话或内置计划状态中。
+
 ## 架构基线
 
 ### Android 官方推荐
@@ -28,18 +33,22 @@ Hoshi Reader Android 是 Hoshi Reader 的 Android/Kotlin/Jetpack Compose 原生�
 - Storage：已有 iOS 兼容 sidecar JSON 必须保持兼容。
 - Reader：保留 WebView 阅读和查词；本地 WebView 资源优先使用 `WebViewAssetLoader` 或仓库已有安全加载路径；不要启用宽泛 file URL 访问，例如 `allowUniversalAccessFromFileURLs`。
 - Reader JS/CSS：长期 reader web 代码放在 `app/src/main/assets/hoshi-web`；不要新增大段 Kotlin 字符串脚本。Kotlin 侧只保留小型 typed command、参数转义、asset 加载、动态配置填充和桥接调用。
+- Reader popup 坐标：`popup.js` 的 `hoshiPopupGeometry` 是 CSS `zoom` 下 popup 坐标换算、滚动位置和元素对齐的唯一入口。popup 代码不得把 `offsetTop` 等未缩放 layout 坐标与 `scrollTop` / `getBoundingClientRect()` 等视觉滚动坐标混用，也不得另写缩放补偿。
 - Reader web 共享语义：`reader-text-semantics.js` 是三种 reader mode 共享的文本 normalization、
   matchable/raw 计数和 matchable-character 判断入口；`reader-dom-text.js` 是 paginated/continuous
   共享的 live DOM ruby/text normalization 入口；`reader-media-semantics.js` 是三种 reader mode
   共享的 image setup 入口，包含 SVG image aspect-ratio 修正、large image block 标记、blur
-  wrapper、tap-to-native-image bridge 和 scoped setup。VN 可以用当前 screen scope 且不等待 image
+  wrapper、tap-to-native-image bridge 和 scoped setup；`reader-layout-semantics.js` 是三种 reader mode
+  在字体和源图片就绪后清理越界 publisher inline-block 和空 strut 的共享入口。VN 可以用当前 screen scope 且不等待 image
   load，但不要重新引入 VN 私有的同类 image setup。`reader-vn-content-stream.js` 和
   `reader-vn-range-map.js` 是 VN 专属 runtime primitive，分别拥有 VN source stream、ruby-aware
   text entry、结构 ID、standalone media unit，以及 VN 渲染屏幕的 raw/highlight range、matchable
   Sasayaki range 和 source-to-clone offset registration。VN 是特殊分页模式，不要重新引入 VN
   私有的文本 offset、range、media 分类或 clone offset 实现；也不要把仅 VN 使用的逻辑命名为 shared
   reader core。除非先落成单独方案和验证计划，不要把 paginated/continuous 的 page/scroll runtime
-  接到 VN content stream instance 或 VN range map。
+  接到 VN content stream instance 或 VN range map。VN 查词文本、完整句子和章内 normalized offset
+  必须从 source stream 解析；current screen clone 只负责点击命中、popup anchor 和当前可见范围，
+  不要用 clone 的截断文本作为查词或制卡语义。
 
 ## 真源文档
 
@@ -61,6 +70,7 @@ Hoshi Reader Android 是 Hoshi Reader 的 Android/Kotlin/Jetpack Compose 原生�
 
 ## 用户可见 UI
 
+- 本项目不以 Android 无障碍服务或屏幕阅读器（包括 TalkBack）为支持目标。除非用户明确要求，设计、实现、审查和验收时不要为无障碍专门增加或要求 `contentDescription`、Compose accessibility semantics、TalkBack 选中状态或播报、无障碍焦点/遍历顺序及其他屏幕阅读器适配；不得仅因缺少这些适配将变更判定为存在缺陷。已有无障碍专用代码也不属于必须保留的兼容行为，可在确认不影响普通用户交互后删除，以减少代码量和维护负担。
 - 所有用户可见 UI 字符串必须使用 Android 本地化资源。
 - Compose 使用 `stringResource()` / `pluralStringResource()`。
 - 非 UI 层发出的可见消息应使用 `UiText` 或等价资源引用，不应持有 `Context`。

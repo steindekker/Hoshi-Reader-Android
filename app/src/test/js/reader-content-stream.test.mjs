@@ -4,6 +4,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 const readerTextSemanticsUrl = new URL('../../main/assets/hoshi-web/reader/reader-text-semantics.js', import.meta.url);
+const readerMediaSemanticsUrl = new URL('../../main/assets/hoshi-web/reader/reader-media-semantics.js', import.meta.url);
 const readerVnContentStreamUrl = new URL('../../main/assets/hoshi-web/reader/reader-vn-content-stream.js', import.meta.url);
 
 class TestNode {
@@ -79,6 +80,7 @@ function text(value) {
 function loadContentStreamModule() {
     const source = [
         fs.readFileSync(readerTextSemanticsUrl, 'utf8'),
+        fs.readFileSync(readerMediaSemanticsUrl, 'utf8'),
         fs.readFileSync(readerVnContentStreamUrl, 'utf8'),
     ].join('\n');
     const window = {};
@@ -158,6 +160,25 @@ test('content stream indexes raw and matchable chapter offsets while ignoring ru
         startRaw: 0,
         endRaw: 4,
     });
+});
+
+test('content stream converts chapter raw offsets and source UTF-16 positions', () => {
+    const leading = text('現、');
+    const tail = text('𠮟激しい');
+    const paragraph = el('p', {}, [leading, tail]);
+    const stream = loadContentStreamModule().create(paragraph);
+
+    const supplementaryPosition = stream.sourcePositionForRawOffset(2);
+    assert.equal(supplementaryPosition.node, tail);
+    assert.equal(supplementaryPosition.offset, 0);
+    const followingPosition = stream.sourcePositionForRawOffset(3);
+    assert.equal(followingPosition.node, tail);
+    assert.equal(followingPosition.offset, 2);
+    assert.equal(stream.rawOffsetForSourcePosition(tail, 2), 3);
+    assert.equal(stream.matchableOffsetForSourcePosition(tail, 2), 2);
+    assert.equal(stream.sourcePositionForRawOffset(stream.totalRawChars), null);
+    assert.equal(stream.rawOffsetForSourcePosition(text('外'), 0), null);
+    assert.equal(stream.matchableOffsetForSourcePosition(text('外'), 0), null);
 });
 
 test('content stream records standalone media units in source order', () => {
@@ -379,6 +400,30 @@ test('content stream treats gaiji images as inline glyphs for media and offset i
             { text: '後', startChar: 1, endChar: 2, startRaw: 1, endRaw: 2 },
         ],
     );
+});
+
+test('content stream keeps large gaiji-wide images inline', () => {
+    const gaijiWide = el('img', { class: 'gaiji-wide', src: 'kao1.jpg' });
+    gaijiWide.naturalWidth = 303;
+    gaijiWide.naturalHeight = 128;
+    const paragraph = el('p', {}, ['前', gaijiWide, '後']);
+
+    const stream = loadContentStreamModule().create(paragraph);
+
+    assert.equal(stream.containsStandaloneMedia(paragraph), false);
+    assert.equal(stream.mediaUnits().length, 0);
+});
+
+test('content stream keeps every class token containing gaiji inline', () => {
+    const gaijiVariant = el('img', { class: 'ornament publisher-GaIjI-tall', src: 'glyph.png' });
+    gaijiVariant.naturalWidth = 128;
+    gaijiVariant.naturalHeight = 512;
+    const paragraph = el('p', {}, ['前', gaijiVariant, '後']);
+
+    const stream = loadContentStreamModule().create(paragraph);
+
+    assert.equal(stream.containsStandaloneMedia(paragraph), false);
+    assert.equal(stream.mediaUnits().length, 0);
 });
 
 test('content stream indexes media nodes separately from standalone media units', () => {

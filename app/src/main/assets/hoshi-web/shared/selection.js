@@ -86,6 +86,38 @@ window.hoshiRubyGeometry = window.hoshiRubyGeometry || {
         return this.rangeOverlapAmount(baseRect.left, baseRect.right, ruby.left, ruby.right) > minimumOverlap;
     },
 
+    clippedRubyRectForBase(baseRect, rubyRect) {
+        const ruby = this.rectWithBounds(rubyRect);
+        if (this.isVertical()) {
+            const top = Math.max(baseRect.top, ruby.top);
+            const bottom = Math.min(baseRect.bottom, ruby.bottom);
+            if (bottom <= top) return null;
+            return {
+                x: ruby.left,
+                y: top,
+                width: ruby.right - ruby.left,
+                height: bottom - top,
+                left: ruby.left,
+                top,
+                right: ruby.right,
+                bottom,
+            };
+        }
+        const left = Math.max(baseRect.left, ruby.left);
+        const right = Math.min(baseRect.right, ruby.right);
+        if (right <= left) return null;
+        return {
+            x: left,
+            y: ruby.top,
+            width: right - left,
+            height: ruby.bottom - ruby.top,
+            left,
+            top: ruby.top,
+            right,
+            bottom: ruby.bottom,
+        };
+    },
+
     rubyAwareRect(rect, node) {
         const rubyRects = this.rubyTextRects(node);
         if (!rubyRects.length) return this.rectObject(rect);
@@ -93,7 +125,10 @@ window.hoshiRubyGeometry = window.hoshiRubyGeometry || {
         let result = base;
         rubyRects.forEach((rubyRect) => {
             if (this.rubyRectMatchesBase(base, rubyRect)) {
-                result = this.unionRect(result, this.rectWithBounds(rubyRect));
+                const clipped = this.clippedRubyRectForBase(base, rubyRect);
+                if (clipped) {
+                    result = this.unionRect(result, clipped);
+                }
             }
         });
         return this.rectObject(result);
@@ -153,10 +188,11 @@ window.hoshiSelection = {
         imageTapResult: null,
         rubyAwareRects: false,
         scaleRects: true,
+        textProjection: null,
     },
     scanDelimiters: '。、！？…‥「」『』（）()【】〈〉《》〔〕｛｝{}［］[]・：；:;，,.─\n\r',
     sentenceDelimiters: '。！？.!?\n\r',
-    trailingSentenceChars: '。、！？…‥」』）)】〉》〕｝}］]',
+    trailingSentenceChars: '。、！？」』）)】〉》〕｝}］]',
     brackets: {'「':'」', '『': '』', '（':'）', '(':')', '【':'】', '〈':'〉', '《':'》', '〔':'〕', '｛':'｝', '{':'}', '［':'］', '[':']'},
 
     configure(options = {}) {
@@ -300,7 +336,7 @@ window.hoshiSelection = {
 
     findParagraph(node) {
         let el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
-        return el?.closest('p, .glossary-content') || null;
+        return el?.closest('p, .glossary-content, .expr-tag') || null;
     },
 
     createWalker(rootNode) {
@@ -534,7 +570,15 @@ window.hoshiSelection = {
             this.clearSelection();
             return null;
         }
-        const hit = this.selectionStartForHit(rawHit);
+        const projection = this.options.textProjection;
+        const semanticHit = projection
+            ? projection.toSemanticHit?.(rawHit)
+            : rawHit;
+        if (!semanticHit) {
+            this.clearSelection();
+            return null;
+        }
+        const hit = this.selectionStartForHit(semanticHit);
 
         if (this.selection &&
             hit.node === this.selection.startNode &&
@@ -582,16 +626,27 @@ window.hoshiSelection = {
         if (!text) {
             return null;
         }
+        const visibleRanges = projection
+            ? projection.visibleRangesForSemanticRanges?.(ranges)
+            : ranges;
+        if (!visibleRanges?.length) {
+            return null;
+        }
 
         this.selection = {
             startNode: hit.node,
             startOffset: hit.offset,
-            ranges,
+            ranges: visibleRanges,
+            semanticRanges: ranges,
             text
         };
 
         const sentenceContext = this.getSentenceContext(hit.node, hit.offset);
-        const normalizedOffset = window.hoshiReader ? this.getNormalizedOffset(hit.node, hit.offset) : null;
+        const normalizedOffset = projection
+            ? projection.normalizedOffsetForHit?.(hit) ?? null
+            : window.hoshiReader
+                ? this.getNormalizedOffset(hit.node, hit.offset)
+                : null;
         this.postTextSelected({
             text,
             sentence: sentenceContext.sentence,
@@ -652,6 +707,9 @@ window.hoshiSelection = {
     selectionRectForBridge(rect) {
         if (!this.options.scaleRects) {
             return rect;
+        }
+        if (window.hoshiPopupGeometry?.bridgeSelectionRect) {
+            return window.hoshiPopupGeometry.bridgeSelectionRect(rect);
         }
         const scale = window.getButtonRectScale?.() ?? 1;
         const scrollX = window.scrollX || 0;

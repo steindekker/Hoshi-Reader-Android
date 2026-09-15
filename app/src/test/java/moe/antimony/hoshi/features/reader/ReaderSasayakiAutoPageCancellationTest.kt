@@ -29,7 +29,7 @@ class ReaderSasayakiAutoPageCancellationTest {
     }
 
     @Test
-    fun openFullscreenImageCancelsAutoPageBeforeShowingImage() {
+    fun openFullscreenImageKeepsAutoPageHoldBeforeShowingImage() {
         val events = mutableListOf<String>()
         val resource = ReaderWebResource(mediaType = "image/png", encoding = null, data = byteArrayOf(1))
 
@@ -40,7 +40,6 @@ class ReaderSasayakiAutoPageCancellationTest {
                 resource
             },
             closeLookupPopupsAndSelection = { events += "close-popups" },
-            cancelAutoPage = { events += "cancel-auto-page" },
             showFullscreenImage = { image ->
                 events += "show:${image.sourceUrl}:${image.resource.mediaType}"
             },
@@ -50,11 +49,32 @@ class ReaderSasayakiAutoPageCancellationTest {
         assertEquals(
             listOf(
                 "resolve:https://reader.example/image.png",
-                "cancel-auto-page",
                 "close-popups",
                 "show:https://reader.example/image.png:image/png",
             ),
             events,
+        )
+    }
+
+    @Test
+    fun imageHoldWaitsForFullscreenImageToCloseAfterHoldDeadline() = runBlocking {
+        var fullscreenImageVisible = true
+        val delays = mutableListOf<Long>()
+
+        awaitReaderSasayakiImageHold(
+            imageHoldMillis = 5_000L,
+            isFullscreenImageVisible = { fullscreenImageVisible },
+            delayMillis = { millis: Long ->
+                delays += millis
+                if (millis == ReaderSasayakiFullscreenImageDismissPollMillis) {
+                    fullscreenImageVisible = false
+                }
+            },
+        )
+
+        assertEquals(
+            listOf(5_000L, ReaderSasayakiFullscreenImageDismissPollMillis),
+            delays,
         )
     }
 

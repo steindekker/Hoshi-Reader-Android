@@ -151,6 +151,7 @@ internal class BookshelfViewModel : ViewModel {
         }
         runLoading(
             errorPrefix = UiText.Resource(R.string.bookshelf_import_failed),
+            preferErrorPrefix = true,
             onComplete = { importGate.finish(importKey) },
             blockingProgressMessage = displayName
                 ?.takeIf { it.isNotBlank() }
@@ -414,6 +415,61 @@ internal class BookshelfViewModel : ViewModel {
         }
     }
 
+    fun beginShelfCreationMoveForSelectedBooks() {
+        val selectedIds = _uiState.value.selectedBookIds
+        if (selectedIds.isEmpty()) return
+        beginShelfCreationMove(selectedIds, clearSelectionOnSuccess = true)
+    }
+
+    fun beginShelfCreationMoveForBook(entry: BookEntry) {
+        beginShelfCreationMove(setOf(entry.metadata.id), clearSelectionOnSuccess = false)
+    }
+
+    fun updateShelfCreationMoveName(name: String) {
+        _uiState.update { state ->
+            if (state.shelfCreationMoveStatus is ShelfCreationMoveStatus.Submitting) {
+                state
+            } else {
+                state.copy(
+                    shelfCreationMoveDialog = state.shelfCreationMoveDialog?.copy(name = name),
+                    shelfCreationMoveStatus = ShelfCreationMoveStatus.Idle,
+                )
+            }
+        }
+    }
+
+    fun confirmShelfCreationMove() {
+        val dialog = _uiState.value.shelfCreationMoveDialog ?: return
+        createShelfAndMoveBooks(
+            name = dialog.name,
+            bookIds = dialog.bookIds,
+            clearSelectionOnSuccess = dialog.clearSelectionOnSuccess,
+        )
+    }
+
+    fun dismissShelfCreationMoveDialog() {
+        _uiState.update { state ->
+            if (state.shelfCreationMoveStatus is ShelfCreationMoveStatus.Submitting) {
+                state
+            } else {
+                state.copy(
+                    shelfCreationMoveDialog = null,
+                    shelfCreationMoveStatus = ShelfCreationMoveStatus.Idle,
+                )
+            }
+        }
+    }
+
+    fun consumeShelfCreationMoveStatus() {
+        _uiState.update { state ->
+            if (state.shelfCreationMoveStatus is ShelfCreationMoveStatus.Submitting) {
+                state
+            } else {
+                state.copy(shelfCreationMoveStatus = ShelfCreationMoveStatus.Idle)
+            }
+        }
+    }
+
     fun deleteShelf(name: String) {
         workScope.launch {
             repository.deleteShelf(name)
@@ -476,6 +532,13 @@ internal class BookshelfViewModel : ViewModel {
         }
     }
 
+    fun changeCoverMode(coverMode: BookshelfCoverMode) {
+        _uiState.update { it.copy(coverMode = coverMode) }
+        workScope.launch {
+            repository.changeCoverMode(coverMode)
+        }
+    }
+
     fun startSelecting() {
         _uiState.update { it.copy(isSelecting = true, selectedBookIds = emptySet()) }
     }
@@ -508,6 +571,82 @@ internal class BookshelfViewModel : ViewModel {
         }
     }
 
+    private fun createShelfAndMoveBooks(
+        name: String,
+        bookIds: Set<String>,
+        clearSelectionOnSuccess: Boolean,
+    ) {
+        val trimmedName = name.trim()
+        if (trimmedName.isEmpty() || bookIds.isEmpty()) return
+        if (_uiState.value.shelfCreationMoveStatus is ShelfCreationMoveStatus.Submitting) return
+        _uiState.update { it.copy(shelfCreationMoveStatus = ShelfCreationMoveStatus.Submitting) }
+        workScope.launch {
+            val updatedShelves = try {
+                repository.createShelfAndMoveBooks(trimmedName, bookIds)
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                _uiState.update {
+                    it.copy(
+                        shelfCreationMoveStatus = ShelfCreationMoveStatus.Failed(
+                            UiText.Resource(R.string.bookshelf_create_shelf_failed),
+                        ),
+                    )
+                }
+                return@launch
+            }
+            if (updatedShelves == null) {
+                _uiState.update {
+                    it.copy(
+                        shelfCreationMoveStatus = ShelfCreationMoveStatus.Failed(
+                            UiText.Resource(R.string.bookshelf_shelf_name_exists),
+                        ),
+                    )
+                }
+                return@launch
+            }
+            _uiState.update { state ->
+                state.copy(
+                    shelves = updatedShelves,
+                    sections = bookshelfSections(
+                        entries = state.bookEntries,
+                        shelves = updatedShelves,
+                        progressById = state.bookProgressById,
+                        showReading = state.showReading,
+                        sortOption = state.sortOption,
+                    ),
+                    isSelecting = if (clearSelectionOnSuccess) false else state.isSelecting,
+                    selectedBookIds = if (clearSelectionOnSuccess) emptySet() else state.selectedBookIds,
+                    shelfExpansionState = state.shelfExpansionState + ("shelf:$trimmedName" to true),
+                    shelfCreationMoveDialog = null,
+                    shelfCreationMoveStatus = ShelfCreationMoveStatus.Succeeded(
+                        shelfName = trimmedName,
+                        bookCount = bookIds.size,
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun beginShelfCreationMove(
+        bookIds: Set<String>,
+        clearSelectionOnSuccess: Boolean,
+    ) {
+        if (bookIds.isEmpty()) return
+        _uiState.update { state ->
+            if (state.shelfCreationMoveStatus is ShelfCreationMoveStatus.Submitting) {
+                state
+            } else {
+                state.copy(
+                    shelfCreationMoveDialog = ShelfCreationMoveDialogState(
+                        bookIds = bookIds,
+                        clearSelectionOnSuccess = clearSelectionOnSuccess,
+                    ),
+                    shelfCreationMoveStatus = ShelfCreationMoveStatus.Idle,
+                )
+            }
+        }
+    }
+
     fun syncBook(
         entry: BookEntry,
         direction: SyncDirection?,
@@ -518,6 +657,7 @@ internal class BookshelfViewModel : ViewModel {
         runLoading(
             errorPrefix = UiText.Resource(R.string.bookshelf_sync_failed),
             blockingProgressMessage = UiText.Resource(R.string.bookshelf_syncing),
+            replaceShelfWithLoading = false,
             block = {
                 val result = repository.syncBook(
                     entry = entry,
@@ -526,7 +666,9 @@ internal class BookshelfViewModel : ViewModel {
                     statsSyncMode = statsSyncMode,
                     syncAudioBook = syncAudioBook,
                 )
-                reloadBookEntriesSync()
+                if (result is SyncResult.Imported) {
+                    refreshBookProgress()
+                }
                 _uiState.update { it.copy(statusMessage = result.bookshelfMessage()) }
             },
         )
@@ -576,6 +718,7 @@ internal class BookshelfViewModel : ViewModel {
                 ),
                 sortOption = result.settings.sortOption,
                 showReading = result.settings.showReading,
+                coverMode = result.settings.coverMode,
                 selectedBookIds = validSelectedIds,
                 hasLoadedBooks = true,
                 isLoading = false,
@@ -588,6 +731,25 @@ internal class BookshelfViewModel : ViewModel {
 
     private suspend fun loadBookEntries(sortOption: BookSortOption): BookshelfLoadResult =
         repository.loadBooks(sortOption, ::showLegacyBookMigrationProgress)
+
+    private suspend fun refreshBookProgress() {
+        val refreshedProgressById = repository.loadBookProgress(_uiState.value.bookEntries)
+        _uiState.update {
+            val currentBookIds = it.bookEntries.mapTo(mutableSetOf()) { entry -> entry.metadata.id }
+            val progressById = (it.bookProgressById + refreshedProgressById)
+                .filterKeys(currentBookIds::contains)
+            it.copy(
+                bookProgressById = progressById,
+                sections = bookshelfSections(
+                    entries = it.bookEntries,
+                    shelves = it.shelves,
+                    progressById = progressById,
+                    showReading = it.showReading,
+                    sortOption = it.sortOption,
+                ),
+            )
+        }
+    }
 
     private fun showLegacyBookMigrationProgress(progress: LegacyBookMigrationProgress) {
         _uiState.update {
@@ -650,14 +812,16 @@ internal class BookshelfViewModel : ViewModel {
 
     private fun runLoading(
         errorPrefix: UiText,
+        preferErrorPrefix: Boolean = false,
         onComplete: () -> Unit = {},
         blockingProgressMessage: UiText? = null,
+        replaceShelfWithLoading: Boolean = true,
         block: suspend () -> Unit,
     ) {
         workScope.launch {
             _uiState.update {
                 it.copy(
-                    isLoading = true,
+                    isLoading = replaceShelfWithLoading,
                     blockingProgressMessage = blockingProgressMessage,
                     statusMessage = null,
                     errorMessage = null,
@@ -668,7 +832,11 @@ internal class BookshelfViewModel : ViewModel {
             } catch (error: Throwable) {
                 _uiState.update {
                     it.copy(
-                        errorMessage = error.localizedMessage?.let(UiText::Literal) ?: errorPrefix,
+                        errorMessage = if (preferErrorPrefix) {
+                            errorPrefix
+                        } else {
+                            error.localizedMessage?.let(UiText::Literal) ?: errorPrefix
+                        },
                     )
                 }
             } finally {

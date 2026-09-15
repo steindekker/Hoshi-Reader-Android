@@ -148,6 +148,28 @@ class SasayakiPlaybackControllerDeferredCommandTest {
     }
 
     @Test
+    fun previousCueDuringAutoPageHoldContinuesPlaybackAfterSeek() {
+        val harness = controllerHarness(
+            matchData = SasayakiMatchData(
+                matches = listOf(
+                    SasayakiMatch("previous", 10.0, 12.0, "previous", 0, 0, 8),
+                    SasayakiMatch("current", 20.0, 22.0, "current", 1, 0, 7),
+                ),
+                unmatched = 0,
+            ),
+            initialPosition = 20.5,
+        )
+        harness.controller.togglePlayback()
+        harness.engine.events.clear()
+
+        assertTrue(harness.controller.pauseForAutoPageHold())
+        harness.controller.previousCue()
+
+        assertEquals(listOf("pause", "seek:10000", "start:1.0"), harness.engine.events)
+        assertTrue(harness.controller.isPlaying)
+    }
+
+    @Test
     fun progressSeekDuringAutoPageHoldContinuesPlaybackAfterSeek() {
         val harness = controllerHarness()
         harness.controller.togglePlayback()

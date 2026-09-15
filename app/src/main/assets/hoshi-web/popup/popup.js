@@ -23,6 +23,214 @@ let currentDictionaryMedia = null;
 let selectedDictionaries = {};
 let dictionaryMediaObserver = null;
 let renderGeneration = 0;
+let kanjiRedirectRequestId = 0;
+let hostEntrySetVersion = 0;
+let activeEntrySetVersion = 0;
+
+window.createPopupGeometry = function({
+    documentRef = document,
+    windowRef = window,
+    computedStyle = getComputedStyle,
+} = {}) {
+    function scrollRoot() {
+        return documentRef.scrollingElement || documentRef.documentElement || documentRef.body;
+    }
+
+    function scrollTop() {
+        const rootTop = Number(scrollRoot()?.scrollTop);
+        if (Number.isFinite(rootTop)) return rootTop;
+        const windowTop = Number(windowRef.scrollY);
+        return Number.isFinite(windowTop) ? windowTop : 0;
+    }
+
+    function setScrollTop(value) {
+        const top = Number.isFinite(value) ? value : 0;
+        const root = scrollRoot();
+        if (root) root.scrollTop = top;
+        windowRef.scrollTo?.(0, top);
+    }
+
+    function viewportHeight() {
+        const candidates = [
+            documentRef.documentElement?.clientHeight,
+            windowRef.innerHeight,
+            scrollRoot()?.clientHeight,
+        ];
+        return candidates.find(value => Number.isFinite(value) && value > 0) || 0;
+    }
+
+    function scrollByViewport(direction, scale = 1) {
+        const root = scrollRoot();
+        if (!root) return;
+        const height = viewportHeight();
+        const maxScrollTop = Math.max(0, (root.scrollHeight || 0) - height);
+        const target = Math.max(0, Math.min(
+            maxScrollTop,
+            scrollTop() + height * scale * direction,
+        ));
+        setScrollTop(target);
+    }
+
+    function elementDocumentTop(element) {
+        const top = Number(element?.getBoundingClientRect?.().top);
+        return Number.isFinite(top) ? scrollTop() + top : Number.NaN;
+    }
+
+    function scrollElementToTop(element) {
+        element?.scrollIntoView?.({
+            block: 'start',
+            inline: 'nearest',
+            behavior: 'instant',
+        });
+    }
+
+    function bridgeRectScale() {
+        const zoom = Number.parseFloat(computedStyle(documentRef.documentElement).zoom);
+        if (!Number.isFinite(zoom) || zoom === 1) return 1;
+
+        const probe = documentRef.createElement('div');
+        probe.style = 'position:absolute;width:100px;visibility:hidden;';
+        const parent = documentRef.documentElement || documentRef.body;
+        if (!parent?.appendChild) return 1;
+
+        parent.appendChild(probe);
+        const width = probe.getBoundingClientRect().width;
+        probe.remove();
+        if (!Number.isFinite(width) || width <= 0) return 1;
+
+        const scale = 100 * zoom / width;
+        return Number.isFinite(scale) && scale > 0 ? scale : 1;
+    }
+
+    function selectionCoordinates(clientX, clientY) {
+        const scale = bridgeRectScale();
+        const scrollX = windowRef.scrollX || 0;
+        const scrollY = windowRef.scrollY || 0;
+        return {
+            rectX: (clientX + scrollX) / scale - scrollX,
+            rectY: (clientY + scrollY) / scale - scrollY,
+        };
+    }
+
+    function bridgeSelectionRect(rect) {
+        const scale = bridgeRectScale();
+        const scrollX = windowRef.scrollX || 0;
+        const scrollY = windowRef.scrollY || 0;
+        return {
+            x: (rect.x + scrollX) * scale - scrollX,
+            y: (rect.y + scrollY) * scale - scrollY,
+            width: rect.width * scale,
+            height: rect.height * scale,
+        };
+    }
+
+    return Object.freeze({
+        bridgeRectScale,
+        bridgeSelectionRect,
+        elementDocumentTop,
+        scrollByViewport,
+        scrollElementToTop,
+        scrollTop,
+        selectionCoordinates,
+        setScrollTop,
+        viewportHeight,
+    });
+};
+
+const popupGeometry = window.createPopupGeometry();
+window.hoshiPopupGeometry = popupGeometry;
+window.getButtonRectScale = () => popupGeometry.bridgeRectScale();
+
+window.createPopupTermNavigator = function({ entryCount, entries, scrollTop, scrollTo }) {
+    const topTolerance = 1;
+    let pendingIndex = null;
+
+    function sortedEntries() {
+        return entries()
+            .filter(entry => Number.isInteger(entry.index) && Number.isFinite(entry.top))
+            .sort((a, b) => a.index - b.index);
+    }
+
+    function currentEntry(availableEntries, currentScrollTop) {
+        if (!availableEntries.length) return null;
+        let current = availableEntries[0];
+        for (const entry of availableEntries) {
+            if (entry.top > currentScrollTop + topTolerance) break;
+            current = entry;
+        }
+        return current;
+    }
+
+    function fulfillPending() {
+        if (pendingIndex === null) return false;
+        const target = sortedEntries().find(entry => entry.index === pendingIndex);
+        if (!target) return false;
+        pendingIndex = null;
+        scrollTo(target);
+        return true;
+    }
+
+    return {
+        navigate(direction) {
+            if (direction !== 'previous' && direction !== 'next') return;
+            const count = entryCount();
+            if (!Number.isInteger(count) || count <= 0) return;
+            const availableEntries = sortedEntries();
+            const currentScrollTop = scrollTop();
+            const current = currentEntry(availableEntries, currentScrollTop);
+            const baseIndex = pendingIndex ?? current?.index ?? 0;
+            let targetIndex;
+            let returnsToCurrentHeader = false;
+            if (direction === 'next') {
+                targetIndex = Math.min(count - 1, baseIndex + 1);
+            } else if (
+                pendingIndex === null &&
+                current &&
+                currentScrollTop > current.top + topTolerance
+            ) {
+                targetIndex = current.index;
+                returnsToCurrentHeader = true;
+            } else {
+                targetIndex = Math.max(0, baseIndex - 1);
+            }
+            if (pendingIndex === null && targetIndex === baseIndex && !returnsToCurrentHeader) return;
+            pendingIndex = targetIndex;
+            fulfillPending();
+        },
+        entryRendered() {
+            fulfillPending();
+        },
+        userScrolled() {
+            pendingIndex = null;
+        },
+        reset() {
+            pendingIndex = null;
+        },
+    };
+};
+
+window.installPopupTermNavigationInput = function(navigator, target = document) {
+    const cancelPending = () => navigator.userScrolled();
+    target.addEventListener('pointerdown', cancelPending, { passive: true });
+    target.addEventListener('touchstart', cancelPending, { passive: true });
+    target.addEventListener('wheel', cancelPending, { passive: true });
+};
+
+const popupTermNavigator = window.createPopupTermNavigator({
+    entryCount: () => window.entryCount || 0,
+    entries: () => {
+        return [...document.querySelectorAll('.entry[data-entry-index]')].map(entry => ({
+            index: Number(entry.dataset.entryIndex),
+            top: popupGeometry.elementDocumentTop(entry),
+            element: entry,
+        }));
+    },
+    scrollTop: popupGeometry.scrollTop,
+    scrollTo: entry => popupGeometry.scrollElementToTop(entry.element),
+});
+window.installPopupTermNavigationInput(popupTermNavigator);
+
+window.navigatePopupTerm = direction => popupTermNavigator.navigate(direction);
 
 function getPopupSelectionText() {
     return window.hoshiSelection?.selection?.text || window.getSelection()?.toString() || '';
@@ -43,6 +251,18 @@ function el(tag, props = {}, children = []) {
     }
 
     return element;
+}
+
+function wrapKanji(text) {
+    const nodes = [];
+    for (const character of text || '') {
+        if (KANJI_PATTERN.test(character)) {
+            nodes.push(el('span', { className: 'kanji-char', textContent: character }));
+        } else {
+            nodes.push(document.createTextNode(character));
+        }
+    }
+    return nodes;
 }
 
 function toHiragana(text) {
@@ -213,11 +433,11 @@ function buildFuriganaEl(parent, expression, reading) {
     const segments = segmentFurigana(expression, reading);
     for (const [text, furigana] of segments) {
         if (furigana) {
-            const ruby = el('ruby', {}, [text]);
+            const ruby = el('ruby', {}, wrapKanji(text));
             ruby.appendChild(el('rt', { textContent: furigana }));
             parent.appendChild(ruby);
         } else {
-            parent.appendChild(document.createTextNode(text));
+            parent.append(...wrapKanji(text));
         }
     }
     return segments.length === 1 && segments[0][1];
@@ -600,8 +820,11 @@ function constructPitchPositionHtml(pitches) {
 
     let result = '<ol>';
     pitches.forEach(pitchGroup => {
-        pitchGroup.pitchPositions.forEach(pos => {
-            result += `<li><span style="display:inline;"><span>[</span><span>${pos}</span><span>]</span></span></li>`;
+        (pitchGroup.pitches || []).forEach(accent => {
+            const downsteps = typeof accent.position === 'string'
+                ? getDownstepPositions(accent.position)
+                : accent.position;
+            result += `<li><span style="display:inline;"><span>[</span><span>${downsteps}</span><span>]</span></span></li>`;
         });
     });
     result += '</ol>';
@@ -616,8 +839,8 @@ function constructPitchCategories(pitches, reading, rules) {
     const verbOrAdj = isVerbOrAdjective(rules);
     const categories = [];
     pitches.forEach(pitchGroup => {
-        pitchGroup.pitchPositions.forEach(pos => {
-            const category = getPitchCategory(reading, pos, verbOrAdj);
+        (pitchGroup.pitches || []).forEach(accent => {
+            const category = getPitchCategory(reading, accent.position, verbOrAdj);
             if (category && !categories.includes(category)) {
                 categories.push(category);
             }
@@ -643,6 +866,45 @@ function constructPhoneticTranscriptionsHtml(pitches) {
         return '';
     }
     return `<ul>${items.join('')}</ul>`;
+}
+
+function constructPitchAccentGraphsHtml(pitches, reading, firstOnly = false) {
+    const positions = [];
+    const seen = new Set();
+    const morae = getKanaMorae(reading || '');
+    (pitches || []).forEach((group) => (group?.pitches || []).forEach((accent) => {
+        const position = accent?.position;
+        if (typeof position !== 'string' && (!Number.isInteger(position) || position < 0)) return;
+        if (typeof position === 'string' && !/^[HL]+$/.test(position)) return;
+        const pattern = pitchPattern(position, morae.length);
+        if (window.deduplicatePitchAccents && seen.has(pattern)) return;
+        seen.add(pattern);
+        positions.push(position);
+    }));
+    const selected = firstOnly ? positions.slice(0, 1) : positions;
+    if (!morae.length || !selected.length) return '';
+    const graphs = selected.map((downstep) => createPronunciationGraphHtml(morae, downstep));
+    if (graphs.length === 1) return graphs[0];
+    return `<ol>${graphs.map((graph) => `<li>${graph}</li>`).join('')}</ol>`;
+}
+
+function createPronunciationGraphHtml(morae, downstep) {
+    const points = [];
+    const dots = [];
+    morae.forEach((_, index) => {
+        const high = isMoraPitchHigh(index, downstep);
+        const highNext = isMoraPitchHigh(index + 1, downstep);
+        const x = index * 50 + 25;
+        const y = high ? 25 : 75;
+        points.push(`${x} ${y}`);
+        dots.push(high && !highNext
+            ? `<circle style="fill:none;stroke-width:5;stroke:currentColor;" cx="${x}" cy="${y}" r="15"/><circle style="fill:currentColor;" cx="${x}" cy="${y}" r="5"/>`
+            : `<circle style="stroke-width:5;fill:currentColor;stroke:currentColor;" cx="${x}" cy="${y}" r="15"/>`);
+    });
+    const tailX = morae.length * 50 + 25;
+    const tailY = isMoraPitchHigh(morae.length, downstep) ? 25 : 75;
+    const last = points[points.length - 1];
+    return `<svg xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;height:1.5em;" focusable="false" viewBox="0 0 ${50 * (morae.length + 1)} 100" data-downstep="${downstep}"><path style="fill:none;stroke-width:5;stroke:currentColor;" d="M${points.join(' L')}"/><path style="fill:none;stroke-width:5;stroke:currentColor;stroke-dasharray:5 5;" d="M${last} L${tailX} ${tailY}"/>${dots.join('')}<path style="fill:none;stroke-width:5;stroke:currentColor;" d="M0 13 L15 -13 L-15 -13 Z" transform="translate(${tailX},${tailY})"/></svg>`;
 }
 
 // https://github.com/yomidevs/yomitan/blob/d810b2f0842536d24ab82b6cd75d00841710e57b/ext/js/display/structured-content-generator.js#L64
@@ -890,7 +1152,7 @@ function getFrequencyHarmonicRank(frequencies) {
     return String(Math.floor(values.length / sumOfReciprocals));
 }
 
-async function mineEntry(expression, reading, frequencies, pitches, rules, matched, entryIndex, popupSelectionText) {
+async function mineEntry(expression, reading, frequencies, pitches, rules, matched, entryIndex, popupSelectionText, formatId = null) {
     const idx = entryIndex || 0;
     const furiganaPlain = constructFuriganaPlain(expression, reading);
     currentDictionaryMedia = new Map();
@@ -904,6 +1166,7 @@ async function mineEntry(expression, reading, frequencies, pitches, rules, match
     const pitchPositions = constructPitchPositionHtml(pitches);
     const pitchCategories = constructPitchCategories(pitches, reading, rules);
     const phoneticTranscriptions = constructPhoneticTranscriptionsHtml(pitches);
+    const pitchAccentGraphs = constructPitchAccentGraphsHtml(pitches, reading || expression);
 
     if (!audioUrls[idx] && window.audioSources?.length && window.needsAudio) {
         audioUrls[idx] = await fetchAudioUrl(expression, reading || expression);
@@ -911,7 +1174,7 @@ async function mineEntry(expression, reading, frequencies, pitches, rules, match
 
     const audio = audioUrls[idx] || '';
 
-    return await webkit.messageHandlers.mineEntry.postMessage({
+    const payload = {
         expression,
         reading,
         matched,
@@ -923,12 +1186,14 @@ async function mineEntry(expression, reading, frequencies, pitches, rules, match
         singleGlossaries: JSON.stringify(singleGlossaries),
         pitchPositions,
         pitchCategories,
+        pitchAccentGraphs,
         phoneticTranscriptions,
         popupSelectionText,
         audio,
         selectedDictionary: selectedDictionaries[idx]?.name || '',
         dictionaryMedia: JSON.stringify([...dictionaryMedia.values()])
-    });
+    };
+    return await webkit.messageHandlers.mineEntry.postMessage({ formatId, payload });
 }
 
 async function mineEntryWithOptions(entryIndex) {
@@ -973,15 +1238,12 @@ async function mineEntryWithOptions(entryIndex) {
         dictionaryMedia: JSON.stringify([...dictionaryMedia.values()])
     });
     if (mined) {
-        if (!window.allowDupes) {
-            updateButtonSlot(getButtonSlot('mine', idx), { enabled: false });
-            updateButtonSlot(getButtonSlot('mineOptions', idx), { enabled: false });
-        }
+        updateButtonSlot(getButtonSlot('mineOptions', idx), { enabled: false });
         const refreshDuplicate = async () => {
-            const wasAdded = await webkit.messageHandlers.duplicateCheck.postMessage(expression);
-            const enabled = !(wasAdded && !window.allowDupes);
-            updateButtonSlot(getButtonSlot('mine', idx), { state: wasAdded ? 'duplicate' : 'default', enabled });
-            updateButtonSlot(getButtonSlot('mineOptions', idx), { enabled });
+            await refreshAnkiDuplicateStates(idx, null);
+            updateButtonSlot(getButtonSlot('mineOptions', idx), {
+                enabled: Boolean(window.ankiBackendAvailable)
+            });
         };
         if (window.useAnkiConnect) {
             await refreshDuplicate();
@@ -1175,11 +1437,58 @@ function createHarmonicFrequencyTag(frequencies) {
 
 // https://github.com/yomidevs/yomitan/blob/c24d4c9b39ceec1b5fd133df774c41972e9ebbdc/ext/js/language/ja/japanese.js#L350
 function isMoraPitchHigh(moraIndex, pitchAccentValue) {
+    if (typeof pitchAccentValue === 'string') {
+        return pitchAccentValue[moraIndex] === 'H';
+    }
     switch (pitchAccentValue) {
         case 0: return (moraIndex > 0);
         case 1: return (moraIndex < 1);
         default: return (moraIndex > 0 && moraIndex < pitchAccentValue);
     }
+}
+
+function getDownstepPositions(pitchString) {
+    const downsteps = [];
+    for (let index = 1; index < pitchString.length; index++) {
+        if (pitchString[index - 1] === 'H' && pitchString[index] === 'L') {
+            downsteps.push(index);
+        }
+    }
+    if (!downsteps.length) {
+        downsteps.push(pitchString.startsWith('L') ? 0 : -1);
+    }
+    return downsteps;
+}
+
+function pitchPattern(position, moraCount) {
+    if (typeof position === 'string') return position;
+    let pattern = '';
+    for (let index = 0; index <= moraCount; index++) {
+        pattern += isMoraPitchHigh(index, position) ? 'H' : 'L';
+    }
+    return pattern;
+}
+
+// https://github.com/yomidevs/yomitan/blob/c0c3702963c22e0f39fdd2f03deef6b15558a7f5/ext/js/language/ja/japanese.js#L138
+const DIACRITIC_MAPPING = (() => {
+    const kana = 'うゔ-かが-きぎ-くぐ-けげ-こご-さざ-しじ-すず-せぜ-そぞ-ただ-ちぢ-つづ-てで-とど-はばぱひびぴふぶぷへべぺほぼぽワヷ-ヰヸ-ウヴ-ヱヹ-ヲヺ-カガ-キギ-クグ-ケゲ-コゴ-サザ-シジ-スズ-セゼ-ソゾ-タダ-チヂ-ツヅ-テデ-トド-ハバパヒビピフブプヘベペホボポ';
+    const mapping = new Map();
+    for (let i = 0; i < kana.length; i += 3) {
+        const character = kana[i];
+        const dakuten = kana[i + 1];
+        const handakuten = kana[i + 2];
+        mapping.set(dakuten, { character, type: 'dakuten' });
+        if (handakuten !== '-') {
+            mapping.set(handakuten, { character, type: 'handakuten' });
+        }
+    }
+    return mapping;
+})();
+
+// https://github.com/yomidevs/yomitan/blob/c0c3702963c22e0f39fdd2f03deef6b15558a7f5/ext/js/language/ja/japanese.js#L573
+function getKanaDiacriticInfo(character) {
+    const info = DIACRITIC_MAPPING.get(character);
+    return typeof info !== 'undefined' ? { character: info.character, type: info.type } : null;
 }
 
 // https://github.com/yomidevs/yomitan/blob/c24d4c9b39ceec1b5fd133df774c41972e9ebbdc/ext/js/language/ja/japanese.js#L406
@@ -1203,25 +1512,30 @@ function isVerbOrAdjective(rules) {
 
 // https://github.com/yomidevs/yomitan/blob/c24d4c9b39ceec1b5fd133df774c41972e9ebbdc/ext/js/language/ja/japanese.js#L366
 function getPitchCategory(reading, pitchAccentValue, verbOrAdjective = false) {
-    if (pitchAccentValue === 0) {
+    const downstep = typeof pitchAccentValue === 'string'
+        ? getDownstepPositions(pitchAccentValue)[0]
+        : pitchAccentValue;
+    if (downstep === 0) {
         return 'heiban';
     }
     if (verbOrAdjective) {
-        return pitchAccentValue > 0 ? 'kifuku' : null;
+        return downstep > 0 ? 'kifuku' : null;
     }
-    if (pitchAccentValue === 1) {
+    if (downstep === 1) {
         return 'atamadaka';
     }
-    if (pitchAccentValue > 1) {
+    if (downstep > 1) {
         const moraCount = getKanaMorae(reading).length;
-        return pitchAccentValue >= moraCount ? 'odaka' : 'nakadaka';
+        return downstep >= moraCount ? 'odaka' : 'nakadaka';
     }
     return null;
 }
 
 // https://github.com/yomidevs/yomitan/blob/c24d4c9b39ceec1b5fd133df774c41972e9ebbdc/ext/js/display/pronunciation-generator.js#L38
-function createPitchHtml(reading, pitchValue) {
+function createPitchHtml(reading, pitchValue, nasalPositions = [], devoicePositions = []) {
     const morae = getKanaMorae(reading);
+    const nasalSet = new Set(nasalPositions);
+    const devoiceSet = new Set(devoicePositions);
     const container = el('span', { className: 'pronunciation-text' });
 
     for (let i = 0; i < morae.length; i++) {
@@ -1232,9 +1546,32 @@ function createPitchHtml(reading, pitchValue) {
         const moraSpan = el('span', {
             className: 'pronunciation-mora',
             'data-pitch': isHigh ? 'high' : 'low',
-            'data-pitch-next': isHighNext ? 'high' : 'low',
-            textContent: mora
+            'data-pitch-next': isHighNext ? 'high' : 'low'
         });
+
+        if (nasalSet.has(i + 1)) {
+            moraSpan.dataset.nasal = 'true';
+            const characterInfo = getKanaDiacriticInfo(mora[0]);
+            if (characterInfo !== null) {
+                moraSpan.dataset.originalText = mora;
+            }
+            const group = el('span', { className: 'pronunciation-character-group' }, [
+                el('span', { textContent: characterInfo !== null ? characterInfo.character : mora[0] }),
+                el('span', { className: 'pronunciation-nasal-diacritic', textContent: '\u309a' }),
+                el('span', { className: 'pronunciation-nasal-indicator' }),
+            ]);
+            moraSpan.appendChild(group);
+            if (mora.length > 1) {
+                moraSpan.appendChild(document.createTextNode(mora.slice(1)));
+            }
+        } else {
+            moraSpan.appendChild(document.createTextNode(mora));
+        }
+
+        if (devoiceSet.has(i + 1)) {
+            moraSpan.dataset.devoice = 'true';
+            moraSpan.appendChild(el('span', { className: 'pronunciation-devoice-indicator' }));
+        }
 
         moraSpan.appendChild(el('span', { className: 'pronunciation-mora-line' }));
         container.appendChild(moraSpan);
@@ -1248,10 +1585,13 @@ function createPitchGroup(pitchData, reading) {
     container.appendChild(el('span', { className: 'pitch-dict-label', textContent: pitchData.dictionary }));
 
     const list = el('ul', { className: 'pitch-entries' });
-    pitchData.pitchPositions?.forEach((pitch) => {
+    pitchData.pitches?.forEach((accent) => {
         const li = el('li');
-        li.appendChild(createPitchHtml(reading, pitch));
-        li.appendChild(document.createTextNode(` [${pitch}]`));
+        const downsteps = typeof accent.position === 'string'
+            ? getDownstepPositions(accent.position)
+            : accent.position;
+        li.appendChild(createPitchHtml(reading, accent.position, accent.nasal, accent.devoice));
+        li.appendChild(document.createTextNode(` [${downsteps}]`));
         list.appendChild(li);
     });
     container.appendChild(list);
@@ -1280,7 +1620,7 @@ function createTags(entry) {
     const traceRows = (deinflectionTraceRows || []).filter(row => row?.length);
     const hasDeinflection = traceRows.length;
     const hasFrequencies = frequencies?.length;
-    const pitchGroups = (pitches || []).filter(pitch => pitch?.pitchPositions?.length);
+    const pitchGroups = (pitches || []).filter(pitch => pitch?.pitches?.length);
     const transcriptionGroups = (pitches || []).filter(pitch => pitch?.transcriptions?.length);
     const hasPitches = pitchGroups.length;
     const hasTranscriptions = transcriptionGroups.length;
@@ -1338,10 +1678,15 @@ function createTags(entry) {
         if (window.deduplicatePitchAccents) {
             const seen = new Set();
             pitchGroups.forEach(pitch => {
-                const unique = pitch.pitchPositions.filter(pos => !seen.has(pos));
+                const moraCount = getKanaMorae(reading || '').length;
+                const unique = pitch.pitches.filter(accent => {
+                    const pattern = pitchPattern(accent.position, moraCount);
+                    if (seen.has(pattern)) return false;
+                    seen.add(pattern);
+                    return true;
+                });
                 if (unique.length > 0) {
-                    unique.forEach(pos => seen.add(pos));
-                    pitchContainer.appendChild(createPitchGroup({ dictionary: pitch.dictionary, pitchPositions: unique }, reading));
+                    pitchContainer.appendChild(createPitchGroup({ dictionary: pitch.dictionary, pitches: unique }, reading));
                 }
             });
         } else {
@@ -1398,38 +1743,17 @@ function playWordAudio(audioUrl) {
     }
 }
 
-function getButtonRectScale() {
-    const zoom = Number.parseFloat(getComputedStyle(document.documentElement).zoom);
-    if (!Number.isFinite(zoom) || zoom === 1) {
-        return 1;
-    }
-
-    const probe = el('div', { style: 'position:absolute;width:100px;visibility:hidden;' });
-    const parent = document.documentElement || document.body;
-    if (!parent?.appendChild) {
-        return 1;
-    }
-
-    parent.appendChild(probe);
-    const width = probe.getBoundingClientRect().width;
-    probe.remove();
-    if (!Number.isFinite(width) || width <= 0) {
-        return 1;
-    }
-
-    const scale = 100 * zoom / width;
-    return Number.isFinite(scale) && scale > 0 ? scale : 1;
-}
-
-function createButtonSlot(kind, entryIndex, enabled = true) {
+function createButtonSlot(kind, entryIndex, enabled = true, formatId = null, formatIcon = 'square') {
     const slot = el('button', {
         className: 'button-slot',
         'data-kind': kind,
         'data-entry-index': entryIndex,
-        'data-enabled': String(enabled)
+        'data-enabled': String(enabled),
+        'data-format-id': formatId || '',
+        'data-format-icon': formatIcon
     });
     slot.type = 'button';
-    slot.setAttribute('aria-label', kind === 'audio' ? 'Play audio' : kind === 'mineOptions' ? 'Mine with options' : 'Add to Anki');
+    slot.setAttribute('aria-label', kind === 'audio' ? 'Play audio' : kind === 'notes' ? 'Show Anki notes' : kind === 'mineOptions' ? 'Mine with options' : 'Add to Anki');
     slot.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -1437,7 +1761,13 @@ function createButtonSlot(kind, entryIndex, enabled = true) {
         if (kind === 'audio') {
             playEntryAudio(entryIndex);
         } else if (kind === 'mine') {
-            mineEntryAtIndex(entryIndex);
+            const parent = slot.parentElement;
+            const buttonsContainer = parent?.className === 'anki-format-actions'
+                ? parent.parentElement
+                : parent;
+            mineEntryAtIndex(entryIndex, formatId, buttonsContainer);
+        } else if (kind === 'notes') {
+            showNotesAtIndex(entryIndex, formatId);
         } else if (kind === 'mineOptions') {
             mineEntryWithOptions(entryIndex);
         }
@@ -1447,8 +1777,9 @@ function createButtonSlot(kind, entryIndex, enabled = true) {
     return slot;
 }
 
-function getButtonSlot(kind, entryIndex) {
-    return document.querySelector(`.button-slot[data-kind="${kind}"][data-entry-index="${entryIndex}"]`);
+function getButtonSlot(kind, entryIndex, formatId = null) {
+    const formatSelector = formatId ? `[data-format-id="${formatId}"]` : '';
+    return document.querySelector(`.button-slot[data-kind="${kind}"][data-entry-index="${entryIndex}"]${formatSelector}`);
 }
 
 function updateButtonSlot(slot, changes) {
@@ -1458,17 +1789,27 @@ function updateButtonSlot(slot, changes) {
     applyButtonSlotVisualState(slot);
 }
 
+function setButtonSlotHidden(slot, hidden) {
+    if (!slot) { return; }
+    slot.hidden = hidden;
+    slot.style.display = hidden ? 'none' : '';
+}
+
 function applyButtonSlotVisualState(slot) {
     if (!slot) { return; }
     const kind = slot.dataset.kind;
     const state = slot.dataset.state || 'default';
     const enabled = slot.dataset.enabled !== 'false';
+    const formatIcon = (slot.dataset.formatIcon || 'square').replace('-small', '');
     const iconName = kind === 'audio'
         ? (state === 'error' ? 'volume_off' : 'volume_up')
-        : kind === 'mineOptions'
-            ? 'note_add'
-            : (state === 'duplicate' ? 'check_box' : 'add_box');
+        : kind === 'notes' ? 'search'
+        : kind === 'mineOptions' ? 'note_add'
+        : formatIcon === 'circle' ? (state === 'duplicate' ? 'check_circle' : 'add_circle')
+        : formatIcon === 'diamond' ? (state === 'duplicate' ? 'diamond_fill' : 'diamond')
+        : (state === 'duplicate' ? 'check_box' : 'add_box');
     slot.disabled = !enabled;
+    slot.classList?.toggle?.('button-slot-small', slot.dataset.formatIcon?.endsWith('-small'));
     slot.style.setProperty('--button-icon-url', `url("https://appassets.androidplatform.net/popup/icons/${iconName}.svg")`);
 }
 
@@ -1486,33 +1827,152 @@ async function playEntryAudio(entryIndex) {
     }
 }
 
-async function mineEntryAtIndex(entryIndex) {
+function duplicateValuesForEntry(entry) {
+    return {
+        '{expression}': entry?.expression || '',
+        '{reading}': entry?.reading || '',
+        '{furigana-plain}': constructFuriganaPlain(entry?.expression || '', entry?.reading || ''),
+        '{popup-selection-text}': getPopupSelectionText(),
+        '{sentence}': entry?.matched || entry?.expression || ''
+    };
+}
+
+function duplicateStateForFormat(states, formatId) {
+    return states && Object.prototype.hasOwnProperty.call(states, formatId)
+        ? Boolean(states[formatId])
+        : null;
+}
+
+async function mineEntryAtIndex(entryIndex, formatId, buttonsContainer = null) {
     const entry = window.lookupEntries?.[entryIndex];
     if (!entry) { return; }
     const { expression, reading, frequencies, pitches, rules, matched } = entry;
-    const mineSlot = getButtonSlot('mine', entryIndex);
+    const formats = Array.isArray(window.ankiFormats) ? window.ankiFormats : [];
+    const mineSlot = buttonSlotInContainer(buttonsContainer, 'mine', entryIndex, formatId);
     const mineOptionsSlot = getButtonSlot('mineOptions', entryIndex);
 
     lastSelection = getPopupSelectionText();
-    updateButtonSlot(mineSlot, { enabled: false });
+    formats.forEach((format) => updateButtonSlot(
+        buttonSlotInContainer(buttonsContainer, 'mine', entryIndex, format.id),
+        { enabled: false },
+    ));
     updateButtonSlot(mineOptionsSlot, { enabled: false });
 
-    const isAnkiConnect = await mineEntry(expression, reading, frequencies, pitches, rules, matched, entryIndex, lastSelection);
+    const mined = await mineEntry(expression, reading, frequencies, pitches, rules, matched, entryIndex, lastSelection, formatId);
+    if (!mined) {
+        updateButtonSlot(mineSlot, { state: 'error', enabled: false });
+        updateButtonSlot(mineOptionsSlot, { enabled: Boolean(window.ankiBackendAvailable) });
+        return;
+    }
     const checkDuplicate = async () => {
-        const wasAdded = await webkit.messageHandlers.duplicateCheck.postMessage(expression);
-        const enabled = !(wasAdded && !window.allowDupes);
-        updateButtonSlot(mineSlot, {
-            state: wasAdded ? 'duplicate' : 'default',
-            enabled
-        });
-        updateButtonSlot(mineOptionsSlot, { enabled });
+        await refreshAnkiDuplicateStates(entryIndex, buttonsContainer);
+        updateButtonSlot(mineOptionsSlot, { enabled: Boolean(window.ankiBackendAvailable) });
     };
 
-    if (isAnkiConnect) {
+    if (window.useAnkiConnect) {
         await checkDuplicate();
     } else {
         setTimeout(checkDuplicate, 1000);
     }
+}
+
+async function showNotesAtIndex(entryIndex, formatId) {
+    const entry = window.lookupEntries?.[entryIndex];
+    if (!entry || !formatId) return false;
+    return await webkit.messageHandlers.showNotes.postMessage({
+        formatId,
+        values: duplicateValuesForEntry(entry)
+    });
+}
+
+function appendAnkiFormatButtons(container, entryIndex) {
+    const formats = Array.isArray(window.ankiFormats) ? window.ankiFormats : [];
+    formats.forEach((format, index) => {
+        const placement = index === 0 ? 'leading' : 'above';
+        const actions = el('span', {
+            className: 'anki-format-actions',
+            'data-format-id': format.id,
+            'data-notes-placement': placement,
+        });
+        const mineButton = createButtonSlot(
+            'mine',
+            entryIndex,
+            Boolean(window.ankiBackendAvailable && format.isValid),
+            format.id,
+            format.icon,
+        );
+        const notesButton = createButtonSlot('notes', entryIndex, true, format.id, format.icon);
+        setButtonSlotHidden(notesButton, true);
+        if (placement === 'leading') {
+            actions.appendChild(notesButton);
+            actions.appendChild(mineButton);
+        } else {
+            notesButton.dataset.placement = 'above';
+            actions.appendChild(mineButton);
+            actions.appendChild(notesButton);
+        }
+        container.appendChild(actions);
+    });
+    return formats;
+}
+
+function buttonSlotInContainer(container, kind, entryIndex, formatId) {
+    const pending = Array.from(container?.children || []);
+    let local = null;
+    while (pending.length && !local) {
+        const child = pending.shift();
+        if (
+            child?.dataset?.kind === kind &&
+            child.dataset.entryIndex === String(entryIndex) &&
+            child.dataset.formatId === (formatId || '')
+        ) {
+            local = child;
+        } else {
+            pending.push(...Array.from(child?.children || []));
+        }
+    }
+    return container ? (local || null) : getButtonSlot(kind, entryIndex, formatId);
+}
+
+function syncShowNotesButton(container, entryIndex, format, visible) {
+    const existing = buttonSlotInContainer(container, 'notes', entryIndex, format.id);
+    setButtonSlotHidden(existing, !visible);
+}
+
+async function refreshAnkiDuplicateStates(entryIndex, buttonsContainer) {
+    const entry = window.lookupEntries?.[entryIndex];
+    const formats = Array.isArray(window.ankiFormats) ? window.ankiFormats : [];
+    if (!entry) return false;
+    let states;
+    try {
+        states = await webkit.messageHandlers.duplicateCheck.postMessage(duplicateValuesForEntry(entry));
+    } catch {
+        states = null;
+    }
+    formats.forEach((format) => {
+        const mineSlot = buttonSlotInContainer(buttonsContainer, 'mine', entryIndex, format.id);
+        const isDuplicate = duplicateStateForFormat(states, format.id);
+        if (isDuplicate === null) {
+            updateButtonSlot(mineSlot, { state: 'error', enabled: false });
+            syncShowNotesButton(buttonsContainer, entryIndex, format, false);
+            return;
+        }
+        updateButtonSlot(mineSlot, {
+            state: isDuplicate ? 'duplicate' : 'default',
+            enabled: Boolean(
+                window.ankiBackendAvailable &&
+                format.isValid &&
+                !(isDuplicate && !window.allowDupes)
+            ),
+        });
+        syncShowNotesButton(
+            buttonsContainer,
+            entryIndex,
+            format,
+            Boolean(isDuplicate && !window.disableShowNotes),
+        );
+    });
+    return states !== null;
 }
 
 function createEntryHeader(entry, idx) {
@@ -1524,7 +1984,7 @@ function createEntryHeader(entry, idx) {
     if (reading && reading !== expression) {
         needsScroll = buildFuriganaEl(expressionSpan, expression, reading);
     } else {
-        expressionSpan.textContent = expression;
+        expressionSpan.append(...wrapKanji(expression));
     }
     if (needsScroll) {
         const expressionScroll = el('div', { className: 'expression-scroll' });
@@ -1536,24 +1996,15 @@ function createEntryHeader(entry, idx) {
 
     const buttonsContainer = el('div', { className: 'header-buttons' });
 
+    appendAnkiFormatButtons(buttonsContainer, idx);
+    refreshAnkiDuplicateStates(idx, buttonsContainer);
+
     if (window.audioSources?.length) {
         buttonsContainer.appendChild(createButtonSlot('audio', idx));
     }
 
-    const mineSlot = createButtonSlot('mine', idx, false);
-    buttonsContainer.appendChild(mineSlot);
-
-    const mineOptionsSlot = createButtonSlot('mineOptions', idx, false);
+    const mineOptionsSlot = createButtonSlot('mineOptions', idx, Boolean(window.ankiBackendAvailable));
     buttonsContainer.appendChild(mineOptionsSlot);
-
-    webkit.messageHandlers.duplicateCheck.postMessage(expression).then(isDuplicate => {
-        const enabled = !(isDuplicate && !window.allowDupes);
-        updateButtonSlot(mineSlot, {
-            state: isDuplicate ? 'duplicate' : 'default',
-            enabled
-        });
-        updateButtonSlot(mineOptionsSlot, { enabled });
-    });
 
     header.appendChild(buttonsContainer);
 
@@ -1666,8 +2117,15 @@ const backStack = [];
 const forwardStack = [];
 let pendingHistoryRestore = null;
 
+function replaceHostEntrySet() {
+    hostEntrySetVersion++;
+    activeEntrySetVersion = hostEntrySetVersion;
+}
+
 window.resetPopupResults = function() {
     renderGeneration++;
+    replaceHostEntrySet();
+    popupTermNavigator.reset();
     flushPendingHistoryRestore();
     backStack.length = 0;
     forwardStack.length = 0;
@@ -1678,7 +2136,7 @@ window.resetPopupResults = function() {
     selectedDictionaries = {};
     resetDictionaryMediaObserver();
     document.getElementById('entries-container')?.replaceChildren();
-    document.scrollingElement.scrollTop = 0;
+    popupGeometry.setScrollTop(0);
 };
 
 function appendPendingHistoryRestore(flush = false) {
@@ -1691,6 +2149,7 @@ function appendPendingHistoryRestore(flush = false) {
     if (chunk.length) {
         pending.container.append(...chunk);
         observePendingDictionaryMedia(pending.container);
+        popupTermNavigator.entryRendered();
     }
     if (!pending.nodes.length) {
         pendingHistoryRestore = null;
@@ -1706,10 +2165,12 @@ function flushPendingHistoryRestore() {
 }
 
 function redirect(count) {
+    popupTermNavigator.reset();
     flushPendingHistoryRestore();
     resetDictionaryMediaObserver();
     backStack.push(snapshot());
     forwardStack.length = 0;
+    replaceHostEntrySet();
     window.lookupEntries = undefined;
     window.entryCount = count;
     audioUrls = {};
@@ -1717,17 +2178,77 @@ function redirect(count) {
     document.getElementById('entries-container').innerHTML = '';
     window.renderPopup();
     requestAnimationFrame(() => {
-        document.scrollingElement.scrollTop = 0;
+        popupGeometry.setScrollTop(0);
         requestAnimationFrame(() => {
-            document.scrollingElement.scrollTop = 0;
+            popupGeometry.setScrollTop(0);
         });
     });
 }
 
+function buildKanjiEntry(data) {
+    const entry = el('div', { className: 'entry kanji-entry' });
+    const header = el('div', { className: 'entry-header' });
+    header.appendChild(el('span', { className: 'kanji', textContent: data.character }));
+    entry.appendChild(header);
+
+    (data.entries || []).forEach((kanjiDictionary) => {
+        const details = el('details', { className: 'glossary-group', open: true });
+        const summary = el('summary', { className: 'dict-label' });
+        summary.appendChild(el('span', { className: 'dict-name', textContent: kanjiDictionary.dictName }));
+        details.appendChild(summary);
+
+        const dictionary = el('div', { 'data-dictionary': kanjiDictionary.dictName });
+        const content = el('div', { className: 'glossary-content' });
+        if (kanjiDictionary.onyomi) {
+            content.appendChild(el('div', {}, [
+                el('span', { className: 'kanji-reading-label', textContent: '音' }),
+                document.createTextNode(kanjiDictionary.onyomi),
+            ]));
+        }
+        if (kanjiDictionary.kunyomi) {
+            content.appendChild(el('div', {}, [
+                el('span', { className: 'kanji-reading-label', textContent: '訓' }),
+                document.createTextNode(kanjiDictionary.kunyomi),
+            ]));
+        }
+        if (kanjiDictionary.meanings?.length) {
+            if (kanjiDictionary.onyomi || kanjiDictionary.kunyomi) {
+                content.appendChild(el('hr', { className: 'kanji-separator' }));
+            }
+            content.appendChild(el('ul', {}, kanjiDictionary.meanings.map((meaning) =>
+                el('li', { textContent: meaning })
+            )));
+        }
+        dictionary.appendChild(content);
+        details.appendChild(dictionary);
+        entry.appendChild(details);
+    });
+    return entry;
+}
+
+function redirectKanji(data) {
+    popupTermNavigator.reset();
+    flushPendingHistoryRestore();
+    resetDictionaryMediaObserver();
+    renderGeneration++;
+    backStack.push(snapshot());
+    forwardStack.length = 0;
+    window.lookupEntries = undefined;
+    window.entryCount = 0;
+    audioUrls = {};
+    selectedDictionaries = {};
+    const container = document.getElementById('entries-container');
+    container.replaceChildren(buildKanjiEntry(data));
+    applyHoshiPopupThemeOverrides(container);
+    requestAnimationFrame(() => popupGeometry.setScrollTop(0));
+}
+
 window.replacePopupResults = function(count, initialEntries) {
     closeOverlay();
+    popupTermNavigator.reset();
     flushPendingHistoryRestore();
     renderGeneration++;
+    replaceHostEntrySet();
     backStack.length = 0;
     forwardStack.length = 0;
     window.lookupEntries = Array.isArray(initialEntries) && initialEntries.length ? initialEntries : undefined;
@@ -1742,7 +2263,7 @@ window.replacePopupResults = function(count, initialEntries) {
     window.hoshiPopupObserveContentReady?.();
     window.renderPopup();
     requestAnimationFrame(() => {
-        document.scrollingElement.scrollTop = 0;
+        popupGeometry.setScrollTop(0);
     });
 };
 
@@ -1751,17 +2272,31 @@ function snapshot() {
     const container = document.getElementById('entries-container');
     return {
         nodes: [...container.childNodes],
-        scrollTop: document.scrollingElement.scrollTop,
-        lookupEntries: window.lookupEntries,
+        scrollTop: popupGeometry.scrollTop(),
+        lookupEntries: window.lookupEntries?.slice(),
         entryCount: window.entryCount,
+        entrySetVersion: activeEntrySetVersion,
     };
 }
 
+function renderedEntryCount(nodes) {
+    return nodes.filter((node) => node?.dataset?.entryIndex !== undefined).length;
+}
+
+function hasRenderedEntry(container, index) {
+    return [...container.childNodes].some((node) => node?.dataset?.entryIndex === String(index));
+}
+
 function restore(snapshot) {
+    renderGeneration++;
+    popupTermNavigator.reset();
     flushPendingHistoryRestore();
     const container = document.getElementById('entries-container');
     const nodes = [...snapshot.nodes];
-    const shouldDeferOffscreenNodes = snapshot.scrollTop === 0 && nodes.length > 6;
+    activeEntrySetVersion = snapshot.entrySetVersion;
+    const shouldResumeRender = snapshot.entrySetVersion === hostEntrySetVersion
+        && snapshot.entryCount > renderedEntryCount(nodes);
+    const shouldDeferOffscreenNodes = !shouldResumeRender && snapshot.scrollTop === 0 && nodes.length > 6;
     if (shouldDeferOffscreenNodes) {
         container.replaceChildren(...nodes.splice(0, 4));
         observePendingDictionaryMedia(container);
@@ -1777,8 +2312,11 @@ function restore(snapshot) {
     selectedDictionaries = {};
     applyHoshiPopupThemeOverrides(container);
     requestAnimationFrame(() => {
-        document.scrollingElement.scrollTop = snapshot.scrollTop;
+        popupGeometry.setScrollTop(snapshot.scrollTop);
     });
+    if (shouldResumeRender) {
+        window.renderPopup();
+    }
 }
 
 function navigate(origin, destination) {
@@ -1822,6 +2360,18 @@ function isPopupInteractiveTapTarget(target) {
 }
 
 function handlePopupTap(target, clientX, clientY) {
+    const kanjiTarget = target?.closest('.kanji-char');
+    if (kanjiTarget) {
+        const requestId = ++kanjiRedirectRequestId;
+        const generation = renderGeneration;
+        Promise.resolve(webkit.messageHandlers.kanjiRedirect.postMessage(kanjiTarget.textContent))
+            .then((data) => {
+                if (!data || requestId !== kanjiRedirectRequestId || generation !== renderGeneration) return;
+                redirectKanji(data);
+                webkit.messageHandlers.kanjiRedirectCommitted?.postMessage(null);
+            });
+        return true;
+    }
     if (isPopupInteractiveTapTarget(target)) {
         return false;
     }
@@ -1829,9 +2379,7 @@ function handlePopupTap(target, clientX, clientY) {
         webkit.messageHandlers.tapOutside.postMessage(null);
         return true;
     }
-    const scale = getButtonRectScale();
-    const rectX = (clientX + window.scrollX) / scale - window.scrollX;
-    const rectY = (clientY + window.scrollY) / scale - window.scrollY;
+    const { rectX, rectY } = popupGeometry.selectionCoordinates(clientX, clientY);
     const selected = window.hoshiSelection?.selectText(clientX, clientY, window.scanLength, rectX, rectY);
     if (!selected) {
         webkit.messageHandlers.tapOutside.postMessage(null);
@@ -1923,6 +2471,7 @@ window.renderPopup = function() {
 
     (async () => {
         for (let idx = 0; idx < window.entryCount; idx++) {
+            if (hasRenderedEntry(container, idx)) continue;
             const entry = window.lookupEntries?.[idx] ?? await webkit.messageHandlers.getEntry.postMessage(idx);
             if (generation !== renderGeneration) return;
             if (!entry) continue;
@@ -1934,7 +2483,10 @@ window.renderPopup = function() {
                 container.appendChild(document.createElement('hr'));
             }
 
-            const entryDiv = el('div', { className: 'entry' });
+            const entryDiv = el('div', {
+                className: 'entry',
+                'data-entry-index': idx,
+            });
             entryDiv.appendChild(createEntryHeader(entry, idx));
 
             if (window.audioEnableAutoplay && window.audioSources?.length && idx === 0) {
@@ -1947,6 +2499,7 @@ window.renderPopup = function() {
             }
 
             container.appendChild(entryDiv);
+            popupTermNavigator.entryRendered();
             await new Promise(r => requestAnimationFrame(r));
             if (generation !== renderGeneration) return;
 

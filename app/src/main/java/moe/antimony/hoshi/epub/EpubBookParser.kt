@@ -17,7 +17,8 @@ data class EpubBook(
     val coverHref: String? = null,
     val resources: Map<String, EpubResource> = emptyMap(),
     val rootDirectory: File? = null,
-    val bookInfo: BookInfo = chapters.toBookInfo(),
+    val bookInfo: BookInfo = buildBookInfo(chapters),
+    val author: String? = null,
 ) {
     fun readResource(path: String): ByteArray? {
         val normalized = path.normalizeResourceHref()
@@ -128,6 +129,10 @@ class EpubBookParser @Inject constructor(
 
     private fun NativeEpubBook.toReaderBook(root: File, fallbackTitle: String?, cachedBookInfo: BookInfo?): EpubBook {
         val manifest = manifest().associateBy { it.id }
+        val declaredCoverHref = coverHref()
+            ?: manifest.values.firstOrNull { item ->
+                item.id.contains("cover", ignoreCase = true) && item.mediaType.isCoverFallbackImageType()
+            }?.href
         val contentDirectory = File(contentDir())
         val contentDirectoryPrefix = contentDirectory.relativeDirectoryHref(root)
         val guideTocHrefs = root.readGuideTocHrefs()
@@ -149,7 +154,8 @@ class EpubBookParser @Inject constructor(
         }
 
         require(chapterShells.isNotEmpty()) { "EPUB spine contains no readable chapters" }
-        val reusableBookInfo = cachedBookInfo?.takeIf { it.matchesChapterShells(chapterShells) }
+        val tocItems = toc().children.map { it.toReaderTocItem() }
+        val reusableBookInfo = cachedBookInfo?.takeIf { it.matchesReaderFacts(chapterShells, tocItems) }
         val chapters = if (reusableBookInfo != null) {
             chapterShells
         } else {
@@ -168,17 +174,19 @@ class EpubBookParser @Inject constructor(
         return EpubBook(
             title = title()?.ifBlank { null } ?: fallbackTitle?.takeIf { it.isNotBlank() } ?: root.nameWithoutExtension,
             language = language()?.ifBlank { null },
-            coverHref = coverHref()
-                ?.let { contentDirectoryPrefix.resolveManifestHref(it) }
-                ?: resources.entries.firstOrNull { (_, resource) -> resource.mediaType.startsWith("image/") }?.key,
-            toc = toc().children.map { it.toReaderTocItem(root, contentDirectory) },
+            coverHref = declaredCoverHref?.let { contentDirectoryPrefix.resolveManifestHref(it) },
+            toc = tocItems,
             chapters = chapters,
             resources = resources,
             rootDirectory = root,
-            bookInfo = reusableBookInfo ?: chapters.toBookInfo(),
+            bookInfo = reusableBookInfo ?: buildBookInfo(chapters, tocItems, root),
+            author = author()?.trim()?.takeIf { it.isNotEmpty() },
         )
     }
 }
+
+private fun String.isCoverFallbackImageType(): Boolean =
+    lowercase() in setOf("image/jpeg", "image/png", "image/gif", "image/svg+xml")
 
 private fun extractPackedEpubFresh(epubFile: File, extractedRoot: File) {
     extractedRoot.deleteRecursively()
@@ -243,20 +251,19 @@ internal fun BookInfo.matchesChapterShells(chapters: List<EpubChapter>): Boolean
     return total == characterCount
 }
 
-private fun NativeTocNode.toReaderTocItem(root: File, contentDirectory: File): EpubTocItem =
+private fun NativeTocNode.toReaderTocItem(): EpubTocItem =
     EpubTocItem(
         label = label,
-        href = href?.normalizeTocHref(root, contentDirectory),
-        children = children.map { it.toReaderTocItem(root, contentDirectory) },
+        href = href?.normalizeTocHref(),
+        children = children.map { it.toReaderTocItem() },
     )
 
-private fun String.normalizeTocHref(root: File, contentDirectory: File): String {
-    val raw = trim().replace('\\', '/').removePrefix("/")
+private fun String.normalizeTocHref(): String {
+    val raw = trim().replace('\\', '/')
     if (raw.isBlank()) return raw
     val fragment = raw.substringAfter('#', "")
-    val base = raw.substringBefore('#').substringBefore('?')
-    val href = contentDirectory.resolve(base).relativeHref(root)
-        ?: base.normalizeResourceHref()
+    val base = raw.substringBefore('#').substringBefore('?').removePrefix("/")
+    val href = File(base).normalize().invariantSeparatorsPath.normalizeResourceHref()
     return if (fragment.isBlank()) href else "$href#$fragment"
 }
 
@@ -341,21 +348,3 @@ private fun String.fallbackMimeType(): String = when (substringAfterLast('.', ""
     "xhtml", "html" -> "application/xhtml+xml"
     else -> "application/octet-stream"
 }
-
-private fun List<EpubChapter>.toBookInfo(): BookInfo {
-    var total = 0
-    val chapterInfo = linkedMapOf<String, BookInfo.ChapterInfo>()
-    forEachIndexed { index, chapter ->
-        val count = chapter.html.filteredReaderText().codePointCount()
-        chapterInfo[chapter.href] = BookInfo.ChapterInfo(
-            spineIndex = index,
-            currentTotal = total,
-            chapterCount = count,
-        )
-        total += count
-    }
-    return BookInfo(characterCount = total, chapterInfo = chapterInfo)
-}
-
-private fun String.codePointCount(): Int =
-    codePointCount(0, length)
