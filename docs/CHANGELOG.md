@@ -6,6 +6,15 @@ Historical release notes before v1.3.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 
 ## [Unreleased]
 
+### Added
+
+- Add a VN tab for visual novels played on a Steam Deck: it shows the current in-game
+  line and recent lines from steamdeck-vn-extractor live, with connection status. Tap a word for the usual lookup and Anki actions; the
+  game sentence becomes `{sentence}` and a Deck screenshot fills `{image}` (picked web
+  images take precedence). Mine with options offers the screenshot as the default
+  picture. New lines advance automatically unless you are looking something up. Set
+  the host, port, and optional token under Settings > VN / Steam Deck.
+
 ## [v1.4.0] - 2026-09-24
 
 ### Added

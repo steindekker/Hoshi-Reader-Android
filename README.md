@@ -18,6 +18,8 @@ It adds a **Mine with options** button next to the usual one-tap card button. Be
 
 <p align="center"><sub><i>The book cover is the default; here a Bing image is picked instead.</i></sub></p>
 
+It also adds a **VN** tab for visual novels played on a Steam Deck. A small companion server, `steamdeck-vn-extractor`, runs on the Deck. It collects each in-game line from a text hooker and streams it to the phone over Tailscale. Tap a word in the current line to look it up and mine it as usual. The game line becomes the card sentence, and a screenshot from the Deck fills the `{image}` field. Set the host (default `steamdeck`), port (7277), and optional token under **Settings > VN / Steam Deck**.
+
 <hr>
 
 <div align="center">

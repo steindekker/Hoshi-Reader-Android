@@ -32,14 +32,14 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   manual, fallback and accent-preview schemes share this treatment. E-ink
   bypasses it to retain pure black/white fills and boundaries.
 - Navigation uses Navigation3 typed route keys, `AppShell`, and `NavDisplay`.
-  Top-level Books, Dictionary, Statistics, and Settings tabs each own an
+  Top-level Books, Dictionary, VN, Statistics, and Settings tabs each own an
   independent Nav3 back stack with its own saveable entry state and per-entry
   ViewModel stores. The shared main navigation chrome is owned by a Nav3 scene
   decorator around top-level root scenes, while Reader and Settings detail
-  routes remain full-screen outside that shell. Once visited, the Dictionary
-  NavDisplay stays composed and attached across tab switches to retain its WebView
-  compositor. `RetainedTabContent` leaves it unplaced while inactive and caps its
-  lifecycle at CREATED, disabling hidden back handlers and lifecycle collection.
+  routes remain full-screen outside that shell. Once visited, the Dictionary and
+  VN NavDisplays stay composed and attached across tab switches to retain their
+  WebView compositors. `RetainedTabContent` leaves them unplaced while inactive and
+  caps their lifecycle at CREATED, disabling hidden back handlers and lifecycle collection.
 - Production dependency injection is Hilt-backed. `HoshiApplication` owns the
   app component through `@HiltAndroidApp`, and Android entry points receive
   dependencies from the Hilt graph.
@@ -394,7 +394,7 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   Source groups update in configured order, and available rows select by URL
   without waiting for other sources; closed/reset menus ignore late results.
 - Shared iframe frame payloads accept optional root `sourceText` for Dictionary
-  search and Process Text; Reader and recursive child frames omit it. Shared
+  search, Process Text, and the VN tab; Reader and recursive child frames omit it. Shared
   popup assets render character spans, look up exact suffixes on tap, mark the
   match, and preserve scroll on successful source redirects. Popup geometry
   converts the source-enabled entries minimum height to one visual viewport
@@ -444,6 +444,34 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   the built-in reader provider. Publishing failures do not block Reader
   loading, and the integration does not request broad storage access.
 - Anki work stays behind the Anki backend/repository boundary.
+- The VN tab (`features.texthooker`, unrelated to the Reader's VN layout mode) shows
+  live game text from the separate steamdeck-vn-extractor server (see its
+  `PROTOCOL.md`, v1) over HTTP/WebSocket, typically via Tailscale. DataStore-backed
+  `TextHookerSettingsRepository` stores host (default `steamdeck`; blank disables),
+  port 7277, optional Bearer token and screenshot width. The singleton
+  `TextHookerRepository` owns the OkHttp WebSocket only while its `StateFlow` has
+  subscribers (the visible tab, via `WhileSubscribed`), reconnects with 1–30 s
+  exponential backoff, resumes with `?after=<latest id>`, and keeps a 200-line
+  in-memory log deduplicated by id; a lower server `latestLineId` replaces the log,
+  endpoint changes clear it, and an incompatible `hello.protocol` stops retrying.
+  Network calls go through the `TextHookerTransport` boundary on the IO dispatcher.
+- The VN tab reuses the Dictionary embedded-root iframe path: the displayed line is
+  the root `sourceText` under a per-line root popup id, source taps run root
+  redirects with exact-suffix mining offsets, and recursive popups, audio, Kanji and
+  Anki messages use the shared bridge. `TextHookerViewModel` follows the newest line
+  unless the root has results or child popups (or an older line was selected); then
+  the line stays and a jump-to-latest banner is shown.
+- `AnkiMiningContext.screenshot` carries a VN line id (and an optional fetched
+  preview). Only when the format's fields reference `{image}` (or its aliases) and no
+  web image was picked does `AnkiRepository` ask the Hilt-bound
+  `AnkiScreenshotSource` (the texthooker repository) for `POST /api/screenshot`,
+  attaching it as a hashed `hoshi_screenshot_*` media file and deleting the temp copy.
+  `{image}` resolves picked web image, then screenshot, then cover. Screenshot
+  failures never block mining: the note is added and `mineEntryWithResult` returns
+  a localized warning shown as a Snackbar. VN cards use the Deck hostname as
+  `{document-title}`; recursive popup mining keeps Dictionary behavior without a
+  screenshot. The mine-with-options sheet offers the fetched screenshot as the
+  default image when its context carries a screenshot request.
 - Anki settings are stored per active profile in
   `Profiles/<profileId>/anki_config.json`. Schema version 2 owns one to three
   stable-ID `AnkiCardFormat` values, each with its own icon, deck, note type,
