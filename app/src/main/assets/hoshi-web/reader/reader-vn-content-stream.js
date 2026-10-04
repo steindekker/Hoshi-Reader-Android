@@ -262,7 +262,17 @@
     countChars: countChars,
     countRawChars: countRawChars,
 
+    sasayakiTextIndex: function() {
+      if (!this.cachedSasayakiTextIndex) {
+        this.cachedSasayakiTextIndex = global.hoshiReaderDomText.createSasayakiTextIndex(
+          this.root, this.textEntries, this.options.sasayakiBoundaries
+        );
+      }
+      return this.cachedSasayakiTextIndex;
+    },
+
     rebuild: function() {
+      this.cachedSasayakiTextIndex = null;
       this.textEntries = [];
       this.sourceTextOffsets = new WeakMap();
       this.sourceTextRawOffsets = new WeakMap();
@@ -552,6 +562,22 @@
       var char = previous ? previous.endChar : 0;
       var raw = previous ? previous.endRaw : 0;
       return { hasText: false, startChar: char, endChar: char, startRaw: raw, endRaw: raw };
+    },
+
+    collectRawSegments: function(offset, length) {
+      var end = offset + length;
+      var segments = [];
+      for (var i = 0; i < this.textEntries.length; i++) {
+        var entry = this.textEntries[i];
+        if (entry.startRaw >= end) break;
+        if (entry.endRaw <= offset) continue;
+        segments.push({
+          node: entry.node,
+          start: utf16OffsetForRawCount(entry.text, Math.max(0, offset - entry.startRaw)),
+          end: utf16OffsetForRawCount(entry.text, Math.min(entry.endRaw, end) - entry.startRaw)
+        });
+      }
+      return segments;
     },
 
     sourcePositionForRawOffset: function(rawOffset) {

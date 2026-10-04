@@ -88,6 +88,8 @@ class MainShellSceneDecoratorTest {
                     AppRoute.BooksRoute -> Text("Books content")
                     AppRoute.DictionaryRoute -> Text("Dictionary content")
                     AppRoute.StatisticsRoute -> Text("Statistics content")
+                    AppRoute.StatisticsSettingsRoute -> Text("Statistics settings content")
+                    is AppRoute.StatisticsBookRoute -> Text("Statistics book content")
                     AppRoute.SettingsRoute -> Column {
                         Text("Settings content")
                         Button(
@@ -102,6 +104,8 @@ class MainShellSceneDecoratorTest {
                     AppRoute.MainRoute -> Text("Main content")
                     is AppRoute.ReaderRoute -> Text("Reader content")
                     is AppRoute.SettingsDetailRoute -> Text("Settings detail content")
+                    AppRoute.AnkiAdvancedRoute -> Text("Anki advanced content")
+                    is AppRoute.AnkiCardFormatRoute -> Text("Anki format content")
                 }
             }
         }

@@ -2,6 +2,7 @@ package moe.antimony.hoshi.features.sasayaki
 
 import com.sun.management.ThreadMXBean
 import moe.antimony.hoshi.epub.EpubBook
+import moe.antimony.hoshi.epub.SasayakiMatchSource
 import moe.antimony.hoshi.epub.EpubChapter
 import moe.antimony.hoshi.epub.EpubBookParser
 import org.junit.Assert.assertEquals
@@ -16,6 +17,33 @@ import java.lang.management.ManagementFactory
 class SasayakiMatcherTest {
     @get:Rule
     val tempFolder = TemporaryFolder()
+
+    @Test fun emptySubtitleMatchRecordsSubtitleSource() {
+        val result = SasayakiMatcher.match(EpubBook(title = "Empty", chapters = emptyList()), emptyList())
+        assertTrue(result.matches.isEmpty())
+        assertEquals(SasayakiMatchSource.Subtitles, result.source)
+    }
+
+    @Test
+    fun koreanCuesUseChapterCodePointOffsetsWithoutRubyFallbackText() {
+        val book = EpubBook(
+            title = "Korean cues",
+            chapters = listOf(EpubChapter(
+                id = "chapter", href = "chapter.xhtml", mediaType = "application/xhtml+xml",
+                html = "<body>𠮟가、<ruby>한글<rp>fallback</rp><rt>reading</rt>" +
+                    "<rp>주석</rp></ruby> 문장입니다。</body>",
+            )),
+        )
+
+        val match = SasayakiMatcher.match(
+            book,
+            listOf(SasayakiCue(id = "korean", startTime = 1.0, endTime = 2.0, text = "한글 문장입니다。")),
+        ).matches.single()
+
+        assertEquals(0, match.chapterIndex)
+        assertEquals(2, match.start)
+        assertEquals(7, match.length)
+    }
 
     @Test
     fun repeatedResynchronizationAllocationScalesNearLinearly() {
@@ -598,6 +626,18 @@ class SasayakiMatcherTest {
 
         assertEquals(listOf("1"), match.matches.map { it.id })
         assertEquals(1, match.unmatched)
+    }
+
+    @Test
+    fun excludesNonNarrativePathsCaseInsensitively() {
+        val paths = listOf("Text/TOC.xhtml", "Text/Caution.xhtml", "Text/COLOPHON.xhtml", "Text/story.xhtml")
+        val book = EpubBook(title = "Source filter", chapters = paths.mapIndexed { index, path ->
+            EpubChapter("$index", path, "application/xhtml+xml", "<body>これは同じ長い本文です。</body>")
+        })
+        val result = SasayakiMatcher.match(book, listOf(SasayakiCue("speech", 1.0, 3.0, "これは同じ長い本文です")))
+
+        assertEquals(3, result.matches.single().chapterIndex)
+        assertEquals(11, result.matches.single().length)
     }
 
     @Test

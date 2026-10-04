@@ -139,8 +139,41 @@ class LocalAudioRepository @Inject constructor(
     fun findAudio(term: String, reading: String): LocalAudioEntry? {
         val normalizedReading = LocalAudioResolver.katakanaToHiragana(reading)
         val sourceConfig = ensureSourceConfig()
-        if (sourceConfig.sourceOrder.all { it in sourceConfig.disabledSources }) return null
-        val rows = withReadOnlyDatabase { db ->
+        return queryAudioRows(term, normalizedReading, sourceConfig)
+            ?.let { rows ->
+                LocalAudioResolver.resolve(
+                    term = term,
+                    reading = normalizedReading,
+                    rows = rows,
+                    sourceOrder = sourceConfig.sourceOrder,
+                    disabledSources = sourceConfig.disabledSources,
+                )
+            }
+    }
+
+    fun findAudioCandidates(term: String, reading: String): List<LocalAudioCandidate> {
+        val normalizedReading = LocalAudioResolver.katakanaToHiragana(reading)
+        val sourceConfig = ensureSourceConfig()
+        return queryAudioRows(term, normalizedReading, sourceConfig)
+            ?.let { rows ->
+                LocalAudioResolver.resolveCandidates(
+                    term = term,
+                    reading = normalizedReading,
+                    rows = rows,
+                    sourceOrder = sourceConfig.sourceOrder,
+                    disabledSources = sourceConfig.disabledSources,
+                )
+            }
+            .orEmpty()
+    }
+
+    private fun queryAudioRows(
+        term: String,
+        normalizedReading: String,
+        sourceConfig: LocalAudioSourceConfig,
+    ): List<LocalAudioEntry>? {
+        if (sourceConfig.sourceOrder.all { it in sourceConfig.disabledSources }) return emptyList()
+        return withReadOnlyDatabase { db ->
             val args: Array<String>
             val selection: String
             if (normalizedReading.isBlank()) {
@@ -153,7 +186,7 @@ class LocalAudioRepository @Inject constructor(
             val rows = mutableListOf<LocalAudioEntry>()
             db.query(
                 "entries",
-                arrayOf("source", "expression", "reading", "file"),
+                arrayOf("source", "expression", "reading", "file", "display"),
                 selection,
                 args,
                 null,
@@ -166,18 +199,12 @@ class LocalAudioRepository @Inject constructor(
                         expression = cursor.getString(1),
                         reading = cursor.getString(2),
                         file = cursor.getString(3),
+                        display = cursor.getString(4).orEmpty(),
                     )
                 }
             }
             rows
-        } ?: return null
-        return LocalAudioResolver.resolve(
-            term = term,
-            reading = normalizedReading,
-            rows = rows,
-            sourceOrder = sourceConfig.sourceOrder,
-            disabledSources = sourceConfig.disabledSources,
-        )
+        }
     }
 
     fun audioSourcesFromDatabase(): List<String> {

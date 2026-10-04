@@ -1,10 +1,19 @@
 package moe.antimony.hoshi.features.statistics
 
+import moe.antimony.hoshi.ui.theme.hoshiContainerOutline
+import moe.antimony.hoshi.ui.theme.hoshiSurfaces
+import moe.antimony.hoshi.ui.theme.hoshiContainerBorder
+import androidx.compose.material.icons.rounded.Settings
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,14 +21,13 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Remove
-import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.draw.clip
@@ -27,11 +35,7 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -47,17 +51,19 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import moe.antimony.hoshi.R
-import moe.antimony.hoshi.features.bookshelf.MainShellLayoutSpec
-import moe.antimony.hoshi.features.bookshelf.MainShellNavigationLayout
+import moe.antimony.hoshi.ui.theme.LocalHoshiEInkMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun StatisticsHeader(
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     CenterAlignedTopAppBar(
@@ -69,9 +75,17 @@ internal fun StatisticsHeader(
                 fontWeight = FontWeight.SemiBold,
             )
         },
+        actions = {
+            androidx.compose.material3.IconButton(onClick = onOpenSettings) {
+                androidx.compose.material3.Icon(
+                    androidx.compose.material.icons.Icons.Rounded.Settings,
+                    contentDescription = null,
+                )
+            }
+        },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.background,
-            scrolledContainerColor = MaterialTheme.colorScheme.background,
+            containerColor = hoshiSurfaces.page,
+            scrolledContainerColor = hoshiSurfaces.page,
         ),
     )
 }
@@ -79,339 +93,103 @@ internal fun StatisticsHeader(
 @Composable
 internal fun TodayStatisticsSection(
     today: TodayStatisticsUi,
+    history: StatisticsHistoryUi,
+    heatmap: StatisticsHeatmapUi,
+    heatmapScrollState: LazyListState,
+    heatmapInitiallyScrolled: Boolean,
+    onHeatmapInitiallyScrolled: () -> Unit,
     settings: StatisticsTargetSettings,
-    layoutSpec: MainShellLayoutSpec,
-    targetEditorExpanded: Boolean,
-    onToggleTargetSettings: () -> Unit,
+    targetEditor: StatisticsTargetSettingsUi,
     onEvent: (StatisticsEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     StatisticsSection(
-        title = stringResource(R.string.statistics_today),
-        trailing = null,
+        title = stringResource(R.string.statistics_daily_target),
         modifier = modifier,
-        trailingContent = {
-            TargetGoalText(
-                text = stringResource(R.string.statistics_target_format, dailyTargetText(settings)),
-                onClick = onToggleTargetSettings,
-            )
-        },
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            GoalRing(
-                percent = today.targetPercent,
-                modifier = Modifier.size(if (layoutSpec.navigationLayout == MainShellNavigationLayout.BottomBar) 96.dp else 116.dp),
-            )
-            MetricGrid(
-                metrics = listOf(
-                    StatisticMetric(
-                        label = stringResource(R.string.statistics_reading_duration),
-                        value = formatStatisticsDuration(today.readingSeconds),
-                    ),
-                    StatisticMetric(
-                        label = stringResource(R.string.statistics_characters_read),
-                        value = formatStatisticsCharacterCount(today.totalCharacters),
-                    ),
-                    StatisticMetric(
-                        label = stringResource(R.string.statistics_average_speed),
-                        value = formatStatisticsSpeed(today.averageSpeedPerHour),
-                    ),
-                    StatisticMetric(
-                        label = stringResource(R.string.statistics_streak),
-                        value = formatStatisticsDays(today.dailyStreakDays),
-                    ),
-                ),
-                columns = 2,
-                modifier = Modifier.weight(1f),
-            )
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            if (maxWidth >= 640.dp) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    DailyGoalGauge(
+                        today = today,
+                        settings = settings,
+                        targetEditor = targetEditor,
+                        onEvent = onEvent,
+                        modifier = Modifier.width(320.dp),
+                    )
+                    StatisticsHistoryGrid(
+                        history = history,
+                        settings = settings,
+                        today = today.date,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            } else {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    DailyGoalGauge(
+                        today = today,
+                        settings = settings,
+                        targetEditor = targetEditor,
+                        onEvent = onEvent,
+                        modifier = Modifier.widthIn(max = 360.dp).fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(18.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(Modifier.height(14.dp))
+                    StatisticsHistoryGrid(history = history, settings = settings, today = today.date)
+                }
+            }
         }
-        if (targetEditorExpanded) {
-            Spacer(Modifier.height(18.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(Modifier.height(14.dp))
-            DailyTargetSettingsSection(settings = settings, onEvent = onEvent)
-        }
-    }
-}
-
-@Composable
-internal fun WeekStatisticsSection(
-    week: WeekStatisticsUi,
-    settings: StatisticsTargetSettings,
-    targetEditorExpanded: Boolean,
-    onToggleTargetSettings: () -> Unit,
-    onEvent: (StatisticsEvent) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val averageMetric = if (settings.dailyTargetType == DailyTargetType.Duration) {
-        StatisticMetric(
-            label = stringResource(R.string.statistics_daily_average_duration),
-            value = formatStatisticsDuration(week.averageReadingSecondsPerElapsedDay),
-        )
-    } else {
-        StatisticMetric(
-            label = stringResource(R.string.statistics_daily_average_characters),
-            value = formatStatisticsCharacterCount(week.averageCharactersPerElapsedDay),
-        )
-    }
-    StatisticsSection(
-        title = stringResource(R.string.statistics_this_week),
-        trailing = null,
-        modifier = modifier,
-        trailingContent = {
-            TargetGoalText(
-                text = stringResource(R.string.statistics_target_format, formatStatisticsDays(week.targetDays)),
-                onClick = onToggleTargetSettings,
-            )
-        },
-    ) {
-        MetricGrid(
-            metrics = weekStatisticsMetricsInDisplayOrder(
-                durationMetric = StatisticMetric(
-                    label = stringResource(R.string.statistics_reading_duration),
-                    value = formatStatisticsDuration(week.readingSeconds),
-                ),
-                charactersMetric = StatisticMetric(
-                    label = stringResource(R.string.statistics_characters_read),
-                    value = formatStatisticsCharacterCount(week.totalCharacters),
-                ),
-                speedMetric = StatisticMetric(
-                    label = stringResource(R.string.statistics_average_speed),
-                    value = formatStatisticsSpeed(week.averageSpeedPerHour),
-                ),
-                targetDaysMetric = StatisticMetric(
-                    label = stringResource(R.string.statistics_target_days),
-                    value = formatStatisticsDays(week.metTargetDays),
-                ),
-                streakMetric = StatisticMetric(
-                    label = stringResource(R.string.statistics_streak),
-                    value = formatStatisticsWeeks(week.weeklyStreakWeeks),
-                ),
-                averageMetric = averageMetric,
-            ),
-            columns = 3,
-        )
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(14.dp))
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Spacer(Modifier.height(16.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.statistics_week_goal_days),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = stringResource(R.string.statistics_week_status_format, week.metTargetDays),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        WeekGoalRow(days = week.days)
-        if (targetEditorExpanded) {
-            Spacer(Modifier.height(18.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(Modifier.height(14.dp))
-            WeeklyTargetSettingsSection(settings = settings, onEvent = onEvent)
-        }
-    }
-}
-
-@Composable
-private fun DailyTargetSettingsSection(
-    settings: StatisticsTargetSettings,
-    onEvent: (StatisticsEvent) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            text = stringResource(R.string.statistics_daily_target),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
+        Spacer(Modifier.height(12.dp))
+        StatisticsHeatmap(
+            heatmap = heatmap,
+            scrollState = heatmapScrollState,
+            initiallyScrolled = heatmapInitiallyScrolled,
+            onInitiallyScrolled = onHeatmapInitiallyScrolled,
         )
-        TargetTypeSegmentedButtons(
-            selected = settings.dailyTargetType,
-            onSelect = { type -> onEvent(StatisticsEvent.SelectDailyTargetType(type)) },
-        )
-        if (settings.dailyTargetType == DailyTargetType.Characters) {
-            StepperRow(
-                label = stringResource(R.string.statistics_current_target),
-                value = stringResource(
-                    R.string.statistics_character_target_format,
-                    formatInteger(settings.dailyCharacterTarget),
-                ),
-                canDecrease = settings.dailyCharacterTarget > StatisticsTargetDefaults.MinDailyCharacterTarget,
-                canIncrease = settings.dailyCharacterTarget < StatisticsTargetDefaults.MaxDailyCharacterTarget,
-                onDecrease = {
-                    onEvent(
-                        StatisticsEvent.UpdateDailyCharacterTarget(
-                            settings.dailyCharacterTarget - StatisticsTargetDefaults.DailyCharacterTargetStep,
-                        ),
-                    )
-                },
-                onIncrease = {
-                    onEvent(
-                        StatisticsEvent.UpdateDailyCharacterTarget(
-                            settings.dailyCharacterTarget + StatisticsTargetDefaults.DailyCharacterTargetStep,
-                        ),
-                    )
-                },
-            )
-        } else {
-            StepperRow(
-                label = stringResource(R.string.statistics_current_target),
-                value = formatStatisticsDuration(settings.dailyDurationTargetMinutes * 60.0),
-                canDecrease = settings.dailyDurationTargetMinutes > StatisticsTargetDefaults.MinDailyDurationTargetMinutes,
-                canIncrease = settings.dailyDurationTargetMinutes < StatisticsTargetDefaults.MaxDailyDurationTargetMinutes,
-                onDecrease = {
-                    onEvent(
-                        StatisticsEvent.UpdateDailyDurationTargetMinutes(
-                            settings.dailyDurationTargetMinutes - StatisticsTargetDefaults.DailyDurationTargetStepMinutes,
-                        ),
-                    )
-                },
-                onIncrease = {
-                    onEvent(
-                        StatisticsEvent.UpdateDailyDurationTargetMinutes(
-                            settings.dailyDurationTargetMinutes + StatisticsTargetDefaults.DailyDurationTargetStepMinutes,
-                        ),
-                    )
-                },
-            )
-        }
-    }
-}
-
-@Composable
-private fun WeeklyTargetSettingsSection(
-    settings: StatisticsTargetSettings,
-    onEvent: (StatisticsEvent) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            text = stringResource(R.string.statistics_weekly_target),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
-        StepperRow(
-            label = stringResource(R.string.statistics_week_status),
-            value = formatStatisticsDays(settings.weeklyTargetDays),
-            canDecrease = settings.weeklyTargetDays > StatisticsTargetDefaults.MinWeeklyTargetDays,
-            canIncrease = settings.weeklyTargetDays < StatisticsTargetDefaults.MaxWeeklyTargetDays,
-            onDecrease = { onEvent(StatisticsEvent.UpdateWeeklyTargetDays(settings.weeklyTargetDays - 1)) },
-            onIncrease = { onEvent(StatisticsEvent.UpdateWeeklyTargetDays(settings.weeklyTargetDays + 1)) },
-        )
-    }
-}
-
-@Composable
-private fun TargetGoalText(
-    text: String,
-    onClick: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Icon(
-                imageVector = Icons.Rounded.Tune,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(16.dp),
-            )
-        }
     }
 }
 
 @Composable
 internal fun StatisticsSection(
     title: String,
-    trailing: String?,
     modifier: Modifier = Modifier,
-    trailingContent: (@Composable () -> Unit)? = null,
-    content: @Composable () -> Unit,
+    contentPadding: PaddingValues = PaddingValues(16.dp),
+    content: @Composable ColumnScope.() -> Unit,
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        shadowElevation = 1.dp,
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                if (trailingContent != null) {
-                    trailingContent()
-                } else if (trailing != null) {
-                    Text(
-                        text = trailing,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-            content()
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        StatisticsSectionHeading(title, Modifier.padding(horizontal = 16.dp))
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = hoshiSurfaces.group,
+            border = hoshiContainerBorder(),
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(contentPadding), content = content)
         }
     }
+}
+
+@Composable
+internal fun StatisticsSectionHeading(title: String, modifier: Modifier = Modifier) {
+    Text(
+        text = title,
+        modifier = modifier,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 internal data class StatisticMetric(
     val label: String,
     val value: String,
 )
-
-internal fun weekStatisticsMetricsInDisplayOrder(
-    durationMetric: StatisticMetric,
-    charactersMetric: StatisticMetric,
-    speedMetric: StatisticMetric,
-    targetDaysMetric: StatisticMetric,
-    streakMetric: StatisticMetric,
-    averageMetric: StatisticMetric,
-): List<StatisticMetric> =
-    listOf(
-        durationMetric,
-        charactersMetric,
-        speedMetric,
-        averageMetric,
-        targetDaysMetric,
-        streakMetric,
-    )
 
 internal data class MetricCardTextSpec(
     val valueFontSizeSp: Int,
@@ -482,7 +260,8 @@ private fun MetricCard(
             .height(68.dp)
             .semantics(mergeDescendants = true) {},
         shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = hoshiSurfaces.nested,
+        border = hoshiContainerBorder(),
     ) {
         Column(
             modifier = Modifier
@@ -519,97 +298,149 @@ private fun MetricCard(
 }
 
 @Composable
-private fun GoalRing(
-    percent: Int,
+private fun DailyGoalGauge(
+    today: TodayStatisticsUi,
+    settings: StatisticsTargetSettings,
+    targetEditor: StatisticsTargetSettingsUi,
+    onEvent: (StatisticsEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val progress = (percent / 100f).coerceIn(0f, 1f)
-    val trackColor = MaterialTheme.colorScheme.surfaceVariant
-    val progressColor = MaterialTheme.colorScheme.primary
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val strokeWidth = 12.dp.toPx()
-            val size = Size(size.width - strokeWidth, size.height - strokeWidth)
-            val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
-            drawArc(
-                color = trackColor,
-                startAngle = -90f,
-                sweepAngle = 360f,
-                useCenter = false,
-                topLeft = topLeft,
-                size = size,
-                style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
-            )
-            drawArc(
-                color = progressColor,
-                startAngle = -90f,
-                sweepAngle = 360f * progress,
-                useCenter = false,
-                topLeft = topLeft,
-                size = size,
-                style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
-            )
+    val progress = statisticsDailyGoalProgress(today, settings)
+    val colors = MaterialTheme.colorScheme
+    val eInkMode = LocalHoshiEInkMode.current
+    val headline = when (settings.dailyTargetType) {
+        DailyTargetType.Characters -> formatStatisticsGroupedCount(today.totalCharacters)
+        DailyTargetType.Duration -> {
+            val seconds = today.readingSeconds.roundToInt().coerceAtLeast(0)
+            stringResource(R.string.statistics_goal_clock_format, seconds / 60, seconds % 60)
         }
-        Text(
-            text = stringResource(R.string.statistics_percent_format, percent),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
-        )
     }
-}
-
-@Composable
-private fun WeekGoalRow(days: List<WeekDayGoalUi>) {
-    val weekdayLabels = statisticsWeekdayLabels()
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        days.forEachIndexed { index, day ->
+    val secondary = when (settings.dailyTargetType) {
+        DailyTargetType.Characters -> stringResource(R.string.statistics_duration_minutes_format, (today.readingSeconds / 60).roundToInt())
+        DailyTargetType.Duration -> formatStatisticsCharacters(today.totalCharacters)
+    }
+    BoxWithConstraints(modifier = modifier.padding(horizontal = 20.dp)) {
+        val gaugeHeight = maxWidth / 2 + 5.dp
+        Box(modifier = Modifier.fillMaxWidth().height(gaugeHeight), contentAlignment = Alignment.BottomCenter) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val strokeWidth = 9.dp.toPx()
+                val diameter = size.width - strokeWidth
+                val arcSize = Size(diameter, diameter)
+                val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
+                fun arc(color: Color, sweep: Float, width: Float) = drawArc(
+                    color = color,
+                    startAngle = 180f,
+                    sweepAngle = sweep,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = Stroke(width = width, cap = StrokeCap.Round),
+                )
+                if (eInkMode) {
+                    arc(colors.onSurface, 180f, strokeWidth)
+                    arc(colors.surface, 180f, 7.dp.toPx())
+                } else {
+                    arc(colors.surfaceContainerHighest, 180f, strokeWidth)
+                }
+                if (progress > 0f) arc(colors.primary, 180f * progress, strokeWidth)
+            }
             Column(
-                modifier = Modifier
-                    .weight(1f),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                val containerColor = when {
-                    day.isToday && day.metTarget -> MaterialTheme.colorScheme.primary
-                    day.metTarget -> MaterialTheme.colorScheme.primaryContainer
-                    day.isToday -> MaterialTheme.colorScheme.secondaryContainer
-                    else -> MaterialTheme.colorScheme.surfaceContainerLow
-                }
-                val contentColor = when {
-                    day.isToday && day.metTarget -> MaterialTheme.colorScheme.onPrimary
-                    day.metTarget -> MaterialTheme.colorScheme.onPrimaryContainer
-                    day.isToday -> MaterialTheme.colorScheme.onSecondaryContainer
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                }
-                Surface(
-                    modifier = Modifier.size(32.dp),
-                    shape = CircleShape,
-                    color = containerColor,
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = weekdayLabels[index],
-                            style = MaterialTheme.typography.labelLarge,
-                            color = contentColor,
-                            fontWeight = FontWeight.SemiBold,
+                    Text(
+                        text = stringResource(R.string.statistics_today),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (progress >= 1f) {
+                        Icon(
+                            Icons.Rounded.CheckCircle,
+                            contentDescription = null,
+                            tint = colors.primary,
+                            modifier = Modifier.size(16.dp),
                         )
                     }
                 }
-                Spacer(Modifier.height(6.dp))
                 Text(
-                    text = day.percent?.let { stringResource(R.string.statistics_percent_format, it) }
-                        ?: stringResource(R.string.statistics_empty_goal_value),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.Medium,
+                    text = headline,
+                    modifier = Modifier.fillMaxWidth(),
+                    style = MaterialTheme.typography.displaySmall.copy(
+                        fontWeight = FontWeight.Normal,
+                        lineHeight = 54.sp,
+                        fontFeatureSettings = "tnum",
+                        letterSpacing = 0.sp,
+                    ),
+                    autoSize = TextAutoSize.StepBased(minFontSize = 26.sp, maxFontSize = 46.sp, stepSize = 1.sp),
+                    textAlign = TextAlign.Center,
                     maxLines = 1,
                 )
+                Text(
+                    text = secondary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                )
+                Box {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onEvent(StatisticsEvent.OpenTargetSettings) }
+                            .padding(horizontal = 6.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = when (settings.dailyTargetType) {
+                                DailyTargetType.Characters -> stringResource(
+                                    R.string.statistics_goal_characters_link_format,
+                                    formatStatisticsGroupedCount(settings.dailyCharacterTarget),
+                                )
+                                DailyTargetType.Duration -> stringResource(
+                                    R.string.statistics_goal_minutes_link_format,
+                                    settings.dailyDurationTargetMinutes,
+                                )
+                            },
+                            style = MaterialTheme.typography.labelLarge,
+                            color = colors.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f, fill = false),
+                            maxLines = 2,
+                        )
+                        Icon(
+                            Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = colors.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                    if (targetEditor.isEditorVisible) {
+                        StatisticsGoalPicker(targetEditor, onEvent)
+                    }
+                }
             }
         }
     }
 }
+
+internal fun statisticsDailyGoalProgress(
+    today: TodayStatisticsUi,
+    settings: StatisticsTargetSettings,
+): Float {
+    val ratio = when (settings.dailyTargetType) {
+        DailyTargetType.Characters -> today.totalCharacters.toDouble() / settings.dailyCharacterTarget
+        DailyTargetType.Duration -> today.readingSeconds / (settings.dailyDurationTargetMinutes * 60.0)
+    }
+    return ratio.toFloat().coerceIn(0f, 1f)
+}
+
+internal fun formatStatisticsGroupedCount(value: Int): String =
+    java.text.NumberFormat.getIntegerInstance().format(value)
 
 internal data class StatisticsSegmentedOption<T>(
     val value: T,
@@ -624,22 +455,25 @@ internal fun <T> StatisticsSegmentedControl(
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val eInkMode = LocalHoshiEInkMode.current
+    val colors = MaterialTheme.colorScheme
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        color = hoshiSurfaces.nested,
+        border = hoshiContainerBorder(),
     ) {
         Row(
             modifier = Modifier
-                .height(56.dp)
-                .padding(4.dp),
+                .height(36.dp)
+                .padding(3.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             options.forEach { option ->
                 val isSelected = option.value == selected
                 val itemShape = RoundedCornerShape(8.dp)
                 val background = if (isSelected) {
-                    MaterialTheme.colorScheme.surface
+                    hoshiSurfaces.selected
                 } else {
                     Color.Transparent
                 }
@@ -649,99 +483,24 @@ internal fun <T> StatisticsSegmentedControl(
                         .fillMaxHeight()
                         .clip(itemShape)
                         .background(background)
+                        .then(if (isSelected) Modifier.hoshiContainerOutline(itemShape) else Modifier)
                         .clickable(enabled = option.enabled) { onSelect(option.value) },
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = option.label,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = if (option.enabled) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                        style = MaterialTheme.typography.labelLarge,
+                        color = when {
+                            !option.enabled -> colors.onSurfaceVariant.copy(alpha = 0.45f)
+                            eInkMode && isSelected -> colors.surface
+                            else -> colors.onSurface
                         },
                         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
-                            .padding(horizontal = 6.dp)
+                            .padding(horizontal = if (options.size >= 5) 3.dp else 6.dp)
                             .widthIn(min = 0.dp),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TargetTypeSegmentedButtons(
-    selected: DailyTargetType,
-    onSelect: (DailyTargetType) -> Unit,
-) {
-    val entries = DailyTargetType.entries
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        entries.forEachIndexed { index, type ->
-            SegmentedButton(
-                selected = selected == type,
-                onClick = { onSelect(type) },
-                shape = SegmentedButtonDefaults.itemShape(index, entries.size),
-            ) {
-                Text(
-                    text = when (type) {
-                        DailyTargetType.Characters -> stringResource(R.string.statistics_target_type_characters)
-                        DailyTargetType.Duration -> stringResource(R.string.statistics_target_type_duration)
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun StepperRow(
-    label: String,
-    value: String,
-    canDecrease: Boolean,
-    canIncrease: Boolean,
-    onDecrease: () -> Unit,
-    onIncrease: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                IconButton(onClick = onDecrease, enabled = canDecrease) {
-                    Icon(
-                        imageVector = Icons.Rounded.Remove,
-                        contentDescription = stringResource(R.string.action_decrease),
-                    )
-                }
-                IconButton(onClick = onIncrease, enabled = canIncrease) {
-                    Icon(
-                        imageVector = Icons.Rounded.Add,
-                        contentDescription = stringResource(R.string.action_increase),
                     )
                 }
             }
@@ -777,10 +536,6 @@ internal fun formatStatisticsDays(days: Int): String =
     pluralStringResource(R.plurals.statistics_days_value, days, days)
 
 @Composable
-internal fun formatStatisticsWeeks(weeks: Int): String =
-    pluralStringResource(R.plurals.statistics_weeks_value, weeks, weeks)
-
-@Composable
 internal fun formatStatisticsSpeed(speedPerHour: Int): String =
     stringResource(R.string.statistics_speed_value_format, formatInteger(speedPerHour))
 
@@ -795,14 +550,22 @@ internal fun dailyTargetText(settings: StatisticsTargetSettings): String =
     }
 
 @Composable
-internal fun statisticsWeekdayLabels(): List<String> = listOf(
-    stringResource(R.string.statistics_weekday_monday_short),
-    stringResource(R.string.statistics_weekday_tuesday_short),
-    stringResource(R.string.statistics_weekday_wednesday_short),
-    stringResource(R.string.statistics_weekday_thursday_short),
-    stringResource(R.string.statistics_weekday_friday_short),
-    stringResource(R.string.statistics_weekday_saturday_short),
-    stringResource(R.string.statistics_weekday_sunday_short),
+internal fun statisticsWeekdayLabels(): List<String> {
+    val firstDay = java.time.temporal.WeekFields.of(java.util.Locale.getDefault()).firstDayOfWeek.value
+    return (0..6).map { statisticsWeekdayLabel((firstDay - 1 + it) % 7 + 1) }
+}
+
+@Composable
+private fun statisticsWeekdayLabel(dayOfWeekValue: Int): String = stringResource(
+    when (dayOfWeekValue) {
+        1 -> R.string.statistics_weekday_monday_short
+        2 -> R.string.statistics_weekday_tuesday_short
+        3 -> R.string.statistics_weekday_wednesday_short
+        4 -> R.string.statistics_weekday_thursday_short
+        5 -> R.string.statistics_weekday_friday_short
+        6 -> R.string.statistics_weekday_saturday_short
+        else -> R.string.statistics_weekday_sunday_short
+    },
 )
 
 @Composable

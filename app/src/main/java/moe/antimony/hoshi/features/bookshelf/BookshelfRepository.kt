@@ -78,6 +78,7 @@ internal interface BookshelfRepository {
     suspend fun setBookProfile(entry: BookEntry, profileId: String?)
     suspend fun changeSort(sortOption: BookSortOption)
     suspend fun changeShowReading(showReading: Boolean)
+    suspend fun changeHideCollapsedShelfThumbnails(hide: Boolean)
     suspend fun changeCoverMode(coverMode: BookshelfCoverMode)
     suspend fun rebuildLookupQuery()
     suspend fun syncBook(
@@ -156,6 +157,7 @@ internal class AndroidBookshelfRepository @Inject constructor(
         val parsedBook = bookParser.parse(root)
         saveMetadata(root, parsedBook, bookRepository.loadMetadata(root))
         saveBookInfo(root, parsedBook)
+        bookRepository.restoreArchivedStatistics(root.name)
         prewarmBookCover(root)
         readerBookId(root)
     }
@@ -183,6 +185,7 @@ internal class AndroidBookshelfRepository @Inject constructor(
             }
             val imported = ttuBookDataConverter.importBookData(tempRoot)
             importRemoteSidecars(imported, entry, syncStats, syncAudioBook)
+            bookRepository.restoreArchivedStatistics(imported.root.name)
             prewarmBookCover(imported.root)
             readerBookId(imported.root)
         } finally {
@@ -292,6 +295,10 @@ internal class AndroidBookshelfRepository @Inject constructor(
 
     override suspend fun changeShowReading(showReading: Boolean) {
         settingsRepository.update { it.copy(showReading = showReading) }
+    }
+
+    override suspend fun changeHideCollapsedShelfThumbnails(hide: Boolean) {
+        settingsRepository.update { it.copy(hideCollapsedShelfThumbnails = hide) }
     }
 
     override suspend fun changeCoverMode(coverMode: BookshelfCoverMode) {
@@ -481,6 +488,12 @@ internal suspend fun loadRemoteBooksOnce(
         )
     }.sortedWith(compareByIosLikeTitle { it.title })
 }
+
+internal fun List<RemoteBookEntry>.sortedRemoteBooks(sortOption: BookSortOption): List<RemoteBookEntry> =
+    when (sortOption) {
+        BookSortOption.Recent -> sortedByDescending { it.lastAccessMillis ?: Long.MIN_VALUE }
+        BookSortOption.Title -> sortedWith(compareByIosLikeTitle { it.title })
+    }
 
 private fun <T> compareByIosLikeTitle(selector: (T) -> String): Comparator<T> {
     val collator = Collator.getInstance(Locale.getDefault()).apply {

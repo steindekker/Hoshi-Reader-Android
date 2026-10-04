@@ -134,7 +134,7 @@ class LocalizationResourceTest {
             defaultResources.strings.getValue("anki_selected_glossary_fallback").value,
         )
         assertEquals(
-            "{selected-glossary} Fallback",
+            "{selected-glossary} 默认值",
             zhResources.strings.getValue("anki_selected_glossary_fallback").value,
         )
         assertEquals(
@@ -191,27 +191,14 @@ class LocalizationResourceTest {
     }
 
     @Test
-    fun statisticsDurationUnitsUseFullWords() {
+    fun statisticsDayUnitsUseFullWords() {
         val defaultResources = readStringResources(File(resDir, "values/strings.xml"))
         val zhResources = readStringResources(File(resDir, "values-zh-rCN/strings.xml"))
 
         assertEquals("%1\$d day", defaultResources.plurals.getValue("statistics_days_value").items.getValue("one"))
         assertEquals("%1\$d days", defaultResources.plurals.getValue("statistics_days_value").items.getValue("other"))
-        assertEquals("%1\$d week", defaultResources.plurals.getValue("statistics_weeks_value").items.getValue("one"))
-        assertEquals("%1\$d weeks", defaultResources.plurals.getValue("statistics_weeks_value").items.getValue("other"))
         assertEquals("%1\$d 天", zhResources.plurals.getValue("statistics_days_value").items.getValue("one"))
         assertEquals("%1\$d 天", zhResources.plurals.getValue("statistics_days_value").items.getValue("other"))
-        assertEquals("%1\$d 周", zhResources.plurals.getValue("statistics_weeks_value").items.getValue("one"))
-        assertEquals("%1\$d 周", zhResources.plurals.getValue("statistics_weeks_value").items.getValue("other"))
-    }
-
-    @Test
-    fun statisticsCurrentRangeTitleNamesSelectedRange() {
-        val defaultResources = readStringResources(File(resDir, "values/strings.xml"))
-        val zhResources = readStringResources(File(resDir, "values-zh-rCN/strings.xml"))
-
-        assertEquals("Selected Range", defaultResources.strings.getValue("statistics_current_range").value)
-        assertEquals("所选范围", zhResources.strings.getValue("statistics_current_range").value)
     }
 
     @Test

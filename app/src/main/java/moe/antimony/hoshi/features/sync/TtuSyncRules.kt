@@ -62,6 +62,12 @@ object TtuSyncRules {
         return parseTtuTimestamp(file, prefix = "bookdata_", index = 4)
     }
 
+    fun parseBookDataLastAccessMillis(file: DriveFile?): Long? {
+        val name = file?.name ?: return null
+        if (!name.startsWith("bookdata_")) return null
+        return name.removeSuffix(".zip").split("_").getOrNull(5)?.toLongOrNull()
+    }
+
     fun parseStatisticsTimestampMillis(file: DriveFile?): Long? {
         return parseTtuTimestamp(file, prefix = "statistics_", index = 3)
     }

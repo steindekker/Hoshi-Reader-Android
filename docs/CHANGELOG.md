@@ -6,60 +6,111 @@ Historical release notes before v1.3.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 
 ## [Unreleased]
 
+## [v1.4.0] - 2026-09-24
+
 ### Added
 
-- Add Show, Blur, and Hide privacy modes for bookshelf covers, plus deterministic
-  title and author artwork when a book has no visible cover.
-- Warn users before enabling AnkiConnect that most setups can create cards
-  directly through AnkiDroid and that an incorrect AnkiConnect configuration
-  prevents fetching decks and note types or creating cards.
-- Add term dictionary categories with category-aware Anki definition mappings
-  and iOS-aligned advanced category/fallback controls, Kanji dictionary
-  import/management and popup lookup, a verified one-tap
-  stroke-order font download for Kanji users, plus complete pitch data with H/L
-  patterns and nasal/devoice markers.
-- Add downloadable recommended Japanese font families to Reader Appearance,
-  including separate family and named variant selectors, real static and
-  variable weight selection, verified app-private downloads, and family/variant
-  grouping for imported TTF and OTF fonts, with compact one-level type grouping
-  in the font menu.
-- Add an optional Reader Behavior setting that uses the volume keys to jump
-  between terms in the topmost lookup popup.
-- Add `hoshi://search?text=...` deep links for opening lookup results in the
-  existing popup overlay, with `mode=app` support for opening the Dictionary
-  tab instead.
+- Transcribe Japanese audiobooks on-device in Sasayaki. Download the model only when
+  needed; pause/resume, continue with the panel closed or after switching apps, and
+  save progress when leaving Reader. Reuse or clear transcripts, open the matching
+  transcription tab, and choose Lightweight, Balanced (default), or Fast. Match speech
+  to book text while reading without interrupting playback, with better recovery of
+  short replies and recognition errors. Support M4A, show match coverage, import
+  multiline subtitles, export partial or complete matches as SRT, and show localized
+  error messages.
+- Set lookup frequency sorting per profile: Auto, Ascending, Descending, or Disabled.
+  Explicit ordering requires an enabled frequency dictionary.
+- Preserve furigana in Reader highlights and Contents. Select an exact highlighted range
+  to change its color or remove it in paginated, continuous, and VN modes.
+- Optionally hide thumbnails in collapsed shelves; this setting is off by default.
+- Add global Theme settings with system or manual light/dark palettes, separate custom
+  light and dark reading colors, interface accents, and app-wide E-ink optimization.
+- Archive deleted-book reading statistics, restore them on reimport, and edit daily
+  records. Deleting all records requires confirmation.
+- Add calendar and all-time Statistics views with period comparisons, averages, goal
+  history, and best-day summaries.
+- Support Anki tag handlebars such as `{document-title}` and `{expression}`; whitespace
+  in substituted values becomes underscores. New formats use the `hoshi` tag by default.
+- Long-press a lookup result's audio button to choose among named local or remote
+  recordings; use the selected recording for Anki cards too.
+- Show source text above Dictionary and shared lookup results. Tap a character to look it
+  up while retaining the full sentence for Anki. Back/Forward restores the selected
+  occurrence, and source text size is adjustable from 12–48.
+- Add Off, Dimmed, Toggle, and Hidden furigana modes. Toggle reveals adjacent ruby
+  annotations together on the first tap.
+- Add Show, Blur, and Hide bookshelf-cover privacy modes, with title and author artwork
+  when a cover is hidden or unavailable.
+- Warn that AnkiDroid can create cards directly in most setups and that a misconfigured
+  AnkiConnect can prevent loading decks and note types or creating cards.
+- Add term dictionary categories and category-aware Anki mappings, Kanji dictionary
+  import and popup lookup, stroke-order font download, and complete pitch accents with
+  H/L patterns and nasal/devoice markers.
+- Add downloadable Japanese fonts with family, variant, and weight choices.
+- Use volume keys to move between terms in the topmost lookup popup.
+- Add `hoshi://search?text=...` links to open lookup results in a popup; use `mode=app`
+  to open the Dictionary tab.
+- Fix transcription setup for some playable M4B and Ogg Opus audiobooks.
+
+### Changed
+
+- Translate the Anki selected-glossary fallback label into Simplified Chinese.
+- Use Sasayaki accent colors to highlight the current chapter in Reader Contents outside
+  E-ink mode.
+- Clearing Dictionary search by pull-down or clear button now focuses the field and
+  opens the keyboard while preserving results and navigation history.
+- Set JapanesePod101, LanguagePod101, and Jisho as the default word-audio sources.
+  Sources can be enabled and reordered independently; custom sources remain unchanged.
+  Play the first match immediately and show recordings as each source loads.
+- Always export dictionary images to Anki as media files; remove the “Embed media” switch.
+- Adjust Reader line spacing to match iOS more closely.
+- Use low-memory imports for automatic dictionary updates; manual imports follow the
+  Low Memory Usage Mode setting.
+- Make book search treat spaces and punctuation literally, show full sentence context,
+  and return up to 100 results. Mark a selected result in blue until page navigation.
+- Include surrounding Japanese quotation marks and punctuation in Sasayaki highlights
+  across all Reader modes.
+- Apply Recent/Title sorting to Google Drive books. Recent uses reading or audiobook
+  progress time, then bookdata last access.
+- Keep display settings global across profiles and show the edited profile name in
+  Appearance. Opening books or switching profiles no longer changes colors or E-ink mode.
+- Use theme colors consistently across navigation, cards, settings, and Reader panels;
+  make selections clearer in E-ink mode.
+- Keep Statistics available and move its settings to the Stats tab. Preserve saved goals
+  and sync preferences; keep Book Open and Page Turn autostart independent and off by
+  default. Group settings into Autostart, Reset Time, Sync, and Archive.
+- Simplify Statistics around daily goals and reading time, with a heatmap, period charts,
+  comparisons, averages, and time-ranked books. Weekly totals and trends remain in the chart.
 
 ### Fixed
 
-- Ask for confirmation before resetting Dictionary custom CSS to prevent
-  accidental clearing.
-- Keep text and images reachable in every Reader mode when publisher CSS wraps
-  paragraphs or empty layout struts in oversized inline blocks.
-- Restore book files and covers from iOS Books backups when equivalent Unicode
-  paths use different composed forms.
-- Match Sasayaki subtitles immediately after selecting an SRT, including unique
-  cues immediately before the stable starting sequence, combined-volume EPUBs,
-  and large text gaps, without requiring Search Window tuning or a separate
-  Match action.
-- Import EPUB and TTU bookdata with multibyte titles that exceed Android's
-  filename byte limit while preserving the complete visible title and cleaning
-  temporary EPUB data after failed imports.
-- Keep wide inline gaiji at the publisher's text-relative size, recognize any
-  publisher class containing `gaiji`, and render gaiji plus transparent
-  monochrome images embedded in text with the active Reader text color while
-  blending away their image backgrounds in standard and custom themes and
-  excluding gaiji from image navigation.
-- Use EPUB fallback text for failed inline gaiji images, while retaining a
-  broken-image marker and its inline space when no fallback text is available.
-- Open EPUB pages that use paired XHTML viewport metadata instead of remaining
-  on the Reader loading screen.
-- Keep oversized lookup popup frames fully inside the visible screen so their
-  bottom border and all scrollable content remain reachable.
-- Keep the Dictionary type selector's `Frequency` label on one line on compact
-  screens.
-- Prefer Arial throughout lookup popups before Android's Japanese font fallback
-  so pitch-accent markers stay aligned with their reading, and keep pitch
-  dictionary labels intact when compact entries wrap.
+- Preserve Dictionary results and Back/Forward history when switching tabs, including
+  after following a definition link and swiping back.
+- Recognize existing AnkiDroid cards with equivalent Unicode spellings to prevent
+  duplicate cards.
+- Open matching AnkiDroid cards regardless of its previously selected deck, while
+  honoring the duplicate-search setting.
+- Report failed dictionary imports by filename and reason, then continue the batch.
+- Show a localized Reader message and Close action for missing or unreadable books.
+- Recover Reader after a crash while preserving reading position, highlights, and
+  Sasayaki cues.
+- Avoid transient errors during automatic Google Drive refresh and keep cached books
+  visible. Manual refresh still reports failures.
+- Count Korean consistently in reading progress, search, and Sasayaki matches; ignore
+  furigana fallback text in native counts and search.
+- Confirm before resetting Dictionary custom CSS.
+- Keep text and images visible in books with unusual publisher formatting.
+- Restore book files and covers from iOS backups despite filename variations.
+- Match Sasayaki subtitles immediately after selecting an SRT, including around chapter
+  boundaries and large text gaps, without search tuning or a separate action.
+- Import EPUB and TTU books with long, non-Latin titles without truncation.
+- Render inline Japanese character images at the right size and color, and exclude them
+  from image navigation.
+- Show EPUB fallback text when an inline character image fails to load.
+- Open EPUBs that previously remained on the Reader loading screen.
+- Keep large lookup popups on-screen so their borders and scrollable content remain
+  reachable.
+- Keep the Dictionary `Frequency` label on one line on compact screens.
+- Keep pitch accents aligned and dictionary labels readable when lookup entries wrap.
 
 ## [v1.3.3] - 2026-08-13
 

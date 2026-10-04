@@ -40,6 +40,22 @@ body {
     padding: 0 10px;
 }
 
+#search-text {
+    padding: 8px 0 7px;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.4);
+    font-size: var(--hoshi-search-text-size, 22px);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+#search-text > span.matched {
+    background-color: rgba(160, 160, 160, 0.4);
+}
+
 .entry {
     padding: 4px 0;
 }
@@ -177,6 +193,63 @@ button.button-slot:disabled {
 
 .button-slot-small .button-slot-icon {
     transform: scale(0.76);
+}
+
+.audio-candidate-menu-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 899;
+    background: transparent;
+}
+
+.audio-candidate-menu {
+    position: fixed;
+    z-index: 900;
+    display: flex;
+    flex-direction: column;
+    min-width: 180px;
+    max-width: min(280px, calc(100vw - 16px));
+    max-height: calc(100vh - 16px);
+    overflow-y: auto;
+    overscroll-behavior: none;
+    padding: 4px;
+    border: 1px solid rgba(60, 60, 67, 0.24);
+    border-radius: 8px;
+    background: var(--background-color-light, #fff);
+    color: var(--text-color, #000);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.2);
+}
+
+.audio-candidate-menu-item {
+    appearance: none;
+    position: relative;
+    width: 100%;
+    min-height: 36px;
+    padding: 8px 30px 8px 10px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+
+.audio-candidate-menu-item:not(:disabled):active {
+    background: rgba(128, 128, 128, 0.18);
+}
+
+.audio-candidate-menu-item[data-selected="true"]::after {
+    content: "✓";
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    font-weight: bold;
+}
+
+.audio-candidate-menu-item:disabled {
+    opacity: 0.55;
 }
 
 .entry-tags {
@@ -574,5 +647,10 @@ html[data-hoshi-eink-mode="true"] .pronunciation-nasal-indicator {
 
     button.button-slot:not(:disabled) {
         color: rgba(235, 235, 245, 0.92);
+    }
+
+    .audio-candidate-menu {
+        border-color: rgba(235, 235, 245, 0.28);
+        background: var(--background-color-dark1, #222);
     }
 }

@@ -34,6 +34,7 @@ data class BookshelfUiState(
     val sections: List<BookshelfSectionModel> = emptyList(),
     val sortOption: BookSortOption = BookSortOption.Recent,
     val showReading: Boolean = false,
+    val hideCollapsedShelfThumbnails: Boolean = false,
     val coverMode: BookshelfCoverMode = BookshelfCoverMode.Show,
     val isSelecting: Boolean = false,
     val selectedBookIds: Set<String> = emptySet(),
@@ -54,7 +55,9 @@ data class RemoteBookEntry(
     val folderName: String,
     val title: String,
     val syncFiles: moe.antimony.hoshi.features.sync.DriveSyncFiles,
-)
+) {
+    val lastAccessMillis: Long? get() = syncFiles.lastAccessMillis
+}
 
 data class BookCoverSource(
     val path: String,

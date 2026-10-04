@@ -334,6 +334,27 @@ window.hoshiSelection = {
         return !!el?.closest('rt, rp');
     },
 
+    setupFurigana(mode, root = document) {
+        if (mode !== 'Toggle') return;
+        root.querySelectorAll('ruby').forEach(ruby => {
+            if (ruby.querySelector('rt')) ruby.classList.add('furigana-hidden');
+        });
+    },
+
+    revealFurigana(ruby) {
+        const group = [ruby];
+        for (const direction of ['previousSibling', 'nextSibling']) {
+            let node = ruby[direction];
+            while (node && (node.localName === 'ruby' ||
+                    (node.nodeType === Node.TEXT_NODE && /^[\t\n\r ]*$/.test(node.nodeValue)))) {
+                if (node.localName === 'ruby') group.push(node);
+                node = node[direction];
+            }
+        }
+        group.forEach(el => el.classList.remove('furigana-hidden'));
+        return group;
+    },
+
     findParagraph(node) {
         let el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
         return el?.closest('p, .glossary-content, .expr-tag') || null;
@@ -563,6 +584,17 @@ window.hoshiSelection = {
         }
         if (hitElement?.closest('img, image, .blur-wrapper')) {
             return this.imageTapResult();
+        }
+        const furigana = hitElement?.closest('ruby.furigana-hidden');
+        if (furigana) {
+            const group = this.revealFurigana(furigana);
+            const projection = this.options.textProjection;
+            group.forEach(ruby => {
+                const sourceRuby = projection?.sourceRubyForRenderedRuby?.(ruby);
+                if (sourceRuby) this.revealFurigana(sourceRuby);
+            });
+            this.clearSelection();
+            return 'furigana';
         }
         const rawHit = this.getCharacterAtPoint(x, y, rectX, rectY);
 

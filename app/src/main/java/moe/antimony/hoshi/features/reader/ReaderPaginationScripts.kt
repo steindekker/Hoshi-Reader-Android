@@ -22,6 +22,12 @@ internal enum class ReaderNavigationResult {
 }
 
 internal object ReaderPaginationScripts {
+    fun showSearchHighlightInvocation(highlight: ReaderSearchHighlight): String =
+        "window.hoshiHighlights.showSearchHighlight(${highlight.offset}, ${highlight.length})"
+
+    fun clearSearchHighlightInvocation(): String =
+        "if (window.hoshiHighlights) window.hoshiHighlights.clearSearchHighlight()"
+
     fun paginateInvocation(direction: ReaderNavigationDirection): String =
         "window.hoshiReader.paginate('${direction.jsValue}')"
 
@@ -31,11 +37,11 @@ internal object ReaderPaginationScripts {
     fun progressInvocation(): String =
         "window.hoshiReader.calculateProgress()"
 
-    fun applySasayakiCuesInvocation(cuesJson: String): String =
-        "if (window.hoshiReader && typeof window.hoshiReader.applySasayakiCues === 'function') { window.hoshiReader.applySasayakiCues($cuesJson); }"
+    fun applySasayakiCuesInvocation(cuesJson: String, preserveLayout: Boolean = false): String =
+        "if (window.hoshiReader && typeof window.hoshiReader.applySasayakiCues === 'function') { window.hoshiReader.applySasayakiCues($cuesJson, $preserveLayout); }"
 
-    fun highlightSasayakiCueInvocation(cue: SasayakiCueRange, reveal: Boolean): String =
-        "window.hoshiReader.highlightSasayakiCue(${cue.toJavaScriptObjectLiteral()}, $reveal)"
+    fun highlightSasayakiCueInvocation(cue: SasayakiCueRange, reveal: Boolean, preserveReveal: Boolean = false): String =
+        "window.hoshiReader.highlightSasayakiCue(${cue.toJavaScriptObjectLiteral()}, $reveal, $preserveReveal)"
 
     fun sasayakiMediaStopsBeforeCueInvocation(cue: SasayakiCueRange): String =
         "window.hoshiReader.sasayakiMediaStopsBeforeCue(${cue.toJavaScriptObjectLiteral()})"
@@ -136,7 +142,6 @@ internal object ReaderPaginationScripts {
                 initialFragment?.javaScriptStringLiteral() ?: "null",
             )
             .replace("__HOSHI_INITIAL_HIGHLIGHTS_JSON__", highlightsJson ?: "null")
-            .replace("__HOSHI_BOTTOM_OVERLAP_PX__", settings.bottomOverlapPx.toString())
             .replace("__HOSHI_VERTICAL_PADDING_BLOCK_RATIO__", (settings.verticalPadding / 200.0).toString())
             .replace("__HOSHI_VERTICAL_PADDING_GAP_RATIO__", (settings.verticalPadding / 100.0).toString())
             .replace("__HOSHI_IMAGE_WIDTH_VIEWPORT_RATIO__", generatedLayout.imageWidthViewportRatio.toString())

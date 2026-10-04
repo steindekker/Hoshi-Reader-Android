@@ -9,6 +9,12 @@ data class LocalAudioEntry(
     val expression: String,
     val reading: String?,
     val file: String,
+    val display: String = "",
+)
+
+data class LocalAudioCandidate(
+    val name: String,
+    val url: String,
 )
 
 data class LocalAudioFile(
@@ -25,6 +31,18 @@ object AudioSourceResolver {
 
 object LocalAudioResolver {
     private val supportedAudioExtensions = setOf("mp3", "opus", "ogg")
+    private val sourceDisplayNames = mapOf(
+        "nhk16" to "NHK16 %s",
+        "daijisen" to "Daijisen %s",
+        "shinmeikai8" to "SMK8 %s",
+        "jpod" to "JPod101",
+        "jpod_alternate" to "JPod101 Alt",
+        "taas" to "TAAS",
+        "ozk5" to "OZK5 %s",
+        "forvo" to "Forvo (%s)",
+        "forvo_ext" to "Forvo Ext",
+        "forvo_ext2" to "Forvo Ext2",
+    )
 
     fun resolve(
         term: String,
@@ -32,7 +50,33 @@ object LocalAudioResolver {
         rows: List<LocalAudioEntry>,
         sourceOrder: List<String> = LocalAudioSourceOrder.defaultOrder(rows.map { it.source }),
         disabledSources: Set<String> = emptySet(),
-    ): LocalAudioEntry? {
+    ): LocalAudioEntry? = rankedEntries(term, reading, rows, sourceOrder, disabledSources).firstOrNull()
+
+    fun resolveCandidates(
+        term: String,
+        reading: String,
+        rows: List<LocalAudioEntry>,
+        sourceOrder: List<String> = LocalAudioSourceOrder.defaultOrder(rows.map { it.source }),
+        disabledSources: Set<String> = emptySet(),
+    ): List<LocalAudioCandidate> {
+        val normalizedReading = katakanaToHiragana(reading)
+        return rankedEntries(term, normalizedReading, rows, sourceOrder, disabledSources)
+            .map { entry ->
+                LocalAudioCandidate(
+                    name = entry.candidateName(term, normalizedReading),
+                    url = audioUrl(entry.source, entry.file),
+                )
+            }
+            .distinctBy(LocalAudioCandidate::url)
+    }
+
+    private fun rankedEntries(
+        term: String,
+        reading: String,
+        rows: List<LocalAudioEntry>,
+        sourceOrder: List<String>,
+        disabledSources: Set<String>,
+    ): List<LocalAudioEntry> {
         val normalizedReading = katakanaToHiragana(reading)
         val sourceRank = sourceOrder.withIndex().associate { it.value to it.index }
         return rows
@@ -46,10 +90,10 @@ object LocalAudioResolver {
                 }.thenBy {
                     sourceRank[it.source] ?: Int.MAX_VALUE
                 }.thenBy {
-                    it.source
+                    it.reading.orEmpty()
                 },
             )
-            .firstOrNull()
+            .toList()
     }
 
     fun audioUrl(source: String, file: String): String =
@@ -83,11 +127,27 @@ object LocalAudioResolver {
         val readingMatches = normalizedReading.isNotBlank() && reading == normalizedReading
         val expressionMatches = expression == term
         return when {
+            normalizedReading.isBlank() && expressionMatches -> 0
             expressionMatches && (reading == null || readingMatches) -> 0
             readingMatches -> 1
             expressionMatches -> 2
             else -> 3
         }
+    }
+
+    private fun LocalAudioEntry.candidateName(term: String, normalizedReading: String): String {
+        val template = sourceDisplayNames[source]
+        val sourceName = when {
+            template == null -> source
+            "%s" in template -> template.replace("%s", display)
+            else -> template
+        }
+        val matchDescription = when (localAudioMatchRank(term, normalizedReading)) {
+            1 -> " ($expression)"
+            2 -> " (${reading.orEmpty()})"
+            else -> ""
+        }
+        return sourceName.trim() + matchDescription
     }
 
     fun katakanaToHiragana(text: String): String {

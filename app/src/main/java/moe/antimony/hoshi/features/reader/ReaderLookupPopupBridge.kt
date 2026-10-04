@@ -107,6 +107,8 @@ internal data class ReaderLookupPopupFramePayload(
     val selectionOffsetY: Double,
     val iframeUrl: String,
     val contentKey: String? = null,
+    val sourceText: String? = null,
+    val sourceSentenceOffset: Int? = null,
 ) {
     companion object {
         fun fromPopup(
@@ -120,6 +122,7 @@ internal data class ReaderLookupPopupFramePayload(
             sasayakiIsPlaying: Boolean = false,
             iframeUrl: String = readerLookupPopupIframeUrl(),
             includeInitialEntryJson: Boolean = true,
+            sourceText: String? = null,
         ): ReaderLookupPopupFramePayload {
             val state = popup.state
             val selectionRect = state.selection.rect
@@ -170,6 +173,7 @@ internal data class ReaderLookupPopupFramePayload(
                     hasSasayakiCue = hasSasayakiCue,
                 ),
                 iframeUrl = iframeUrl,
+                sourceText = sourceText,
             )
         }
     }
@@ -259,6 +263,12 @@ internal sealed class ReaderLookupPopupBridgeMessage {
         override val popupId: String,
         override val messageId: String?,
         val query: String,
+    ) : ReaderLookupPopupBridgeMessage()
+
+    data class SourceHistoryRestored(
+        override val popupId: String,
+        override val messageId: String?,
+        val sentenceOffset: Int?,
     ) : ReaderLookupPopupBridgeMessage()
 
     data class KanjiRedirect(
@@ -381,6 +391,12 @@ internal sealed class ReaderLookupPopupBridgeMessage {
                     messageId = messageId ?: return null,
                     query = payload.string("body") ?: return null,
                 )
+                "sourceHistoryRestored" -> {
+                    val body = payload.obj("body") ?: return null
+                    val offset = if (body["sentenceOffset"] is JsonNull) null else
+                        body.int("sentenceOffset")?.takeIf { it >= 0 } ?: return null
+                    SourceHistoryRestored(popupId, messageId, offset)
+                }
                 "kanjiRedirect" -> KanjiRedirect(
                     popupId = popupId,
                     messageId = messageId ?: return null,
@@ -483,7 +499,11 @@ internal object ReaderLookupPopupWebBridge {
     private fun isSupported(): Boolean =
         WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
 
-    fun install(webView: WebView, callbackHolder: ReaderLookupPopupBridgeCallbackHolder) {
+    fun install(
+        webView: WebView,
+        callbackHolder: ReaderLookupPopupBridgeCallbackHolder,
+        isActive: () -> Boolean = { true },
+    ) {
         if (!isSupported()) return
         WebViewCompat.addWebMessageListener(
             webView,
@@ -493,7 +513,7 @@ internal object ReaderLookupPopupWebBridge {
             val data = message.data ?: return@addWebMessageListener
             val parsed = ReaderLookupPopupBridgeMessage.fromJson(data) ?: return@addWebMessageListener
             webView.post {
-                callbackHolder.callbacks.onMessage(parsed)
+                if (isActive()) callbackHolder.callbacks.onMessage(parsed)
             }
         }
     }

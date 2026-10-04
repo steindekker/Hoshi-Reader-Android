@@ -89,7 +89,6 @@ data class AnkiUiState(
                 allowDupes = settings.allowDupes,
                 compactGlossaries = settings.compactGlossaries,
                 disableShowNotes = settings.disableShowNotes,
-                embedMedia = isConfigured && settings.embedMedia,
             )
         }
 }
@@ -209,6 +208,7 @@ internal class AnkiViewModel @Inject constructor(
                         selectedNoteTypeId = noteType?.id,
                         selectedNoteTypeName = noteType?.name,
                         fieldMappings = noteType?.let(AnkiFieldTemplates::defaultMappings).orEmpty(),
+                        tags = DefaultAnkiTag,
                     ),
                 )
             }
@@ -377,10 +377,6 @@ internal class AnkiViewModel @Inject constructor(
         viewModelScope.launch {
             repository.updateSettings { it.copy(compactGlossaries = value) }
         }
-    }
-
-    fun updateEmbedMedia(value: Boolean) {
-        viewModelScope.launch { repository.updateSettings { it.copy(embedMedia = value) } }
     }
 
     fun updateDisableShowNotes(value: Boolean) {

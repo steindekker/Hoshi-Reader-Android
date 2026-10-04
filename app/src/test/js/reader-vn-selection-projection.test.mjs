@@ -12,6 +12,7 @@ function loadProjectionFactory() {
     const window = {};
     vm.runInNewContext(fs.readFileSync(projectionUrl, 'utf8'), {
         window,
+        NodeFilter: { SHOW_TEXT: 4, FILTER_REJECT: 2, FILTER_ACCEPT: 1 },
     });
     return window.hoshiReaderVnSelectionProjection;
 }
@@ -104,4 +105,20 @@ test('VN selection projection fails closed when a required mapping is absent', (
         projection.visibleRangesForSemanticRanges([{ node: {}, start: 0, end: 1 }]).length,
         0,
     );
+});
+
+
+test('VN ruby reveal resolves styled clone base text to the source ruby', () => {
+    const cloneText = { nodeValue: '日', parentElement: { closest: () => null } };
+    const sourceRuby = { localName: 'ruby' };
+    const sourceText = { parentElement: { closest: (selector) => selector === 'ruby' ? sourceRuby : null } };
+    const projection = loadProjectionFactory().create({
+        rangeMap: { chapterPositionForClone: (node) => node === cloneText ? { rawOffset: 4 } : null },
+        contentStream: { sourcePositionForRawOffset: (offset) => offset === 4 ? { node: sourceText, offset: 0 } : null },
+    });
+    const ruby = { ownerDocument: { createTreeWalker: () => {
+        let visited = false;
+        return { nextNode: () => visited ? null : (visited = true, cloneText) };
+    } } };
+    assert.equal(projection.sourceRubyForRenderedRuby(ruby), sourceRuby);
 });

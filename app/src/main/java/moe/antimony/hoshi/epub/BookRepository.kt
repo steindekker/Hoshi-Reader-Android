@@ -4,6 +4,9 @@ import android.content.ContentResolver
 import android.net.Uri
 import java.io.File
 import java.io.InputStream
+import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.time.Instant
 import java.util.zip.CRC32
 import java.util.zip.ZipEntry
@@ -33,20 +36,30 @@ class BookRepository private constructor(
     private val fileDataSource: BookFileDataSource,
     private val sidecarDataSource: BookSidecarDataSource,
     private val clock: BookClock,
+    internal val statisticsStore: BookStatisticsStore,
+    private val workRegistry: BookWorkRegistry,
 ) : ReaderRouteBookRepository, SasayakiSidecarRepository {
     @Inject
     constructor(
         @FilesDir filesDir: File,
         @IoDispatcher ioDispatcher: CoroutineDispatcher,
+        statisticsStore: BookStatisticsStore,
+        workRegistry: BookWorkRegistry,
     ) : this(
         filesDir = filesDir,
         ioDispatcher = ioDispatcher,
         fileDataSource = BookFileDataSource(filesDir, ioDispatcher),
         sidecarDataSource = BookSidecarDataSource(ioDispatcher),
         clock = SystemBookClock,
+        statisticsStore = statisticsStore,
+        workRegistry = workRegistry,
     )
 
-    constructor(filesDir: File) : this(filesDir, Dispatchers.IO)
+    constructor(
+        filesDir: File,
+        ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+        workRegistry: BookWorkRegistry = BookWorkRegistry(),
+    ) : this(filesDir, ioDispatcher, BookStatisticsStore(filesDir, ioDispatcher), workRegistry)
 
     private val archiveExtractor = EpubArchiveExtractor()
     private val importDataSource = BookImportDataSource(filesDir, fileDataSource, ioDispatcher = ioDispatcher)
@@ -144,12 +157,14 @@ class BookRepository private constructor(
     suspend fun deleteBook(
         bookRoot: File,
         releasePersistedSasayakiAudioUri: (String) -> Unit = {},
-    ) {
+    ) = workRegistry.delete(bookRoot) {
         val removedId = loadMetadata(bookRoot)?.id ?: bookRoot.name
-        loadSasayakiPlayback(bookRoot)?.audioUri?.let { uri ->
-            runCatching { releasePersistedSasayakiAudioUri(uri) }
+        statisticsStore.archiveAndDelete(bookRoot) {
+            loadSasayakiPlayback(bookRoot)?.audioUri?.let { uri ->
+                runCatching { releasePersistedSasayakiAudioUri(uri) }
+            }
+            fileDataSource.deleteBook(bookRoot)
         }
-        fileDataSource.deleteBook(bookRoot)
         val cleanedShelves = loadShelves().map { shelf ->
             shelf.copy(bookIds = shelf.bookIds.filterNot { it == removedId })
         }
@@ -179,10 +194,22 @@ class BookRepository private constructor(
     }
 
     override suspend fun loadStatistics(bookRoot: File): List<ReadingStatistics> =
-        sidecarDataSource.loadStatistics(bookRoot).orEmpty()
+        statisticsStore.load(bookRoot).orEmpty()
 
-    override suspend fun saveStatistics(bookRoot: File, statistics: List<ReadingStatistics>) {
-        sidecarDataSource.saveStatistics(bookRoot, statistics)
+    suspend fun saveStatistics(bookRoot: File, statistics: List<ReadingStatistics>) {
+        statisticsStore.save(bookRoot, statistics)
+    }
+
+    override suspend fun saveTrackedStatistics(bookRoot: File, statistics: List<ReadingStatistics>) {
+        statisticsStore.saveTrackedDays(bookRoot, statistics)
+    }
+
+    suspend fun updateStatistics(bookRoot: File, transform: (List<ReadingStatistics>) -> List<ReadingStatistics>) {
+        statisticsStore.update(bookRoot, transform)
+    }
+
+    suspend fun restoreArchivedStatistics(folder: String) {
+        statisticsStore.restore(folder)
     }
 
     suspend fun loadHighlights(bookRoot: File): List<ReaderHighlight> =
@@ -369,7 +396,7 @@ interface ReaderRouteBookRepository {
     suspend fun loadBookmark(bookRoot: File): Bookmark?
     suspend fun saveBookmark(bookRoot: File, bookmark: Bookmark)
     suspend fun loadStatistics(bookRoot: File): List<ReadingStatistics>
-    suspend fun saveStatistics(bookRoot: File, statistics: List<ReadingStatistics>)
+    suspend fun saveTrackedStatistics(bookRoot: File, statistics: List<ReadingStatistics>)
     suspend fun loadReaderBookInfo(bookRoot: File): BookInfo?
     suspend fun saveBookInfo(bookRoot: File, bookInfo: BookInfo)
     fun currentAppleReferenceDateSeconds(): Double
@@ -391,16 +418,24 @@ class BookFileDataSource(
     val currentBookFile: File = File(booksDirectory, "current.epub")
 
     suspend fun loadAllBooks(): List<File> = withContext(ioDispatcher) {
+        migrateReservedStatisticsBook(booksDirectory)
         booksDirectory
             .listFiles()
-            ?.filter { it.isDirectory && !it.name.startsWith(".") }
+            ?.filter { it.isDirectory && !it.name.startsWith(".") && it.name != STATISTICS_ARCHIVE_DIRECTORY }
             ?.sortedByDescending { it.lastModified() }
             .orEmpty()
     }
 
     suspend fun createBookDirectory(folder: String = UUID.randomUUID().toString()): File = withContext(ioDispatcher) {
         booksDirectory.mkdirs()
-        val root = booksDirectory.resolve(folder).canonicalFile
+        migrateReservedStatisticsBook(booksDirectory)
+        val storageFolder = if (folder == STATISTICS_ARCHIVE_DIRECTORY) folder.toImportedBookStorageName() else folder
+        val requestedRoot = booksDirectory.resolve(storageFolder).canonicalFile
+        val root = requestedRoot.takeIf { it.exists() }
+            ?: booksDirectory.listFiles().orEmpty().firstOrNull {
+                it.isDirectory && it.name.normalizedBookFolder() == storageFolder.normalizedBookFolder()
+            }?.canonicalFile
+            ?: requestedRoot
         val booksRoot = booksDirectory.canonicalFile
         require(root.path == booksRoot.path || root.path.startsWith(booksRoot.path + File.separator)) {
             "Unsafe book folder: $folder"
@@ -604,6 +639,7 @@ class BookSidecarDataSource(
         prettyPrint = true
         prettyPrintIndent = "    "
         encodeDefaults = true
+        explicitNulls = false
         ignoreUnknownKeys = true
     }
 
@@ -619,19 +655,6 @@ class BookSidecarDataSource(
 
     suspend fun saveBookmark(bookRoot: File, bookmark: Bookmark) {
         saveJson(bookRoot, BOOKMARK_FILE_NAME, Bookmark.serializer(), bookmark)
-    }
-
-    suspend fun loadStatistics(bookRoot: File): List<ReadingStatistics>? =
-        loadJson(ListSerializer(ReadingStatistics.serializer()), bookRoot.resolve(STATISTICS_FILE_NAME))
-            ?.deduplicateReadingStatistics()
-
-    suspend fun saveStatistics(bookRoot: File, statistics: List<ReadingStatistics>) {
-        saveJson(
-            bookRoot,
-            STATISTICS_FILE_NAME,
-            ListSerializer(ReadingStatistics.serializer()),
-            statistics.deduplicateReadingStatistics(),
-        )
     }
 
     suspend fun loadHighlights(bookRoot: File): List<ReaderHighlight>? =
@@ -651,8 +674,17 @@ class BookSidecarDataSource(
     suspend fun loadSasayakiMatch(bookRoot: File): SasayakiMatchData? =
         loadJson(SasayakiMatchData.serializer(), bookRoot.resolve(SASAYAKI_MATCH_FILE_NAME))
 
-    suspend fun saveSasayakiMatch(bookRoot: File, match: SasayakiMatchData) {
-        saveJson(bookRoot, SASAYAKI_MATCH_FILE_NAME, SasayakiMatchData.serializer(), match)
+    suspend fun saveSasayakiMatch(bookRoot: File, match: SasayakiMatchData) = withContext(ioDispatcher) {
+        bookRoot.mkdirs()
+        val temporary = File.createTempFile(".sasayaki-match-", ".tmp", bookRoot)
+        try {
+            FileOutputStream(temporary).use { output ->
+                output.write(json.encodeToString(SasayakiMatchData.serializer(), match).toByteArray(Charsets.UTF_8))
+                output.fd.sync()
+            }
+            Files.move(temporary.toPath(), bookRoot.resolve(SASAYAKI_MATCH_FILE_NAME).toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            Unit
+        } finally { temporary.delete() }
     }
 
     suspend fun loadSasayakiPlayback(bookRoot: File): SasayakiPlaybackData? =
@@ -710,6 +742,7 @@ private val bookSidecarFileNames = setOf(
     BOOKINFO_FILE_NAME,
     SASAYAKI_MATCH_FILE_NAME,
     SASAYAKI_PLAYBACK_FILE_NAME,
+    "sasayaki_transcript.json",
 )
 
 private fun String.sanitizeRootFileName(): String =

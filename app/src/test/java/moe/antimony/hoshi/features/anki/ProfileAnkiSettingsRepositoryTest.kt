@@ -20,6 +20,18 @@ class ProfileAnkiSettingsRepositoryTest {
     val tempFolder = TemporaryFolder()
 
     @Test
+    fun freshProfileStartsWithHoshiAndPreservesExplicitlyClearedTags() = runBlocking {
+        val profileRepository = ProfileRepository(tempFolder.newFolder("tag-files"))
+        val repository = repository(profileRepository)
+        assertEquals("hoshi", repository.settings.first().cardFormats.single().tags)
+
+        repository.update { settings ->
+            settings.updateCardFormat(settings.cardFormats.single().id) { it.copy(tags = "") }
+        }
+        assertEquals("", repository(profileRepository).settings.first().cardFormats.single().tags)
+    }
+
+    @Test
     fun profileSettingsReadsAndWritesUseInjectedIoDispatcher() = runBlocking {
         CountingCoroutineDispatcher().use { ioDispatcher ->
             val profileRepository = ProfileRepository(
@@ -130,7 +142,7 @@ class ProfileAnkiSettingsRepositoryTest {
         val scope = CoroutineScope(Dispatchers.IO + Job())
         val dataStore = PreferenceDataStoreFactory.create(
             scope = scope,
-            produceFile = { tempFolder.newFile("anki-settings.preferences_pb") },
+            produceFile = { tempFolder.newFolder().resolve("anki-settings.preferences_pb") },
         )
         return DataStoreAnkiSettingsRepository(
             dataStore = dataStore,

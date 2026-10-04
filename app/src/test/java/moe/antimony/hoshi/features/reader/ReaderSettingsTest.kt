@@ -1,6 +1,10 @@
 package moe.antimony.hoshi.features.reader
 
 import androidx.compose.ui.graphics.Color
+import moe.antimony.hoshi.features.display.AppDisplaySettings
+import moe.antimony.hoshi.features.display.DisplayPalettePreset
+import moe.antimony.hoshi.features.display.DisplayPaletteSlot
+import moe.antimony.hoshi.features.display.DisplayPaletteSelection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -8,6 +12,88 @@ import org.junit.Test
 import java.io.File
 
 class ReaderSettingsTest {
+    @Test
+    fun projectedReaderUsesIndependentEInkBrightness() {
+        for (dark in listOf(false, true)) {
+            val settings = ReaderSettings(
+                displaySettings = AppDisplaySettings(
+                    autoSwitch = false,
+                    manualPaletteSlot = if (dark) DisplayPaletteSlot.Light else DisplayPaletteSlot.Dark,
+                    eInkMode = true,
+                    eInkDarkTheme = dark,
+                ),
+            )
+            val projected = settings.resolvedForDisplay(systemDark = !dark)
+            assertEquals(dark, projected.usesDarkInterface(!dark))
+            assertEquals(settings.backgroundColor(!dark), projected.backgroundColor(!dark))
+            assertEquals(settings.textColorCss(!dark), projected.textColorCss(!dark))
+        }
+    }
+
+    @Test
+    fun globalDisplaySettingsDriveExistingReaderColorAndThemeHelpers() {
+        val settings = ReaderSettings(
+            theme = ReaderTheme.Light,
+            displaySettings = AppDisplaySettings(
+                autoSwitch = true,
+                eInkMode = false,
+                lightPalette = DisplayPaletteSelection(DisplayPalettePreset.Sepia),
+                darkPalette = DisplayPaletteSelection(
+                    preset = DisplayPalettePreset.Custom,
+                    customBackgroundColor = 0xCC101820L,
+                    customTextColor = 0x80203040L,
+                    customInfoColor = 0x40506070L,
+                ),
+            ),
+        )
+
+        assertEquals(0xFFF2E2C9L, settings.backgroundColor(systemDark = false))
+        assertEquals("#332A1B", settings.textColorCss(systemDark = false))
+        assertTrue(settings.usesSepiaLightContent(systemDark = false))
+        assertEquals(0xCC101820L, settings.backgroundColor(systemDark = true))
+        assertEquals("#20304080", settings.textColorCss(systemDark = true))
+        assertTrue(settings.usesDarkInterface(systemDark = true))
+    }
+
+    @Test
+    fun resolvedForDisplayProjectsEInkBrightnessAndRetainsUnderlyingCustomColors() {
+        val global = AppDisplaySettings(
+            autoSwitch = true,
+            eInkMode = true,
+            darkPalette = DisplayPaletteSelection(
+                preset = DisplayPalettePreset.Custom,
+                customBackgroundColor = 0xFF101820L,
+                customTextColor = 0xFFE0E8F0L,
+                customInfoColor = 0xFF8090A0L,
+            ),
+        )
+
+        val projected = ReaderSettings(displaySettings = global).resolvedForDisplay(systemDark = true)
+
+        assertEquals(ReaderTheme.Dark, projected.theme)
+        assertEquals(ReaderInterfaceTheme.Dark, projected.uiTheme)
+        assertEquals(0xFF101820L, projected.customBackgroundColor)
+        assertEquals(0xFFE0E8F0L, projected.customTextColor)
+        assertEquals(0xFF8090A0L, projected.customInfoColor)
+        assertTrue(projected.eInkMode)
+    }
+
+    @Test
+    fun resolvedForDisplayProjectsDarkSepiaPresetColors() {
+        val projected = ReaderSettings(
+            displaySettings = AppDisplaySettings(
+                autoSwitch = false,
+                manualPaletteSlot = DisplayPaletteSlot.Dark,
+                darkPalette = DisplayPaletteSelection(DisplayPalettePreset.DarkSepia),
+            ),
+        ).resolvedForDisplay(systemDark = false)
+
+        assertEquals(ReaderTheme.Custom, projected.theme)
+        assertEquals(ReaderInterfaceTheme.Dark, projected.uiTheme)
+        assertEquals(0xFF17150FL, projected.customBackgroundColor)
+        assertEquals(0xFFF2E2C9L, projected.customTextColor)
+    }
+
     @Test
     fun selectingFontVariantUpdatesStableIdsAndPerFamilyMemory() {
         val family = ReaderRecommendedFontCatalog.families.first { it.id == "recommended:kleeone" }
@@ -43,9 +129,8 @@ class ReaderSettingsTest {
         assertEquals(0xFF999999L, settings.customInfoColor)
         assertFalse(settings.continuousMode)
         assertFalse(settings.blurImages)
-        assertFalse(settings.enableStatistics)
-        assertTrue(settings.showStatisticsTab)
-        assertEquals(StatisticsAutostartMode.Off, settings.statisticsAutostartMode)
+        assertFalse(settings.statisticsAutostartOnBookOpen)
+        assertFalse(settings.statisticsAutostartOnPageTurn)
         assertFalse(settings.showStatisticsToggle)
         assertFalse(settings.showReadingSpeed)
         assertFalse(settings.showReadingTime)
@@ -76,57 +161,21 @@ class ReaderSettingsTest {
     }
 
     @Test
-    fun statisticsAutostartModesUseIosRawLabels() {
-        assertEquals("Off", StatisticsAutostartMode.Off.rawValue)
-        assertEquals("Page Turn", StatisticsAutostartMode.PageTurn.rawValue)
-        assertEquals("On", StatisticsAutostartMode.On.rawValue)
-    }
-
-    @Test
-    fun enablingStatisticsTurnsOnReaderDisplayStatisticsControls() {
-        val settings = ReaderSettings(
-            enableStatistics = false,
-            showStatisticsToggle = false,
-            showReadingSpeed = false,
-            showReadingTime = false,
+    fun legacyStatisticsAutostartModesMapToIndependentTriggers() {
+        val cases = listOf(
+            null to (false to false),
+            "Off" to (false to false),
+            "On" to (true to false),
+            "Page Turn" to (false to true),
+            "Unexpected" to (false to false),
         )
 
-        val enabled = settings.withStatisticsEnabled(true)
+        cases.forEach { (rawValue, expected) ->
+            val migrated = migrateLegacyStatisticsAutostart(rawValue)
 
-        assertTrue(enabled.enableStatistics)
-        assertTrue(enabled.showStatisticsToggle)
-        assertTrue(enabled.showReadingSpeed)
-        assertTrue(enabled.showReadingTime)
-    }
-
-    @Test
-    fun statisticsDisplayControlsRemainUserControlledAfterAlreadyEnabled() {
-        val settings = ReaderSettings(
-            enableStatistics = true,
-            showStatisticsToggle = false,
-            showReadingSpeed = false,
-            showReadingTime = false,
-        )
-
-        val enabled = settings.withStatisticsEnabled(true)
-
-        assertTrue(enabled.enableStatistics)
-        assertFalse(enabled.showStatisticsToggle)
-        assertFalse(enabled.showReadingSpeed)
-        assertFalse(enabled.showReadingTime)
-    }
-
-    @Test
-    fun statisticsTabVisibilityRemainsUserControlledWhenEnablingStatistics() {
-        val settings = ReaderSettings(
-            enableStatistics = false,
-            showStatisticsTab = false,
-        )
-
-        val enabled = settings.withStatisticsEnabled(true)
-
-        assertTrue(enabled.enableStatistics)
-        assertFalse(enabled.showStatisticsTab)
+            assertEquals(expected.first, migrated.onBookOpen)
+            assertEquals(expected.second, migrated.onPageTurn)
+        }
     }
 
     @Test
@@ -160,9 +209,9 @@ class ReaderSettingsTest {
         assertTrue(css.contains("margin-left: 1.4em !important;"))
         assertFalse(css.contains("margin-top: 1.4em !important;"))
         assertFalse(css.contains("margin-bottom: 1.4em !important;"))
-        assertTrue(css.contains("column-gap: calc(var(--hoshi-vertical-padding-gap, 8vh) + 28px);"))
+        assertTrue(css.contains("column-gap: var(--hoshi-vertical-padding-gap, 8vh);"))
         assertTrue(css.contains("padding: var(--hoshi-vertical-padding-block, 4.0vh) 6.0vw !important;"))
-        assertTrue(css.contains("padding-bottom: calc(var(--hoshi-vertical-padding-block, 4.0vh) + 28px) !important;"))
+        assertTrue(css.contains("padding-bottom: var(--hoshi-vertical-padding-block, 4.0vh) !important;"))
     }
 
     @Test
@@ -178,7 +227,7 @@ class ReaderSettingsTest {
             viewportCssHeight = 720,
         )
 
-        assertEquals(742, layout.pageHeightPx)
+        assertEquals(720, layout.pageHeightPx)
         assertEquals(720, layout.visibleHeightPx)
         assertEquals(360, layout.pageWidthPx)
         assertEquals(36.0, layout.verticalPaddingBlockPx, 0.0)
@@ -187,7 +236,7 @@ class ReaderSettingsTest {
         assertEquals(648, layout.imageMaxHeightPx)
 
         val css = layout.cssVariables()
-        assertTrue(css.contains("--page-height: 742px;"))
+        assertTrue(css.contains("--page-height: 720px;"))
         assertTrue(css.contains("--hoshi-reader-visible-height: 720px;"))
         assertTrue(css.contains("--page-width: 360px;"))
         assertTrue(css.contains("--hoshi-vertical-padding-block: 36.0px;"))
@@ -678,7 +727,6 @@ class ReaderSettingsTest {
     fun readerCssIncludesIosWebKitSelectionAndSizingRules() {
         val css = ReaderContentStyles.styleTag()
 
-        assertTrue(css.contains("-webkit-line-box-contain: block glyphs replaced;"))
         assertTrue(css.contains("-webkit-text-size-adjust: none !important;"))
         assertTrue(css.contains("ruby > rt, ruby > rp"))
         assertTrue(css.contains("-webkit-user-select: none;"))
@@ -727,7 +775,7 @@ class ReaderSettingsTest {
     }
 
     @Test
-    fun visualNovelReaderCssCentersWithinVisibleViewportInsteadOfPageOverlap() {
+    fun visualNovelReaderCssCentersWithinVisibleViewport() {
         val css = ReaderContentStyles.styleTag(
             ReaderSettings(
                 viewMode = ReaderViewMode.VisualNovel,
@@ -755,7 +803,7 @@ class ReaderSettingsTest {
         assertEquals("visible !important", content["overflow"])
         assertEquals("allow-end !important", content["hanging-punctuation"])
         assertEquals("var(--hoshi-image-max-width, 88vw) !important", contentSvg["width"])
-        assertEquals("var(--hoshi-image-max-height, calc(var(--page-height, 100vh) - 28px)) !important", contentSvg["height"])
+        assertEquals("var(--hoshi-image-max-height, var(--page-height, 100vh)) !important", contentSvg["height"])
         assertFalse(content.containsValue("calc(100% - 28px) !important"))
     }
 
@@ -791,7 +839,7 @@ class ReaderSettingsTest {
     fun readerCssUsesIosAppearanceFlags() {
         val css = ReaderContentStyles.styleTag(
             ReaderSettings(
-                hideFurigana = true,
+                furiganaMode = FuriganaMode.Hidden,
                 avoidPageBreak = true,
                 justifyText = true,
             ),
@@ -830,14 +878,12 @@ class ReaderSettingsTest {
             surfaceVariant = Color.White,
             primaryContainer = Color.Black,
             onPrimaryContainer = Color.White,
-            outlineVariant = Color.Black,
         )
 
         assertEquals(Color.White, colors.container)
         assertEquals(Color.Black, colors.selected)
         assertEquals(Color.White, colors.selectedContent)
         assertEquals(Color.Black, colors.unselectedContent)
-        assertEquals(Color.Black, colors.border)
     }
 
     private fun cssDeclarationsForSelector(css: String, selector: String): Map<String, String> {

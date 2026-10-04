@@ -3,46 +3,107 @@ package moe.antimony.hoshi.features.statistics
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.temporal.ChronoUnit
+import java.time.temporal.WeekFields
+import java.util.Locale
 import kotlin.math.roundToInt
-
-internal fun recentYearStatisticsWindow(today: LocalDate): StatisticsDateRange =
-    StatisticsDateRange(
-        start = today.minusYears(1).plusDays(1),
-        end = today,
-    )
-
-internal fun fixedYearStatisticsWindow(year: Int, today: LocalDate): StatisticsDateRange =
-    StatisticsDateRange(
-        start = LocalDate.of(year, 1, 1),
-        end = if (year == today.year) today else LocalDate.of(year, 12, 31),
-    )
 
 internal fun selectedStatisticsRange(
     mode: StatisticsRangeMode,
     anchor: LocalDate,
-    window: StatisticsDateRange,
+    today: LocalDate,
+    firstActivity: LocalDate? = null,
+    locale: Locale = Locale.getDefault(),
 ): StatisticsDateRange {
-    val clampedAnchor = window.coerce(anchor)
-    val unclipped = when (mode) {
-        StatisticsRangeMode.Year -> window
-        StatisticsRangeMode.Month -> {
-            val month = YearMonth.from(clampedAnchor)
+    val boundedAnchor = minOf(anchor, today)
+    return when (mode) {
+        StatisticsRangeMode.Year -> StatisticsDateRange(
+            LocalDate.of(boundedAnchor.year, 1, 1), LocalDate.of(boundedAnchor.year, 12, 31),
+        )
+        StatisticsRangeMode.Month -> YearMonth.from(boundedAnchor).let { month ->
             StatisticsDateRange(month.atDay(1), month.atEndOfMonth())
         }
-        StatisticsRangeMode.Week -> {
-            val start = mondayStartOfWeek(clampedAnchor)
+        StatisticsRangeMode.Week -> statisticsStartOfWeek(boundedAnchor, locale).let { start ->
             StatisticsDateRange(start, start.plusDays(6))
         }
-        StatisticsRangeMode.Day -> StatisticsDateRange(clampedAnchor, clampedAnchor)
+        StatisticsRangeMode.All -> StatisticsDateRange(minOf(firstActivity ?: today, today), today)
     }
-    return StatisticsDateRange(
-        start = maxOf(unclipped.start, window.start),
-        end = minOf(unclipped.end, window.end),
+}
+
+internal fun statisticsStartOfWeek(date: LocalDate, locale: Locale = Locale.getDefault()): LocalDate {
+    val firstDay = WeekFields.of(locale).firstDayOfWeek
+    return date.minusDays(((date.dayOfWeek.value - firstDay.value + 7) % 7).toLong())
+}
+
+internal fun shiftedStatisticsAnchor(
+    mode: StatisticsRangeMode,
+    anchor: LocalDate,
+    offset: Int,
+    locale: Locale = Locale.getDefault(),
+): LocalDate? =
+    when (mode) {
+        StatisticsRangeMode.Week -> statisticsStartOfWeek(anchor, locale).plusWeeks(offset.toLong())
+        StatisticsRangeMode.Month -> anchor.withDayOfMonth(1).plusMonths(offset.toLong())
+        StatisticsRangeMode.Year -> anchor.withDayOfYear(1).plusYears(offset.toLong())
+        StatisticsRangeMode.All -> null
+    }
+
+internal fun overviewRangeSummary(
+    days: List<StatisticsDayAggregate>,
+    settings: StatisticsTargetSettings,
+    mode: StatisticsRangeMode,
+    anchor: LocalDate,
+    today: LocalDate,
+    locale: Locale = Locale.getDefault(),
+): StatisticsRangeSummary {
+    val activity = days.filter { !it.date.isAfter(today) && it.isActiveReadingDay() }
+    val firstActivity = activity.minOfOrNull { it.date }
+    fun period(reference: LocalDate): Pair<StatisticsRangeSummary, Double> {
+        val range = selectedStatisticsRange(mode, reference, today, firstActivity, locale)
+        val summary = aggregateRange(activity.filter { range.contains(it.date) }, settings)
+        val elapsedEnd = minOf(range.end, today)
+        val count = when (mode) {
+            StatisticsRangeMode.Year, StatisticsRangeMode.All ->
+                ChronoUnit.MONTHS.between(YearMonth.from(range.start), YearMonth.from(elapsedEnd)) + 1
+            else -> ChronoUnit.DAYS.between(range.start, elapsedEnd) + 1
+        }.coerceAtLeast(1)
+        return summary to summary.readingSeconds / count
+    }
+    val (summary, average) = period(anchor)
+    val previous = shiftedStatisticsAnchor(mode, anchor, -1, locale)?.let { period(it).second }
+    return summary.copy(
+        averageReadingSecondsPerBucket = average,
+        averageReadingTimeChangePercent = previous?.takeIf { it > 0.0 }?.let { (average - it) / it * 100.0 },
     )
 }
 
-internal fun mondayStartOfWeek(date: LocalDate): LocalDate =
-    date.minusDays((date.dayOfWeek.value - 1).toLong())
+internal fun statisticsHistorySummary(
+    days: List<StatisticsDayAggregate>,
+    today: LocalDate,
+    settings: StatisticsTargetSettings,
+): StatisticsHistoryUi {
+    val activity = days.filter { !it.date.isAfter(today) && it.isActiveReadingDay() }.sortedBy { it.date }
+    var current = StatisticsGoalStreak()
+    var longest = StatisticsGoalStreak()
+    var metDays = 0
+    activity.filter { it.targetRatio(settings) >= 1.0 }.forEach { day ->
+        metDays += 1
+        val previousRange = current.range
+        current = if (previousRange?.end?.plusDays(1) == day.date) {
+            StatisticsGoalStreak(current.count + 1, StatisticsDateRange(previousRange.start, day.date))
+        } else {
+            StatisticsGoalStreak(1, StatisticsDateRange(day.date, day.date))
+        }
+        if (current.count > longest.count) longest = current
+    }
+    if (current.range?.end?.let { it < today.minusDays(1) } != false) current = StatisticsGoalStreak()
+    val best = activity.maxByOrNull { day ->
+        when (settings.dailyTargetType) {
+            DailyTargetType.Characters -> day.totalCharacters.toDouble()
+            DailyTargetType.Duration -> day.readingSeconds
+        }
+    }
+    return StatisticsHistoryUi(current, longest, metDays, activity.size, best)
+}
 
 internal fun StatisticsDayAggregate.targetRatio(settings: StatisticsTargetSettings): Double =
     when (settings.dailyTargetType) {
@@ -59,35 +120,6 @@ internal fun StatisticsDayAggregate.targetRatio(settings: StatisticsTargetSettin
 
 internal fun StatisticsDayAggregate.isActiveReadingDay(): Boolean =
     totalCharacters > 0 || readingSeconds > 0.0
-
-internal const val ReadingHeatActiveLevelCount = 7
-
-internal fun readingHeatLevels(days: List<StatisticsDayAggregate>): Map<LocalDate, Int> {
-    val activeCharacterValues = days
-        .map { day -> day.totalCharacters }
-        .filter { characters -> characters > 0 }
-        .distinct()
-        .sorted()
-    val levelByCharacters = activeCharacterValues.adaptiveHeatLevels()
-    return days.associate { day ->
-        day.date to (levelByCharacters[day.totalCharacters] ?: 0)
-    }
-}
-
-private fun List<Int>.adaptiveHeatLevels(): Map<Int, Int> {
-    if (isEmpty()) {
-        return emptyMap()
-    }
-    if (size == 1) {
-        return mapOf(single() to ReadingHeatActiveLevelCount)
-    }
-    val maxIndex = lastIndex.toDouble()
-    return mapIndexed { index, characters ->
-        val normalizedRank = index.toDouble() / maxIndex
-        val level = 1 + (normalizedRank * (ReadingHeatActiveLevelCount - 1)).roundToInt()
-        characters to level.coerceIn(1, ReadingHeatActiveLevelCount)
-    }.toMap()
-}
 
 internal fun aggregateRange(
     days: List<StatisticsDayAggregate>,
@@ -124,50 +156,6 @@ internal fun todaySummary(
     )
 }
 
-internal fun currentWeekSummary(
-    days: List<StatisticsDayAggregate>,
-    today: LocalDate,
-    settings: StatisticsTargetSettings,
-): WeekStatisticsUi {
-    val daysByDate = days.associateBy { it.date }
-    val start = mondayStartOfWeek(today)
-    val end = start.plusDays(6)
-    val weekRange = StatisticsDateRange(start, end)
-    val weekDates = (0L..6L).map { start.plusDays(it) }
-    val aggregates = weekDates.map { date -> daysByDate[date] ?: emptyDayAggregate(date) }
-    val elapsedDays = (ChronoUnit.DAYS.between(start, today).toInt() + 1).coerceIn(1, 7)
-    val summary = aggregateRange(aggregates, settings)
-    return WeekStatisticsUi(
-        range = weekRange,
-        elapsedDays = elapsedDays,
-        totalCharacters = summary.totalCharacters,
-        readingSeconds = summary.readingSeconds,
-        averageSpeedPerHour = summary.averageSpeedPerHour,
-        targetDays = settings.weeklyTargetDays,
-        metTargetDays = aggregates.count { it.targetRatio(settings) >= 1.0 },
-        dailyStreakDays = dailyGoalStreak(daysByDate, today, settings),
-        weeklyStreakWeeks = weeklyGoalStreak(daysByDate, today, settings),
-        averageCharactersPerElapsedDay = (summary.totalCharacters.toDouble() / elapsedDays.toDouble()).roundToInt(),
-        averageReadingSecondsPerElapsedDay = summary.readingSeconds / elapsedDays.toDouble(),
-        days = weekDates.map { date ->
-            val aggregate = daysByDate[date]
-            val isFuture = date.isAfter(today)
-            val ratio = aggregate?.targetRatio(settings) ?: 0.0
-            WeekDayGoalUi(
-                date = date,
-                isToday = date == today,
-                isFuture = isFuture,
-                percent = if (aggregate != null && aggregate.isActiveReadingDay() && !isFuture) {
-                    (ratio * 100.0).roundToInt()
-                } else {
-                    null
-                },
-                metTarget = !isFuture && ratio >= 1.0,
-            )
-        },
-    )
-}
-
 internal fun dailyGoalStreak(
     daysByDate: Map<LocalDate, StatisticsDayAggregate>,
     today: LocalDate,
@@ -186,32 +174,14 @@ internal fun dailyGoalStreak(
     return streak
 }
 
-internal fun weeklyGoalStreak(
-    daysByDate: Map<LocalDate, StatisticsDayAggregate>,
-    today: LocalDate,
-    settings: StatisticsTargetSettings,
-): Int {
-    var weekStart = mondayStartOfWeek(today)
-    if (!weekMet(daysByDate, weekStart, settings)) {
-        weekStart = weekStart.minusWeeks(1)
-    }
-    var streak = 0
-    while (weekMet(daysByDate, weekStart, settings)) {
-        streak += 1
-        weekStart = weekStart.minusWeeks(1)
-    }
-    return streak
-}
-
 internal fun trendPoints(
     rangeMode: StatisticsRangeMode,
     range: StatisticsDateRange,
     days: List<StatisticsDayAggregate>,
 ): List<StatisticsTrendPoint> =
     when (rangeMode) {
-        StatisticsRangeMode.Day -> emptyList()
-        StatisticsRangeMode.Year -> {
-            val daysByMonth = days.groupBy { YearMonth.from(it.date) }
+        StatisticsRangeMode.Year, StatisticsRangeMode.All -> {
+            val daysByMonth = days.filter { range.contains(it.date) }.groupBy { YearMonth.from(it.date) }
             val startMonth = YearMonth.from(range.start)
             val endMonth = YearMonth.from(range.end)
             generateSequence(startMonth) { month ->
@@ -220,7 +190,6 @@ internal fun trendPoints(
                 val groupedDays = daysByMonth[month].orEmpty()
                 StatisticsTrendPoint(
                     key = month.toString(),
-                    label = "${month.monthValue}",
                     characters = groupedDays.sumOf { it.totalCharacters },
                     readingSeconds = groupedDays.sumOf { it.readingSeconds },
                 )
@@ -235,7 +204,6 @@ internal fun trendPoints(
                 val day = daysByDate[date]
                 StatisticsTrendPoint(
                     key = date.toString(),
-                    label = date.dayOfMonth.toString(),
                     characters = day?.totalCharacters ?: 0,
                     readingSeconds = day?.readingSeconds ?: 0.0,
                 )
@@ -245,52 +213,41 @@ internal fun trendPoints(
 
 internal fun distributionRows(
     days: List<StatisticsDayAggregate>,
-    settings: StatisticsTargetSettings,
 ): List<BookDistributionRow> {
     val grouped = linkedMapOf<String, MutableList<StatisticsBookContribution>>()
     days.flatMap { it.bookContributions }
         .filter { it.characters > 0 || it.readingSeconds > 0.0 }
         .forEach { contribution ->
-            grouped.getOrPut(contribution.bookId) { mutableListOf() } += contribution
+            grouped.getOrPut(contribution.folder) { mutableListOf() } += contribution
         }
     val totals = grouped.values.map { contributions ->
         val first = contributions.first()
         StatisticsBookContribution(
             bookId = first.bookId,
+            folder = first.folder,
+            isArchived = contributions.all { it.isArchived },
             title = first.title,
             coverPath = first.coverPath,
             characters = contributions.sumOf { it.characters },
             readingSeconds = contributions.sumOf { it.readingSeconds },
         )
     }
-    val percentBase = when (settings.dailyTargetType) {
-        DailyTargetType.Characters -> totals.sumOf { it.characters }.toDouble()
-        DailyTargetType.Duration -> totals.sumOf { it.readingSeconds }
-    }
+    val maxReadingSeconds = totals.maxOfOrNull { it.readingSeconds } ?: 0.0
     return totals
-        .sortedWith(
-            compareByDescending<StatisticsBookContribution> {
-                when (settings.dailyTargetType) {
-                    DailyTargetType.Characters -> it.characters.toDouble()
-                    DailyTargetType.Duration -> it.readingSeconds
-                }
-            }.thenBy { it.title.lowercase() },
-        )
+        .sortedWith(compareByDescending<StatisticsBookContribution> { it.readingSeconds }.thenBy { it.title.lowercase() })
         .map { contribution ->
-            val percentValue = when (settings.dailyTargetType) {
-                DailyTargetType.Characters -> contribution.characters.toDouble()
-                DailyTargetType.Duration -> contribution.readingSeconds
-            }
             BookDistributionRow(
                 bookId = contribution.bookId,
+                folder = contribution.folder,
+                isArchived = contribution.isArchived,
                 title = contribution.title,
                 coverPath = contribution.coverPath,
                 characters = contribution.characters,
                 readingSeconds = contribution.readingSeconds,
-                percent = if (percentBase > 0.0) {
-                    ((percentValue / percentBase) * 100.0).roundToInt().coerceIn(0, 100)
+                timeFraction = if (maxReadingSeconds > 0.0) {
+                    (contribution.readingSeconds / maxReadingSeconds).toFloat().coerceIn(0f, 1f)
                 } else {
-                    0
+                    0f
                 },
             )
         }
@@ -315,11 +272,53 @@ internal fun averageSpeedPerHour(characters: Int, readingSeconds: Double): Int =
         0
     }
 
-private fun weekMet(
-    daysByDate: Map<LocalDate, StatisticsDayAggregate>,
-    weekStart: LocalDate,
-    settings: StatisticsTargetSettings,
-): Boolean =
-    (0L..6L).count { offset ->
-        (daysByDate[weekStart.plusDays(offset)]?.targetRatio(settings) ?: 0.0) >= 1.0
-    } >= settings.weeklyTargetDays
+/** Chart selection drills into a bucket without changing the enclosing reading-time period. */
+internal fun statisticsTrendBucket(mode: StatisticsRangeMode, key: String): StatisticsDateRange? =
+    runCatching {
+        when (mode) {
+            StatisticsRangeMode.Week, StatisticsRangeMode.Month -> LocalDate.parse(key).let { StatisticsDateRange(it, it) }
+            StatisticsRangeMode.Year, StatisticsRangeMode.All -> YearMonth.parse(key).let {
+                StatisticsDateRange(it.atDay(1), it.atEndOfMonth())
+            }
+        }
+    }.getOrNull()
+
+internal fun statisticsPeriodPageCount(mode: StatisticsRangeMode, firstDate: LocalDate, today: LocalDate): Int =
+    when (mode) {
+        StatisticsRangeMode.All -> 1
+        StatisticsRangeMode.Week -> ChronoUnit.WEEKS.between(statisticsStartOfWeek(firstDate), statisticsStartOfWeek(today)).toInt() + 1
+        StatisticsRangeMode.Month -> ChronoUnit.MONTHS.between(YearMonth.from(firstDate), YearMonth.from(today)).toInt() + 1
+        StatisticsRangeMode.Year -> today.year - firstDate.year + 1
+    }.coerceAtLeast(1)
+
+internal fun statisticsPeriodPageAnchor(mode: StatisticsRangeMode, page: Int, pageCount: Int, today: LocalDate): LocalDate =
+    shiftedStatisticsAnchor(mode, today, page - pageCount + 1) ?: today
+
+internal const val ReadingHeatActiveLevelCount = 7
+
+internal fun readingHeatLevels(days: List<StatisticsDayAggregate>): Map<LocalDate, Int> {
+    val activeCharacterValues = days
+        .map { day -> day.totalCharacters }
+        .filter { characters -> characters > 0 }
+        .distinct()
+        .sorted()
+    val levelByCharacters = activeCharacterValues.adaptiveHeatLevels()
+    return days.associate { day ->
+        day.date to (levelByCharacters[day.totalCharacters] ?: 0)
+    }
+}
+
+private fun List<Int>.adaptiveHeatLevels(): Map<Int, Int> {
+    if (isEmpty()) {
+        return emptyMap()
+    }
+    if (size == 1) {
+        return mapOf(single() to ReadingHeatActiveLevelCount)
+    }
+    val maxIndex = lastIndex.toDouble()
+    return mapIndexed { index, characters ->
+        val normalizedRank = index.toDouble() / maxIndex
+        val level = 1 + (normalizedRank * (ReadingHeatActiveLevelCount - 1)).roundToInt()
+        characters to level.coerceIn(1, ReadingHeatActiveLevelCount)
+    }.toMap()
+}
