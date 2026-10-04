@@ -409,6 +409,29 @@ internal class AnkiViewModel @Inject constructor(
     fun mineEntryAsync(rawPayload: String, context: AnkiMiningContext, onResult: (Boolean) -> Unit) =
         mineEntryAsync(null, rawPayload, context, onResult)
 
+    /** Like [mineEntryAsync], also reporting non-blocking media warnings (e.g. a missing screenshot). */
+    fun mineEntryAsync(
+        formatId: String?,
+        rawPayload: String,
+        context: AnkiMiningContext,
+        onWarning: (UiText) -> Unit,
+        onResult: (Boolean) -> Unit,
+    ) {
+        viewModelScope.launch {
+            val result = runCatching {
+                repository.mineEntryWithResult(
+                    rawPayload = rawPayload,
+                    context = context,
+                    decks = _uiState.value.availableDecks,
+                    noteTypes = _uiState.value.availableNoteTypes,
+                    formatId = formatId,
+                )
+            }.getOrDefault(AnkiMineResult(added = false))
+            onResult(result.added)
+            result.warnings.forEach(onWarning)
+        }
+    }
+
     fun duplicateStatesAsync(valuesByHandlebar: Map<String, String>, onResult: (Map<String, Boolean>) -> Unit) {
         viewModelScope.launch {
             onResult(runCatching {

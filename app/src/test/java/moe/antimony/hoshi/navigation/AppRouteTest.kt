@@ -16,6 +16,7 @@ class AppRouteTest {
             "MainRoute",
             "BooksRoute",
             "DictionaryRoute",
+            "TextHookerRoute",
             "StatisticsRoute",
             "StatisticsSettingsRoute",
             "StatisticsBookRoute",
@@ -71,6 +72,7 @@ class AppRouteTest {
             listOf(
                 "Dictionaries",
                 "Anki",
+                "TextHooker",
                 "Profiles",
                 "Display",
                 "Appearance",
