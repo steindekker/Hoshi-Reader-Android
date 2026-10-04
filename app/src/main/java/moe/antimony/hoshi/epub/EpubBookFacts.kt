@@ -13,7 +13,7 @@ private val readerAttributeRegex = Regex(
 private val readerOpeningTagRegex = Regex("""<[A-Za-z][^>]*>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
 private val readerBodyOpeningTagRegex = Regex("""<body\b[^>]*>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
 private val readerGalleryExtensions = setOf("jpg", "jpeg", "png")
-private const val CURRENT_READER_FACTS_VERSION = 2
+private const val CURRENT_READER_FACTS_VERSION = 3
 
 internal fun buildBookInfo(
     chapters: List<EpubChapter>,

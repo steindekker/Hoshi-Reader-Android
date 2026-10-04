@@ -1,323 +1,170 @@
 package moe.antimony.hoshi.features.statistics
 
-import android.graphics.Paint
-import android.graphics.Typeface
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import kotlin.math.ceil
 import kotlin.math.max
-import kotlin.math.roundToInt
 import moe.antimony.hoshi.R
+import moe.antimony.hoshi.ui.theme.LocalHoshiEInkMode
 
 @Composable
 internal fun StatisticsTrendChart(
     mode: StatisticsRangeMode,
     points: List<StatisticsTrendPoint>,
+    averageSeconds: Double,
+    selectedBucket: StatisticsDateRange?,
+    today: LocalDate,
+    onSelectBucket: (String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (points.size < 2) {
-        Text(
-            text = stringResource(R.string.statistics_no_trend_data),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = modifier.padding(vertical = 24.dp),
-        )
-        return
+    if (points.isEmpty()) return
+    val primary = MaterialTheme.colorScheme.primary
+    val muted = MaterialTheme.colorScheme.outlineVariant
+    val surface = MaterialTheme.colorScheme.surface
+    val eInkMode = LocalHoshiEInkMode.current
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (eInkMode) 1f else 0.65f)
+    val labelStyle = MaterialTheme.typography.labelSmall.copy(color = labelColor, fontWeight = FontWeight.Normal)
+    val averageStyle = labelStyle.copy(color = primary)
+    val textMeasurer = rememberTextMeasurer()
+    val buckets = remember(points, mode) { points.map { requireNotNull(statisticsTrendBucket(mode, it.key)) } }
+    val range = remember(buckets) { StatisticsDateRange(buckets.first().start, buckets.last().end) }
+    val maxHours = max(5.0, ceil(points.maxOf { it.readingSeconds } / 3600.0))
+    val topLabel = stringResource(R.string.statistics_chart_hours_format, formatInteger(maxHours.toInt()))
+    val zeroLabel = formatInteger(0)
+    val averageLabel = stringResource(R.string.statistics_chart_average)
+    val locale = LocalConfiguration.current.locales[0]
+    val datePattern = stringResource(when (mode) {
+        StatisticsRangeMode.Week -> R.string.statistics_chart_weekday_pattern
+        StatisticsRangeMode.Month -> R.string.statistics_chart_day_pattern
+        StatisticsRangeMode.Year -> R.string.statistics_chart_month_pattern
+        StatisticsRangeMode.All -> R.string.statistics_chart_month_year_pattern
+    })
+    val formatter = remember(datePattern, locale) { DateTimeFormatter.ofPattern(datePattern, locale) }
+    val density = LocalDensity.current
+    val rightMargin = with(density) {
+        // Keep the same trailing breathing room as the iOS plot, including its axis labels.
+        maxOf(40.dp.toPx(), textMeasurer.measure(topLabel, labelStyle).size.width + 8.dp.toPx(),
+            textMeasurer.measure(averageLabel, averageStyle).size.width + 8.dp.toPx())
     }
-    val durationColor = MaterialTheme.colorScheme.primary
-    val characterColor = MaterialTheme.colorScheme.tertiary
-    val axisColor = MaterialTheme.colorScheme.outlineVariant
-    val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.62f)
-    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-    val maxDuration = max(1.0, points.maxOf { it.readingSeconds })
-    val maxCharacters = max(1, points.maxOf { it.characters })
-    val xLabelIndexes = remember(points, mode) { trendLabelIndexes(points.size, mode) }
-    val axisLabels = TrendAxisLabels(
-        durationTop = formatStatisticsDuration(maxDuration),
-        durationMiddle = formatStatisticsDuration(maxDuration / 2.0),
-        durationBottom = formatStatisticsDuration(0.0),
-        charactersTop = formatInteger(maxCharacters),
-        charactersMiddle = formatInteger((maxCharacters.toDouble() / 2.0).roundToInt()),
-        charactersBottom = formatInteger(0),
+    val labelHeight = textMeasurer.measure(averageLabel, averageStyle).size.height.toFloat()
+    val topMargin = with(density) { maxOf(8.dp.toPx(), labelHeight / 2f) }
+    val plotHeight = with(density) { maxOf(96.dp.toPx(), labelHeight * 3 + 8.dp.toPx()) }
+    val chartHeight = with(density) { (topMargin + plotHeight + maxOf(24.dp.toPx(), labelHeight + 4.dp.toPx())).toDp() }
+    val currentOnSelectBucket = rememberUpdatedState(onSelectBucket)
+    Spacer(
+        modifier = modifier.fillMaxWidth().height(chartHeight)
+            .pointerInput(buckets, today, rightMargin, topMargin, plotHeight) {
+                detectTapGestures { position ->
+                    if (position.y < topMargin || position.y > topMargin + plotHeight) return@detectTapGestures
+                    val index = trendBucketIndex(position.x, size.width - rightMargin, buckets) ?: return@detectTapGestures
+                    if (!buckets[index].start.isAfter(today)) currentOnSelectBucket.value(points[index].key)
+                }
+            }
+            .drawWithCache {
+                val plotWidth = (size.width - rightMargin).coerceAtLeast(1f)
+                val plotBottom = topMargin + plotHeight
+                fun x(date: LocalDate) = trendDateFraction(date, range) * plotWidth
+                fun y(seconds: Double) = plotBottom - (seconds / (maxHours * 3600)).coerceIn(0.0, 1.0).toFloat() * plotHeight
+                val topText = textMeasurer.measure(topLabel, labelStyle, softWrap = false)
+                val zeroText = textMeasurer.measure(zeroLabel, labelStyle, softWrap = false)
+                val averageText = textMeasurer.measure(averageLabel, averageStyle, softWrap = false)
+                val allDates = trendAxisDates(mode, range, locale)
+                val widestLabel = allDates.maxOf { textMeasurer.measure(formatter.format(it), labelStyle, softWrap = false).size.width }
+                val maxLabels = (plotWidth / (widestLabel + 12.dp.toPx())).toInt().coerceAtLeast(1)
+                val ticks = trendAxisDates(mode, range, locale, maxLabels).map { date ->
+                    x(date) to textMeasurer.measure(formatter.format(date), labelStyle, softWrap = false)
+                }
+                val tickBottom = plotBottom + 4.dp.toPx() + ticks.maxOf { it.second.size.height }
+                val verticalDash = PathEffect.dashPathEffect(floatArrayOf(2.dp.toPx(), 3.dp.toPx()))
+                val averageDash = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx()))
+                // Cache bar geometry and text; scrolling only replays the draw operations.
+                val bars = points.mapIndexedNotNull { index, point ->
+                    val height = plotBottom - y(point.readingSeconds)
+                    if (height <= 0f) return@mapIndexedNotNull null
+                    val bucket = buckets[index]
+                    val start = x(bucket.start)
+                    val width = x(bucket.end.plusDays(1)) - start
+                    val left = start + width * 0.2f
+                    val right = start + width * 0.8f
+                    val top = plotBottom - height
+                    val radius = minOf(3.dp.toPx(), (right - left) / 2f, height)
+                    val emphasized = selectedBucket == null || bucket == selectedBucket
+                    val hollow = eInkMode && !emphasized
+                    val strokeWidth = minOf(1.dp.toPx(), (right - left) / 3f, height / 3f)
+                    fun path(inset: Float) = Path().apply {
+                        val corner = CornerRadius((radius - inset).coerceAtLeast(0f))
+                        addRoundRect(RoundRect(left + inset, top + inset, right - inset, plotBottom - inset,
+                            topLeftCornerRadius = corner, topRightCornerRadius = corner))
+                    }
+                    TrendBarDrawing(
+                        fill = path(0f),
+                        outline = if (hollow) path(strokeWidth / 2f) else null,
+                        stroke = Stroke(strokeWidth),
+                        color = when {
+                            hollow -> surface
+                            emphasized -> primary
+                            else -> muted
+                        },
+                    )
+                }
+                onDrawBehind {
+                    repeat(5) { index ->
+                        val gridY = topMargin + index * plotHeight / 4f
+                        drawLine(muted, Offset(0f, gridY), Offset(plotWidth, gridY), strokeWidth = 0.7.dp.toPx())
+                    }
+                    ticks.forEach { (tickX, label) ->
+                        drawLine(muted, Offset(tickX, topMargin), Offset(tickX, tickBottom), 1.dp.toPx(), pathEffect = verticalDash)
+                        drawText(label, topLeft = Offset((tickX + 3.dp.toPx()).coerceAtMost(size.width - label.size.width), plotBottom + 4.dp.toPx()))
+                    }
+                    bars.forEach { bar ->
+                        drawPath(bar.fill, bar.color)
+                        bar.outline?.let { drawPath(it, primary, style = bar.stroke) }
+                    }
+                    if (averageSeconds > 0.0) {
+                        val averageY = y(averageSeconds)
+                        drawLine(primary, Offset(0f, averageY), Offset(plotWidth, averageY),
+                            strokeWidth = 1.5.dp.toPx(), pathEffect = averageDash)
+                        // Short sessions can put the mean almost on zero; keep both labels legible.
+                        val labelTop = (averageY - averageText.size.height / 2f).coerceIn(
+                            topMargin + topText.size.height / 2f + 2.dp.toPx(),
+                            plotBottom - zeroText.size.height / 2f - 2.dp.toPx() - averageText.size.height,
+                        )
+                        drawText(averageText, topLeft = Offset(plotWidth + 4.dp.toPx(), labelTop))
+                    }
+                    drawText(topText, topLeft = Offset(plotWidth + 4.dp.toPx(), topMargin - topText.size.height / 2f))
+                    drawText(zeroText, topLeft = Offset(plotWidth + 4.dp.toPx(), plotBottom - zeroText.size.height / 2f))
+                }
+            },
     )
-    Column(modifier = modifier) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = if (mode == StatisticsRangeMode.Year) {
-                    stringResource(R.string.statistics_monthly_trend)
-                } else {
-                    stringResource(R.string.statistics_daily_trend)
-                },
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-            )
-            TrendLegend(
-                durationColor = durationColor,
-                characterColor = characterColor,
-            )
-        }
-        Canvas(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(170.dp)
-                .padding(top = 12.dp),
-        ) {
-            drawTrendChart(
-                points = points,
-                mode = mode,
-                xLabelIndexes = xLabelIndexes,
-                maxDuration = maxDuration,
-                maxCharacters = maxCharacters,
-                durationColor = durationColor,
-                characterColor = characterColor,
-                axisColor = axisColor,
-                gridColor = gridColor,
-                labelColor = labelColor,
-                axisLabels = axisLabels,
-            )
-        }
-    }
 }
 
-@Composable
-private fun TrendLegend(
-    durationColor: Color,
-    characterColor: Color,
-) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        TrendLegendItem(
-            label = stringResource(R.string.statistics_duration),
-            color = durationColor,
-        )
-        TrendLegendItem(
-            label = stringResource(R.string.statistics_characters),
-            color = characterColor,
-        )
-    }
-}
-
-@Composable
-private fun TrendLegendItem(
-    label: String,
-    color: Color,
-) {
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Surface(
-            modifier = Modifier
-                .padding(top = 7.dp)
-                .size(width = 12.dp, height = 3.dp),
-            shape = RoundedCornerShape(50),
-            color = color,
-            content = {},
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
-}
-
-private fun DrawScope.drawTrendChart(
-    points: List<StatisticsTrendPoint>,
-    mode: StatisticsRangeMode,
-    xLabelIndexes: List<Int>,
-    maxDuration: Double,
-    maxCharacters: Int,
-    durationColor: Color,
-    characterColor: Color,
-    axisColor: Color,
-    gridColor: Color,
-    labelColor: Color,
-    axisLabels: TrendAxisLabels,
-) {
-    if (points.size < 2) return
-    val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = labelColor.toArgb()
-        textSize = 10.dp.toPx()
-        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-    }
-    val durationPaint = Paint(labelPaint).apply { color = durationColor.toArgb() }
-    val characterPaint = Paint(labelPaint).apply {
-        color = characterColor.toArgb()
-        textAlign = Paint.Align.RIGHT
-    }
-    val xLabelPaint = Paint(labelPaint).apply {
-        color = labelColor.toArgb()
-        typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-        textAlign = Paint.Align.CENTER
-    }
-    val axisMargins = trendChartAxisMargins(
-        leftLabelWidthsPx = listOf(
-            durationPaint.measureText(axisLabels.durationTop),
-            labelPaint.measureText(axisLabels.durationMiddle),
-            labelPaint.measureText(axisLabels.durationBottom),
-        ),
-        rightLabelWidthsPx = listOf(
-            characterPaint.measureText(axisLabels.charactersTop),
-            characterPaint.measureText(axisLabels.charactersMiddle),
-            characterPaint.measureText(axisLabels.charactersBottom),
-        ),
-        minLeftPx = 32.dp.toPx(),
-        minRightPx = 38.dp.toPx(),
-        labelPaddingPx = 6.dp.toPx(),
-    )
-    val marginLeft = axisMargins.leftPx
-    val marginRight = axisMargins.rightPx
-    val marginTop = 16.dp.toPx()
-    val marginBottom = 28.dp.toPx()
-    val plotLeft = marginLeft
-    val plotRight = size.width - marginRight
-    val plotTop = marginTop
-    val plotBottom = size.height - marginBottom
-    val plotWidth = (plotRight - plotLeft).coerceAtLeast(1f)
-    val plotHeight = (plotBottom - plotTop).coerceAtLeast(1f)
-    val axisStroke = 1.dp.toPx()
-    val lineStroke = 2.25.dp.toPx()
-    val pointRadius = 2.6.dp.toPx()
-
-    fun xFor(index: Int): Float = plotLeft + (index.toFloat() / points.lastIndex.toFloat()) * plotWidth
-    fun yFor(value: Double, maxValue: Double): Float =
-        plotBottom - (value / maxValue).coerceIn(0.0, 1.0).toFloat() * plotHeight
-
-    listOf(0f, 0.5f, 1f).forEach { ratio ->
-        val y = plotTop + ratio * plotHeight
-        drawLine(
-            color = gridColor,
-            start = Offset(plotLeft, y),
-            end = Offset(plotRight, y),
-            strokeWidth = axisStroke,
-        )
-    }
-
-    drawLine(axisColor, Offset(plotLeft, plotTop), Offset(plotLeft, plotBottom), axisStroke)
-    drawLine(axisColor, Offset(plotRight, plotTop), Offset(plotRight, plotBottom), axisStroke)
-    drawLine(axisColor, Offset(plotLeft, plotBottom), Offset(plotRight, plotBottom), axisStroke)
-
-    val durationOffsets = points.mapIndexed { index, point ->
-        Offset(xFor(index), yFor(point.readingSeconds, maxDuration))
-    }
-    val characterOffsets = points.mapIndexed { index, point ->
-        Offset(xFor(index), yFor(point.characters.toDouble(), maxCharacters.toDouble()))
-    }
-    drawTrendPath(durationOffsets, durationColor, lineStroke)
-    drawTrendPath(characterOffsets, characterColor, lineStroke)
-    durationOffsets.forEach { offset -> drawCircle(durationColor, pointRadius, offset) }
-    characterOffsets.forEach { offset -> drawCircle(characterColor, pointRadius, offset) }
-
-    drawIntoCanvas { canvas ->
-        val nativeCanvas = canvas.nativeCanvas
-        val middleY = plotTop + plotHeight / 2f + 3.dp.toPx()
-        val bottomY = plotBottom + 3.dp.toPx()
-        nativeCanvas.drawText(axisLabels.durationTop, 0f, plotTop + 3.dp.toPx(), durationPaint)
-        nativeCanvas.drawText(axisLabels.durationMiddle, 0f, middleY, labelPaint)
-        nativeCanvas.drawText(axisLabels.durationBottom, 0f, bottomY, labelPaint)
-        nativeCanvas.drawText(axisLabels.charactersTop, size.width, plotTop + 3.dp.toPx(), characterPaint)
-        nativeCanvas.drawText(axisLabels.charactersMiddle, size.width, middleY, characterPaint)
-        nativeCanvas.drawText(axisLabels.charactersBottom, size.width, bottomY, characterPaint)
-        xLabelIndexes.forEach { index ->
-            val label = points[index].label
-            nativeCanvas.drawText(
-                label,
-                xFor(index),
-                size.height - 5.dp.toPx(),
-                xLabelPaint,
-            )
-        }
-    }
-}
-
-internal data class TrendChartAxisMargins(
-    val leftPx: Float,
-    val rightPx: Float,
+private data class TrendBarDrawing(
+    val fill: Path,
+    val outline: Path?,
+    val stroke: Stroke,
+    val color: androidx.compose.ui.graphics.Color,
 )
-
-internal fun trendChartAxisMargins(
-    leftLabelWidthsPx: List<Float>,
-    rightLabelWidthsPx: List<Float>,
-    minLeftPx: Float,
-    minRightPx: Float,
-    labelPaddingPx: Float,
-): TrendChartAxisMargins =
-    TrendChartAxisMargins(
-        leftPx = max(minLeftPx, leftLabelWidthsPx.maxOrNull().orZero() + labelPaddingPx),
-        rightPx = max(minRightPx, rightLabelWidthsPx.maxOrNull().orZero() + labelPaddingPx),
-    )
-
-private fun DrawScope.drawTrendPath(
-    offsets: List<Offset>,
-    color: Color,
-    strokeWidth: Float,
-) {
-    if (offsets.size < 2) return
-    val path = Path().apply {
-        moveTo(offsets.first().x, offsets.first().y)
-        offsets.drop(1).forEach { offset -> lineTo(offset.x, offset.y) }
-    }
-    drawPath(
-        path = path,
-        color = color,
-        style = Stroke(
-            width = strokeWidth,
-            cap = StrokeCap.Round,
-            join = StrokeJoin.Round,
-        ),
-    )
-}
-
-private fun trendLabelIndexes(count: Int, mode: StatisticsRangeMode): List<Int> {
-    if (count <= 0) return emptyList()
-    if (mode == StatisticsRangeMode.Week || count <= 8) {
-        return List(count) { it }
-    }
-    if (mode == StatisticsRangeMode.Year) {
-        return List(count) { it }
-    }
-    val indexes = linkedSetOf(0, count - 1)
-    var index = 6
-    while (index < count - 1) {
-        indexes += index
-        index += 7
-    }
-    return indexes.sorted()
-}
-
-private data class TrendAxisLabels(
-    val durationTop: String,
-    val durationMiddle: String,
-    val durationBottom: String,
-    val charactersTop: String,
-    val charactersMiddle: String,
-    val charactersBottom: String,
-)
-
-private fun Float?.orZero(): Float = this ?: 0f

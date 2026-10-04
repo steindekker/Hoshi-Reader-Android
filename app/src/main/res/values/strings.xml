@@ -9,6 +9,7 @@
     <string name="action_back">Back</string>
     <string name="action_forward">Forward</string>
     <string name="action_close">Close</string>
+    <string name="reader_open_failed">Couldn\'t open book</string>
     <string name="action_share">Share</string>
     <string name="action_import" comment="Generic import action label.">Import</string>
     <string name="action_export">Export</string>
@@ -27,7 +28,7 @@
     <string name="action_edit">Edit</string>
     <string name="action_choose">Choose</string>
     <string name="action_open">Open</string>
-    <string name="action_more">More</string>
+    <string name="action_more" comment="Generic action to reveal additional choices, distinct from the heatmap intensity endpoint.">More</string>
     <string name="action_fetch">Fetch</string>
     <string name="action_connect">Connect</string>
     <string name="action_sign_out">Sign out</string>
@@ -38,7 +39,7 @@
     <string name="dialog_error_title">Error</string>
     <string name="import_select_epub_book">Select a .epub EPUB book file.</string>
     <string name="import_select_srt_subtitle">Select a .srt subtitle file.</string>
-    <string name="import_select_audiobook">Select a .mp3, .m4b, or .opus audiobook file.</string>
+    <string name="import_select_audiobook">Select a .mp3, .m4b, .m4a, or .opus audiobook file.</string>
     <string name="import_select_audio_database">Select a .db audio database file.</string>
     <string name="import_select_dictionary_archive">Select a .zip dictionary archive file.</string>
     <string name="import_select_hoshi_backup">Select a .hoshi Hoshi backup file.</string>
@@ -50,37 +51,19 @@
     <string name="main_tab_settings" comment="Main navigation tab label, intentionally matching settings page titles.">Settings</string>
     <string name="statistics_title" comment="Statistics page title, intentionally matching the main tab label.">Statistics</string>
     <string name="statistics_today" comment="Statistics dashboard section title, intentionally matching reader statistics today label.">Today</string>
-    <string name="statistics_this_week">This Week</string>
-    <string name="statistics_target_format">Goal: %1$s</string>
     <string name="statistics_reading_duration" comment="Dashboard metric label, intentionally matching the duration legend and target type label.">Duration</string>
-    <string name="statistics_characters_read" comment="Dashboard metric label, intentionally matching the characters legend and target type label.">Characters</string>
-    <string name="statistics_average_speed" comment="Dashboard metric label, intentionally matching the Sasayaki speed setting noun.">Speed</string>
-    <string name="statistics_streak">Streak</string>
+    <string name="statistics_characters_read">Characters Read</string>
+    <string name="statistics_average_speed">Reading Speed</string>
     <string name="statistics_target_days">Days Met</string>
-    <string name="statistics_daily_average_characters">Avg Characters</string>
-    <string name="statistics_daily_average_duration">Avg Duration</string>
-    <string name="statistics_week_goal_days" comment="Weekly dashboard section label, intentionally matching the current-range goal progress metric.">Goal Progress</string>
-    <string name="statistics_week_status_format">%1$d/7 days</string>
-    <string name="statistics_reading_calendar">Calendar</string>
-    <string name="statistics_recent_year">Recent year</string>
     <string name="statistics_range_year">Year</string>
     <string name="statistics_range_month">Month</string>
     <string name="statistics_range_week">Week</string>
-    <string name="statistics_range_day">Day</string>
     <string name="statistics_selected_range_format">Selected: %1$s</string>
-    <string name="statistics_current_range">Selected Range</string>
-    <string name="statistics_tab_overview">Overview</string>
-    <string name="statistics_tab_trend">Trend</string>
-    <string name="statistics_tab_distribution">By Book</string>
-    <string name="statistics_target_progress" comment="Current-range metric label, intentionally matching the weekly dashboard goal progress label.">Goal Progress</string>
-    <string name="statistics_monthly_trend">Monthly Trend</string>
-    <string name="statistics_daily_trend">Daily Trend</string>
+    <string name="statistics_target_progress">Goal Progress</string>
     <string name="statistics_duration" comment="Trend legend label, intentionally matching duration target type label.">Duration</string>
     <string name="statistics_characters" comment="Trend legend label, intentionally matching characters target type label.">Characters</string>
     <string name="statistics_daily_target">Daily Goal</string>
     <string name="statistics_current_target">Current Goal</string>
-    <string name="statistics_weekly_target">Weekly Goal</string>
-    <string name="statistics_week_status">Reading Days</string>
     <string name="statistics_target_type_characters" comment="Daily target type option, intentionally matching statistics characters legend label.">Characters</string>
     <string name="statistics_target_type_duration" comment="Daily target type option, intentionally matching statistics duration legend label.">Duration</string>
     <string name="statistics_no_reading_records">No reading records</string>
@@ -88,8 +71,6 @@
     <string name="statistics_partial_unavailable">Some statistics are temporarily unavailable.</string>
     <string name="statistics_target_met">Goal met</string>
     <string name="statistics_target_not_met">Goal not met</string>
-    <string name="statistics_calendar_heatmap_semantics">Reading calendar heatmap</string>
-    <string name="statistics_empty_goal_value">-</string>
     <string name="statistics_trend_legend_format">%1$s / %2$s</string>
     <string name="statistics_character_target_format" comment="Daily character target value, intentionally matching generic statistics character value format.">%1$s chars</string>
     <string name="statistics_duration_target_format">%1$s</string>
@@ -100,10 +81,10 @@
     <string name="statistics_duration_hours_format">%1$dh</string>
     <string name="statistics_duration_hours_minutes_format">%1$dh %2$dm</string>
     <string name="statistics_range_fixed_year_format">%1$d</string>
-    <string name="statistics_range_month_title_format">%1$d-%2$d</string>
+    <string name="statistics_range_month_title_pattern">MMMM yyyy</string>
     <string name="statistics_range_week_title_format">%1$d/%2$d-%3$d/%4$d</string>
     <string name="statistics_range_day_title_format">%1$d/%2$d %3$s</string>
-    <string name="statistics_distribution_meta_format">%1$s · %2$s</string>
+    <string name="statistics_distribution_meta_format" comment="Book editor character and duration metadata, sharing the separator with the overview caption.">%1$s · %2$s</string>
     <string name="statistics_distribution_cover_placeholder">Book cover placeholder</string>
     <string name="statistics_weekday_monday_short">M</string>
     <string name="statistics_weekday_tuesday_short" comment="Single-letter Tuesday label, intentionally matching Thursday in English.">T</string>
@@ -123,13 +104,10 @@
         <item quantity="one">%1$d day</item>
         <item quantity="other">%1$d days</item>
     </plurals>
-    <plurals name="statistics_weeks_value">
-        <item quantity="one">%1$d week</item>
-        <item quantity="other">%1$d weeks</item>
-    </plurals>
     <string name="settings_dictionaries" comment="Settings row label, intentionally matching the backup Dictionaries section.">Dictionaries</string>
     <string name="settings_anki">Anki</string>
     <string name="settings_profiles" comment="Settings row label, intentionally matching the Profiles screen title.">Profiles</string>
+    <string name="settings_display">Theme</string>
     <string name="settings_appearance">Appearance</string>
     <string name="settings_behavior">Behavior</string>
     <string name="settings_advanced">Advanced</string>
@@ -186,12 +164,13 @@
     <string name="bookshelf_no_shelf" comment="Shelf picker empty value, intentionally matching generic none.">None</string>
     <string name="bookshelf_delete_selected_books">Delete selected books</string>
     <string name="bookshelf_manage_shelves">Manage Shelves</string>
+    <string name="bookshelf_hide_collapsed_shelf_thumbnails">Hide thumbnails when collapsed</string>
     <string name="bookshelf_covers">Covers</string>
     <string name="bookshelf_cover_mode_show">Show</string>
     <string name="bookshelf_cover_mode_blur">Blur</string>
     <string name="bookshelf_cover_mode_hide">Hide</string>
     <string name="bookshelf_import_epub">Import EPUB</string>
-    <string name="bookshelf_sync">Sync</string>
+    <string name="bookshelf_sync" comment="Bookshelf sync action, intentionally matching the Statistics settings Sync heading.">Sync</string>
     <string name="bookshelf_move">Move</string>
     <string name="bookshelf_mark_read">Mark Read</string>
     <string name="bookshelf_export_epub">Export EPUB</string>
@@ -272,10 +251,12 @@
     <string name="dictionary_delete_action">Delete Dictionary</string>
     <string name="dictionary_reorder_action">Reorder Dictionary</string>
     <string name="dictionary_settings_lookup">Lookup</string>
+    <string name="dictionary_settings_search_text">Search Text</string>
     <string name="dictionary_settings_import" comment="Dictionary settings section label, intentionally matching the Import action noun.">Import</string>
     <string name="dictionary_scan_non_japanese">Scan Non-Japanese Text</string>
     <string name="dictionary_max_results">Max Results</string>
     <string name="dictionary_scan_length">Scan Length</string>
+    <string name="dictionary_text_size">Text Size</string>
     <string name="dictionary_collapse_dictionaries">Collapse Dictionaries</string>
     <string name="dictionary_collapse_mode_expand_all">Expand All</string>
     <string name="dictionary_collapse_mode_collapse_all">Collapse All</string>
@@ -317,7 +298,7 @@
     <string name="profiles_delete_title_format" comment="Profile delete confirmation, intentionally matching book and imported-font delete confirmation formats.">Delete \"%1$s\"?</string>
     <string name="profiles_default_cannot_delete">The default profile cannot be deleted.</string>
     <string name="bookshelf_profile">Profile</string>
-    <string name="bookshelf_profile_automatic">Automatic</string>
+    <string name="bookshelf_profile_automatic" comment="Automatically choose the content language profile for a book.">Automatic</string>
     <string name="bookshelf_profile_automatic_uses_format">Uses %1$s</string>
     <string name="reader_behavior_volume_keys_turn_pages">Volume Keys Turn Pages</string>
     <string name="reader_behavior_volume_keys_navigate_popup_terms">Volume Keys Navigate Popup Terms</string>
@@ -364,47 +345,39 @@
     <string name="reader_highlight_action">Highlight</string>
     <string name="reader_statistics_session">Session</string>
     <string name="reader_statistics_today" comment="Reader statistics section title, intentionally matching dashboard today label.">Today</string>
-    <string name="reader_statistics_all_time">All Time</string>
+    <string name="reader_statistics_all_time" comment="Reader lifetime summary tab, independent of the dashboard period caption.">All Time</string>
     <string name="reader_statistics_time_to_finish_book">Time to finish Book:</string>
     <string name="reader_statistics_time_to_finish_chapter">Time to finish Chapter:</string>
     <string name="reader_statistics_characters_read">Characters Read:</string>
     <string name="reader_statistics_words_read">Words Read:</string>
     <string name="reader_statistics_reading_speed">Reading Speed:</string>
     <string name="reader_statistics_reading_time">Reading Time:</string>
-    <string name="reader_statistics_show_tab">Show Statistics tab</string>
-    <string name="reader_statistics_autostart">Autostart</string>
+    <string name="reader_statistics_autostart_on_book_open">Start on Book Open</string>
+    <string name="reader_statistics_autostart_on_page_turn">Start on Page Turn</string>
     <string name="reader_statistics_reset_time">Reset Time</string>
-    <string name="reader_statistics_autostart_off" comment="Reader statistics autostart setting value; intentionally matches other off labels.">Off</string>
-    <string name="reader_statistics_autostart_page_turn">Page Turn</string>
-    <string name="reader_statistics_autostart_on">On</string>
     <string name="reader_statistics_sync_behaviour">Sync Behaviour</string>
+    <string name="reader_statistics_sync_behaviour_hint">Determines whether statistics are merged entry by entry or replaced completely during sync.</string>
     <string name="reader_statistics_sync_mode_merge">Merge</string>
     <string name="reader_statistics_sync_mode_replace">Replace</string>
     <string name="reader_statistics_settings_hint">Statistics can be accessed from the Reader\'s context menu.</string>
-    <string name="reader_appearance_theme">Theme</string>
     <string name="reader_appearance_text">Text</string>
     <string name="reader_appearance_layout">Layout</string>
     <string name="reader_appearance_display">Display</string>
     <string name="reader_appearance_progress">Progress</string>
     <string name="reader_appearance_popup">Popup</string>
-    <string name="reader_appearance_theme_system" comment="Reader theme option, intentionally matching the font-library System section label.">System</string>
     <string name="reader_appearance_theme_light">Light</string>
     <string name="reader_appearance_theme_dark">Dark</string>
     <string name="reader_appearance_theme_sepia">Sepia</string>
     <string name="reader_appearance_theme_custom" comment="Reader Appearance theme option, distinct from dictionary collapse custom mode.">Custom</string>
-    <string name="reader_appearance_eink_mode">E-ink Mode</string>
-    <string name="reader_appearance_use_sepia_light_theme">Use Sepia as Light Theme</string>
-    <string name="reader_appearance_invert_sepia_dark">Invert in System Dark Theme</string>
-    <string name="reader_appearance_interface">Interface</string>
     <string name="reader_appearance_background_color">Background Color</string>
     <string name="reader_appearance_text_color">Text Color</string>
     <string name="reader_appearance_info_color">Info Color</string>
     <string name="reader_appearance_color_hex">Hex</string>
     <string name="reader_appearance_color_invalid">Use #RRGGBB or #RRGGBBAA.</string>
     <string name="reader_appearance_color_alpha">Alpha</string>
-    <string name="reader_appearance_color_red">Red</string>
-    <string name="reader_appearance_color_green">Green</string>
-    <string name="reader_appearance_color_blue">Blue</string>
+    <string name="reader_appearance_color_red" comment="RGB color editor channel label; distinct from interface accent preset names.">Red</string>
+    <string name="reader_appearance_color_green" comment="RGB color editor channel label; distinct from interface accent preset names.">Green</string>
+    <string name="reader_appearance_color_blue" comment="RGB color editor channel label; distinct from interface accent preset names.">Blue</string>
     <string name="reader_appearance_text_orientation">Text Orientation</string>
     <string name="reader_appearance_vertical">Vertical</string>
     <string name="reader_appearance_horizontal">Horizontal</string>
@@ -428,6 +401,10 @@
     <string name="reader_appearance_import_font">Import Font</string>
     <string name="reader_appearance_importing" comment="Generic import progress label, intentionally shared with ッツ backup import.">Importing...</string>
     <string name="reader_appearance_font_size">Font Size</string>
+    <string name="reader_furigana_off" comment="Furigana visibility mode that shows annotations normally; intentionally matches other off labels.">Off</string>
+    <string name="reader_furigana_dimmed">Dimmed</string>
+    <string name="reader_furigana_toggle">Toggle</string>
+    <string name="reader_furigana_hidden">Hidden</string>
     <string name="reader_appearance_hide_furigana">Hide Furigana</string>
     <string name="reader_appearance_mode" comment="Reader appearance setting label, intentionally matching dictionary mode.">Mode</string>
     <string name="reader_appearance_paginated">Paginated</string>
@@ -499,7 +476,7 @@
     <string name="sync_clear_cache_confirmation">Hoshi will clear cached Google Drive folder IDs and remote cover thumbnails. Local books are not deleted.</string>
     <string name="sync_sign_out_title">Sign out of Google Drive?</string>
     <string name="sync_sign_out_confirmation">Hoshi will disconnect Google Drive and clear cached Drive folders. Local books are not deleted.</string>
-    <string name="sync_mode_auto">Auto</string>
+    <string name="sync_mode_auto" comment="Automatic synchronization mode.">Auto</string>
     <string name="sync_mode_manual">Manual</string>
     <string name="sync_google_drive" comment="Sync provider label, intentionally matching the bookshelf remote Google Drive section.">Google Drive</string>
     <string name="sync_device_client_id">Device client ID</string>
@@ -555,8 +532,6 @@
     <string name="backup_exporting">Exporting...</string>
     <string name="backup_importing" comment="ッツ backup import progress label, intentionally matching the generic importing progress text.">Importing...</string>
     <string name="advanced_audio">Audio</string>
-    <string name="advanced_statistics" comment="Advanced settings row label, intentionally matching reader statistics label.">Statistics</string>
-    <string name="advanced_statistics_subtitle">Track per-book reading time, speed, and characters read</string>
     <string name="advanced_sasayaki_audiobooks">Sasayaki (Audiobooks)</string>
     <string name="advanced_sasayaki_subtitle">Read along with matched audiobook subtitles</string>
     <string name="audio_sources">Sources</string>
@@ -585,6 +560,7 @@
     <string name="audio_move_local_source_up">Move local audio source up</string>
     <string name="audio_move_local_source_down">Move local audio source down</string>
     <string name="audio_local_source_save_failed">Unable to save local audio source settings.</string>
+    <string name="audio_no_audio_found">No audio found</string>
     <string name="anki_fetch_decks_ankiconnect">Fetch decks and note types from AnkiConnect.</string>
     <string name="anki_fetch_decks_ankidroid">Fetch decks and note types from AnkiDroid.</string>
     <string name="anki_open_app_settings">Open App Settings</string>
@@ -595,7 +571,6 @@
     <string name="anki_check_duplicates_all_models">Check for duplicates across all models</string>
     <string name="anki_duplicate_check_scope">Duplicate Check Scope</string>
     <string name="anki_compact_glossaries" comment="Anki setting label, intentionally matching dictionary compact glossaries.">Compact Glossaries</string>
-    <string name="anki_embed_media">Embed media</string>
     <string name="anki_droid_force_sync">Sync AnkiDroid after adding card</string>
     <string name="anki_droid_force_sync_description">Starts AnkiDroid sync after a card is added. AnkiDroid may ignore syncs run more often than every 5 minutes.</string>
     <string name="anki_fields">Fields</string>
@@ -737,15 +712,18 @@
     <string name="sasayaki_remove_audio">Remove</string>
     <string name="sasayaki_storage_copied">Copied to app storage. The original audiobook file can be deleted.</string>
     <string name="sasayaki_storage_linked">Linked to the external audiobook file. Keep the original file available.</string>
-    <string name="sasayaki_storage_select_audio">Select a .mp3, .m4b, or .opus audiobook</string>
-    <string name="sasayaki_subtitle_match">Subtitle Match</string>
+    <string name="sasayaki_storage_select_audio">Select a .mp3, .m4b, .m4a, or .opus audiobook</string>
+    <string name="sasayaki_export_srt">Export SRT</string>
+    <string name="sasayaki_srt_saved">SRT file saved.</string>
+    <string name="sasayaki_srt_export_failed">Could not export subtitles. Please try again.</string>
+    <string name="sasayaki_current_match">Current Match</string>
     <string name="sasayaki_no_subtitle_match">No match</string>
     <string name="sasayaki_no_chapters">No chapters found in this audiobook.</string>
     <string name="sasayaki_unknown_chapter">Chapter</string>
     <string name="sasayaki_current_chapter">Current chapter</string>
     <string name="sasayaki_skip_cue">1 sentence</string>
     <string name="sasayaki_skip_seconds_format">%1$d seconds</string>
-    <string name="sasayaki_settings_description">Open the Reader Sasayaki menu to load a .mp3, .m4b, or .opus audiobook. Subtitle matching is available from the Resources tab when you have a matching .srt file.</string>
+    <string name="sasayaki_settings_description">Open the Reader Sasayaki menu to load a .mp3, .m4b, .m4a, or .opus audiobook. In Resources, match an .srt subtitle file or transcribe Japanese audio on this device.</string>
     <string name="sasayaki_select_srt_file">Select an .srt subtitle file.</string>
     <string name="sasayaki_selected_srt">Selected SRT</string>
     <string name="sasayaki_open_srt_failed">Unable to open selected SRT.</string>
@@ -791,4 +769,144 @@
     <string name="book_cover_scale_fill_summary">Fill the screen while preserving proportions, cropping overflow.</string>
     <string name="book_cover_scale_stretch">Stretch</string>
     <string name="book_cover_scale_stretch_summary">Fill the screen without preserving the cover’s proportions.</string>
+    <string name="statistics_sync_heading" comment="Statistics settings section heading, intentionally matching the bookshelf Sync action.">Sync</string>
+    <string name="statistics_archive_heading">Archive</string>
+    <string name="statistics_clear_archive">Clear Archive</string>
+    <string name="statistics_clear_archive_confirmation">Delete statistics for %1$d archived books? Statistics for books in your library will be kept.</string>
+    <plurals name="statistics_archived_book_count">
+        <item quantity="one">%1$d book</item>
+        <item quantity="other">%1$d books</item>
+    </plurals>
+    <string name="statistics_operation_failed">Could not update or load statistics. Please try again.</string>
+    <string name="statistics_book_unavailable">Statistics for this book are no longer available.</string>
+    <string name="statistics_delete_all">Delete All Statistics</string>
+    <string name="statistics_delete_all_confirmation">Delete all local statistics for this book? Merging with synced statistics may restore deleted records.</string>
+    <string name="statistics_edit_hours">Hours</string>
+    <string name="statistics_edit_minutes">Minutes</string>
+    <string name="statistics_range_all">All</string>
+    <string name="statistics_average_change_week_format">%1$s%% from previous week</string>
+    <string name="statistics_average_change_month_format">%1$s%% from previous month</string>
+    <string name="statistics_average_change_year_format">%1$s%% from previous year</string>
+    <string name="statistics_current_streak">Current streak</string>
+    <string name="statistics_longest_streak">Longest streak</string>
+    <string name="statistics_best_day">Best day</string>
+    <string name="statistics_date_interval_format">%1$s – %2$s</string>
+    <string name="bookshelf_delete_failed">Could not delete the book or save its statistics archive. The book has been kept.</string>
+    <plurals name="statistics_history_reading_days">
+        <item quantity="one">of %1$d day read</item>
+        <item quantity="other">of %1$d days read</item>
+    </plurals>
+    <string name="statistics_goal_clock_format">%1$d:%2$02d</string>
+    <string name="statistics_goal_characters_link_format">/ %1$s character goal</string>
+    <string name="statistics_goal_minutes_link_format">/ %1$d minute goal</string>
+    <string name="statistics_history_short_date_pattern">MMM d</string>
+    <string name="statistics_history_since_format">since %1$s</string>
+    <string name="statistics_reading_time">Reading Time</string>
+    <string name="statistics_books" comment="Statistics book list heading, intentionally matching the main Books tab and backup section.">Books</string>
+    <string name="statistics_total_time">Total Time</string>
+    <string name="statistics_chart_average">avg</string>
+    <string name="statistics_chart_hours_format">%1$sh</string>
+    <string name="statistics_show_more_books">Show More</string>
+    <string name="statistics_heatmap_month_year_pattern">yyyy/M</string>
+    <string name="statistics_period_daily_average_format">%1$s Daily Average</string>
+    <string name="statistics_period_monthly_average_format">%1$s Monthly Average</string>
+    <string name="statistics_range_all_time" comment="Dashboard period caption, independent of the Reader statistics summary.">All Time</string>
+    <string name="statistics_heatmap_less">Less</string>
+    <string name="statistics_heatmap_more" comment="Upper endpoint of the reading intensity scale, distinct from the More action.">More</string>
+    <string name="statistics_goal_picker_title">Goal</string>
+    <string name="statistics_goal_characters_per_day">characters per day</string>
+    <string name="statistics_goal_minutes_per_day">minutes per day</string>
+    <string name="statistics_goal_save_failed">Could not save the goal. Please try again.</string>
+    <string name="statistics_days_heading">Days</string>
+    <string name="statistics_chart_weekday_pattern">EEEEE</string>
+    <string name="statistics_chart_day_pattern">d</string>
+    <string name="statistics_chart_month_pattern">MMMMM</string>
+    <string name="statistics_chart_month_year_pattern">MMM yy</string>
+    <string name="display_settings_load_failed">Could not load display and reading settings. Please try again.</string>
+    <string name="display_settings_save_failed">Could not save the settings. Your previous settings have been kept.</string>
+    <string name="display_settings_auto_switch">Automatically Switch with System</string>
+    <string name="display_settings_light_palette">Light Palette</string>
+    <string name="display_settings_dark_palette">Dark Palette</string>
+    <string name="display_settings_palette_dark_sepia">Dark Sepia</string>
+    <string name="display_settings_custom_light_palette">Custom Light</string>
+    <string name="display_settings_custom_dark_palette">Custom Dark</string>
+    <string name="display_settings_custom_light_explanation">Uses a light interface and dictionary popups with black text on white. Reading colors are set below.</string>
+    <string name="display_settings_custom_dark_explanation">Uses a dark interface and dictionary popups with white text on black. Reading colors are set below.</string>
+    <string name="display_settings_palette_preview_title">Reading preview</string>
+    <string name="display_settings_palette_preview_info">Secondary information</string>
+    <string name="display_settings_accent">Accent Color</string>
+    <string name="display_settings_accent_system">System Default</string>
+    <string name="display_settings_accent_purple">Purple</string>
+    <string name="display_settings_accent_blue" comment="Interface accent preset name; distinct from RGB editor channel labels.">Blue</string>
+    <string name="display_settings_accent_teal">Teal</string>
+    <string name="display_settings_accent_green" comment="Interface accent preset name; distinct from RGB editor channel labels.">Green</string>
+    <string name="display_settings_accent_yellow">Yellow</string>
+    <string name="display_settings_accent_orange">Orange</string>
+    <string name="display_settings_accent_red" comment="Interface accent preset name; distinct from RGB editor channel labels.">Red</string>
+    <string name="display_settings_accent_pink">Pink</string>
+    <string name="display_settings_custom_accent">Custom Accent Color</string>
+    <string name="display_settings_accent_hex">RGB hex color</string>
+    <string name="display_settings_accent_hex_invalid">Enter exactly six hexadecimal digits.</string>
+    <string name="display_settings_accent_preview">Control preview</string>
+    <string name="display_settings_accent_preview_action">Button</string>
+    <string name="display_settings_eink_mode">E-ink Optimization</string>
+    <string name="display_settings_eink_appearance">E-ink Appearance</string>
+    <string name="display_settings_eink_explanation">E-ink optimization uses a black-and-white palette. Turning it off restores your saved palette and accent color.</string>
+    <string name="reader_settings_profile_title">Appearance · %1$s</string>
+    <string name="dictionary_frequency_sort_order">Sort order</string>
+    <string name="dictionary_frequency_dictionary">Frequency dictionary</string>
+    <string name="dictionary_frequency_auto" comment="Automatic dictionary lookup frequency ordering.">Auto</string>
+    <string name="dictionary_frequency_ascending">Ascending</string>
+    <string name="dictionary_frequency_descending">Descending</string>
+    <string name="dictionary_frequency_disabled">Disabled</string>
+    <string name="dictionary_import_file_error_format">%1$s: %2$s</string>
+    <string name="dictionary_import_native_error_format">Dictionary importer: %1$s</string>
+    <string name="dictionary_import_file_access_error">Cannot access the dictionary file.</string>
+    <string name="dictionary_import_archive_error">The dictionary archive is invalid or damaged.</string>
+    <string name="dictionary_import_index_error">The dictionary index is missing or invalid.</string>
+    <string name="dictionary_import_contents_error">No supported dictionary entries were found.</string>
+    <string name="dictionary_import_io_error">Could not read or save the dictionary files.</string>
+    <string name="audio_source_jpod101" translatable="false">JapanesePod101</string>
+    <string name="audio_source_language_pod101" translatable="false">LanguagePod101</string>
+    <string name="audio_source_jisho" translatable="false">Jisho</string>
+    <string name="sasayaki_match_source_subtitles">Subtitles</string>
+    <string name="sasayaki_transcription">Transcription</string>
+    <string name="sasayaki_transcription_description">Transcribe Japanese audio and match it to the book.</string>
+    <string name="sasayaki_transcription_select_audio">Import an audiobook using the Audiobook section above.</string>
+    <string name="sasayaki_transcription_start">Transcribe</string>
+    <string name="sasayaki_transcription_resume">Resume</string>
+    <string name="sasayaki_transcription_realign">Match Again</string>
+    <string name="sasayaki_transcription_pause">Pause</string>
+    <string name="sasayaki_transcription_preparing">Preparing transcription…</string>
+    <string name="sasayaki_transcription_downloading">Downloading transcription files… %1$d%%</string>
+    <string name="sasayaki_transcription_progress">Transcribing and matching…</string>
+    <string name="sasayaki_transcription_paused">Transcription paused</string>
+    <string name="sasayaki_transcription_complete">Transcription complete</string>
+    <string name="sasayaki_transcription_awaiting_download">Waiting for download confirmation</string>
+    <string name="sasayaki_transcription_download_title">Download transcription files?</string>
+    <string name="sasayaki_transcription_download_message">Transcription needs about %1$d MiB of additional files (speech model and processing components). Downloaded files can be reused offline. Your audio stays on this device.</string>
+    <string name="sasayaki_transcription_download_action">Download and transcribe</string>
+    <string name="sasayaki_transcription_saved_progress">Transcribed %1$s / %2$s</string>
+    <string name="sasayaki_transcription_remaining">About %1$d min left</string>
+    <string name="sasayaki_transcription_aligning">Aligning with book…</string>
+    <string name="sasayaki_transcription_pausing">Saving progress…</string>
+    <string name="sasayaki_transcription_clear">Clear Transcription</string>
+    <string name="sasayaki_transcription_clear_confirmation">Clear transcription?</string>
+    <string name="sasayaki_transcription_clear_message">Only transcription data will be cleared. The current match will be kept.</string>
+    <string name="sasayaki_transcription_error_audio">Couldn’t read this audio. Check that the file is complete, accessible, and in a supported format, then try again.</string>
+    <string name="sasayaki_transcription_error_resources">Couldn’t download or verify transcription files. Check your connection and available storage, then try again.</string>
+    <string name="sasayaki_transcription_error_recognition">Japanese speech recognition couldn’t start or complete. Restart the app and try again; if it repeats, switch to Lightweight mode.</string>
+    <string name="sasayaki_transcription_error_match">Couldn’t match the transcription to this book. Check that the book opens correctly and matches this audio.</string>
+    <string name="sasayaki_transcription_error_storage">Couldn’t save transcription progress. Check available storage and that the book is still available.</string>
+    <string name="sasayaki_transcription_busy">Another book is being transcribed.</string>
+    <string name="about_ffmpeg_license" translatable="false">FFmpeg 9.0.2 · LGPL 2.1+</string>
+    <string name="about_ffmpeg_source">FFmpeg source code</string>
+    <string name="about_transcription_license">Transcription component licenses</string>
+    <string name="sasayaki_transcription_speed">Transcription speed</string>
+    <string name="sasayaki_transcription_light">Lightweight</string>
+    <string name="sasayaki_transcription_balanced">Balanced</string>
+    <string name="sasayaki_transcription_fast">Fast</string>
+    <string name="sasayaki_transcription_light_description">Uses fewer resources, with slower transcription.</string>
+    <string name="sasayaki_transcription_balanced_description">Balances transcription speed and everyday use.</string>
+    <string name="sasayaki_transcription_fast_description">Faster transcription; may generate more heat.</string>
 </resources>

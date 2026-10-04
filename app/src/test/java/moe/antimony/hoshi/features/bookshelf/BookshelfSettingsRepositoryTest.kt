@@ -30,6 +30,7 @@ class BookshelfSettingsRepositoryTest {
 
             assertEquals(BookSortOption.Recent, settings.sortOption)
             assertFalse(settings.showReading)
+            assertFalse(settings.hideCollapsedShelfThumbnails)
             assertEquals(BookshelfCoverMode.Show, settings.coverMode)
         }
     }
@@ -63,6 +64,42 @@ class BookshelfSettingsRepositoryTest {
             repository.writeRawCoverMode("Unknown")
 
             assertEquals(BookshelfCoverMode.Show, repository.settings.first().coverMode)
+        }
+    }
+
+    @Test
+    fun restoresCollapsedThumbnailPreferenceAndPreservesItAcrossOtherUpdates() = runBlocking {
+        val file = tempFolder.newFile("restored-settings.preferences_pb")
+        val firstJob = Job()
+        val firstStore = PreferenceDataStoreFactory.create(
+            scope = CoroutineScope(Dispatchers.IO + firstJob),
+            produceFile = { file },
+        )
+        try {
+            BookshelfSettingsRepository(firstStore).update { it.copy(hideCollapsedShelfThumbnails = true) }
+        } finally {
+            firstJob.cancel()
+            firstJob.join()
+        }
+        val secondJob = Job()
+        val secondStore = PreferenceDataStoreFactory.create(
+            scope = CoroutineScope(Dispatchers.IO + secondJob),
+            produceFile = { file },
+        )
+        try {
+            val restored = BookshelfSettingsRepository(secondStore)
+            assertTrue(restored.settings.first().hideCollapsedShelfThumbnails)
+            restored.update { it.copy(sortOption = BookSortOption.Title, showReading = true, coverMode = BookshelfCoverMode.Hide) }
+            assertTrue(restored.settings.first().hideCollapsedShelfThumbnails)
+            restored.update { it.copy(hideCollapsedShelfThumbnails = false) }
+            val settings = restored.settings.first()
+            assertFalse(settings.hideCollapsedShelfThumbnails)
+            assertEquals(BookSortOption.Title, settings.sortOption)
+            assertTrue(settings.showReading)
+            assertEquals(BookshelfCoverMode.Hide, settings.coverMode)
+        } finally {
+            secondJob.cancel()
+            secondJob.join()
         }
     }
 

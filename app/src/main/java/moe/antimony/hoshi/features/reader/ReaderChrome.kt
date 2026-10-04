@@ -4,6 +4,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Redo
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.ui.graphics.vector.ImageVector
+import moe.antimony.hoshi.features.display.DisplayPalettePreset
+import moe.antimony.hoshi.features.display.resolveDisplaySettings
 import java.util.Locale
 
 data class ReaderChromeState(
@@ -64,7 +66,6 @@ data class ReaderChromeState(
         progressDisplay: ReaderProgressDisplay = ReaderProgressDisplay.characters(),
     ): String {
         val statistics = statistics ?: return ""
-        if (!settings.enableStatistics) return ""
         val parts = mutableListOf<String>()
         if (settings.showReadingSpeed) {
             parts += progressDisplay.speedText(statistics.readingSpeed)
@@ -126,7 +127,8 @@ data class ReaderChromeVisibility(
 )
 
 enum class ReaderMenuDestination {
-    Appearance,
+    Display,
+    ReadingSettings,
     GoTo,
     Statistics,
     Sasayaki,
@@ -344,7 +346,8 @@ fun readerBottomMenuVisualOrder(
     if (showSasayaki) add(ReaderMenuDestination.Sasayaki)
     if (showStatistics) add(ReaderMenuDestination.Statistics)
     add(ReaderMenuDestination.GoTo)
-    add(ReaderMenuDestination.Appearance)
+    add(ReaderMenuDestination.ReadingSettings)
+    add(ReaderMenuDestination.Display)
 }
 
 fun readerSasayakiBottomPlaybackControls(
@@ -407,8 +410,10 @@ fun readerJumpBackIcon(): ImageVector = Icons.AutoMirrored.Rounded.Undo
 fun readerJumpForwardIcon(): ImageVector = Icons.AutoMirrored.Rounded.Redo
 
 fun readerChromeColors(settings: ReaderSettings, systemDark: Boolean): ReaderChromeColors {
+    val display = settings.displaySettings?.let { resolveDisplaySettings(it, systemDark) }
+    val resolvedSettings = settings.resolvedForDisplay(systemDark)
     val colors = when {
-        settings.eInkMode && settings.usesDarkInterface(systemDark) -> ReaderChromeColors(
+        resolvedSettings.eInkMode && resolvedSettings.usesDarkInterface(systemDark) -> ReaderChromeColors(
             buttonContainer = 0xFF000000,
             buttonBorder = 0xFFFFFFFF,
             buttonOutline = 0x00000000,
@@ -425,7 +430,7 @@ fun readerChromeColors(settings: ReaderSettings, systemDark: Boolean): ReaderChr
             bubbleInnerShadowColor = 0x00000000,
             infoText = 0xFFFFFFFF,
         )
-        settings.eInkMode -> ReaderChromeColors(
+        resolvedSettings.eInkMode -> ReaderChromeColors(
             buttonContainer = 0xFFFFFFFF,
             buttonBorder = 0xFF000000,
             buttonOutline = 0x00000000,
@@ -442,7 +447,8 @@ fun readerChromeColors(settings: ReaderSettings, systemDark: Boolean): ReaderChr
             bubbleInnerShadowColor = 0x00000000,
             infoText = 0xFF000000,
         )
-        settings.theme == ReaderTheme.Sepia && settings.sepiaInvertInDark && systemDark -> ReaderChromeColors(
+        display?.palette == DisplayPalettePreset.DarkSepia ||
+            (resolvedSettings.theme == ReaderTheme.Sepia && resolvedSettings.usesDarkInterface(systemDark)) -> ReaderChromeColors(
             buttonContainer = 0xE6191713,
             buttonBorder = 0xFF4A4438,
             buttonOutline = 0x00000000,
@@ -459,7 +465,7 @@ fun readerChromeColors(settings: ReaderSettings, systemDark: Boolean): ReaderChr
             bubbleInnerShadowColor = 0x00000000,
             infoText = 0xCCF2E2C9,
         )
-        settings.usesDarkInterface(systemDark) -> ReaderChromeColors(
+        resolvedSettings.usesDarkInterface(systemDark) -> ReaderChromeColors(
             buttonContainer = 0xE6141414,
             buttonBorder = 0xFF484848,
             buttonOutline = 0x00000000,
@@ -511,8 +517,10 @@ fun readerChromeColors(settings: ReaderSettings, systemDark: Boolean): ReaderChr
             infoText = 0xB3111111,
         )
     }
-    return if (!settings.eInkMode && settings.theme == ReaderTheme.Custom) {
-        colors.copy(infoText = settings.customInfoColor)
+    return if (display != null) {
+        colors.copy(infoText = display.infoColor)
+    } else if (!resolvedSettings.eInkMode && resolvedSettings.theme == ReaderTheme.Custom) {
+        colors.copy(infoText = resolvedSettings.customInfoColor)
     } else {
         colors
     }

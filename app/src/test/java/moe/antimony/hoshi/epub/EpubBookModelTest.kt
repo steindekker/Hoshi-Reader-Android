@@ -175,7 +175,7 @@ class EpubBookModelTest {
         )
         val complete = legacy.copy(
             images = emptyList(),
-            readerFactsVersion = 2,
+            readerFactsVersion = 3,
             chapterInfo = legacy.chapterInfo.mapValues { (_, info) ->
                 info.copy(fragmentOffsets = mapOf("part" to 4))
             },

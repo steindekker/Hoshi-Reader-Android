@@ -24,20 +24,15 @@ class ReaderAppearanceSasayakiTest {
     }
 
     @Test
-    fun appearanceShowsStatisticsRowsWhenStatisticsAreEnabled() {
+    fun appearanceKeepsStatisticsDisplayPreferencesAvailable() {
         assertEquals(
             listOf(
                 ReaderAppearanceStatisticsRow.Toggle,
                 ReaderAppearanceStatisticsRow.ReadingSpeed,
                 ReaderAppearanceStatisticsRow.ReadingTime,
             ),
-            readerAppearanceStatisticsRows(ReaderSettings(enableStatistics = true)),
+            readerAppearanceStatisticsRows(),
         )
-    }
-
-    @Test
-    fun appearanceHidesStatisticsRowsWhenStatisticsAreDisabled() {
-        assertTrue(readerAppearanceStatisticsRows(ReaderSettings(enableStatistics = false)).isEmpty())
     }
 
     @Test
@@ -72,21 +67,6 @@ class ReaderAppearanceSasayakiTest {
     @Test
     fun appearanceHidesSasayakiToggleWhenSasayakiIsDisabled() {
         assertTrue(readerAppearanceSasayakiRows(SasayakiSettings(enabled = false)).isEmpty())
-    }
-
-    @Test
-    fun appearanceShowsCustomThemeControlsOnlyForCustomTheme() {
-        assertTrue(readerAppearanceShowsCustomInterfaceTheme(ReaderSettings(theme = ReaderTheme.Custom)))
-        assertTrue(!readerAppearanceShowsCustomInterfaceTheme(ReaderSettings(theme = ReaderTheme.Sepia)))
-        assertEquals(
-            listOf(
-                ReaderAppearanceCustomColorRow.Background,
-                ReaderAppearanceCustomColorRow.Text,
-                ReaderAppearanceCustomColorRow.Info,
-            ),
-            readerAppearanceCustomColorRows(ReaderSettings(theme = ReaderTheme.Custom)),
-        )
-        assertTrue(readerAppearanceCustomColorRows(ReaderSettings(theme = ReaderTheme.Light)).isEmpty())
     }
 
     @Test

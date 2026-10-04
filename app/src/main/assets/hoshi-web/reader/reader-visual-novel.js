@@ -1,5 +1,6 @@
 __HOSHI_READER_VIEWPORT_SCRIPT__
 __HOSHI_READER_TEXT_SEMANTICS_SCRIPT__
+__HOSHI_READER_DOM_TEXT_SCRIPT__
 __HOSHI_READER_MEDIA_SEMANTICS_SCRIPT__
 __HOSHI_READER_LAYOUT_SEMANTICS_SCRIPT__
 __HOSHI_READER_VN_CONTENT_STREAM_SCRIPT__
@@ -23,6 +24,7 @@ window.hoshiReader = {
   sasayakiCues: [],
   sasayakiCueMap: new Map(),
   sasayakiCuesSignature: null,
+  sasayakiScreensNeedRebuild: false,
   cueWrappers: new Map(),
   cueSourceRanges: new Map(),
   cueGeometryRanges: new Map(),
@@ -163,6 +165,8 @@ window.hoshiReader = {
     }
     this.nodeStartOffsets = offsets;
     this.nodeStartRawOffsets = rawOffsets;
+    // Wrapping/unwrapping moves text nodes and invalidates live CSS Ranges.
+    if (window.hoshiHighlights?.searchRange) window.hoshiHighlights.refreshSearchHighlight();
   },
   waitForImages: function(scope) {
     var root = scope || this.sourceRoot;
@@ -222,6 +226,7 @@ window.hoshiReader = {
   },
   detachChapterSource: function() {
     if (this.sourceRoot) return;
+    this.sourceSasayakiBoundaries = window.hoshiReaderDomText.captureSasayakiBoundaries(document.body);
     this.sourceRoot = document.createElement('div');
     var children = Array.from(document.body.childNodes);
     for (var i = 0; i < children.length; i++) {
@@ -256,7 +261,7 @@ window.hoshiReader = {
     if (!selectionProjectionFactory) {
       throw new Error('hoshiReaderVnSelectionProjection is required for visual novel reader');
     }
-    this.contentStream = contentStreamFactory(this.sourceRoot);
+    this.contentStream = contentStreamFactory(this.sourceRoot, { sasayakiBoundaries: this.sourceSasayakiBoundaries });
     this.rangeMap = rangeMapFactory(this);
     this.selectionProjection = selectionProjectionFactory(this);
     if (window.hoshiSelection && window.hoshiSelection.configure) {
@@ -265,6 +270,7 @@ window.hoshiReader = {
     this.totalChapterChars = this.contentStream.totalMatchableChars;
   },
   buildScreens: function() {
+    this.sasayakiScreensNeedRebuild = false;
     var mode = String(this.screenMode || '').toLowerCase();
     var baseScreens;
     if (mode === 'sentence' || mode === 'sentences') {
@@ -1870,13 +1876,24 @@ window.hoshiReader = {
     var originalRemoveHighlight = typeof highlights.removeHighlight === 'function'
       ? highlights.removeHighlight.bind(highlights)
       : null;
+    highlights.searchRawRange = function(offset, length) {
+      return window.hoshiReaderTextSemantics.searchRawRange(reader.contentStream.textEntries, offset, length);
+    };
+    highlights.collectTextSegments = function(offset, length) {
+      return reader.contentStream.collectRawSegments(offset, length);
+    };
     highlights.collectSegments = function(offset, length) {
       return reader.highlightSegmentsForChapterRawRange(offset, length);
     };
     if (originalCreateHighlight) {
       highlights.createHighlight = function(color, id) {
         var result = originalCreateHighlight(color, id);
-        if (result) reader.rememberCreatedHighlight(id, color, result);
+        if (result && result.action === 'created') reader.rememberCreatedHighlight(id, color, result);
+        if (result && result.action === 'recolored') {
+          reader.initialHighlights = reader.initialHighlights.map(function(highlight) {
+            return highlight.id === result.id ? Object.assign({}, highlight, { color: color }) : highlight;
+          });
+        }
         return result;
       };
     }
@@ -1898,7 +1915,8 @@ window.hoshiReader = {
       id: id,
       color: color,
       offset: result.offset,
-      text: result.text
+      text: result.text,
+      textFurigana: result.textFurigana
     });
     this.initialHighlights = highlights;
   },
@@ -1910,12 +1928,12 @@ window.hoshiReader = {
   },
   clearCurrentHighlightWrappers: function() {
     var highlights = window.hoshiHighlights;
-    if (!highlights || !highlights.wrappers || typeof highlights.wrappers.forEach !== 'function') return;
+    if (!highlights || !highlights.highlights || typeof highlights.highlights.forEach !== 'function') return;
     var wrapperGroups = [];
-    highlights.wrappers.forEach(function(wrappers) {
-      wrapperGroups.push(wrappers);
+    highlights.highlights.forEach(function(entry) {
+      wrapperGroups.push(entry.wrappers);
     });
-    highlights.wrappers.clear();
+    highlights.highlights.clear();
     for (var i = 0; i < wrapperGroups.length; i++) {
       this.unwrap(wrapperGroups[i]);
     }
@@ -1923,11 +1941,12 @@ window.hoshiReader = {
   applyCurrentScreenHighlights: function() {
     var highlights = Array.isArray(this.initialHighlights) ? this.initialHighlights : [];
     this.patchHighlightsForVisualNovel();
-    if (!highlights.length || !window.hoshiHighlights || typeof window.hoshiHighlights.applyHighlights !== 'function') return;
+    if (!window.hoshiHighlights || typeof window.hoshiHighlights.applyHighlights !== 'function') return;
     this.clearCurrentHighlightWrappers();
     window.hoshiHighlights.applyHighlights(highlights);
   },
   paginate: function(direction) {
+    window.hoshiHighlights?.clearSearchHighlight?.();
     if (this.nativeSelectionActive) return "limit";
     if (!this.screens.length) return "limit";
     if (direction === "forward") {
@@ -1936,12 +1955,21 @@ window.hoshiReader = {
         return "revealed";
       }
       if (this.currentScreenIndex >= this.screens.length - 1) return "limit";
-      this.renderScreen(this.currentScreenIndex + 1, false);
+      this.renderAdjacentScreen(this.currentScreenIndex + 1, false);
       return "scrolled";
     }
     if (this.currentScreenIndex <= 0) return "limit";
-    this.renderScreen(this.currentScreenIndex - 1, true);
+    this.renderAdjacentScreen(this.currentScreenIndex - 1, true);
     return "scrolled";
+  },
+  renderAdjacentScreen: function(index, fullyRevealed) {
+    if (this.sasayakiScreensNeedRebuild) {
+      // Follow the adjacent screen's source position, even if a new cue now merges it with this screen.
+      var progress = this.progressForScreen(this.screens[index]);
+      this.buildScreens();
+      index = this.screenIndexForProgress(progress);
+    }
+    this.renderScreen(index, fullyRevealed);
   },
   calculateProgress: function() {
     if (!this.screens.length) return 0;
@@ -1957,6 +1985,7 @@ window.hoshiReader = {
   },
   restoreProgress: async function(progress) {
     await this.ensureReady();
+    if (this.sasayakiScreensNeedRebuild) this.buildScreens();
     this.renderScreen(this.screenIndexForProgress(progress), true);
     this.notifyRestoreComplete();
   },
@@ -1974,6 +2003,10 @@ window.hoshiReader = {
     if (index < 0) {
       this.notifyRestoreComplete();
       return false;
+    }
+    if (this.sasayakiScreensNeedRebuild) {
+      this.buildScreens();
+      index = this.screenIndexForFragment(fragment);
     }
     this.renderScreen(index, true);
     this.notifyRestoreComplete();
@@ -2201,10 +2234,12 @@ window.hoshiReader = {
     this.cueGeometryRanges.clear();
     this.buildNodeOffsets();
   },
-  applySasayakiCues: function(cues) {
+  applySasayakiCues: function(cues, preserveLayout) {
     var activeCueId = this.activeCueId;
     var nextCues = Array.isArray(cues) ? cues : [];
-    var shouldRebuildScreens = this.mergeCrossScreenSasayakiCues && this.sasayakiCueDataChanged(nextCues);
+    var layoutChanged = this.mergeCrossScreenSasayakiCues && this.sasayakiCueDataChanged(nextCues);
+    this.sasayakiScreensNeedRebuild = this.sasayakiScreensNeedRebuild || layoutChanged;
+    var shouldRebuildScreens = !preserveLayout && this.sasayakiScreensNeedRebuild;
     var progress = shouldRebuildScreens ? this.calculateProgress() : null;
     this.clearSasayakiTargets();
     this.setSasayakiCueData(nextCues);
@@ -2216,6 +2251,12 @@ window.hoshiReader = {
     }
     this.buildNodeOffsets();
     if (this.activeCueId) this.refreshSasayakiCuePresentation();
+  },
+  rebuildSasayakiScreensForNavigation: function() {
+    if (!this.sasayakiScreensNeedRebuild) return;
+    var progress = this.calculateProgress();
+    this.buildScreens();
+    this.renderScreen(this.screenIndexForProgress(progress), true);
   },
   sasayakiMediaStopsBetweenScreens: function(startIndex, endIndex) {
     if (!this.screens || !this.screens.length) return [];
@@ -2230,12 +2271,14 @@ window.hoshiReader = {
     return stops;
   },
   sasayakiMediaStopsBeforeCue: function(cue) {
+    this.rebuildSasayakiScreensForNavigation();
     var cueObject = this.sasayakiCueForInput(cue);
     var targetIndex = this.screenIndexForSasayakiCue(cueObject);
     if (targetIndex < 0) return [];
     return this.sasayakiMediaStopsBetweenScreens(this.currentScreenIndex, targetIndex);
   },
   sasayakiMediaStopsToChapterEnd: function() {
+    this.rebuildSasayakiScreensForNavigation();
     if (!this.screens || !this.screens.length) return [];
     var stops = [];
     for (var i = this.currentScreenIndex; i < this.screens.length; i++) {
@@ -2246,6 +2289,7 @@ window.hoshiReader = {
     return stops;
   },
   showSasayakiMediaStop: function(stop) {
+    window.hoshiHighlights?.clearSearchHighlight?.();
     var index = Number(stop && stop.screenIndex);
     if (!Number.isFinite(index) || !this.screens || !this.screens.length) return null;
     var safeIndex = Math.min(Math.max(0, Math.floor(index)), this.screens.length - 1);
@@ -2253,7 +2297,9 @@ window.hoshiReader = {
     this.renderScreen(safeIndex, true);
     return this.calculateProgress();
   },
-  highlightSasayakiCue: function(cue, reveal) {
+  highlightSasayakiCue: function(cue, reveal, preserveReveal) {
+    if (reveal) this.rebuildSasayakiScreensForNavigation();
+    if (reveal) window.hoshiHighlights?.clearSearchHighlight?.();
     var cueObject = this.sasayakiCueForInput(cue);
     var cueId = typeof cue === 'string' ? cue : cueObject && cueObject.id;
     if (!cueId) return null;
@@ -2277,7 +2323,7 @@ window.hoshiReader = {
       this.refreshSasayakiCuePresentation();
       return this.calculateProgress();
     }
-    if (!this.revealComplete) this.completeCurrentReveal();
+    if (!preserveReveal && !this.revealComplete) this.completeCurrentReveal();
     this.refreshSasayakiCuePresentation();
     return null;
   },

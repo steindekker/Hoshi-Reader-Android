@@ -1,6 +1,10 @@
 package moe.antimony.hoshi.features.audio
 
 import android.webkit.WebResourceResponse
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.io.ByteArrayInputStream
 import java.net.HttpURLConnection
 import java.net.URI
@@ -8,8 +12,10 @@ import java.net.URL
 
 class AudioRequestHandler(
     private val localAudioRepository: LocalAudioRepository,
+    private val remoteAudioRepository: RemoteWordAudioRepository,
     private val fetchRemoteAudioList: (String) -> ByteArray = ::fetchRemoteAudioList,
-    private val findLocalAudio: (term: String, reading: String) -> LocalAudioEntry? = localAudioRepository::findAudio,
+    private val findLocalAudioCandidates: (term: String, reading: String) -> List<LocalAudioCandidate> =
+        localAudioRepository::findAudioCandidates,
 ) {
     fun handleAudioRequest(url: String): WebResourceResponse? {
         val body = handleAudioRequestBody(url) ?: return null
@@ -23,9 +29,33 @@ class AudioRequestHandler(
 
         return if (target.startsWith(AudioSettings.InternalLocalAudioUrl.substringBefore("?"))) {
             localAudioResponse(target)
+        } else if (target.startsWith("${BuiltInAudioSource.Scheme}:", ignoreCase = true)) {
+            builtInAudioResponse(target)
         } else {
             fetchRemoteAudioList(target)
         }
+    }
+
+    private fun builtInAudioResponse(target: String): ByteArray {
+        val uri = runCatching { URI(target) }.getOrNull() ?: return emptyAudioResponse()
+        val source = BuiltInAudioSource.entries.firstOrNull { it.id == uri.host } ?: return emptyAudioResponse()
+        val query = runCatching { queryParameters(uri.rawQuery.orEmpty()) }.getOrNull() ?: return emptyAudioResponse()
+        // WebView requires a synchronous interception response on its worker thread.
+        // The repository owns the IO dispatcher; no UI or WebView state is accessed here.
+        val candidates = runBlocking {
+            remoteAudioRepository.resolve(source, query["term"].orEmpty(), query["reading"].orEmpty())
+        }
+        return buildJsonObject {
+            put("type", "audioSourceList")
+            put("audioSources", buildJsonArray {
+                candidates.forEach { candidate ->
+                    add(buildJsonObject {
+                        put("name", candidate.name)
+                        put("url", candidate.url)
+                    })
+                }
+            })
+        }.toString().toByteArray(Charsets.UTF_8)
     }
 
     private fun localAudioResponse(targetUrl: String): ByteArray {
@@ -33,9 +63,12 @@ class AudioRequestHandler(
         val query = queryParameters(uri.rawQuery.orEmpty())
         val term = query["term"].orEmpty()
         val reading = query["reading"].orEmpty()
-        val entry = findLocalAudio(term, reading) ?: return emptyAudioResponse()
-        val audioUrl = LocalAudioResolver.audioUrl(entry.source, entry.file)
-        return """{"type":"audioSourceList","audioSources":[{"name":${entry.source.jsonString()},"url":${audioUrl.jsonString()}}]}""".toByteArray()
+        val candidates = findLocalAudioCandidates(term, reading)
+        if (candidates.isEmpty()) return emptyAudioResponse()
+        val sources = candidates.joinToString(",") { candidate ->
+            """{"name":${candidate.name.jsonString()},"url":${candidate.url.jsonString()}}"""
+        }
+        return """{"type":"audioSourceList","audioSources":[$sources]}""".toByteArray()
     }
 
     private fun jsonResponse(body: ByteArray): WebResourceResponse =

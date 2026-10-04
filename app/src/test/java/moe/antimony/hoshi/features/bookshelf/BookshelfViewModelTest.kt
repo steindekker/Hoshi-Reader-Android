@@ -47,6 +47,7 @@ class BookshelfViewModelTest {
                 sortOption = BookSortOption.Title,
                 showReading = true,
                 coverMode = BookshelfCoverMode.Blur,
+                hideCollapsedShelfThumbnails = true,
             ),
         )
         val viewModel = BookshelfViewModel(repository, testScope())
@@ -58,11 +59,24 @@ class BookshelfViewModelTest {
         assertEquals(mapOf("book-a" to coverSource), viewModel.uiState.value.coverSourcesById)
         assertEquals(listOf(BookShelf("Manga", listOf("book-a"))), viewModel.uiState.value.shelves)
         assertEquals(BookSortOption.Title, viewModel.uiState.value.sortOption)
+        assertTrue(viewModel.uiState.value.hideCollapsedShelfThumbnails)
         assertTrue(viewModel.uiState.value.showReading)
         assertEquals(BookshelfCoverMode.Blur, viewModel.uiState.value.coverMode)
         assertTrue(viewModel.uiState.value.hasLoadedBooks)
         assertFalse(viewModel.uiState.value.isLoading)
         assertNull(viewModel.uiState.value.errorMessage.testString())
+    }
+
+    @Test
+    fun changeCollapsedThumbnailsPublishesStateAndSurvivesReload() {
+        val viewModel = BookshelfViewModel(FakeBookshelfRepository(), testScope())
+        viewModel.changeHideCollapsedShelfThumbnails(true)
+        assertTrue(viewModel.uiState.value.hideCollapsedShelfThumbnails)
+        viewModel.reloadBookEntries()
+        assertTrue(viewModel.uiState.value.hideCollapsedShelfThumbnails)
+        viewModel.changeHideCollapsedShelfThumbnails(false)
+        viewModel.reloadBookEntries()
+        assertFalse(viewModel.uiState.value.hideCollapsedShelfThumbnails)
     }
 
     @Test
@@ -137,6 +151,55 @@ class BookshelfViewModelTest {
         assertEquals(listOf(local), viewModel.uiState.value.bookEntries)
         assertTrue(viewModel.uiState.value.hasLoadedBooks)
         assertNull(viewModel.uiState.value.errorMessage.testString())
+    }
+
+    @Test
+    fun automaticRefreshSuppressesTransientNetworkFailuresButManualRefreshReportsThem() {
+        listOf(
+            java.net.SocketTimeoutException("Read timed out"),
+            java.net.SocketException("Connection reset"),
+            java.net.UnknownHostException("oauth2.googleapis.com"),
+        ).forEach { error ->
+            val local = bookEntry("local-book")
+            val remote = remoteEntry("drive-folder", "Remote Book")
+            val repository = FakeBookshelfRepository(
+                entries = listOf(local),
+                remoteEntries = listOf(remote),
+            )
+            val viewModel = BookshelfViewModel(repository, testScope())
+            viewModel.reloadBookEntries()
+            repository.remoteLoadError = error
+
+            viewModel.reloadBookEntries()
+
+            assertNull(error.toString(), viewModel.uiState.value.errorMessage.testString())
+            assertEquals(listOf(local), viewModel.uiState.value.bookEntries)
+            assertEquals(listOf(remote), viewModel.uiState.value.remoteBookEntries)
+
+            viewModel.refreshRemoteBooks()
+
+            assertEquals("Failed to fetch books from Google Drive.", viewModel.uiState.value.errorMessage.testString())
+            assertEquals(listOf(remote), viewModel.uiState.value.remoteBookEntries)
+        }
+    }
+
+    @Test
+    fun automaticRefreshReportsHttpTlsAndNonNetworkFailures() {
+        listOf(
+            GoogleDriveApiException("Unauthorized", statusCode = 401),
+            GoogleDriveApiException("Forbidden", statusCode = 403),
+            GoogleDriveApiException("Server error", statusCode = 500),
+            javax.net.ssl.SSLHandshakeException("Certificate rejected"),
+            java.io.IOException("Disk read failed"),
+            IllegalArgumentException("Invalid response"),
+        ).forEach { error ->
+            val repository = FakeBookshelfRepository(remoteLoadError = error)
+            val viewModel = BookshelfViewModel(repository, testScope())
+
+            viewModel.reloadBookEntries()
+
+            assertEquals("Failed to fetch books from Google Drive.", viewModel.uiState.value.errorMessage.testString())
+        }
     }
 
     @Test
@@ -409,6 +472,48 @@ class BookshelfViewModelTest {
             "Failed to delete book from Google Drive.",
             viewModel.uiState.value.errorMessage.testString(),
         )
+    }
+
+    @Test
+    fun remoteBooksFollowSelectedSortAndRefreshedAccessTimes() {
+        val older = remoteEntry("older", "Book 2")
+        val newer = remoteEntry("newer", "Book 10").let {
+            it.copy(syncFiles = it.syncFiles.copy(progress = DriveFile("progress", "progress_1_6_3000_0.5.json")))
+        }
+        val repository = FakeBookshelfRepository(remoteEntries = listOf(older, newer))
+        val viewModel = BookshelfViewModel(repository, testScope())
+
+        viewModel.reloadBookEntries()
+        assertEquals(listOf("newer", "older"), viewModel.uiState.value.remoteBookEntries.map { it.id })
+        viewModel.changeSort(BookSortOption.Title)
+        assertEquals(listOf("older", "newer"), viewModel.uiState.value.remoteBookEntries.map { it.id })
+        viewModel.changeSort(BookSortOption.Recent)
+        assertEquals(listOf("newer", "older"), viewModel.uiState.value.remoteBookEntries.map { it.id })
+
+        repository.remoteEntries = listOf(newer, older.copy(syncFiles = older.syncFiles.copy(
+            audioBook = DriveFile("audio", "audioBook_1_6_4000_0.json"),
+        )))
+        viewModel.reloadBookEntries()
+        assertEquals(listOf("older", "newer"), viewModel.uiState.value.remoteBookEntries.map { it.id })
+    }
+
+    @Test
+    fun changingRemoteSortReordersCachedBooksWhileRefreshWaits() {
+        val unknown = remoteEntry("unknown", "Book 1").let {
+            it.copy(syncFiles = it.syncFiles.copy(bookData = DriveFile("bad", "bookdata_invalid.zip")))
+        }
+        val recent = remoteEntry("recent", "Book 2")
+        val repository = FakeBookshelfRepository(remoteEntries = listOf(unknown, recent))
+        val viewModel = BookshelfViewModel(repository, testScope())
+        viewModel.reloadBookEntries()
+        assertEquals(listOf("recent", "unknown"), viewModel.uiState.value.remoteBookEntries.map { it.id })
+
+        val gate = CompletableDeferred<Unit>()
+        repository.remoteLoadGate = gate
+        viewModel.changeSort(BookSortOption.Title)
+        assertEquals(listOf("unknown", "recent"), viewModel.uiState.value.remoteBookEntries.map { it.id })
+        gate.complete(Unit)
+        assertEquals(listOf("unknown", "recent"), viewModel.uiState.value.remoteBookEntries.map { it.id })
     }
 
     @Test
@@ -698,6 +803,23 @@ class BookshelfViewModelTest {
 
         assertEquals(listOf(entry), repository.deletedEntries)
         assertEquals(emptyList<BookEntry>(), viewModel.uiState.value.bookEntries)
+    }
+
+    @Test
+    fun failedArchiveKeepsBookAndShowsLocalizedDeletionError() {
+        val entry = bookEntry("book-a")
+        val repository = FakeBookshelfRepository(entries = listOf(entry), localDeleteError = java.io.IOException("disk full"))
+        val viewModel = BookshelfViewModel(repository, testScope())
+        viewModel.reloadBookEntries()
+        viewModel.deleteBook(entry)
+        assertEquals(listOf(entry), viewModel.uiState.value.bookEntries)
+        assertEquals(UiText.Resource(R.string.bookshelf_delete_failed), viewModel.uiState.value.errorMessage)
+        viewModel.startSelecting()
+        viewModel.toggleSelectedBook(entry)
+        viewModel.deleteSelectedBooks()
+        assertEquals(setOf("book-a"), viewModel.uiState.value.selectedBookIds)
+        assertEquals(UiText.Resource(R.string.bookshelf_delete_failed), viewModel.uiState.value.errorMessage)
+        assertFalse(viewModel.uiState.value.isLoading)
     }
 
     @Test
@@ -1194,6 +1316,7 @@ class BookshelfViewModelTest {
         var remoteLoadError: Throwable? = null,
         val remoteImportError: Throwable? = null,
         val remoteDeleteError: Throwable? = null,
+        val localDeleteError: Throwable? = null,
         val remoteImportGate: CompletableDeferred<Unit>? = null,
         val remoteDeleteGate: CompletableDeferred<Unit>? = null,
         val remoteImportProgress: List<Double> = emptyList(),
@@ -1287,6 +1410,7 @@ class BookshelfViewModelTest {
         }
 
         override suspend fun deleteBook(entry: BookEntry) {
+            localDeleteError?.let { throw it }
             deletedEntries += entry
         }
 
@@ -1297,6 +1421,7 @@ class BookshelfViewModelTest {
         }
 
         override suspend fun deleteBooks(entries: Collection<BookEntry>) {
+            localDeleteError?.let { throw it }
             deletedEntries += entries
         }
 
@@ -1349,6 +1474,10 @@ class BookshelfViewModelTest {
             showReadingUpdates += showReading
         }
 
+        override suspend fun changeHideCollapsedShelfThumbnails(hide: Boolean) {
+            settings = settings.copy(hideCollapsedShelfThumbnails = hide)
+        }
+
         override suspend fun changeCoverMode(coverMode: BookshelfCoverMode) {
             coverModeUpdates += coverMode
             coverModeGate?.await()
@@ -1373,6 +1502,7 @@ class BookshelfViewModelTest {
 private fun UiText?.testString(): String? =
     when (this) {
         null -> null
+        is UiText.Joined -> parts.joinToString(separator) { it.testString().orEmpty() }
         is UiText.Literal -> value
         is UiText.Resource -> when (id) {
             R.string.bookshelf_importing_named_format -> "Importing ${args[0]}..."

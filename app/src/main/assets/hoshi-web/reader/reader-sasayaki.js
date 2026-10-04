@@ -1,61 +1,13 @@
   collectSasayakiCueRanges: function(cues) {
-    var cueRanges = new Map();
     if (!cues.length) return [];
-    var index = 0;
-    var current = cues[0];
-    var start = current.start;
-    var end = start + current.length;
-    var cursor = 0;
-    var segment = null;
-    var flushSegment = function(node) {
-      if (!segment) return;
-      var ranges = cueRanges.get(segment.id) || [];
-      ranges.push({ node: node, start: segment.start, end: segment.end });
-      cueRanges.set(segment.id, ranges);
-      segment = null;
-    };
-    var advanceCue = function() {
-      index += 1;
-      current = cues[index];
-      if (current) {
-        start = current.start;
-        end = start + current.length;
-      }
-    };
+    var entries = [];
     var walker = this.createWalker();
     var node;
-    while (current && (node = walker.nextNode())) {
-      var text = node.textContent;
-      var i = 0;
-      while (i < text.length && current) {
-        var char = String.fromCodePoint(text.codePointAt(i));
-        var next = i + char.length;
-        if (this.isMatchableChar(char)) {
-          if (cursor >= start && cursor < end) {
-            if (!segment) {
-              segment = { id: current.id, start: i, end: next };
-            } else {
-              segment.end = next;
-            }
-          } else {
-            flushSegment(node);
-          }
-          cursor += 1;
-          if (cursor === end) {
-            flushSegment(node);
-            advanceCue();
-          }
-        } else if (segment) {
-          segment.end = next;
-        } else if (cursor > start && cursor < end) {
-          segment = { id: current.id, start: i, end: next };
-        }
-        i = next;
-      }
-      flushSegment(node);
-    }
+    while (node = walker.nextNode()) entries.push({ node: node, text: node.textContent });
+    var domText = window.hoshiReaderDomText;
+    var index = domText.createSasayakiTextIndex(document.body, entries);
     return cues.map(function(cue) {
-      return { id: cue.id, ranges: cueRanges.get(cue.id) || [] };
+      return { id: cue.id, ranges: domText.sasayakiSegments(index, index.range(cue.start, cue.length)) };
     });
   },
    applySasayakiCues: function(cues) {

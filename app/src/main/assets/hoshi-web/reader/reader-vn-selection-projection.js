@@ -16,6 +16,21 @@
       return this.reader.contentStream.sourcePositionForRawOffset(chapterPosition.rawOffset);
     },
 
+    sourceRubyForRenderedRuby: function(ruby) {
+      var walker = ruby.ownerDocument.createTreeWalker(ruby, NodeFilter.SHOW_TEXT, {
+        acceptNode: function(node) {
+          return node.parentElement.closest('rt, rp') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      var node;
+      while (node = walker.nextNode()) {
+        var source = this.toSemanticHit({ node: node, offset: 0 });
+        var sourceRuby = source && source.node.parentElement.closest('ruby');
+        if (sourceRuby) return sourceRuby;
+      }
+      return null;
+    },
+
     normalizedOffsetForHit: function(semanticHit) {
       if (!semanticHit || !semanticHit.node) return null;
       return this.reader.contentStream.matchableOffsetForSourcePosition(

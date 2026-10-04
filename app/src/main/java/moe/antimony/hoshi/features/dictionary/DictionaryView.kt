@@ -1,11 +1,15 @@
 package moe.antimony.hoshi.features.dictionary
 
+import moe.antimony.hoshi.ui.theme.hoshiSurfaces
+import moe.antimony.hoshi.ui.theme.hoshiContainerBorder
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.core.Animatable
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -41,10 +45,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.AlertDialog
+import moe.antimony.hoshi.ui.HoshiAlertDialog as AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.DropdownMenu
+import moe.antimony.hoshi.ui.HoshiDropdownMenu as DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -119,7 +123,6 @@ import moe.antimony.hoshi.ui.asString
 import moe.antimony.hoshi.ui.hoshiTextFieldCursorBrush
 import kotlin.math.roundToInt
 
-private val DictionarySwitchColor = Color(0xFF34C759)
 
 internal fun scanNonJapaneseTextSettingVisible(contentLanguageProfile: ContentLanguageProfile): Boolean =
     contentLanguageProfile.dictionaryLanguageId == ContentLanguageProfile.JapaneseLanguageId
@@ -328,6 +331,7 @@ fun DictionaryView(
             DictionarySettingsView(
                 settings = uiState.settings,
                 termDictionaries = uiState.dictionaries[DictionaryType.Term].orEmpty(),
+                frequencyDictionaries = uiState.dictionaries[DictionaryType.Frequency].orEmpty(),
                 showScanNonJapaneseText = scanNonJapaneseTextSettingVisible(
                     profileState.effectiveContentLanguageProfile,
                 ),
@@ -361,7 +365,7 @@ fun DictionaryView(
             }
         },
         modifier = modifier.fillMaxSize(),
-        containerColor = colorScheme.background,
+        containerColor = hoshiSurfaces.page,
         contentColor = colorScheme.onBackground,
         actions = {
             IconButton(
@@ -406,8 +410,8 @@ fun DictionaryView(
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(24.dp),
-                            color = colorScheme.surface,
-                            border = BorderStroke(1.dp, colorScheme.outlineVariant),
+                            color = hoshiSurfaces.group,
+                            border = hoshiContainerBorder(),
                             tonalElevation = 0.dp,
                         ) {
                             Column {
@@ -436,8 +440,8 @@ fun DictionaryView(
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(24.dp),
-                                color = colorScheme.surface,
-                                border = BorderStroke(1.dp, colorScheme.outlineVariant),
+                                color = hoshiSurfaces.group,
+                                border = hoshiContainerBorder(),
                                 tonalElevation = 0.dp,
                             ) {
                                 ListItem(
@@ -470,8 +474,8 @@ fun DictionaryView(
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(24.dp),
-                                color = colorScheme.surface,
-                                border = BorderStroke(1.dp, colorScheme.outlineVariant),
+                                color = hoshiSurfaces.group,
+                                border = hoshiContainerBorder(),
                                 tonalElevation = 0.dp,
                             ) {
                                 Column {
@@ -563,8 +567,8 @@ fun DictionaryView(
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(24.dp),
-                            color = colorScheme.surface,
-                            border = BorderStroke(1.dp, colorScheme.outlineVariant),
+                            color = hoshiSurfaces.group,
+                            border = hoshiContainerBorder(),
                             tonalElevation = 0.dp,
                         ) {
                             Column {
@@ -725,7 +729,7 @@ fun DictionaryView(
             AlertDialog(
                 onDismissRequest = dictionaryViewModel::consumeErrorMessage,
                 title = { Text(stringResource(R.string.dialog_error_title)) },
-                text = { Text(message.asString()) },
+                text = { Text(message.asString(), modifier = Modifier.verticalScroll(rememberScrollState())) },
                 confirmButton = {
                     TextButton(onClick = dictionaryViewModel::consumeErrorMessage) {
                         Text(stringResource(R.string.action_ok))
@@ -914,6 +918,7 @@ private fun DictionaryRow(
                     .clickable(enabled = enabled) { onDelete() },
                 shape = RoundedCornerShape(20.dp),
                 color = colorScheme.error,
+                border = hoshiContainerBorder(),
             ) {
                 Row(
                     modifier = Modifier
@@ -946,8 +951,8 @@ private fun DictionaryRow(
                     onClick = { onRevealChange(false) },
                 ),
             shape = RoundedCornerShape(20.dp),
-            color = colorScheme.surface,
-            border = BorderStroke(1.dp, colorScheme.outlineVariant),
+            color = hoshiSurfaces.group,
+            border = hoshiContainerBorder(),
             tonalElevation = 0.dp,
         ) {
             Row(
@@ -1049,13 +1054,7 @@ private fun HoshiSwitch(
 }
 
 @Composable
-private fun hoshiSwitchColors() = SwitchDefaults.colors(
-    checkedThumbColor = Color.White,
-    checkedTrackColor = DictionarySwitchColor,
-    uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
-    uncheckedBorderColor = MaterialTheme.colorScheme.outline,
-)
+private fun hoshiSwitchColors() = SwitchDefaults.colors()
 
 @Composable
 private fun HoshiIconBackButton(onClick: () -> Unit) {
@@ -1080,6 +1079,7 @@ private fun GroupDivider() {
 private fun DictionarySettingsView(
     settings: DictionarySettings,
     termDictionaries: List<DictionaryInfo>,
+    frequencyDictionaries: List<DictionaryInfo>,
     showScanNonJapaneseText: Boolean,
     onSettingsChange: ((DictionarySettings) -> DictionarySettings) -> Unit,
     onClose: () -> Unit,
@@ -1108,12 +1108,12 @@ private fun DictionarySettingsView(
     val colorScheme = MaterialTheme.colorScheme
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = colorScheme.background,
+        containerColor = hoshiSurfaces.page,
         topBar = {
             CenterAlignedTopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = colorScheme.background,
-                    scrolledContainerColor = colorScheme.background,
+                    containerColor = hoshiSurfaces.page,
+                    scrolledContainerColor = hoshiSurfaces.page,
                     titleContentColor = colorScheme.onBackground,
                     navigationIconContentColor = colorScheme.onBackground,
                 ),
@@ -1125,7 +1125,7 @@ private fun DictionarySettingsView(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .background(colorScheme.background)
+                .background(hoshiSurfaces.page)
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp),
         ) {
@@ -1165,6 +1165,66 @@ private fun DictionarySettingsView(
                         },
                         canDecrease = settings.scanLength > DictionarySettings.MIN_SCAN_LENGTH,
                         canIncrease = settings.scanLength < DictionarySettings.MAX_SCAN_LENGTH,
+                    )
+                    GroupDivider()
+                    var orderMenuExpanded by remember { mutableStateOf(false) }
+                    val enabledTitles = frequencyDictionaries.filter { it.isEnabled }.map { it.index.title }
+                    ListItem(
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        headlineContent = { Text(stringResource(R.string.dictionary_frequency_sort_order)) },
+                        trailingContent = {
+                            Box {
+                                TextButton(onClick = { orderMenuExpanded = true }) {
+                                    Text(stringResource(settings.frequencySortOrder.labelRes))
+                                }
+                                DropdownMenu(expanded = orderMenuExpanded, onDismissRequest = { orderMenuExpanded = false }) {
+                                    FrequencySortOrder.entries.forEach { order ->
+                                        DropdownMenuItem(text = { Text(stringResource(order.labelRes)) }, onClick = {
+                                            orderMenuExpanded = false
+                                            onSettingsChange { it.withFrequencySortOrder(order, enabledTitles) }
+                                        })
+                                    }
+                                }
+                            }
+                        },
+                    )
+                    if (settings.frequencySortOrder.usesDictionary && enabledTitles.isNotEmpty()) {
+                        GroupDivider()
+                        var dictionaryMenuExpanded by remember { mutableStateOf(false) }
+                        ListItem(
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            headlineContent = { Text(stringResource(R.string.dictionary_frequency_dictionary)) },
+                            trailingContent = {
+                                Box {
+                                    TextButton(onClick = { dictionaryMenuExpanded = true }) {
+                                        Text(settings.frequencySortDictionary)
+                                    }
+                                    DropdownMenu(expanded = dictionaryMenuExpanded, onDismissRequest = { dictionaryMenuExpanded = false }) {
+                                        enabledTitles.forEach { title ->
+                                            DropdownMenuItem(text = { Text(title) }, onClick = {
+                                                dictionaryMenuExpanded = false
+                                                onSettingsChange { it.copy(frequencySortDictionary = title) }
+                                            })
+                                        }
+                                    }
+                                }
+                            },
+                        )
+                    }
+                }
+                SectionLabel(stringResource(R.string.dictionary_settings_search_text))
+                SettingsGroup {
+                    StepperRow(
+                        title = stringResource(R.string.dictionary_text_size),
+                        value = settings.searchTextSize,
+                        onDecrease = {
+                            onSettingsChange { it.copy(searchTextSize = it.searchTextSize - 1) }
+                        },
+                        onIncrease = {
+                            onSettingsChange { it.copy(searchTextSize = it.searchTextSize + 1) }
+                        },
+                        canDecrease = settings.searchTextSize > DictionarySettings.MIN_SEARCH_TEXT_SIZE,
+                        canIncrease = settings.searchTextSize < DictionarySettings.MAX_SEARCH_TEXT_SIZE,
                     )
                 }
                 SectionLabel(stringResource(R.string.dictionary_settings_import))
@@ -1263,7 +1323,7 @@ private fun CollapsedDictionariesView(
         title = stringResource(R.string.dictionary_collapse_dictionaries),
         onClose = onClose,
         modifier = modifier.fillMaxSize(),
-        containerColor = colorScheme.background,
+        containerColor = hoshiSurfaces.page,
         contentColor = colorScheme.onBackground,
     ) { innerPadding ->
         LazyColumn(
@@ -1395,12 +1455,12 @@ private fun DictionaryCustomCssView(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = colorScheme.background,
+        containerColor = hoshiSurfaces.page,
         topBar = {
             CenterAlignedTopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = colorScheme.background,
-                    scrolledContainerColor = colorScheme.background,
+                    containerColor = hoshiSurfaces.page,
+                    scrolledContainerColor = hoshiSurfaces.page,
                     titleContentColor = colorScheme.onBackground,
                     navigationIconContentColor = colorScheme.onBackground,
                 ),
@@ -1424,8 +1484,8 @@ private fun DictionaryCustomCssView(
                 .padding(innerPadding)
                 .padding(16.dp),
             shape = RoundedCornerShape(18.dp),
-            color = colorScheme.surface,
-            border = BorderStroke(1.dp, colorScheme.outlineVariant),
+            color = hoshiSurfaces.group,
+            border = hoshiContainerBorder(),
             tonalElevation = 0.dp,
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -1559,8 +1619,8 @@ private fun SettingsGroup(content: @Composable ColumnScope.() -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        color = hoshiSurfaces.group,
+        border = hoshiContainerBorder(),
         tonalElevation = 0.dp,
     ) {
         Column(content = content)
@@ -1592,7 +1652,8 @@ private fun StepperRow(
                 )
                 Surface(
                     shape = RoundedCornerShape(24.dp),
-                    color = colorScheme.surfaceVariant,
+                    color = hoshiSurfaces.nested,
+                    border = hoshiContainerBorder(),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onDecrease, enabled = canDecrease) {

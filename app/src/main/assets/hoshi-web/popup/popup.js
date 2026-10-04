@@ -18,6 +18,10 @@ const NUMERIC_TAG = /^\d+$/;
 // this might not cover every tag
 const POS_TAGS = new Set(['n', 'adj-i', 'adj-na', 'adj-no', 'v1', 'vk', 'vs', 'vs-i', 'vs-s', 'vz', 'vi', 'vt']);
 let audioUrls = {};
+let audioLists = {};
+let audioSelectionVersions = {};
+let audioStateGeneration = 0;
+let activeAudioCandidateMenu = null;
 let lastSelection = '';
 let currentDictionaryMedia = null;
 let selectedDictionaries = {};
@@ -26,6 +30,8 @@ let renderGeneration = 0;
 let kanjiRedirectRequestId = 0;
 let hostEntrySetVersion = 0;
 let activeEntrySetVersion = 0;
+let sourceTextGeneration = 0;
+let sourceTextContext = null;
 
 window.createPopupGeometry = function({
     documentRef = document,
@@ -57,6 +63,11 @@ window.createPopupGeometry = function({
             scrollRoot()?.clientHeight,
         ];
         return candidates.find(value => Number.isFinite(value) && value > 0) || 0;
+    }
+
+    function viewportMinHeightCss() {
+        const zoom = Number.parseFloat(computedStyle(documentRef.documentElement).zoom);
+        return `${100 / (Number.isFinite(zoom) && zoom > 0 ? zoom : 1)}vh`;
     }
 
     function scrollByViewport(direction, scale = 1) {
@@ -124,6 +135,14 @@ window.createPopupGeometry = function({
         };
     }
 
+    function visualViewportPointToLayout(x, y) {
+        const scale = bridgeRectScale();
+        return {
+            x: x / scale,
+            y: y / scale,
+        };
+    }
+
     return Object.freeze({
         bridgeRectScale,
         bridgeSelectionRect,
@@ -133,7 +152,9 @@ window.createPopupGeometry = function({
         scrollTop,
         selectionCoordinates,
         setScrollTop,
+        visualViewportPointToLayout,
         viewportHeight,
+        viewportMinHeightCss,
     });
 };
 
@@ -1026,24 +1047,20 @@ function createDefinitionImage(data, dictionary, exporting = false) {
         }
     } else {
         const alt = nodeData?.alt || title || '';
-        const filename = (window.useAnkiConnect || window.embedMedia) ? getMediaFilename(dictionary, path) : null;
-        const image = document.createElement(filename ? 'img' : 'span');
+        const filename = getMediaFilename(dictionary, path);
+        const image = document.createElement('img');
         image.classList.add('gloss-image');
-        if (filename) {
-            image.alt = alt;
-            image.src = filename;
-            if (sizeUnits === 'em') {
-                const emSize = 14;
-                const scaleFactor = 2 * window.devicePixelRatio;
-                image.width = usedWidth * emSize * scaleFactor;
-            } else {
-                image.width = usedWidth;
-            }
-            image.height = image.width * invAspectRatio;
-            applyImageStyles(node, imageContainer, aspectRatioSizer, imageBackground, image, filename, appearance, sizeUnits === 'em');
+        image.alt = alt;
+        image.src = filename;
+        if (sizeUnits === 'em') {
+            const emSize = 14;
+            const scaleFactor = 2 * window.devicePixelRatio;
+            image.width = usedWidth * emSize * scaleFactor;
         } else {
-            image.textContent = alt;
+            image.width = usedWidth;
         }
+        image.height = image.width * invAspectRatio;
+        applyImageStyles(node, imageContainer, aspectRatioSizer, imageBackground, image, filename, appearance, sizeUnits === 'em');
         imageContainer.appendChild(image);
     }
     return node;
@@ -1169,7 +1186,11 @@ async function mineEntry(expression, reading, frequencies, pitches, rules, match
     const pitchAccentGraphs = constructPitchAccentGraphsHtml(pitches, reading || expression);
 
     if (!audioUrls[idx] && window.audioSources?.length && window.needsAudio) {
-        audioUrls[idx] = await fetchAudioUrl(expression, reading || expression);
+        const selection = audioUrls;
+        const defaultUrl = (await fetchAudioList(idx, true))[0]?.url || null;
+        if (selection !== audioUrls) return;
+        // A menu choice made during resolution takes priority over the default.
+        selection[idx] ||= defaultUrl;
     }
 
     const audio = audioUrls[idx] || '';
@@ -1343,7 +1364,7 @@ function renderStructuredContent(parent, node, language = null, dictName = null,
                 const query = i < 0 ? null : new URLSearchParams(node.href.slice(i + 1)).get('query');
                 const count = query ? await webkit.messageHandlers.lookupRedirect.postMessage(query) : 0;
                 if (count > 0) {
-                    redirect(count);
+                    redirect(count, 0, query);
                 }
             }
         };
@@ -1704,26 +1725,178 @@ function createTags(entry) {
     return container;
 }
 
-async function fetchAudioUrl(expression, reading) {
-    const templates = window.audioSources;
-    if (!templates?.length) return null;
-
-    for (const template of templates) {
-        const url = template
+async function fetchAudioSources(source, expression, reading) {
+    const template = typeof source === 'string' ? source : source?.url;
+    if (!template) {
+        return [];
+    }
+    const url = template
         .replace('{term}', encodeURIComponent(expression))
         .replace('{reading}', encodeURIComponent(reading));
-        try {
-            const audioRequestUrl = window.audioRequestEndpoint
-                ? `${window.audioRequestEndpoint}?url=${encodeURIComponent(url)}`
-                : `audio://?url=${encodeURIComponent(url)}`;
-            const response = await fetch(audioRequestUrl);
-            const data = await response.json();
-            if (data.type === 'audioSourceList' && data.audioSources?.[0]?.url) {
-                return data.audioSources[0].url;
-            }
-        } catch {}
+    try {
+        const audioRequestUrl = window.audioRequestEndpoint
+            ? `${window.audioRequestEndpoint}?url=${encodeURIComponent(url)}`
+            : `audio://?url=${encodeURIComponent(url)}`;
+        const response = await fetch(audioRequestUrl);
+        const data = await response.json();
+        if (data.type !== 'audioSourceList') {
+            return [];
+        }
+        return (data.audioSources || []).filter(candidate => candidate?.url);
+    } catch {
+        return [];
     }
-    return null;
+}
+
+async function fetchAudioList(entryIndex, firstMatchOnly = false) {
+    const entry = window.lookupEntries?.[entryIndex];
+    const sources = window.audioSources;
+    if (!entry || !sources?.length) {
+        return [];
+    }
+
+    // Share each source request, not a promise for the complete menu: default
+    // playback/mining must not wait for lower-priority sources after a hit.
+    const requests = audioLists[entryIndex] ||= [];
+    const list = [];
+    for (let index = 0; index < sources.length; index++) {
+        const source = sources[index];
+        requests[index] ||= fetchAudioSources(source, entry.expression, entry.reading);
+        const candidates = await requests[index];
+        const sourceName = typeof source === 'string' ? 'Audio' : (source.name || 'Audio');
+        candidates.forEach(candidate => list.push({
+            name: candidate.name ? `${sourceName}: ${candidate.name}` : sourceName,
+            url: candidate.url,
+        }));
+        if (firstMatchOnly && list.length) {
+            break;
+        }
+    }
+    return list;
+}
+
+async function getAudioMenu(entryIndex) {
+    const list = await fetchAudioList(entryIndex);
+    const counts = {};
+    return {
+        names: list.map(candidate => {
+            counts[candidate.name] = (counts[candidate.name] || 0) + 1;
+            return counts[candidate.name] > 1
+                ? `${candidate.name} ${counts[candidate.name]}`
+                : candidate.name;
+        }),
+        selected: list.findIndex(candidate => candidate.url === audioUrls[entryIndex]),
+    };
+}
+
+function closeAudioCandidateMenu() {
+    activeAudioCandidateMenu?.menu?.remove();
+    activeAudioCandidateMenu?.scrim?.remove();
+    activeAudioCandidateMenu = null;
+}
+
+async function showAudioCandidateMenu(entryIndex, anchor) {
+    if (!anchor?.isConnected) return;
+    closeAudioCandidateMenu();
+    const generation = audioStateGeneration;
+    const entry = window.lookupEntries?.[entryIndex];
+    const sources = entry ? (window.audioSources || []) : [];
+    const requests = audioLists[entryIndex] ||= [];
+    const scrim = el('div', { className: 'audio-candidate-menu-scrim' });
+    const menu = el('div', { className: 'audio-candidate-menu' });
+    const groups = sources.map(source => {
+        const name = typeof source === 'string' ? 'Audio' : (source.name || 'Audio');
+        const container = el('div');
+        container.appendChild(el('button', {
+            className: 'audio-candidate-menu-item',
+            textContent: `${name}: ${window.audioLoadingText || 'Loading...'}`,
+            disabled: true,
+        }));
+        menu.appendChild(container);
+        return { name, container, candidates: null, buttons: [] };
+    });
+    const stopMenuEvent = event => event.stopPropagation();
+    menu.addEventListener('pointerdown', stopMenuEvent);
+    menu.addEventListener('click', stopMenuEvent);
+    scrim.addEventListener('pointerdown', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        closeAudioCandidateMenu();
+    });
+    document.body.appendChild(scrim);
+    document.body.appendChild(menu);
+    activeAudioCandidateMenu = { menu, scrim };
+
+    const isCurrent = () => generation === audioStateGeneration &&
+        activeAudioCandidateMenu?.menu === menu && anchor.isConnected;
+    const updateMenu = () => {
+        if (!isCurrent()) return;
+        const counts = {};
+        groups.forEach(group => group.candidates?.forEach((candidate, index) => {
+            const name = candidate.name ? `${group.name}: ${candidate.name}` : group.name;
+            counts[name] = (counts[name] || 0) + 1;
+            group.buttons[index].textContent = counts[name] > 1 ? `${name} ${counts[name]}` : name;
+            group.buttons[index].setAttribute('data-selected', String(candidate.url === audioUrls[entryIndex]));
+        }));
+        if (groups.every(group => group.candidates?.length === 0)) {
+            menu.replaceChildren(el('button', {
+                className: 'audio-candidate-menu-item',
+                textContent: window.noAudioFoundText || 'No audio found',
+                disabled: true,
+            }));
+        }
+        requestAnimationFrame(() => {
+            if (!isCurrent()) return;
+            const anchorRect = anchor.getBoundingClientRect();
+            const visualViewportWidth = window.innerWidth || document.documentElement.clientWidth || 320;
+            const visualViewportHeight = window.innerHeight || document.documentElement.clientHeight || 480;
+            const anchorPoint = popupGeometry.visualViewportPointToLayout(anchorRect.right, anchorRect.bottom);
+            const anchorTop = popupGeometry.visualViewportPointToLayout(anchorRect.left, anchorRect.top).y;
+            const viewport = popupGeometry.visualViewportPointToLayout(visualViewportWidth, visualViewportHeight);
+            const spaceAbove = Math.max(0, anchorTop - 4 - 8);
+            const spaceBelow = Math.max(0, viewport.y - 8 - anchorPoint.y - 4);
+            const openBelow = spaceBelow >= spaceAbove;
+            const availableHeight = openBelow ? spaceBelow : spaceAbove;
+            // Keep the trigger uncovered as asynchronous candidates grow the menu.
+            menu.style.maxHeight = `${availableHeight}px`;
+            const menuWidth = menu.offsetWidth || 220;
+            const menuHeight = menu.offsetHeight || Math.min(Math.max(1, sources.length) * 40, availableHeight);
+            menu.style.left = `${Math.max(8, Math.min(anchorPoint.x - menuWidth, viewport.x - menuWidth - 8))}px`;
+            menu.style.top = `${openBelow ? anchorPoint.y + 4 : anchorTop - 4 - menuHeight}px`;
+        });
+    };
+    updateMenu();
+    await Promise.all(sources.map(async (source, index) => {
+        requests[index] ||= fetchAudioSources(source, entry.expression, entry.reading);
+        const candidates = await requests[index];
+        if (!isCurrent()) return;
+        const group = groups[index];
+        group.candidates = candidates;
+        group.buttons = candidates.map(candidate => {
+            const item = el('button', { className: 'audio-candidate-menu-item' });
+            item.addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (!isCurrent()) return;
+                // Bind the URL, not a list index that can shift as sources finish.
+                audioSelectionVersions[entryIndex] = (audioSelectionVersions[entryIndex] || 0) + 1;
+                audioUrls[entryIndex] = candidate.url;
+                closeAudioCandidateMenu();
+                playEntryAudio(entryIndex);
+            });
+            return item;
+        });
+        group.container.replaceChildren(...group.buttons);
+        updateMenu();
+    }));
+}
+
+function resetAudioCandidateState() {
+    audioUrls = {};
+    audioLists = {};
+    audioSelectionVersions = {};
+    audioStateGeneration++;
+    closeAudioCandidateMenu();
 }
 
 function playWordAudio(audioUrl) {
@@ -1754,11 +1927,51 @@ function createButtonSlot(kind, entryIndex, enabled = true, formatId = null, for
     });
     slot.type = 'button';
     slot.setAttribute('aria-label', kind === 'audio' ? 'Play audio' : kind === 'notes' ? 'Show Anki notes' : kind === 'mineOptions' ? 'Mine with options' : 'Add to Anki');
+    let audioLongPressTimer = null;
+    let audioLongPressed = false;
+    let audioPointerStart = null;
+    const cancelAudioLongPress = () => {
+        clearTimeout(audioLongPressTimer);
+        audioLongPressTimer = null;
+        audioPointerStart = null;
+    };
+    if (kind === 'audio') {
+        slot.addEventListener('pointerdown', event => {
+            if (slot.dataset.enabled === 'false') return;
+            audioLongPressed = false;
+            audioPointerStart = { x: event.clientX, y: event.clientY };
+            audioLongPressTimer = setTimeout(() => {
+                audioLongPressTimer = null;
+                audioLongPressed = true;
+                showAudioCandidateMenu(entryIndex, slot);
+            }, 400);
+        });
+        slot.addEventListener('pointermove', event => {
+            if (!audioPointerStart) return;
+            if (Math.abs(event.clientX - audioPointerStart.x) > 10 || Math.abs(event.clientY - audioPointerStart.y) > 10) {
+                cancelAudioLongPress();
+            }
+        });
+        slot.addEventListener('pointerup', cancelAudioLongPress);
+        slot.addEventListener('pointercancel', cancelAudioLongPress);
+        slot.addEventListener('contextmenu', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!audioLongPressed) {
+                audioLongPressed = true;
+                showAudioCandidateMenu(entryIndex, slot);
+            }
+        });
+    }
     slot.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
         if (slot.dataset.enabled === 'false') { return; }
         if (kind === 'audio') {
+            if (audioLongPressed) {
+                audioLongPressed = false;
+                return;
+            }
             playEntryAudio(entryIndex);
         } else if (kind === 'mine') {
             const parent = slot.parentElement;
@@ -1813,13 +2026,20 @@ function applyButtonSlotVisualState(slot) {
     slot.style.setProperty('--button-icon-url', `url("https://appassets.androidplatform.net/popup/icons/${iconName}.svg")`);
 }
 
-async function playEntryAudio(entryIndex) {
+async function playEntryAudio(entryIndex, sourceIndex = null) {
     const entry = window.lookupEntries?.[entryIndex];
     if (!entry) { return; }
     const audioSlot = getButtonSlot('audio', entryIndex);
 
-    if (!audioUrls[entryIndex]) {
-        audioUrls[entryIndex] = await fetchAudioUrl(entry.expression, entry.reading);
+    if (sourceIndex !== null) {
+        audioSelectionVersions[entryIndex] = (audioSelectionVersions[entryIndex] || 0) + 1;
+    }
+    if (sourceIndex !== null || !audioUrls[entryIndex]) {
+        const selection = audioUrls;
+        const selectionVersion = audioSelectionVersions[entryIndex] || 0;
+        const list = await fetchAudioList(entryIndex, sourceIndex === null);
+        if (selection !== audioUrls || selectionVersion !== (audioSelectionVersions[entryIndex] || 0)) return;
+        selection[entryIndex] = list[sourceIndex ?? 0]?.url || null;
     }
     if (!audioUrls[entryIndex] || !playWordAudio(audioUrls[entryIndex])) {
         updateButtonSlot(audioSlot, { state: 'error' });
@@ -2123,6 +2343,7 @@ function replaceHostEntrySet() {
 }
 
 window.resetPopupResults = function() {
+    renderSourceText(null);
     renderGeneration++;
     replaceHostEntrySet();
     popupTermNavigator.reset();
@@ -2132,7 +2353,7 @@ window.resetPopupResults = function() {
     pendingHistoryRestore = null;
     window.lookupEntries = undefined;
     window.entryCount = 0;
-    audioUrls = {};
+    resetAudioCandidateState();
     selectedDictionaries = {};
     resetDictionaryMediaObserver();
     document.getElementById('entries-container')?.replaceChildren();
@@ -2164,23 +2385,32 @@ function flushPendingHistoryRestore() {
     appendPendingHistoryRestore(true);
 }
 
-function redirect(count) {
+function redirect(count, scrollTop = 0, query = null) {
+    sourceTextGeneration++;
     popupTermNavigator.reset();
     flushPendingHistoryRestore();
     resetDictionaryMediaObserver();
     backStack.push(snapshot());
+    if (sourceTextContext) {
+        applySourceTextContext({
+            ...sourceTextContext,
+            matchStart: null,
+            matchLength: 0,
+            sentenceOffset: query && sourceTextContext.text.endsWith(query) ? sourceTextContext.text.length - query.length : null,
+        });
+    }
     forwardStack.length = 0;
     replaceHostEntrySet();
     window.lookupEntries = undefined;
     window.entryCount = count;
-    audioUrls = {};
+    resetAudioCandidateState();
     selectedDictionaries = {};
     document.getElementById('entries-container').innerHTML = '';
     window.renderPopup();
     requestAnimationFrame(() => {
-        popupGeometry.setScrollTop(0);
+        popupGeometry.setScrollTop(scrollTop);
         requestAnimationFrame(() => {
-            popupGeometry.setScrollTop(0);
+            popupGeometry.setScrollTop(scrollTop);
         });
     });
 }
@@ -2227,6 +2457,7 @@ function buildKanjiEntry(data) {
 }
 
 function redirectKanji(data) {
+    sourceTextGeneration++;
     popupTermNavigator.reset();
     flushPendingHistoryRestore();
     resetDictionaryMediaObserver();
@@ -2235,7 +2466,7 @@ function redirectKanji(data) {
     forwardStack.length = 0;
     window.lookupEntries = undefined;
     window.entryCount = 0;
-    audioUrls = {};
+    resetAudioCandidateState();
     selectedDictionaries = {};
     const container = document.getElementById('entries-container');
     container.replaceChildren(buildKanjiEntry(data));
@@ -2243,7 +2474,57 @@ function redirectKanji(data) {
     requestAnimationFrame(() => popupGeometry.setScrollTop(0));
 }
 
-window.replacePopupResults = function(count, initialEntries) {
+function applySourceTextContext(context) {
+    sourceTextContext = context;
+    const container = document.getElementById('search-text');
+    if (!container) return;
+    [...container.children].forEach((span, index) => {
+        span.classList.toggle('matched', context?.matchStart != null
+            && index >= context.matchStart && index < context.matchStart + context.matchLength);
+    });
+}
+
+function renderSourceText(sourceText, sentenceOffset = null) {
+    sourceTextGeneration++;
+    const container = document.getElementById('search-text');
+    if (!container) return;
+    const entriesContainer = document.getElementById('entries-container');
+    if (entriesContainer) entriesContainer.style.minHeight = sourceText == null ? '' : popupGeometry.viewportMinHeightCss();
+    sourceTextContext = sourceText == null ? null : { text: sourceText, matchStart: null, matchLength: 0, sentenceOffset };
+    container.replaceChildren();
+    container.hidden = sourceText == null;
+    container.onclick = null;
+    if (sourceText == null) return;
+    const chars = [...sourceText];
+    container.append(...chars.map((char, index) => {
+        const span = document.createElement('span');
+        span.textContent = char;
+        span.dataset.index = String(index);
+        return span;
+    }));
+    container.onclick = async (event) => {
+        event.stopPropagation();
+        const index = event.target.dataset.index;
+        if (index === undefined) return;
+        const generation = ++sourceTextGeneration;
+        const start = Number(index);
+        const count = await webkit.messageHandlers.lookupRedirect.postMessage(chars.slice(start).join(''));
+        if (!count || generation !== sourceTextGeneration) return;
+        const entry = await webkit.messageHandlers.getEntry.postMessage(0);
+        if (generation !== sourceTextGeneration) return;
+        const scrollTop = popupGeometry.scrollTop();
+        redirect(count, scrollTop);
+        applySourceTextContext({
+            ...sourceTextContext,
+            matchStart: start,
+            matchLength: [...(entry?.matched || '')].length,
+            sentenceOffset: chars.slice(0, start).join('').length,
+        });
+    };
+}
+
+window.replacePopupResults = function(count, initialEntries, sourceText = null, sentenceOffset = null) {
+    renderSourceText(sourceText, sentenceOffset);
     closeOverlay();
     popupTermNavigator.reset();
     flushPendingHistoryRestore();
@@ -2253,7 +2534,7 @@ window.replacePopupResults = function(count, initialEntries) {
     forwardStack.length = 0;
     window.lookupEntries = Array.isArray(initialEntries) && initialEntries.length ? initialEntries : undefined;
     window.entryCount = count;
-    audioUrls = {};
+    resetAudioCandidateState();
     selectedDictionaries = {};
     resetDictionaryMediaObserver();
     const container = document.getElementById('entries-container');
@@ -2276,6 +2557,7 @@ function snapshot() {
         lookupEntries: window.lookupEntries?.slice(),
         entryCount: window.entryCount,
         entrySetVersion: activeEntrySetVersion,
+        sourceTextContext,
     };
 }
 
@@ -2288,6 +2570,11 @@ function hasRenderedEntry(container, index) {
 }
 
 function restore(snapshot) {
+    sourceTextGeneration++;
+    applySourceTextContext(snapshot.sourceTextContext);
+    if (sourceTextContext) {
+        webkit.messageHandlers.sourceHistoryRestored.postMessage(sourceTextContext.sentenceOffset);
+    }
     renderGeneration++;
     popupTermNavigator.reset();
     flushPendingHistoryRestore();
@@ -2308,7 +2595,7 @@ function restore(snapshot) {
     }
     window.lookupEntries = snapshot.lookupEntries;
     window.entryCount = snapshot.entryCount;
-    audioUrls = {};
+    resetAudioCandidateState();
     selectedDictionaries = {};
     applyHoshiPopupThemeOverrides(container);
     requestAnimationFrame(() => {
@@ -2352,7 +2639,7 @@ function popupEventTarget(event) {
 }
 
 function isPopupInteractiveTapTarget(target) {
-    if (target?.closest('summary, a, button, .button-slot, .deinflection-tag, .frequency-group, .pitch-group, .overlay, .overlay-close, .overlay-content')) {
+    if (target?.closest('#search-text, summary, a, button, .button-slot, .deinflection-tag, .frequency-group, .pitch-group, .overlay, .overlay-close, .overlay-content')) {
         return true;
     }
     const tagRow = target?.closest('.tag-row');

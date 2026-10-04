@@ -52,9 +52,7 @@ internal class ReaderRouteStateHolder(
                 bookCoverFile = bookCoverFile,
                 bookmark = bookmark,
             )
-        }.getOrElse { error ->
-            ReaderRouteLoadState.Error(error.localizedMessage ?: "Failed to open EPUB.")
-        }
+        }.getOrElse { ReaderRouteLoadState.Error }
     }
 
     suspend fun saveBookmark(
@@ -73,7 +71,7 @@ internal class ReaderRouteStateHolder(
             )
             repository.saveBookmark(state.bookRoot, bookmark)
             if (statistics != null) {
-                repository.saveStatistics(state.bookRoot, statistics)
+                repository.saveTrackedStatistics(state.bookRoot, statistics)
             }
         }
         onBookmarkSaved()
@@ -102,9 +100,7 @@ internal sealed interface ReaderRouteLoadState {
         val bookmark: Bookmark?,
     ) : ReaderRouteLoadState
 
-    data class Error(
-        val message: String,
-    ) : ReaderRouteLoadState
+    data object Error : ReaderRouteLoadState
 }
 
 internal fun ReaderRouteLoadState.publishProfileActivation(

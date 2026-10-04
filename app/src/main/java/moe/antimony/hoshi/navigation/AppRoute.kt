@@ -18,6 +18,12 @@ sealed interface AppRoute : NavKey {
     data object StatisticsRoute : AppRoute
 
     @Serializable
+    data object StatisticsSettingsRoute : AppRoute
+
+    @Serializable
+    data class StatisticsBookRoute(val folder: String) : AppRoute
+
+    @Serializable
     data object SettingsRoute : AppRoute
 
     @Serializable
@@ -44,6 +50,7 @@ enum class SettingsDetailSection {
     Dictionaries,
     Anki,
     Profiles,
+    Display,
     Appearance,
     Behavior,
     Advanced,

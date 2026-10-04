@@ -263,6 +263,45 @@ class EpubBookParserTest {
     }
 
     @Test
+    fun versionTwoFactsRebuildKoreanCountsAndRubyFragmentOffsetsBeforeReuse() {
+        val root = tempFolder.newFolder("korean-reader-facts")
+        writeNestedEpub3NavigationFixture(root)
+        root.resolve("OEBPS/Text/p-002.xhtml").writeText(
+            "<body>가𠮟<ruby>漢<rp>fallback</rp><rt>かん</rt><rp>주석</rp></ruby>" +
+                "<h1 id=\"toc-001\">한글</h1></body>",
+        )
+        root.resolve("OEBPS/Text/p-003.xhtml").writeText(
+            "<body>ㄱ<h1 id=\"toc-002\">ㆎA</h1></body>",
+        )
+        val stale = BookInfo(
+            characterCount = 11,
+            chapterInfo = mapOf(
+                "OEBPS/Text/p-002.xhtml" to BookInfo.ChapterInfo(0, 0, 10, mapOf("toc-001" to 10)),
+                "OEBPS/Text/p-003.xhtml" to BookInfo.ChapterInfo(1, 10, 1, mapOf("toc-002" to 0)),
+            ),
+            images = emptyList(),
+            readerFactsVersion = 2,
+        )
+        val parser = EpubBookParser()
+
+        val regenerated = parser.parse(root, cachedBookInfo = stale)
+        val reused = parser.parse(root, cachedBookInfo = regenerated.bookInfo)
+
+        assertEquals(8, regenerated.bookInfo.characterCount)
+        assertEquals(
+            BookInfo.ChapterInfo(0, 0, 5, mapOf("toc-001" to 3)),
+            regenerated.bookInfo.chapterInfo.getValue("OEBPS/Text/p-002.xhtml"),
+        )
+        assertEquals(
+            BookInfo.ChapterInfo(1, 5, 3, mapOf("toc-002" to 1)),
+            regenerated.bookInfo.chapterInfo.getValue("OEBPS/Text/p-003.xhtml"),
+        )
+        assertTrue(regenerated.chapters.all { it.html.isNotEmpty() })
+        assertTrue(reused.chapters.all { it.html.isEmpty() })
+        assertEquals(regenerated.bookInfo, reused.bookInfo)
+    }
+
+    @Test
     fun parsesPackedEpubReextractsIncompleteCacheBeforeReusingBookInfo() {
         val archive = tempFolder.newFile("incomplete-cache.epub")
         val cacheRoot = tempFolder.newFolder("incomplete-cache")
@@ -302,6 +341,14 @@ class EpubBookParserTest {
             setOf(firstRoot, secondRoot),
             cacheRoot.listFiles().orEmpty().filter { it.isDirectory }.map { it.canonicalFile }.toSet(),
         )
+    }
+
+    @Test
+    fun metadataWithoutOptionalCoverStillResolvesCustomPackedFilename() {
+        val root = tempFolder.newFolder("renamed-book")
+        writeMinimalEpubArchive(root.resolve("original.epub"), title = "Packed Book")
+        root.resolve("metadata.json").writeText("""{"id":"book","title":"Packed Book","folder":"renamed-book","lastAccess":0,"epub":"original.epub"}""")
+        assertEquals("Packed Book", EpubBookParser().parse(root).title)
     }
 
     @Test

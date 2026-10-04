@@ -101,49 +101,10 @@
     },
 
     collectMatchableSegments: function(startOffset, endOffset) {
-      var start = Math.max(0, Number(startOffset) || 0);
-      var end = Math.max(start, Number(endOffset) || 0);
-      var ranges = [];
-      if (end <= start) return ranges;
-      var walker = this.reader.createWalker();
-      var node;
-      while (node = walker.nextNode()) {
-        var nodeStart = this.reader.nodeStartOffsets.get(node);
-        if (nodeStart === undefined) continue;
-        var text = node.textContent || '';
-        var cursor = nodeStart;
-        var offset = 0;
-        var segment = null;
-        var flushSegment = function() {
-          if (!segment) return;
-          ranges.push(segment);
-          segment = null;
-        };
-        while (offset < text.length && cursor < end) {
-          var char = String.fromCodePoint(text.codePointAt(offset));
-          var next = offset + char.length;
-          if (this.reader.isMatchableChar(char)) {
-            if (cursor >= start && cursor < end) {
-              if (!segment) {
-                segment = { node: node, start: offset, end: next };
-              } else {
-                segment.end = next;
-              }
-            } else {
-              flushSegment();
-            }
-            cursor += 1;
-            if (cursor === end) flushSegment();
-          } else if (segment) {
-            segment.end = next;
-          } else if (cursor > start && cursor < end) {
-            segment = { node: node, start: offset, end: next };
-          }
-          offset = next;
-        }
-        flushSegment();
-      }
-      return ranges;
+      var stream = this.reader.contentStream;
+      if (!stream) return [];
+      var range = stream.sasayakiTextIndex().range(startOffset, Number(endOffset) - Number(startOffset));
+      return range ? this.collectRawSegments(range.start, range.end - range.start) : [];
     }
   };
 

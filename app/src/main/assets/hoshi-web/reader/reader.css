@@ -12,9 +12,6 @@ __HOSHI_PARAGRAPH_SPACING_CSS__
     --hoshi-sasayaki-text-color: __HOSHI_SASAYAKI_TEXT_COLOR__;
     --hoshi-sasayaki-background-color: __HOSHI_SASAYAKI_BACKGROUND_COLOR__;
 }
-html {
-    -webkit-line-box-contain: block glyphs replaced;
-}
 __HOSHI_LAYOUT_CSS__
 img.block-img {
     max-width: var(--hoshi-image-max-width, __HOSHI_IMAGE_MAX_WIDTH_FALLBACK__) !important;
@@ -135,4 +132,20 @@ html:not([data-hoshi-reader-eink-mode="true"]) .hoshi-sasayaki-cue.hoshi-sasayak
 __HOSHI_HIGHLIGHT_COLOR_CSS__
 a {
     color: rgba(66, 108, 245, 1) !important;
+}
+
+ruby.furigana-hidden > rt,
+ruby.furigana-hidden > rp {
+    visibility: hidden !important;
+}
+ruby.furigana-hidden {
+    text-decoration-line: underline !important;
+    text-decoration-style: dotted !important;
+    text-decoration-color: rgba(160, 160, 160, 0.8) !important;
+    text-underline-offset: 0.05em !important;
+}
+
+::highlight(hoshi-search) {
+  background-color: rgba(100, 160, 255, 0.4);
+  color: inherit;
 }

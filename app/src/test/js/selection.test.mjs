@@ -705,3 +705,85 @@ test('shared selection keeps vertical lookup rects split when adjacent ruby-awar
         ],
     );
 });
+
+
+function rubyGroupFixture() {
+    const ruby = () => {
+        const classes = new Set(['furigana-hidden']);
+        return {
+            nodeType: 1, localName: 'ruby',
+            classList: { add: (name) => classes.add(name), remove: (name) => classes.delete(name), contains: (name) => classes.has(name) },
+            querySelector: () => ({}),
+        };
+    };
+    const nodes = [ruby(), { nodeType: 3, nodeValue: ' \n\t' }, ruby(), ruby(), { nodeType: 3, nodeValue: '。' }, ruby()];
+    nodes.forEach((node, index) => {
+        node.previousSibling = nodes[index - 1] || null;
+        node.nextSibling = nodes[index + 1] || null;
+        if (node.localName === 'ruby') node.closest = (selector) => selector === 'ruby.furigana-hidden' && node.classList.contains('furigana-hidden') ? node : null;
+    });
+    return nodes;
+}
+
+test('hidden ruby tap reveals whitespace-adjacent group and consumes tap before lookup', () => {
+    const { document, selection, window } = loadSelection('日本語。');
+    window.getSelection = () => null;
+    const nodes = rubyGroupFixture();
+    document.pointElement = nodes[2];
+    selection.selection = { startNode: {}, ranges: [] };
+    selection.getCharacterAtPoint = () => { throw new Error('reveal tap must not perform lookup'); };
+    assert.equal(selection.selectText(10, 10, 16), 'furigana');
+    assert.equal(selection.selection, null);
+    for (const index of [0, 2, 3]) assert.equal(nodes[index].classList.contains('furigana-hidden'), false);
+    assert.equal(nodes[5].classList.contains('furigana-hidden'), true);
+    selection.getCharacterAtPoint = () => null;
+    assert.equal(selection.selectText(10, 10, 16), null);
+});
+
+test('Toggle setup marks only annotated ruby and other modes leave reveal markers absent', () => {
+    const { selection } = loadSelection('日本語。');
+    const nodes = rubyGroupFixture().filter((node) => node.localName === 'ruby');
+    nodes.forEach((node) => node.classList.remove('furigana-hidden'));
+    nodes[1].querySelector = () => null;
+    const scope = { querySelectorAll: () => nodes };
+    selection.setupFurigana('Toggle', scope);
+    assert.equal(nodes[0].classList.contains('furigana-hidden'), true);
+    assert.equal(nodes[1].classList.contains('furigana-hidden'), false);
+    for (const mode of ['Off', 'Dimmed', 'Hidden']) {
+        nodes.forEach((node) => node.classList.remove('furigana-hidden'));
+        selection.setupFurigana(mode, scope);
+        assert.equal(nodes.some((node) => node.classList.contains('furigana-hidden')), false);
+    }
+});
+
+
+test('VN reveal also updates source ruby group so clones retain reveal on return', () => {
+    const { document, selection, window } = loadSelection('日本語。');
+    window.getSelection = () => null;
+    const clones = rubyGroupFixture();
+    const sources = rubyGroupFixture();
+    selection.configure({ textProjection: {
+        sourceRubyForRenderedRuby: (ruby) => sources[clones.indexOf(ruby)],
+    } });
+    document.pointElement = clones[2];
+    assert.equal(selection.selectText(10, 10, 16), 'furigana');
+    for (const index of [0, 2, 3]) {
+        assert.equal(clones[index].classList.contains('furigana-hidden'), false);
+        assert.equal(sources[index].classList.contains('furigana-hidden'), false);
+    }
+    assert.equal(sources[5].classList.contains('furigana-hidden'), true);
+});
+
+test('ruby reveal stops at styled siblings and non-ASCII whitespace as in iOS', () => {
+    const { selection } = loadSelection('日本語。');
+    for (const separator of [{ nodeType: 1, localName: 'span' }, { nodeType: 3, nodeValue: '\u00a0' }]) {
+        const nodes = rubyGroupFixture();
+        nodes[0].nextSibling = separator;
+        separator.previousSibling = nodes[0];
+        separator.nextSibling = nodes[2];
+        nodes[2].previousSibling = separator;
+        selection.revealFurigana(nodes[2]);
+        assert.equal(nodes[0].classList.contains('furigana-hidden'), true);
+        assert.equal(nodes[2].classList.contains('furigana-hidden'), false);
+    }
+});

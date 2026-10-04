@@ -1,6 +1,15 @@
 package moe.antimony.hoshi.features.anki
 
 import android.content.ContextWrapper
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import java.nio.file.Files
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,6 +23,109 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AnkiRepositoryBackendSelectionTest {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun addingAFormatDefaultsToHoshiWithoutChangingExistingTags() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val settings = InMemoryAnkiSettingsRepository(
+            AnkiSettings(cardFormats = listOf(AnkiCardFormat(id = "saved", name = "Saved", tags = ""))),
+        )
+        val viewModel = AnkiViewModel(repository(settingsRepository = settings))
+        try {
+            runCurrent()
+            viewModel.addCardFormat("New")
+            runCurrent()
+            assertEquals(listOf("", "hoshi"), settings.current.cardFormats.map { it.tags })
+        } finally {
+            viewModel.viewModelScope.cancel()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun mineEntryResolvesTagsForEachFormatThroughBothBackends() = runBlocking {
+        val deck = AnkiDeck(10L, "Mining")
+        val noteType = AnkiNoteType(20L, "Basic", listOf("Front", "Back"))
+        val template = "hoshi book::{document-title} {expression} {bilingual-definition} {selected-glossary}"
+        for (kind in AnkiBackendKind.entries) {
+            val ankiDroid = RecordingBackend(decks = listOf(deck), noteTypes = listOf(noteType))
+            val ankiConnect = RecordingBackend(decks = listOf(deck), noteTypes = listOf(noteType))
+            val format = AnkiCardFormat(
+                id = "word",
+                name = "Word",
+                selectedDeckId = deck.id,
+                selectedNoteTypeId = noteType.id,
+                fieldMappings = mapOf("Front" to "{expression}", "Back" to template),
+                tags = template,
+            )
+            val repository = repository(
+                backend = ankiDroid,
+                settingsRepository = InMemoryAnkiSettingsRepository(
+                    AnkiSettings(
+                        backendKind = kind,
+                        ankiConnectUrl = "https://anki.example.com",
+                        selectedGlossaryFallback = "{bilingual-definition}",
+                        cardFormats = listOf(format, format.copy(id = "custom", tags = "custom\n{reading}")),
+                    ),
+                ),
+                ankiConnectBackendFactory = { _, _ -> ankiConnect },
+                loadTermDictionaries = {
+                    listOf(AnkiTermDictionary("JMdict", DictionaryCategory.Bilingual))
+                },
+            )
+            val active = if (kind == AnkiBackendKind.AnkiDroid) ankiDroid else ankiConnect
+            val inactive = if (kind == AnkiBackendKind.AnkiDroid) ankiConnect else ankiDroid
+            for ((id, expected) in listOf(
+                "word" to setOf("hoshi", "book::My_Book", "食べる", "to_eat"),
+                "custom" to setOf("custom", "たべる"),
+            )) {
+                assertTrue(repository.mineEntry(
+                    rawPayload = """{"expression":"食べる","reading":"たべる","singleGlossaries":"{\"JMdict\":\"to eat\"}"}""",
+                    context = AnkiMiningContext(sentence = "パンを食べる。", documentTitle = "My Book"),
+                    decks = emptyList(),
+                    noteTypes = emptyList(),
+                    formatId = id,
+                ))
+                assertEquals("backend=$kind format=$id", expected, active.lastTags)
+                assertEquals("hoshi book::My Book 食べる to eat to eat", active.lastFields["Back"])
+                assertFalse(inactive.addNoteCalled)
+            }
+        }
+    }
+
+    @Test
+    fun mineEntryNormalizesOnlySubstitutionsAndDropsEmptyAndDuplicateTags() = runBlocking {
+        val cases = listOf(
+            Triple(" literal\t{document-title}\n{expression} literal ", " \tMy\n\r Book\u00a0第三\u3000巻\u0085 ",
+                setOf("literal", "My_Book_第三_巻", "猫")),
+            Triple("{document-title} {unknown} {reading}", null, emptySet()),
+            Triple("pre{unknown}post {expression}{expression}", "", setOf("prepost", "猫猫")),
+            Triple("{document-title}", "{expression}", setOf("{expression}")),
+            Triple("{document-title}", "\t\u00a0\u3000\u0085\n", emptySet()),
+        )
+        for ((template, title, expected) in cases) {
+            val backend = RecordingBackend()
+            val repository = repository(
+                backend = backend,
+                settingsRepository = InMemoryAnkiSettingsRepository(
+                    AnkiSettings(
+                        selectedDeckId = 1L,
+                        selectedNoteTypeId = 2L,
+                        fieldMappings = mapOf("Front" to "{expression}"),
+                        tags = template,
+                    ),
+                ),
+            )
+            assertTrue(repository.mineEntry(
+                rawPayload = """{"expression":"猫"}""",
+                context = AnkiMiningContext(sentence = "", documentTitle = title),
+                decks = emptyList(),
+                noteTypes = emptyList(),
+            ))
+            assertEquals("template=$template", expected, backend.lastTags)
+        }
+    }
+
     @Test
     fun fetchConfigurationUsesAnkiConnectBackendWhenSelected() = runBlocking {
         val settingsRepository = InMemoryAnkiSettingsRepository(

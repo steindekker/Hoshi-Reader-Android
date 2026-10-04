@@ -8,6 +8,7 @@ import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavEntryDecorator
 import androidx.navigation3.runtime.NavKey
@@ -40,9 +42,12 @@ import moe.antimony.hoshi.features.bookshelf.MainTab
 import moe.antimony.hoshi.features.bookshelf.SettingsDestination
 import moe.antimony.hoshi.features.bookshelf.SettingsTab
 import moe.antimony.hoshi.features.diagnostics.DiagnosticsView
+import moe.antimony.hoshi.features.dictionary.DictionarySearchSession
+import moe.antimony.hoshi.features.dictionary.rememberDictionarySearchSession
 import moe.antimony.hoshi.features.dictionary.DictionarySearchView
 import moe.antimony.hoshi.features.dictionary.DictionaryView
 import moe.antimony.hoshi.features.dictionary.PendingDictionaryLookupRequest
+import moe.antimony.hoshi.features.display.DisplaySettingsScreen
 import moe.antimony.hoshi.features.reader.ReaderAppearanceScreen
 import moe.antimony.hoshi.features.reader.ReaderBehaviorScreen
 import moe.antimony.hoshi.features.reader.ReaderFontManager
@@ -51,6 +56,8 @@ import moe.antimony.hoshi.features.profiles.ProfilesView
 import moe.antimony.hoshi.features.sasayaki.SasayakiSettings
 import moe.antimony.hoshi.features.settings.AdvancedSettingsView
 import moe.antimony.hoshi.features.statistics.StatisticsView
+import moe.antimony.hoshi.features.statistics.StatisticsSettingsView
+import moe.antimony.hoshi.features.statistics.StatisticsBookView
 import moe.antimony.hoshi.features.update.AboutScreen
 import kotlinx.coroutines.launch
 
@@ -74,18 +81,20 @@ fun AppShell(
     pendingDictionaryLookupRequest: PendingDictionaryLookupRequest? = null,
     onPendingDictionaryLookupConsumed: () -> Unit = {},
     readerSettings: ReaderSettings,
-    onReaderSettingsChange: (ReaderSettings) -> Unit,
+    onReaderSettingsChange: ((ReaderSettings) -> ReaderSettings) -> Unit,
     onReaderKeyEventHandlerChange: (((KeyEvent) -> Boolean)?) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val appContainer = LocalHoshiUiDependencies.current
+    val profileState by appContainer.profileRepository.state.collectAsStateWithLifecycle()
     val dictionarySettingsRepository = appContainer.dictionarySettingsRepository
     val launchRouteStateHolder = remember { AppLaunchRouteStateHolder() }
     val pendingImportRouteCoordinator = remember { PendingImportRouteCoordinator() }
     var selectedTab by rememberSaveable { mutableStateOf(MainTab.Books) }
     val booksBackStack = rememberNavBackStack(AppRoute.BooksRoute)
     val dictionaryBackStack = rememberNavBackStack(AppRoute.DictionaryRoute)
+    val dictionarySession = rememberDictionarySearchSession()
     val statisticsBackStack = rememberNavBackStack(AppRoute.StatisticsRoute)
     val settingsBackStack = rememberNavBackStack(AppRoute.SettingsRoute)
     val bookRepository = appContainer.bookRepository
@@ -109,17 +118,7 @@ fun AppShell(
     var bookshelfRefreshKey by remember { mutableIntStateOf(0) }
     var dictionaryFocusRequestKey by rememberSaveable { mutableIntStateOf(0) }
     var sasayakiSettings by remember { mutableStateOf(SasayakiSettings()) }
-    val visibleMainTabs = appShellVisibleMainTabs(readerSettings)
-    val effectiveSelectedTab = coerceAvailableMainTab(
-        requestedTab = selectedTab,
-        visibleTabs = visibleMainTabs,
-    )
-
-    LaunchedEffect(selectedTab, effectiveSelectedTab) {
-        if (selectedTab != effectiveSelectedTab) {
-            selectedTab = effectiveSelectedTab
-        }
-    }
+    val visibleMainTabs = MainTab.entries
 
     LaunchedEffect(sasayakiSettingsRepository) {
         sasayakiSettingsRepository.settings.collect { settings ->
@@ -134,7 +133,7 @@ fun AppShell(
         }
     }
 
-    fun selectedBackStack(): MutableList<NavKey> = when (effectiveSelectedTab) {
+    fun selectedBackStack(): MutableList<NavKey> = when (selectedTab) {
         MainTab.Books -> booksBackStack
         MainTab.Dictionary -> dictionaryBackStack
         MainTab.Statistics -> statisticsBackStack
@@ -142,23 +141,16 @@ fun AppShell(
     }
 
     fun selectTopLevelRoute(route: AppRoute) {
-        selectedTab = coerceAvailableMainTab(
-            requestedTab = route.toMainTab(),
-            visibleTabs = visibleMainTabs,
-        )
+        selectedTab = route.toMainTab()
     }
 
     fun selectMainTab(tab: MainTab) {
-        val availableTab = coerceAvailableMainTab(
-            requestedTab = tab,
-            visibleTabs = visibleMainTabs,
-        )
         dictionaryFocusRequestKey = nextDictionaryFocusRequestKey(
-            selectedTab = effectiveSelectedTab,
-            requestedTab = availableTab,
+            selectedTab = selectedTab,
+            requestedTab = tab,
             currentKey = dictionaryFocusRequestKey,
         )
-        selectedTab = availableTab
+        selectedTab = tab
     }
 
     fun clearLoadedReaderProfile() {
@@ -167,14 +159,6 @@ fun AppShell(
 
     fun clearReaderRoutesOutsideBooks() {
         statisticsBackStack.removeReaderRoutes(onReaderRouteRemoved = ::clearLoadedReaderProfile)
-    }
-
-    LaunchedEffect(visibleMainTabs) {
-        normalizeStatisticsBackStackForVisibleTabs(
-            visibleTabs = visibleMainTabs,
-            statisticsBackStack = statisticsBackStack,
-            onReaderRouteRemoved = ::clearLoadedReaderProfile,
-        )
     }
 
     LaunchedEffect(dictionarySettingsRepository) {
@@ -295,6 +279,8 @@ fun AppShell(
                 )
                 AppRoute.DictionaryRoute -> TopLevelRouteContent(
                     selectedTab = MainTab.Dictionary,
+                    dictionarySession = dictionarySession,
+                    isActive = selectedTab == MainTab.Dictionary,
                     pendingImportUri = currentPendingImportUri,
                     onPendingImportConsumed = currentOnPendingImportConsumed,
                     readerSettings = currentReaderSettings,
@@ -307,6 +293,8 @@ fun AppShell(
                 )
                 AppRoute.StatisticsRoute -> TopLevelRouteContent(
                     selectedTab = MainTab.Statistics,
+                    onOpenStatisticsSettings = { statisticsBackStack.add(AppRoute.StatisticsSettingsRoute) },
+                    onOpenBookStatistics = { folder -> statisticsBackStack.add(AppRoute.StatisticsBookRoute(folder)) },
                     pendingImportUri = currentPendingImportUri,
                     onPendingImportConsumed = currentOnPendingImportConsumed,
                     readerSettings = currentReaderSettings,
@@ -337,8 +325,11 @@ fun AppShell(
                         }
                     },
                 )
+                AppRoute.StatisticsSettingsRoute -> StatisticsSettingsView(onClose = ::popRoute)
+                is AppRoute.StatisticsBookRoute -> StatisticsBookView(folder = route.folder, onClose = ::popRoute)
                 is AppRoute.SettingsDetailRoute -> SettingsDetailDestination(
                     route = route,
+                    effectiveProfileName = profileState.effectiveProfile.name,
                     readerSettings = currentReaderSettings,
                     onReaderSettingsChange = currentOnReaderSettingsChange,
                     sasayakiSettings = sasayakiSettings,
@@ -386,7 +377,7 @@ fun AppShell(
         }
     }
     val mainShellSceneDecorator = rememberMainShellSceneDecoratorStrategy(
-        selectedTab = effectiveSelectedTab,
+        selectedTab = selectedTab,
         visibleTabs = visibleMainTabs,
         onSelectedTabChange = ::selectMainTab,
     )
@@ -410,22 +401,37 @@ fun AppShell(
         entryDecorators = rememberAppNavEntryDecorators(),
         entryProvider = entryProvider,
     )
-    val currentEntries = when (effectiveSelectedTab) {
+    val currentEntries = when (selectedTab) {
         MainTab.Books -> booksEntries
         MainTab.Dictionary -> dictionaryEntries
         MainTab.Statistics -> statisticsEntries
         MainTab.Settings -> settingsEntries
     }
 
-    NavDisplay(
-        entries = currentEntries,
-        modifier = modifier,
-        onBack = ::popRoute,
-        sceneDecoratorStrategies = listOf(mainShellSceneDecorator),
-        transitionSpec = NoNavContentTransition,
-        popTransitionSpec = NoNavContentTransition,
-        predictivePopTransitionSpec = NoPredictiveNavContentTransition,
-    )
+    Box(modifier) {
+        RetainedTabContent(active = selectedTab == MainTab.Dictionary) {
+            NavDisplay(
+                entries = dictionaryEntries,
+                modifier = Modifier.fillMaxSize(),
+                onBack = ::popRoute,
+                sceneDecoratorStrategies = listOf(mainShellSceneDecorator),
+                transitionSpec = NoNavContentTransition,
+                popTransitionSpec = NoNavContentTransition,
+                predictivePopTransitionSpec = NoPredictiveNavContentTransition,
+            )
+        }
+        if (selectedTab != MainTab.Dictionary) {
+            NavDisplay(
+                entries = currentEntries,
+                modifier = Modifier.fillMaxSize(),
+                onBack = ::popRoute,
+                sceneDecoratorStrategies = listOf(mainShellSceneDecorator),
+                transitionSpec = NoNavContentTransition,
+                popTransitionSpec = NoNavContentTransition,
+                predictivePopTransitionSpec = NoPredictiveNavContentTransition,
+            )
+        }
+    }
 }
 
 @Composable
@@ -454,13 +460,17 @@ private fun TopLevelRouteContent(
     pendingImportUri: Uri?,
     onPendingImportConsumed: () -> Unit,
     readerSettings: ReaderSettings,
-    onReaderSettingsChange: (ReaderSettings) -> Unit,
+    onReaderSettingsChange: ((ReaderSettings) -> ReaderSettings) -> Unit,
     onOpenReader: (String) -> Unit,
     bookshelfRefreshKey: Int,
     dictionaryFocusRequestKey: Int,
     pendingDictionaryLookupRequest: PendingDictionaryLookupRequest? = null,
     onPendingDictionaryLookupConsumed: () -> Unit = {},
+    dictionarySession: DictionarySearchSession? = null,
+    isActive: Boolean = true,
     onSettingsDestination: (SettingsDestination) -> Unit = {},
+    onOpenStatisticsSettings: () -> Unit = {},
+    onOpenBookStatistics: (String) -> Unit = {},
 ) {
     val layoutSpec = currentMainShellLayoutSpec()
     when (selectedTab) {
@@ -473,6 +483,8 @@ private fun TopLevelRouteContent(
             modifier = Modifier.fillMaxSize(),
         )
         MainTab.Dictionary -> DictionarySearchView(
+            session = requireNotNull(dictionarySession),
+            isActive = isActive,
             readerSettings = readerSettings,
             focusRequestKey = dictionaryFocusRequestKey,
             pendingLookupRequest = pendingDictionaryLookupRequest,
@@ -480,6 +492,8 @@ private fun TopLevelRouteContent(
             modifier = Modifier.fillMaxSize(),
         )
         MainTab.Statistics -> StatisticsView(
+            onOpenSettings = onOpenStatisticsSettings,
+            onOpenBook = onOpenBookStatistics,
             layoutSpec = layoutSpec,
             modifier = Modifier.fillMaxSize(),
         )
@@ -494,8 +508,9 @@ private fun TopLevelRouteContent(
 @Composable
 private fun SettingsDetailDestination(
     route: AppRoute.SettingsDetailRoute,
+    effectiveProfileName: String,
     readerSettings: ReaderSettings,
-    onReaderSettingsChange: (ReaderSettings) -> Unit,
+    onReaderSettingsChange: ((ReaderSettings) -> ReaderSettings) -> Unit,
     sasayakiSettings: SasayakiSettings,
     onSasayakiSettingsChange: (SasayakiSettings) -> Unit,
     readerFontManager: ReaderFontManager,
@@ -520,8 +535,13 @@ private fun SettingsDetailDestination(
             onClose = onClose,
             modifier = Modifier.fillMaxSize(),
         )
+        SettingsDetailSection.Display -> DisplaySettingsScreen(
+            onClose = onClose,
+            modifier = Modifier.fillMaxSize(),
+        )
         SettingsDetailSection.Appearance -> ReaderAppearanceScreen(
             settings = readerSettings,
+            profileName = effectiveProfileName,
             onSettingsChange = onReaderSettingsChange,
             sasayakiSettings = sasayakiSettings,
             onSasayakiSettingsChange = onSasayakiSettingsChange,
@@ -571,35 +591,10 @@ internal fun nextDictionaryFocusRequestKey(
         currentKey
     }
 
-internal fun appShellVisibleMainTabs(readerSettings: ReaderSettings): List<MainTab> =
-    MainTab.entries.filter { tab ->
-        tab != MainTab.Statistics || readerSettings.enableStatistics && readerSettings.showStatisticsTab
-    }
-
-internal fun coerceAvailableMainTab(
-    requestedTab: MainTab,
-    visibleTabs: List<MainTab>,
-): MainTab =
-    if (requestedTab in visibleTabs) {
-        requestedTab
-    } else {
-        MainTab.Books
-    }
-
-internal fun normalizeStatisticsBackStackForVisibleTabs(
-    visibleTabs: List<MainTab>,
-    statisticsBackStack: MutableList<NavKey>,
-    onReaderRouteRemoved: () -> Unit = {},
-) {
-    if (MainTab.Statistics !in visibleTabs) {
-        statisticsBackStack.removeReaderRoutes(onReaderRouteRemoved = onReaderRouteRemoved)
-    }
-}
-
 private fun AppRoute.toMainTab(): MainTab = when (this) {
     AppRoute.MainRoute, AppRoute.BooksRoute -> MainTab.Books
     AppRoute.DictionaryRoute -> MainTab.Dictionary
-    AppRoute.StatisticsRoute -> MainTab.Statistics
+    AppRoute.StatisticsRoute, AppRoute.StatisticsSettingsRoute, is AppRoute.StatisticsBookRoute -> MainTab.Statistics
     AppRoute.SettingsRoute -> MainTab.Settings
     is AppRoute.ReaderRoute -> MainTab.Books
     is AppRoute.SettingsDetailRoute -> MainTab.Settings
@@ -610,6 +605,7 @@ private fun SettingsDestination.toSection(): SettingsDetailSection = when (this)
     SettingsDestination.Dictionaries -> SettingsDetailSection.Dictionaries
     SettingsDestination.Anki -> SettingsDetailSection.Anki
     SettingsDestination.Profiles -> SettingsDetailSection.Profiles
+    SettingsDestination.Display -> SettingsDetailSection.Display
     SettingsDestination.Appearance -> SettingsDetailSection.Appearance
     SettingsDestination.Behavior -> SettingsDetailSection.Behavior
     SettingsDestination.Advanced -> SettingsDetailSection.Advanced

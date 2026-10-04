@@ -9,6 +9,25 @@ import java.io.File
 
 class DictionarySettingsTest {
     @Test
+    fun frequencyOrderSelectionAndLookupOptionsPreserveIosSemantics() {
+        val defaults = DictionarySettings()
+        assertEquals(FrequencySortOrder.Auto, defaults.frequencySortOrder)
+        assertEquals(null, defaults.lookupOptions().frequencyDictionary)
+        val ascending = defaults.withFrequencySortOrder(FrequencySortOrder.Ascending, listOf("Rank", "Count"))
+        assertEquals("Rank", ascending.frequencySortDictionary)
+        assertEquals(de.manhhao.hoshi.LookupFrequencyOrder.Ascending, ascending.lookupOptions().frequencyOrder)
+        val selected = ascending.copy(frequencySortDictionary = "Count")
+        assertEquals("Count", selected.withFrequencySortOrder(FrequencySortOrder.Descending, listOf("Rank", "Count")).frequencySortDictionary)
+        assertEquals("Rank", selected.withFrequencySortOrder(FrequencySortOrder.Descending, listOf("Rank")).frequencySortDictionary)
+        assertEquals("", selected.withFrequencySortOrder(FrequencySortOrder.Descending, emptyList()).frequencySortDictionary)
+        for (mode in listOf(FrequencySortOrder.Auto, FrequencySortOrder.Disabled)) {
+            val settings = selected.withFrequencySortOrder(mode, emptyList())
+            assertEquals("Count", settings.frequencySortDictionary)
+            assertEquals(null, settings.lookupOptions().frequencyDictionary)
+        }
+    }
+
+    @Test
     fun defaultsMatchIosUserConfig() {
         val settings = DictionarySettings()
 
@@ -19,6 +38,7 @@ class DictionarySettingsTest {
         assertTrue(settings.scanNonJapaneseText)
         assertEquals(16, settings.maxResults)
         assertEquals(16, settings.scanLength)
+        assertEquals(22, settings.searchTextSize)
         assertEquals(DictionaryCollapseMode.ExpandAll, settings.collapseMode)
         assertFalse(settings.expandFirstDictionary)
         assertEquals(emptySet<String>(), settings.collapsedDictionaries)
@@ -32,10 +52,17 @@ class DictionarySettingsTest {
 
     @Test
     fun lookupSettingsAreClampedToIosStepperRanges() {
-        val settings = DictionarySettings(maxResults = 200, scanLength = 0).normalized()
+        val minimums = DictionarySettings(
+            maxResults = 200,
+            scanLength = 0,
+            searchTextSize = 0,
+        ).normalized()
+        val maximums = DictionarySettings(searchTextSize = 100).normalized()
 
-        assertEquals(50, settings.maxResults)
-        assertEquals(1, settings.scanLength)
+        assertEquals(50, minimums.maxResults)
+        assertEquals(1, minimums.scanLength)
+        assertEquals(12, minimums.searchTextSize)
+        assertEquals(48, maximums.searchTextSize)
     }
 
     @Test

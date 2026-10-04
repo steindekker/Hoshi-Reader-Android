@@ -57,6 +57,7 @@ function readerSource() {
     return fs.readFileSync(readerVisualNovelUrl, 'utf8')
         .replaceAll('__HOSHI_READER_VIEWPORT_SCRIPT__', readerViewportSource())
         .replaceAll('__HOSHI_READER_TEXT_SEMANTICS_SCRIPT__', readerTextSemanticsSource())
+        .replaceAll('__HOSHI_READER_DOM_TEXT_SCRIPT__', fs.readFileSync(new URL('../../main/assets/hoshi-web/reader/reader-dom-text.js', import.meta.url), 'utf8'))
         .replaceAll('__HOSHI_READER_MEDIA_SEMANTICS_SCRIPT__', readerMediaSemanticsSource())
         .replaceAll(
             '__HOSHI_READER_LAYOUT_SEMANTICS_SCRIPT__',
@@ -83,6 +84,7 @@ function configuredReaderSource(options = {}) {
     return fs.readFileSync(readerVisualNovelUrl, 'utf8')
         .replaceAll('__HOSHI_READER_VIEWPORT_SCRIPT__', options.viewportScript ?? readerViewportSource())
         .replaceAll('__HOSHI_READER_TEXT_SEMANTICS_SCRIPT__', options.textSemanticsScript ?? readerTextSemanticsSource())
+        .replaceAll('__HOSHI_READER_DOM_TEXT_SCRIPT__', fs.readFileSync(new URL('../../main/assets/hoshi-web/reader/reader-dom-text.js', import.meta.url), 'utf8'))
         .replaceAll('__HOSHI_READER_MEDIA_SEMANTICS_SCRIPT__', options.mediaSemanticsScript ?? readerMediaSemanticsSource())
         .replaceAll(
             '__HOSHI_READER_LAYOUT_SEMANTICS_SCRIPT__',
@@ -202,6 +204,10 @@ class TestElement extends TestNode {
         };
     }
 
+    get localName() {
+        return this.tagName.toLowerCase();
+    }
+
     get className() {
         return this.attributes.get('class') ?? '';
     }
@@ -315,6 +321,10 @@ class TestElement extends TestNode {
             this.childNodes.forEach((child) => clone.appendChild(child.cloneNode(true)));
         }
         return clone;
+    }
+
+    matches(selector) {
+        return selector.split(',').some((item) => matchesSelector(this, item.trim()));
     }
 
     closest(selector) {
@@ -629,6 +639,8 @@ function textOffsetWithin(root, target) {
 }
 
 function matchesSelector(node, selector) {
+    const tagClass = selector.match(/^([a-z]+)\.([\w-]+)$/i);
+    if (tagClass) return node.localName === tagClass[1].toLowerCase() && node.classList.contains(tagClass[2]);
     if (selector.startsWith('#')) {
         return node.id === selector.slice(1);
     }
@@ -840,7 +852,8 @@ function loadReader(body, options = {}) {
     };
     const source = `${options.selectionScript ?? ''}\n${configuredReaderSource(options)}`;
     vm.runInNewContext(source, {
-        CSS: {},
+        CSS: options.css ?? {},
+        Highlight: Set,
         document,
         window,
         HoshiReaderImage: imageBridge,
@@ -1143,6 +1156,33 @@ test('block mode preserves ruby annotations while indexing only base text', asyn
     assert.equal(reader.totalChapterChars, 2);
     assert.equal(reader.nodeStartOffsets.get(rubyTextNodes.find((node) => node.textContent === '星')), 1);
     assert.equal(reader.nodeStartOffsets.get(rubyTextNodes.find((node) => node.textContent === 'ほし')), undefined);
+});
+
+test('Korean VN counts and restores screens while keeping raw offsets and ruby-free cue ranges', async () => {
+    const ruby = element('ruby', {}, [
+        '한글', element('rp', {}, ['fallback']), element('rt', {}, ['reading']), element('rp', {}, ['주석']),
+    ]);
+    const { reader } = await initializeReader(
+        bodyWith(p('𠮟가、'), paragraphWith(ruby, ' ㄱㆎA')),
+        { mode: 'block', revealSpeed: 0 },
+    );
+    assert.equal(reader.totalChapterChars, 7);
+    const firstProgress = reader.calculateProgress();
+    assert.equal(firstProgress, 2 / 7);
+
+    await reader.restoreProgress(0.6);
+
+    const screenRuby = currentScreen(reader).querySelector('ruby');
+    assert.ok(screenRuby);
+    const base = collectTextNodes(screenRuby).find((node) => node.textContent === '한글');
+    assert.equal(reader.nodeStartOffsets.get(base), 2);
+    assert.equal(reader.nodeStartRawOffsets.get(base), 3);
+    assert.equal(reader.calculateProgress(), 1);
+
+    const cue = { id: 'korean', start: 2, length: 2 };
+    reader.applySasayakiCues([cue]);
+    reader.highlightSasayakiCue(cue, false);
+    assert.equal(sasayakiWrappers(reader).map((wrapper) => wrapper.textContent).join(''), '한글');
 });
 
 test('block mode splits vertical ruby-adjacent clone text and preserves offsets', async () => {
@@ -1627,6 +1667,32 @@ test('VN selection maps supplementary characters and ruby base text across a scr
     assert.equal(window.hoshiSelection.selectText(12, 48, 32), '激しい抵抗');
     assert.equal(selectionMessages[0].sentence, '𠮟激しい抵抗。');
     assert.equal(selectionMessages[0].normalizedOffset, 1);
+});
+
+test('VN Korean lookup uses the full source sentence across a screen boundary', async () => {
+    const loaded = await initializeReader(bodyWith(p('𠮟가한글문장。')), {
+        mode: 'block', charactersPerScreen: 2, revealSpeed: 0,
+        selectionScript: readerSelectionSource(),
+    });
+    const { reader, document, selectionMessages, window } = loaded;
+    const screenIndex = reader.screens.findIndex((screen) =>
+        reader.screenStartRawCount(screen) <= 2 && reader.screenEndRawCount(screen) > 2
+    );
+    reader.renderScreen(screenIndex, true);
+    const walker = reader.createWalker();
+    let hitNode;
+    let node;
+    while (node = walker.nextNode()) {
+        if (node.textContent.includes('한')) hitNode = node;
+    }
+    assert.ok(hitNode);
+    document.elementFromPoint = () => hitNode.parentElement;
+    window.hoshiSelection.configure({ bridge: 'android-reader' });
+    window.hoshiSelection.getCharacterAtPoint = () => ({ node: hitNode, offset: hitNode.textContent.indexOf('한') });
+
+    assert.equal(window.hoshiSelection.selectText(12, 48, 32), '한글문장');
+    assert.equal(selectionMessages[0].sentence, '𠮟가한글문장。');
+    assert.equal(selectionMessages[0].normalizedOffset, 2);
 });
 
 test('sentence mode groups sentences by configured count', async () => {
@@ -2125,10 +2191,10 @@ test('visual novel first created highlight wraps the current screen immediately'
         currentScreen(reader).querySelectorAll('.hoshi-highlight').map((node) => node.textContent),
         ['うえ'],
     );
-    assert.equal(window.hoshiHighlights.wrappers.get('first').length, 1);
+    assert.equal(window.hoshiHighlights.highlights.get('first').wrappers.length, 1);
     assert.equal(
         JSON.stringify(reader.initialHighlights),
-        JSON.stringify([{ id: 'first', color: 'pink', offset: 3, text: 'うえ' }]),
+        JSON.stringify([{ id: 'first', color: 'pink', offset: 3, text: 'うえ', textFurigana: null }]),
     );
 });
 
@@ -2150,7 +2216,7 @@ test('visual novel persisted highlights wrap only the visible raw range on each 
         currentScreen(reader).querySelectorAll('.hoshi-highlight').map((node) => node.textContent),
         ['う'],
     );
-    assert.equal(window.hoshiHighlights.wrappers.get('h1').length, 1);
+    assert.equal(window.hoshiHighlights.highlights.get('h1').wrappers.length, 1);
 });
 
 test('visible node offsets remain chapter-level after rendering later screens', async () => {
@@ -2293,7 +2359,7 @@ test('visual novel Sasayaki reveal jumps to a later screen and returns progress'
     assert.equal(result, 0.75);
     assert.equal(currentScreen(reader).textContent, '二三。');
     assert.equal(currentScreen(reader).querySelectorAll('[data-hoshi-visual-novel-unrevealed]').length, 0);
-    assert.equal(sasayakiWrappers(reader)[0].textContent, '二三');
+    assert.equal(sasayakiWrappers(reader)[0].textContent, '二三。');
     assert.equal(sasayakiWrappers(reader)[0].classList.contains('hoshi-sasayaki-active'), true);
 });
 
@@ -2394,7 +2460,7 @@ test('visual novel Sasayaki reveal jumps to the visible split screen inside an o
     assert.equal(result, 10 / reader.totalChapterChars);
     assert.equal(currentScreen(reader).textContent, '九十。');
     assert.equal(currentScreen(reader).querySelectorAll('[data-hoshi-visual-novel-unrevealed]').length, 0);
-    assert.equal(sasayakiWrappers(reader)[0].textContent, '九十');
+    assert.equal(sasayakiWrappers(reader)[0].textContent, '九十。');
     assert.equal(sasayakiWrappers(reader)[0].classList.contains('hoshi-sasayaki-active'), true);
 });
 
@@ -2411,7 +2477,7 @@ test('visual novel Sasayaki cue without reveal does not move to another screen',
     assert.equal(reader.activeCueId, 'cue');
 
     assert.equal(reader.paginate('forward'), 'scrolled');
-    assert.equal(sasayakiWrappers(reader)[0].textContent, '二三');
+    assert.equal(sasayakiWrappers(reader)[0].textContent, '二三。');
     assert.equal(sasayakiWrappers(reader)[0].classList.contains('hoshi-sasayaki-active'), true);
 });
 
@@ -2501,7 +2567,7 @@ test('visual novel Sasayaki highlights only the visible part of a cross-screen c
 
     assert.equal(reader.paginate('forward'), 'scrolled');
     assert.equal(sasayakiWrappers(reader).length, 1);
-    assert.equal(sasayakiWrappers(reader)[0].textContent, '三四');
+    assert.equal(sasayakiWrappers(reader)[0].textContent, '三四。');
 });
 
 test('visual novel Sasayaki e-ink cross-screen cue uses only visible geometry', async () => {
@@ -2522,7 +2588,7 @@ test('visual novel Sasayaki e-ink cross-screen cue uses only visible geometry', 
     assert.equal(ranges.length, 1);
     assert.equal(ranges[0].startNode.textContent, '三四。');
     assert.equal(ranges[0].startOffset, 0);
-    assert.equal(ranges[0].endOffset, 2);
+    assert.equal(ranges[0].endOffset, 3);
 });
 
 test('visual novel Sasayaki merge setting combines block screens intersecting a cross-screen cue', async () => {
@@ -2543,7 +2609,7 @@ test('visual novel Sasayaki merge setting combines block screens intersecting a 
     await reader.restoreProgress(0);
     reader.highlightSasayakiCue(cue, false);
     assert.equal(sasayakiWrappers(reader).length, 2);
-    assert.equal(sasayakiWrappers(reader).map((wrapper) => wrapper.textContent).join(''), '二。三四');
+    assert.equal(sasayakiWrappers(reader).map((wrapper) => wrapper.textContent).join(''), '二。三四。');
 });
 
 test('visual novel Sasayaki merge setting combines sentence screens intersecting a cross-screen cue', async () => {
@@ -2564,6 +2630,77 @@ test('visual novel Sasayaki merge setting combines sentence screens intersecting
     assert.equal(currentScreen(reader).textContent, '二。三。');
     assert.equal(reader.paginate('forward'), 'scrolled');
     assert.equal(currentScreen(reader).textContent, '四。');
+});
+
+test('live Sasayaki data updates preserve the visible VN screen while correcting cue ranges', async () => {
+    const cue = { id: 'cue', start: 0, length: 1 };
+    const { reader } = await initializeReader(bodyWith(p('一二。'), p('三四。'), p('五。')), {
+        revealSpeed: 0,
+        mergeCrossScreenSasayakiCues: true,
+        initialSasayakiCues: [cue],
+    });
+    reader.highlightSasayakiCue(cue, false);
+    const screen = currentScreen(reader);
+    const progress = reader.calculateProgress();
+
+    reader.applySasayakiCues([{ id: 'cue', start: 0, length: 4 }], true);
+
+    assert.equal(currentScreen(reader), screen);
+    assert.equal(currentScreen(reader).textContent, '一二。');
+    assert.equal(reader.calculateProgress(), progress);
+    assert.equal(reader.sasayakiCueMap.get('cue').length, 4);
+    assert.equal(sasayakiWrappers(reader).map((wrapper) => wrapper.textContent).join(''), '一二。');
+
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '一二。三四。');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '五。');
+});
+
+test('natural Sasayaki reveal applies deferred VN cue merging', async () => {
+    const cue = { id: 'cue', start: 2, length: 3 };
+    const { reader } = await initializeReader(bodyWith(p('一二。'), p('三四。'), p('五。')), {
+        revealSpeed: 0,
+        mergeCrossScreenSasayakiCues: true,
+    });
+    reader.applySasayakiCues([cue], true);
+    assert.equal(currentScreen(reader).textContent, '一二。');
+
+    reader.sasayakiMediaStopsBeforeCue(cue);
+    reader.highlightSasayakiCue(cue, true);
+
+    assert.equal(currentScreen(reader).textContent, '三四。五。');
+});
+
+test('missing VN fragment leaves deferred cue layout and reading position intact', async () => {
+    const { reader } = await initializeReader(bodyWith(p('一。'), p('二。'), p('三。')), {
+        revealSpeed: 0,
+        mergeCrossScreenSasayakiCues: true,
+    });
+    reader.paginate('forward');
+    reader.paginate('forward');
+    const progress = reader.calculateProgress();
+    const screenCount = reader.screens.length;
+    reader.applySasayakiCues([{ id: 'cue', start: 0, length: 3 }], true);
+
+    assert.equal(await reader.jumpToFragment('missing-id'), false);
+
+    assert.equal(reader.calculateProgress(), progress);
+    assert.equal(reader.screens.length, screenCount);
+    assert.equal(currentScreen(reader).textContent, '三。');
+    assert.equal(reader.paginate('backward'), 'scrolled');
+    assert.equal(currentScreen(reader).textContent, '一。二。三。');
+});
+
+test('quiet Sasayaki highlight correction preserves an unfinished VN reveal', async () => {
+    const cue = { id: 'cue', start: 0, length: 4 };
+    const { reader } = await initializeReader(bodyWith(p('蒸し暑い')), { revealSpeed: 10 });
+    reader.applySasayakiCues([cue], true);
+
+    reader.highlightSasayakiCue(cue, false, true);
+
+    assert.equal(reader.revealComplete, false);
+    assert.ok(currentScreen(reader).querySelectorAll('[data-hoshi-visual-novel-unrevealed]').length > 0);
 });
 
 test('visual novel Sasayaki merged screens still split when text exceeds the viewport', async () => {
@@ -2631,4 +2768,226 @@ test('visual novel Sasayaki completes reveal before highlighting the active cue'
     assert.equal(currentScreen(reader).querySelectorAll('[data-hoshi-visual-novel-unrevealed]').length, 0);
     assert.equal(sasayakiWrappers(reader)[0].textContent, '蒸し暑い');
     assert.equal(sasayakiWrappers(reader)[0].classList.contains('hoshi-sasayaki-active'), true);
+});
+
+
+test('VN Toggle reveals styled ruby groups and retains them after screen return', async () => {
+    const sourceRuby = rubyText('日本', 'にほん');
+    const adjacentRuby = rubyText('語', 'ご');
+    const base = sourceRuby.firstChild;
+    const styledBase = new TestElement('span');
+    sourceRuby.insertBefore(styledBase, base);
+    styledBase.appendChild(base);
+    const body = bodyWith(paragraphWith(sourceRuby, adjacentRuby, '。'), p('次の画面。'));
+    const loaded = loadReader(body, { mode: 'block', revealSpeed: 0, selectionScript: readerSelectionSource() });
+    const { reader, document, window, selectionMessages } = loaded;
+    window.hoshiSelection.configure({ bridge: 'android-reader' });
+    window.hoshiSelection.setupFurigana('Toggle', document);
+    await reader.initialize();
+    const cloneRuby = currentScreen(reader).querySelector('ruby');
+    // The lightweight DOM fixture must assign the document to freshly cloned nodes.
+    assignOwnerDocument(currentScreen(reader), document);
+    assert.equal(cloneRuby.classList.contains('furigana-hidden'), true);
+    document.elementFromPoint = () => cloneRuby;
+    assert.equal(window.hoshiSelection.selectText(12, 72, 32), 'furigana');
+    assert.equal(selectionMessages.length, 0);
+    assert.equal(sourceRuby.classList.contains('furigana-hidden'), false);
+    assert.equal(adjacentRuby.classList.contains('furigana-hidden'), false);
+    assert.equal(reader.totalChapterChars, 7);
+    reader.renderScreen(1, true);
+    reader.renderScreen(0, true);
+    assert.equal(currentScreen(reader).querySelectorAll('ruby').some((ruby) => ruby.classList.contains('furigana-hidden')), false);
+    const baseNode = reader.createWalker(currentScreen(reader).querySelector('ruby')).nextNode();
+    document.elementFromPoint = () => baseNode.parentElement;
+    window.hoshiSelection.getCharacterAtPoint = () => ({ node: baseNode, offset: 0 });
+    assert.equal(window.hoshiSelection.selectText(12, 72, 32), '日本語');
+    assert.equal(selectionMessages[0].sentence, '日本語。');
+    assert.equal(selectionMessages[0].normalizedOffset, 0);
+});
+
+test('VN Sasayaki includes owned punctuation and ruby bases for batch and single cues', async () => {
+    const paragraph = new TestElement('p');
+    paragraph.appendChild(new TestText('「……'));
+    paragraph.appendChild(rubyText('本当', 'ほんとう'));
+    paragraph.appendChild(new TestText('！？」そうか……わかった。'));
+    const { reader } = await initializeReader(bodyWith(paragraph), { revealSpeed: 0 });
+    const cues = [{ id: 'a', start: 0, length: 2 }, { id: 'b', start: 2, length: 3 }, { id: 'c', start: 5, length: 4 }];
+    const texts = (results) => Array.from(results, ({ ranges }) => ranges.map(({ node, start, end }) => node.textContent.slice(start, end)).join(''));
+    const expected = ['「……本当！？」', 'そうか……', 'わかった。'];
+    assert.deepEqual(texts(reader.collectSasayakiCueRanges(cues)), expected);
+    for (let i = 0; i < cues.length; i++) {
+        assert.deepEqual(texts(reader.collectSasayakiCueRanges([cues[i]])), [expected[i]]);
+    }
+});
+
+test('VN preserves CSS paragraph punctuation boundaries before detaching source DOM', async () => {
+    const cssBlock = element('span', { class: 'publisher-paragraph' }, ['……次。']);
+    const body = bodyWith(paragraphWith('前', cssBlock));
+    const { reader, window } = loadReader(body, { revealSpeed: 0 });
+    const getStyle = window.getComputedStyle;
+    window.getComputedStyle = (target) => {
+        let root = target;
+        while (root && root !== body) root = root.parentNode;
+        return { ...getStyle(target), display: root === body && target === cssBlock ? 'block' : '' };
+    };
+    await reader.initialize();
+    const results = reader.collectSasayakiCueRanges([{ id: 'a', start: 0, length: 1 }, { id: 'b', start: 1, length: 1 }]);
+    assert.deepEqual(Array.from(results, ({ ranges }) => ranges.map(({ node, start, end }) => node.textContent.slice(start, end)).join('')), ['前', '……次。']);
+});
+
+
+function selectHighlightRawRange(loaded, offset, length) {
+    const segments = loaded.reader.highlightSegmentsForChapterRawRange(offset, length);
+    assert.ok(segments.length);
+    const range = loaded.document.createRange();
+    range.setStart(segments[0].node, segments[0].start);
+    const last = segments.at(-1);
+    range.setEnd(last.node, last.end);
+    loaded.window.getSelection = () => ({ rangeCount: 1, getRangeAt: () => range, removeAllRanges() {} });
+}
+
+test('exact highlight range recolors then removes and survives VN screen rebuilds', async () => {
+    const loaded = await initializeReader(bodyWith(p('あ、𠮟猫'), p('続き')), {
+        revealSpeed: 0, highlightsScript: readerHighlightsSource(),
+    });
+    const highlights = loaded.window.hoshiHighlights;
+    selectHighlightRawRange(loaded, 2, 2);
+    const created = highlights.createHighlight('yellow', 'original');
+    assert.equal(created.action, 'created');
+    assert.equal(created.start, 1);
+    assert.equal(created.offset, 2);
+    assert.equal(created.text, '𠮟猫');
+    selectHighlightRawRange(loaded, 2, 2);
+    assert.equal(JSON.stringify(highlights.createHighlight('pink', 'unused')), JSON.stringify({ action: 'recolored', id: 'original' }));
+    assert.equal(loaded.reader.initialHighlights.length, 1);
+    assert.equal(loaded.reader.initialHighlights[0].color, 'pink');
+    loaded.reader.paginate('forward');
+    loaded.reader.paginate('backward');
+    assert.equal(currentScreen(loaded.reader).querySelectorAll('.hoshi-highlight-pink').length, 1);
+    selectHighlightRawRange(loaded, 2, 2);
+    assert.equal(JSON.stringify(highlights.createHighlight('pink', 'unused2')), JSON.stringify({ action: 'removed', id: 'original' }));
+    loaded.reader.paginate('forward');
+    loaded.reader.paginate('backward');
+    assert.equal(loaded.reader.initialHighlights.length, 0);
+    assert.equal(currentScreen(loaded.reader).querySelectorAll('.hoshi-highlight').length, 0);
+});
+
+test('highlight text collects styled ruby once from source even after wrapping', async () => {
+    const ruby = new TestElement('ruby');
+    const base = new TestElement('span');
+    const bold = new TestElement('b');
+    bold.appendChild(new TestText('東'));
+    base.appendChild(bold);
+    base.appendChild(new TestText('京'));
+    ruby.appendChild(base);
+    const rp = new TestElement('rp'); rp.appendChild(new TestText('(')); ruby.appendChild(rp);
+    const rt = new TestElement('rt'); rt.appendChild(new TestText('とうきょう')); ruby.appendChild(rt);
+    const paragraph = p('前、'); paragraph.appendChild(ruby); paragraph.appendChild(new TestText('。'));
+    const loaded = await initializeReader(bodyWith(paragraph), { revealSpeed: 0, highlightsScript: readerHighlightsSource() });
+    selectHighlightRawRange(loaded, 2, 2);
+    const result = loaded.window.hoshiHighlights.createHighlight('yellow', 'ruby');
+    assert.equal(result.text, '東京');
+    assert.equal(result.textFurigana, '東京(とうきょう)');
+    selectHighlightRawRange(loaded, 1, 4);
+    const overlapping = loaded.window.hoshiHighlights.createHighlight('blue', 'overlap');
+    assert.equal(overlapping.text, '、東京。');
+    assert.equal(overlapping.textFurigana, '、東京(とうきょう)。');
+    assert.equal(loaded.reader.initialHighlights.length, 2);
+});
+
+test('VN source ruby and full highlight identity survive clipped screens and reveal completion', async () => {
+    const loaded = await initializeReader(bodyWith(paragraphWith('一', rubyText('二三', 'にさん'), '四五')), {
+        mode: 'block', charactersPerScreen: 2, revealSpeed: 10,
+        highlightsScript: readerHighlightsSource(),
+        initialHighlights: [{ id: 'cross', color: 'yellow', offset: 0, text: '一二三四', textFurigana: '一二三(にさん)四' }],
+    });
+    const { reader, window } = loaded;
+    reader.completeCurrentReveal();
+    assert.equal(window.hoshiHighlights.findHighlight(0, 4), 'cross');
+    assert.equal(reader.paginate('forward'), 'scrolled');
+    reader.completeCurrentReveal();
+    assert.equal(window.hoshiHighlights.findHighlight(0, 4), 'cross');
+    assert.equal(window.hoshiHighlights.findHighlight(1, 2), null);
+    const fullText = window.hoshiHighlights.textForRange(0, 4);
+    assert.equal(fullText.text, '一二三四');
+    assert.equal(fullText.textFurigana, '一二三(にさん)四');
+    selectHighlightRawRange(loaded, 1, 2);
+    assert.equal(window.hoshiHighlights.createHighlight('pink', 'ruby-only').action, 'created');
+    assert.equal(reader.initialHighlights.length, 2);
+    reader.completeCurrentReveal();
+    selectHighlightRawRange(loaded, 1, 2);
+    assert.equal(window.hoshiHighlights.createHighlight('blue', 'unused').action, 'recolored');
+    reader.paginate('forward');
+    reader.completeCurrentReveal();
+    reader.paginate('backward');
+    assert.equal(reader.initialHighlights.find((item) => item.id === 'ruby-only').color, 'blue');
+    assert.equal(window.hoshiHighlights.highlights.get('ruby-only').color, 'blue');
+    assert.equal(window.hoshiHighlights.highlights.get('cross').length, 4);
+    window.hoshiHighlights.removeHighlight('cross');
+    reader.completeCurrentReveal();
+    assert.equal(reader.initialHighlights.length, 1);
+    assert.equal(window.hoshiHighlights.findHighlight(0, 4), null);
+});
+
+test('VN restores overlapping highlight geometry before recoloring and removing either range', async () => {
+    const loaded = await initializeReader(bodyWith(p('あいうえお'), p('次')), {
+        revealSpeed: 0, highlightsScript: readerHighlightsSource(),
+    });
+    const { reader, window } = loaded;
+    const highlights = window.hoshiHighlights;
+    selectHighlightRawRange(loaded, 0, 3);
+    highlights.createHighlight('yellow', 'a');
+    selectHighlightRawRange(loaded, 1, 3);
+    highlights.createHighlight('blue', 'b');
+    reader.paginate('forward');
+    reader.paginate('backward');
+    const wrappedText = (id) => highlights.highlights.get(id).wrappers.map((node) => node.textContent).join('');
+    assert.equal(wrappedText('a'), 'あいう');
+    assert.equal(wrappedText('b'), 'いうえ');
+    selectHighlightRawRange(loaded, 1, 3);
+    assert.equal(highlights.createHighlight('pink', 'unused').action, 'recolored');
+    assert.equal(wrappedText('b'), 'いうえ');
+    selectHighlightRawRange(loaded, 0, 3);
+    assert.equal(highlights.createHighlight('yellow', 'unused').action, 'removed');
+    assert.equal(wrappedText('b'), 'いうえ');
+    reader.paginate('forward');
+    reader.paginate('backward');
+    assert.equal(wrappedText('b'), 'いうえ');
+    assert.equal(highlights.highlights.has('a'), false);
+});
+
+test('VN search projects chapter offsets onto the current clone and survives highlight reapplication', async () => {
+    const registry = new Map();
+    const { reader, window } = await initializeReader(bodyWith(p('前。'), p('「𠮟 、猫。」'), p('後。')), {
+        mode: 'block', sentencesPerScreen: 1, revealSpeed: 0,
+        css: { highlights: registry }, highlightsScript: readerHighlightsSource(),
+    });
+    reader.renderScreen(1, true);
+    const highlights = window.hoshiHighlights;
+    highlights.showSearchHighlight(1, 2);
+    const text = () => Array.from(registry.get('hoshi-search') ?? [], range =>
+        range.startContainer.textContent.slice(range.startOffset, range.endOffset)).join('');
+    assert.equal(text(), '𠮟 、猫');
+    reader.applyCurrentScreenHighlights();
+    assert.equal(text(), '𠮟 、猫');
+    assert.equal(highlights.highlights.size, 0);
+    highlights.clearSearchHighlight();
+    reader.applyCurrentScreenHighlights();
+    assert.equal(text(), '');
+});
+
+test('VN cue jumps and page navigation clear search marks while passive cues preserve them', async () => {
+    const registry = new Map();
+    const { reader, window } = await initializeReader(bodyWith(p('前。'), p('猫。')), {
+        mode: 'block', revealSpeed: 0, css: { highlights: registry }, highlightsScript: readerHighlightsSource(),
+    });
+    const highlights = window.hoshiHighlights;
+    highlights.showSearchHighlight(0, 1);
+    reader.highlightSasayakiCue({ id: 'cue', start: 0, length: 1 }, false);
+    assert.notEqual(highlights.searchRange, null);
+    reader.highlightSasayakiCue({ id: 'cue', start: 1, length: 1 }, true);
+    assert.equal(highlights.searchRange, null);
+    highlights.showSearchHighlight(1, 1);
+    reader.paginate('backward');
+    assert.equal(highlights.searchRange, null);
 });

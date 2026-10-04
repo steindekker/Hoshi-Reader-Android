@@ -3,6 +3,7 @@ package moe.antimony.hoshi.features.dictionary
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import de.manhhao.hoshi.LookupOptions
 import de.manhhao.hoshi.LookupResult
 import de.manhhao.hoshi.KanjiResult
 import javax.inject.Inject
@@ -18,6 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import moe.antimony.hoshi.dictionary.DictionaryRepository
 import moe.antimony.hoshi.features.audio.AudioSettings
+import moe.antimony.hoshi.features.anki.AnkiMiningContext
 import moe.antimony.hoshi.features.audio.AudioSettingsRepository
 import moe.antimony.hoshi.features.reader.ReaderSelectionData
 import moe.antimony.hoshi.R
@@ -28,7 +30,7 @@ internal interface DictionarySearchRepository {
     val dictionarySettings: Flow<DictionarySettings>
     val audioSettings: Flow<AudioSettings>
     suspend fun rebuildLookupQuery()
-    fun lookup(query: String, maxResults: Int, scanLength: Int): List<LookupResult>
+    fun lookup(query: String, maxResults: Int, scanLength: Int, options: LookupOptions): List<LookupResult>
     fun dictionaryStyles(): Map<String, String>
     fun lookupKanji(kanji: String): KanjiResult = KanjiResult(kanji, emptyArray())
 }
@@ -46,8 +48,8 @@ internal class AndroidDictionarySearchRepository @Inject constructor(
         dictionaryRepository.rebuildLookupQuery()
     }
 
-    override fun lookup(query: String, maxResults: Int, scanLength: Int): List<LookupResult> =
-        dictionaryRepository.lookup(query, maxResults, scanLength)
+    override fun lookup(query: String, maxResults: Int, scanLength: Int, options: LookupOptions): List<LookupResult> =
+        dictionaryRepository.lookup(query, maxResults, scanLength, options)
 
     override fun dictionaryStyles(): Map<String, String> =
         dictionaryRepository.dictionaryStyles()
@@ -155,6 +157,7 @@ internal class DictionarySearchViewModel : ViewModel {
         _uiState.update { current ->
             current.copy(
                 lastQuery = "",
+                sentenceOffset = null,
                 results = emptyList(),
                 hasSearched = false,
                 isSearching = false,
@@ -180,7 +183,7 @@ internal class DictionarySearchViewModel : ViewModel {
         val dictionarySettings = _uiState.value.dictionarySettings.normalized()
         val lookupProfileVersion = profileChangeVersion
         scope.launch {
-            _uiState.update { it.copy(isSearching = true, errorMessage = null) }
+            _uiState.update { it.copy(isSearching = true, errorMessage = null, sentenceOffset = null) }
             runCatching {
                 withContext(ioDispatcher) {
                     val trimmed = query.trim()
@@ -194,7 +197,7 @@ internal class DictionarySearchViewModel : ViewModel {
                         val styles = repository.dictionaryStyles()
                         DictionarySearchContent.runLookup(
                             query = query,
-                            lookup = { repository.lookup(it, dictionarySettings.maxResults, dictionarySettings.scanLength) },
+                            lookup = { repository.lookup(it, dictionarySettings.maxResults, dictionarySettings.scanLength, dictionarySettings.lookupOptions()) },
                             dictionaryStyles = styles,
                         )
                     }
@@ -204,6 +207,7 @@ internal class DictionarySearchViewModel : ViewModel {
                     _uiState.update {
                         it.copy(
                             lastQuery = state.lastQuery,
+                            sentenceOffset = null,
                             results = state.results,
                             hasSearched = true,
                             isSearching = false,
@@ -223,6 +227,7 @@ internal class DictionarySearchViewModel : ViewModel {
                     _uiState.update {
                         it.copy(
                             lastQuery = query.trim(),
+                            sentenceOffset = null,
                             results = emptyList(),
                             hasSearched = true,
                             isSearching = false,
@@ -244,10 +249,24 @@ internal class DictionarySearchViewModel : ViewModel {
 
     fun lookupRedirect(query: String): List<LookupResult> {
         val settings = _uiState.value.dictionarySettings.normalized()
-        return repository.lookup(query, settings.maxResults, settings.scanLength)
+        return repository.lookup(query, settings.maxResults, settings.scanLength, settings.lookupOptions())
     }
 
     fun lookupKanji(kanji: String): KanjiResult = repository.lookupKanji(kanji)
+
+    fun restoreRootSourceHistory(sentenceOffset: Int?) {
+        _uiState.update { state ->
+            if (sentenceOffset != null && sentenceOffset !in 0..state.lastQuery.length) {
+                state
+            } else {
+                state.copy(sentenceOffset = sentenceOffset)
+            }
+        }
+    }
+
+    fun rootMiningContext(): AnkiMiningContext = _uiState.value.let {
+        AnkiMiningContext(sentence = it.lastQuery.ifBlank { it.query }, sentenceOffset = it.sentenceOffset)
+    }
 
     fun entryForPopup(popupId: String, index: Int): LookupResult? {
         if (index < 0) return null
@@ -260,14 +279,14 @@ internal class DictionarySearchViewModel : ViewModel {
     }
 
     fun lookupRootRedirect(query: String): List<LookupResult> {
-        val trimmed = query.trim()
-        if (trimmed.isEmpty()) return emptyList()
+        if (query.isBlank()) return emptyList()
         val settings = _uiState.value.dictionarySettings.normalized()
-        val results = repository.lookup(trimmed, settings.maxResults, settings.scanLength)
+        val results = runCatching { repository.lookup(query, settings.maxResults, settings.scanLength, settings.lookupOptions()) }
+            .getOrElse { return emptyList() }
         if (results.isNotEmpty()) {
             _uiState.update {
                 it.copy(
-                    lastQuery = trimmed,
+                    sentenceOffset = if (it.lastQuery.endsWith(query)) it.lastQuery.length - query.length else null,
                     results = results,
                     hasSearched = true,
                     isSearching = false,
@@ -340,7 +359,7 @@ internal class DictionarySearchViewModel : ViewModel {
             selection = selection,
             options = options,
             dictionaryStyles = _uiState.value.dictionaryStyles,
-            lookup = repository::lookup,
+            lookup = { text, maxResults, scanLength -> repository.lookup(text, maxResults, scanLength, options.dictionarySettings.lookupOptions()) },
         )
 
     fun setPopups(popups: List<LookupPopupItem>) {
