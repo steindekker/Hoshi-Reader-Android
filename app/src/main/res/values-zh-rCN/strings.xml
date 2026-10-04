@@ -407,7 +407,7 @@
     <string name="reader_appearance_mode" comment="Reader appearance setting label, intentionally matching dictionary mode.">模式</string>
     <string name="reader_appearance_paginated">分页</string>
     <string name="reader_appearance_continuous">连续</string>
-    <string name="reader_appearance_visual_novel">VN</string>
+    <string name="reader_appearance_visual_novel" comment="Reader VN layout mode label, intentionally matching the VN main tab label.">VN</string>
     <string name="reader_visual_novel_reveal_speed">文字显示速度</string>
     <string name="reader_visual_novel_reveal_speed_instant">立即</string>
     <string name="reader_visual_novel_screen_mode">屏幕内容</string>
@@ -419,7 +419,7 @@
     <string name="reader_visual_novel_merge_cross_screen_sasayaki_cues">字幕文本同屏</string>
     <string name="reader_appearance_chapter_swipe_distance">章节滑动距离</string>
     <string name="reader_appearance_page_swipe_threshold">翻页滑动阈值</string>
-    <string name="reader_appearance_page_swipe_threshold_value">%1$d px</string>
+    <string name="reader_appearance_page_swipe_threshold_value" comment="Pixel value label, intentionally matching the VN screenshot width value.">%1$d px</string>
     <string name="reader_appearance_page_swipe_disabled" comment="分页和 VN 阅读器的滑动阈值状态；有意与其他关闭标签使用相同文案。">关闭</string>
     <string name="reader_appearance_horizontal_padding">水平边距</string>
     <string name="reader_appearance_vertical_padding">垂直边距</string>
@@ -907,4 +907,57 @@
     <string name="sasayaki_transcription_light_description">减少资源占用，转录较慢。</string>
     <string name="sasayaki_transcription_balanced_description">兼顾转录速度与日常使用。</string>
     <string name="sasayaki_transcription_fast_description">优先转录速度，发热可能增加。</string>
+    <!-- VN tab (steamdeck-vn-extractor text hooker) -->
+    <string name="main_tab_vn" comment="Main navigation tab for Steam Deck visual novel text, intentionally matching the reader VN mode label.">VN</string>
+    <string name="settings_texthooker">VN / Steam Deck</string>
+    <string name="texthooker_status_not_configured">尚未设置 Steam Deck 连接</string>
+    <string name="texthooker_status_connecting">正在连接 %1$s…</string>
+    <string name="texthooker_status_connected">已连接 %1$s</string>
+    <string name="texthooker_status_disconnected">已断开与 %1$s 的连接</string>
+    <string name="texthooker_retry_in">%1$d 秒后重试</string>
+    <string name="texthooker_no_text_source">Deck 上没有已连接的文本提取源</string>
+    <string name="texthooker_reason_unreachable">无法访问服务器</string>
+    <string name="texthooker_reason_unauthorized">服务器拒绝了访问令牌</string>
+    <string name="texthooker_reason_http">服务器错误（HTTP %1$d）</string>
+    <string name="texthooker_reason_closed">服务器关闭了连接</string>
+    <string name="texthooker_reason_invalid_response">这似乎不是 VN 文本服务器</string>
+    <string name="texthooker_reason_incompatible">服务器协议不兼容（v%1$d），请更新应用或服务器</string>
+    <string name="texthooker_reason_invalid_settings">主机或端口无效</string>
+    <string name="texthooker_new_line">收到新的台词</string>
+    <string name="texthooker_show_latest">显示最新</string>
+    <string name="texthooker_empty_waiting">正在等待游戏文本…</string>
+    <string name="texthooker_empty_waiting_hint">Deck 捕获到台词后会立即显示在这里。点按词语即可查词。</string>
+    <string name="texthooker_empty_not_configured">在手机上阅读视觉小说</string>
+    <string name="texthooker_empty_not_configured_hint">连接 Steam Deck 上的 steamdeck-vn-extractor，即可在这里查看游戏内文本。</string>
+    <string name="texthooker_action_set_up">设置连接</string>
+    <string name="texthooker_history_title">最近台词</string>
+    <string name="texthooker_settings_description">显示 Steam Deck 上 steamdeck-vn-extractor 捕获的游戏内文本（例如通过 Tailscale 连接）。游戏截图可通过 {image} 添加到 Anki 卡片。</string>
+    <string name="texthooker_settings_host">主机</string>
+    <string name="texthooker_settings_host_hint">Tailscale MagicDNS 名称或 IP 地址。留空即关闭连接。</string>
+    <string name="texthooker_settings_port">端口</string>
+    <string name="texthooker_settings_token">访问令牌（可选）</string>
+    <string name="texthooker_settings_token_hint">仅当服务器配置了令牌时需要。</string>
+    <string name="texthooker_settings_use_defaults">使用默认值</string>
+    <string name="texthooker_settings_test">测试连接</string>
+    <string name="texthooker_settings_test_success">已连接 %1$s（服务器 %2$s）</string>
+    <string name="texthooker_settings_test_failed">连接失败：%1$s</string>
+    <string name="texthooker_settings_error_host">请输入主机名或 IP 地址，不要包含 http:// 或端口</string>
+    <string name="texthooker_settings_error_port">请输入 1 到 65535 之间的端口</string>
+    <string name="texthooker_settings_error_token">令牌不能包含控制字符</string>
+    <string name="texthooker_settings_screenshot_width">截图宽度</string>
+    <string name="texthooker_settings_screenshot_width_value" comment="Screenshot width in pixels, intentionally matching the page swipe threshold value.">%1$d px</string>
+    <string name="texthooker_settings_screenshot_original">原始分辨率</string>
+    <string name="texthooker_settings_screenshot_help">在 VN 标签页制卡且卡片格式使用 {image} 时，会从 Deck 获取截图。手动选择的网络图片优先。</string>
+    <string name="texthooker_screenshot_failed">未添加截图：Deck 没有返回图片</string>
+    <string name="texthooker_screenshot_attach_failed">无法将游戏截图附加到卡片</string>
+    <string name="texthooker_screenshot_not_configured">未添加截图：尚未设置 Steam Deck 连接</string>
+    <string name="texthooker_screenshot_unreachable">未添加截图：无法访问 Deck</string>
+    <string name="texthooker_screenshot_unavailable">未添加截图：Deck 无法截取屏幕</string>
+    <string name="texthooker_screenshot_unauthorized">未添加截图：Deck 拒绝了访问令牌</string>
+    <string name="texthooker_screenshot_http_error">未添加截图：服务器错误（HTTP %1$d）</string>
+    <string name="mine_with_options_image_screenshot">游戏截图</string>
+    <plurals name="texthooker_history_count">
+        <item quantity="one">%1$d 句</item>
+        <item quantity="other">%1$d 句</item>
+    </plurals>
 </resources>

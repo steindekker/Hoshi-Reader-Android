@@ -31,6 +31,7 @@ internal class AnkiRepository(
     private val ankiConnectBackendFactory: (String, String) -> AnkiBackend,
     private val loadDictionaryMedia: (DictionaryMedia) -> ByteArray?,
     private val loadTermDictionaries: () -> List<AnkiTermDictionary>,
+    private val screenshotSource: AnkiScreenshotSource,
 ) {
     @Inject
     constructor(
@@ -39,6 +40,7 @@ internal class AnkiRepository(
         settingsRepository: AnkiSettingsRepository,
         localAudioRepository: LocalAudioRepository,
         dictionaryRepository: DictionaryRepository,
+        screenshotSource: AnkiScreenshotSource,
     ) : this(
         context = context,
         backend = backend,
@@ -56,6 +58,7 @@ internal class AnkiRepository(
                 )
             }
         },
+        screenshotSource = screenshotSource,
     )
 
     internal constructor(
@@ -67,6 +70,7 @@ internal class AnkiRepository(
             AnkiConnectBackend(endpoint, apiKey = apiKey)
         },
         loadTermDictionaries: () -> List<AnkiTermDictionary> = { emptyList() },
+        screenshotSource: AnkiScreenshotSource = UnavailableAnkiScreenshotSource,
     ) : this(
         context = context,
         backend = backend,
@@ -75,6 +79,7 @@ internal class AnkiRepository(
         ankiConnectBackendFactory = ankiConnectBackendFactory,
         loadDictionaryMedia = { null },
         loadTermDictionaries = loadTermDictionaries,
+        screenshotSource = screenshotSource,
     )
 
     val settings: Flow<AnkiSettings> = settingsRepository.settings
@@ -200,28 +205,41 @@ internal class AnkiRepository(
         decks: List<AnkiDeck>,
         noteTypes: List<AnkiNoteType>,
         formatId: String? = null,
-    ): Boolean = withContext(Dispatchers.IO) {
+    ): Boolean = mineEntryWithResult(rawPayload, context, decks, noteTypes, formatId).added
+
+    suspend fun mineEntryWithResult(
+        rawPayload: String,
+        context: AnkiMiningContext,
+        decks: List<AnkiDeck>,
+        noteTypes: List<AnkiNoteType>,
+        formatId: String? = null,
+    ): AnkiMineResult = withContext(Dispatchers.IO) {
+        val notAdded = AnkiMineResult(added = false)
         val settings = settings.first()
         val termDictionaries = loadTermDictionaries()
-        val format = settings.resolveAnkiCardFormat(formatId) ?: return@withContext false
-        val activeBackend = activeBackendOrError(settings).getOrElse { return@withContext false }
-        if (!activeBackend.isAvailable()) return@withContext false
+        val format = settings.resolveAnkiCardFormat(formatId) ?: return@withContext notAdded
+        val activeBackend = activeBackendOrError(settings).getOrElse { return@withContext notAdded }
+        if (!activeBackend.isAvailable()) return@withContext notAdded
         val availableDecks = decks.ifEmpty { activeBackend.fetchDecks() }
         val availableNoteTypes = noteTypes.ifEmpty { activeBackend.fetchNoteTypes() }
         val deck = availableDecks.firstOrNull { it.id == format.selectedDeckId }
             ?: format.selectedDeckName?.let { name -> availableDecks.firstOrNull { it.name == name } }
-            ?: return@withContext false
+            ?: return@withContext notAdded
         val noteType = availableNoteTypes.firstOrNull { it.id == format.selectedNoteTypeId }
             ?: format.selectedNoteTypeName?.let { name -> availableNoteTypes.firstOrNull { it.name == name } }
-            ?: return@withContext false
+            ?: return@withContext notAdded
         val fieldMappings = format.fieldMappings.activeAnkiFieldMappings(noteType)
         val payload = runCatching { AnkiMiningPayload.fromJson(rawPayload) }.getOrNull()
-            ?: return@withContext false
+            ?: return@withContext notAdded
         // The merged {image} marker (plus the deprecated {book-cover}/{web-image} aliases) gates
-        // both the cover and the picked web image — only one is ever set on the context at a time.
+        // the picked web image, the game screenshot, and the cover (in that precedence).
         val needsImage = fieldMappings.referencesAnkiHandlebar("{image}") ||
             fieldMappings.referencesAnkiHandlebar("{book-cover}") ||
             fieldMappings.referencesAnkiHandlebar("{web-image}")
+        // An explicitly picked web image wins, so the Deck is only contacted without one.
+        val screenshot = context.screenshot
+            ?.takeIf { needsImage && context.webImageUrl.isNullOrBlank() }
+            ?.let { addScreenshot(it, activeBackend, settings.backendKind) }
         val needsSasayakiAudio = fieldMappings.referencesAnkiHandlebar("{sasayaki-audio}")
         val needsAudio = fieldMappings.referencesAnkiHandlebar("{audio}")
         val mediaContext = AnkiMiningContext(
@@ -237,6 +255,7 @@ internal class AnkiRepository(
             webImagePath = context.webImageUrl?.takeIf { needsImage }?.let {
                 addRemoteImage(it, activeBackend, settings.backendKind)
             },
+            screenshotPath = screenshot?.ref,
         )
         val mediaPayload = payload.copy(
             audio = payload.audio.takeIf { needsAudio && it.isNotBlank() }
@@ -280,7 +299,50 @@ internal class AnkiRepository(
                 AnkiBackendKind.AnkiDroid -> if (settings.ankiDroidForceSync) activeBackend.sync()
             }
         }
-        added
+        AnkiMineResult(
+            added = added,
+            warnings = listOfNotNull(screenshot?.warning).takeIf { added }.orEmpty(),
+        )
+    }
+
+    private data class ScreenshotAttachment(val ref: String?, val warning: UiText?)
+
+    /** Attaches the game screenshot; any failure only produces a warning so mining continues. */
+    private suspend fun addScreenshot(
+        request: AnkiScreenshotRequest,
+        activeBackend: AnkiBackend,
+        backendKind: AnkiBackendKind,
+    ): ScreenshotAttachment {
+        val attachFailed = UiText.Resource(R.string.texthooker_screenshot_attach_failed)
+        request.localPath?.takeIf { File(it).isFile }?.let { path ->
+            val ref = runCatching { addHashedMediaFile(path, "hoshi_screenshot", activeBackend, backendKind) }
+                .getOrNull()
+            return ScreenshotAttachment(ref, if (ref == null) attachFailed else null)
+        }
+        val result = try {
+            screenshotSource.fetchScreenshot(request)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            runCatching { Log.w(TAG, "Failed to fetch screenshot", e) }
+            AnkiScreenshotResult.Failure(UiText.Resource(R.string.texthooker_screenshot_failed))
+        }
+        return when (result) {
+            is AnkiScreenshotResult.Failure -> ScreenshotAttachment(null, result.message)
+            is AnkiScreenshotResult.Success -> {
+                val extension = if (result.mimeType == "image/png") "png" else "jpg"
+                val file = mediaCacheFile("hoshi_screenshot_${sha1Hex(result.bytes)}.$extension")
+                val ref = try {
+                    file.writeBytes(result.bytes)
+                    addMediaFile(file.absolutePath, file.name, mimeTypeForPath(file.name), activeBackend, backendKind)
+                } catch (e: java.io.IOException) {
+                    null
+                } finally {
+                    file.delete()
+                }
+                ScreenshotAttachment(ref, if (ref == null) attachFailed else null)
+            }
+        }
     }
 
     suspend fun duplicateStates(
@@ -550,6 +612,10 @@ private fun sha1Hex(data: ByteArray): String =
     MessageDigest.getInstance("SHA-1").digest(data).joinToString("") { "%02x".format(it) }
 
 private const val TAG = "AnkiRepository"
+
+private val UnavailableAnkiScreenshotSource = AnkiScreenshotSource {
+    AnkiScreenshotResult.Failure(UiText.Resource(R.string.texthooker_screenshot_failed))
+}
 
 private fun logAnkiFetchFailure(message: String, error: Throwable) {
     runCatching { Log.w(TAG, message, error) }

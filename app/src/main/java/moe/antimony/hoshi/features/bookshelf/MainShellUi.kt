@@ -9,6 +9,7 @@ import moe.antimony.hoshi.epub.BookSortOption
 enum class MainTab(@param:StringRes val labelRes: Int) {
     Books(R.string.main_tab_books),
     Dictionary(R.string.main_tab_dictionary),
+    TextHooker(R.string.main_tab_vn),
     Statistics(R.string.main_tab_statistics),
     Settings(R.string.main_tab_settings),
 }
@@ -164,6 +165,7 @@ private const val CompletedProgressThreshold = 0.999
 enum class SettingsDestination {
     Dictionaries,
     Anki,
+    TextHooker,
     Profiles,
     Display,
     Appearance,
@@ -206,6 +208,7 @@ fun settingsGroups(): List<List<SettingsRowModel>> = listOf(
         SettingsRowModel(R.string.settings_profiles, SettingsDestination.Profiles),
         SettingsRowModel(R.string.settings_dictionaries, SettingsDestination.Dictionaries),
         SettingsRowModel(R.string.settings_anki, SettingsDestination.Anki),
+        SettingsRowModel(R.string.settings_texthooker, SettingsDestination.TextHooker),
         SettingsRowModel(R.string.settings_display, SettingsDestination.Display),
         SettingsRowModel(R.string.settings_appearance, SettingsDestination.Appearance),
         SettingsRowModel(R.string.settings_behavior, SettingsDestination.Behavior),

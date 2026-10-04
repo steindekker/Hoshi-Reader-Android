@@ -409,7 +409,7 @@
     <string name="reader_appearance_mode" comment="Reader appearance setting label, intentionally matching dictionary mode.">Mode</string>
     <string name="reader_appearance_paginated">Paginated</string>
     <string name="reader_appearance_continuous">Continuous</string>
-    <string name="reader_appearance_visual_novel">VN</string>
+    <string name="reader_appearance_visual_novel" comment="Reader VN layout mode label, intentionally matching the VN main tab label.">VN</string>
     <string name="reader_visual_novel_reveal_speed">Text Reveal Speed</string>
     <string name="reader_visual_novel_reveal_speed_instant">Instant</string>
     <string name="reader_visual_novel_screen_mode">Screen Content</string>
@@ -421,7 +421,7 @@
     <string name="reader_visual_novel_merge_cross_screen_sasayaki_cues">Keep Sasayaki Text Together</string>
     <string name="reader_appearance_chapter_swipe_distance">Chapter Swipe Distance</string>
     <string name="reader_appearance_page_swipe_threshold">Page Swipe Threshold</string>
-    <string name="reader_appearance_page_swipe_threshold_value">%1$d px</string>
+    <string name="reader_appearance_page_swipe_threshold_value" comment="Pixel value label, intentionally matching the VN screenshot width value.">%1$d px</string>
     <string name="reader_appearance_page_swipe_disabled" comment="Paginated and VN Reader swipe-threshold value; intentionally matches other off labels.">Off</string>
     <string name="reader_appearance_horizontal_padding">Horizontal Padding</string>
     <string name="reader_appearance_vertical_padding">Vertical Padding</string>
@@ -909,4 +909,57 @@
     <string name="sasayaki_transcription_light_description">Uses fewer resources, with slower transcription.</string>
     <string name="sasayaki_transcription_balanced_description">Balances transcription speed and everyday use.</string>
     <string name="sasayaki_transcription_fast_description">Faster transcription; may generate more heat.</string>
+    <!-- VN tab (steamdeck-vn-extractor text hooker) -->
+    <string name="main_tab_vn" comment="Main navigation tab for Steam Deck visual novel text, intentionally matching the reader VN mode label.">VN</string>
+    <string name="settings_texthooker">VN / Steam Deck</string>
+    <string name="texthooker_status_not_configured">Steam Deck connection not set up</string>
+    <string name="texthooker_status_connecting">Connecting to %1$s…</string>
+    <string name="texthooker_status_connected">Connected to %1$s</string>
+    <string name="texthooker_status_disconnected">Disconnected from %1$s</string>
+    <string name="texthooker_retry_in">Retrying in %1$d s</string>
+    <string name="texthooker_no_text_source">No text hooker source is connected on the Deck</string>
+    <string name="texthooker_reason_unreachable">Can\'t reach the server</string>
+    <string name="texthooker_reason_unauthorized">The server rejected the access token</string>
+    <string name="texthooker_reason_http">Server error (HTTP %1$d)</string>
+    <string name="texthooker_reason_closed">The server closed the connection</string>
+    <string name="texthooker_reason_invalid_response">This doesn\'t look like a VN text server</string>
+    <string name="texthooker_reason_incompatible">Incompatible server protocol (v%1$d); update the app or the server</string>
+    <string name="texthooker_reason_invalid_settings">Invalid host or port</string>
+    <string name="texthooker_new_line">A new line arrived</string>
+    <string name="texthooker_show_latest">Show latest</string>
+    <string name="texthooker_empty_waiting">Waiting for text from the game…</string>
+    <string name="texthooker_empty_waiting_hint">Lines appear here as soon as the Deck captures them. Tap a word to look it up.</string>
+    <string name="texthooker_empty_not_configured">Read your visual novel on your phone</string>
+    <string name="texthooker_empty_not_configured_hint">Connect to steamdeck-vn-extractor on your Steam Deck to see in-game text here.</string>
+    <string name="texthooker_action_set_up">Set up connection</string>
+    <string name="texthooker_history_title">Recent lines</string>
+    <string name="texthooker_settings_description">Shows in-game text captured by steamdeck-vn-extractor on your Steam Deck, for example over Tailscale. Game screenshots can be added to Anki cards through {image}.</string>
+    <string name="texthooker_settings_host">Host</string>
+    <string name="texthooker_settings_host_hint">Tailscale MagicDNS name or IP address. Leave empty to turn the connection off.</string>
+    <string name="texthooker_settings_port">Port</string>
+    <string name="texthooker_settings_token">Access token (optional)</string>
+    <string name="texthooker_settings_token_hint">Only needed when the server is configured with a token.</string>
+    <string name="texthooker_settings_use_defaults">Use defaults</string>
+    <string name="texthooker_settings_test">Test connection</string>
+    <string name="texthooker_settings_test_success">Connected to %1$s (server %2$s)</string>
+    <string name="texthooker_settings_test_failed">Connection failed: %1$s</string>
+    <string name="texthooker_settings_error_host">Enter a host name or IP address without http:// or a port</string>
+    <string name="texthooker_settings_error_port">Enter a port between 1 and 65535</string>
+    <string name="texthooker_settings_error_token">The token can\'t contain control characters</string>
+    <string name="texthooker_settings_screenshot_width">Screenshot width</string>
+    <string name="texthooker_settings_screenshot_width_value" comment="Screenshot width in pixels, intentionally matching the page swipe threshold value.">%1$d px</string>
+    <string name="texthooker_settings_screenshot_original">Original resolution</string>
+    <string name="texthooker_settings_screenshot_help">Screenshots are fetched from the Deck when you mine from the VN tab and the card format uses {image}. A picked web image takes precedence.</string>
+    <string name="texthooker_screenshot_failed">No screenshot added: the Deck didn\'t return an image</string>
+    <string name="texthooker_screenshot_attach_failed">Couldn\'t attach the game screenshot to the card</string>
+    <string name="texthooker_screenshot_not_configured">No screenshot added: the Steam Deck connection isn\'t set up</string>
+    <string name="texthooker_screenshot_unreachable">No screenshot added: can\'t reach the Deck</string>
+    <string name="texthooker_screenshot_unavailable">No screenshot added: the Deck couldn\'t capture the screen</string>
+    <string name="texthooker_screenshot_unauthorized">No screenshot added: the Deck rejected the access token</string>
+    <string name="texthooker_screenshot_http_error">No screenshot added: server error (HTTP %1$d)</string>
+    <string name="mine_with_options_image_screenshot">Game screenshot</string>
+    <plurals name="texthooker_history_count">
+        <item quantity="one">%1$d line</item>
+        <item quantity="other">%1$d lines</item>
+    </plurals>
 </resources>

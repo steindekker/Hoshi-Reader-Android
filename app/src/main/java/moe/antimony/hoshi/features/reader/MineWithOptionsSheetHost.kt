@@ -32,14 +32,26 @@ internal sealed interface MineImageChoice {
 
     /** A Bing image at [url], downloaded and attached on mine. */
     data class Web(val url: String) : MineImageChoice
+
+    /**
+     * The game screenshot — only offered when the context carries a screenshot request (the VN
+     * tab). [localPath] is the fetched preview when available; otherwise it is fetched on mine.
+     */
+    data class Screenshot(val localPath: String?) : MineImageChoice
 }
+
+/** The game screenshot preview shown in the options sheet ([path] null while loading or failed). */
+internal data class MineScreenshotPreview(
+    val path: String?,
+    val loading: Boolean,
+)
 
 /**
  * The context committed by the options flow. A picked sentence replaces the
  * sentence (clearing the stale in-book offset); a null pick keeps the base context
  * unchanged, so "mine with options" with the in-book sentence equals instant mine.
- * [image] sets exactly one of cover/web on the context (or neither), which the
- * single {image} marker then resolves: web first, else cover.
+ * [image] sets exactly one of cover/web/screenshot on the context (or none), which the
+ * single {image} marker then resolves: web first, else screenshot, else cover.
  */
 internal fun augmentedMiningContext(
     base: AnkiMiningContext,
@@ -48,9 +60,14 @@ internal fun augmentedMiningContext(
 ): AnkiMiningContext {
     val withSentence = if (picked != null) base.copy(sentence = picked, sentenceOffset = null) else base
     return when (image) {
-        MineImageChoice.None -> withSentence.copy(coverPath = null, webImageUrl = null)
-        MineImageChoice.Cover -> withSentence.copy(webImageUrl = null)
-        is MineImageChoice.Web -> withSentence.copy(coverPath = null, webImageUrl = image.url)
+        MineImageChoice.None -> withSentence.copy(coverPath = null, webImageUrl = null, screenshot = null)
+        MineImageChoice.Cover -> withSentence.copy(webImageUrl = null, screenshot = null)
+        is MineImageChoice.Web -> withSentence.copy(coverPath = null, webImageUrl = image.url, screenshot = null)
+        is MineImageChoice.Screenshot -> withSentence.copy(
+            coverPath = null,
+            webImageUrl = null,
+            screenshot = withSentence.screenshot?.copy(localPath = image.localPath),
+        )
     }
 }
 
@@ -68,6 +85,7 @@ internal fun MineWithOptionsSheetHost(
     reply: (popupId: String, messageId: String, body: String) -> Unit,
     onClose: () -> Unit,
     sentenceMode: MineSentenceMode,
+    screenshotPreview: MineScreenshotPreview? = null,
 ) {
     val req = request ?: return
     // Reader / process-text carry a real surrounding sentence; the dictionary does not.
@@ -79,6 +97,7 @@ internal fun MineWithOptionsSheetHost(
         term = req.term,
         currentSentence = inBookSentence,
         bookCoverPath = req.baseContext.coverPath,
+        screenshot = screenshotPreview?.takeIf { req.baseContext.screenshot != null },
         onConfirm = { picked, image ->
             mine(req.payloadJson, augmentedMiningContext(req.baseContext, picked, image)) { mined ->
                 reply(req.popupId, req.messageId, mined.toString())

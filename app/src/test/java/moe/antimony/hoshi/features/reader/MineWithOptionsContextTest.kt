@@ -1,6 +1,7 @@
 package moe.antimony.hoshi.features.reader
 
 import moe.antimony.hoshi.features.anki.AnkiMiningContext
+import moe.antimony.hoshi.features.anki.AnkiScreenshotRequest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -44,5 +45,27 @@ class MineWithOptionsContextTest {
         assertNull(result.coverPath)
         assertNull(result.webImageUrl)
         assertEquals("例文です。", result.sentence)
+    }
+
+    private val vnBase = AnkiMiningContext(
+        sentence = "game sentence",
+        sentenceOffset = 2,
+        screenshot = AnkiScreenshotRequest(lineId = 7),
+    )
+
+    @Test
+    fun screenshotChoiceKeepsRequestWithPreviewPath() {
+        val result = augmentedMiningContext(vnBase, picked = null, image = MineImageChoice.Screenshot("/cache/p.jpg"))
+        assertEquals(AnkiScreenshotRequest(lineId = 7, localPath = "/cache/p.jpg"), result.screenshot)
+        assertNull(result.webImageUrl)
+        assertEquals(2, result.sentenceOffset)
+    }
+
+    @Test
+    fun webAndNoneChoicesDropTheScreenshot() {
+        val web = augmentedMiningContext(vnBase, picked = null, image = MineImageChoice.Web("https://x/a.jpg"))
+        assertNull(web.screenshot)
+        assertEquals("https://x/a.jpg", web.webImageUrl)
+        assertNull(augmentedMiningContext(vnBase, picked = null, image = MineImageChoice.None).screenshot)
     }
 }
