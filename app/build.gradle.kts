@@ -19,10 +19,33 @@ val sherpaOnnxArchive by configurations.creating {
     isTransitive = false
 }
 val androidNdkHome = System.getenv("ANDROID_NDK_HOME") ?: "/opt/homebrew/share/android-ndk"
-val releaseKeystorePath = providers.environmentVariable("ANDROID_KEYSTORE_FILE").orNull
-val releaseKeystorePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull
-val releaseKeyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").orNull
-val releaseKeyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull
+val releaseSigningNames = listOf(
+    "ANDROID_KEYSTORE_FILE",
+    "ANDROID_KEYSTORE_PASSWORD",
+    "ANDROID_KEY_ALIAS",
+    "ANDROID_KEY_PASSWORD",
+)
+val releaseSigningFromEnvironment = releaseSigningNames.associateWith { name ->
+    providers.environmentVariable(name).orNull?.takeIf { it.isNotBlank() }
+}
+// CI sets the four variables above. Local release builds use the machine file
+// only when none of those variables are set, so a partial environment cannot
+// mix with a different keystore.
+val localReleaseSigningFile = objects.fileProperty().apply {
+    set(File(System.getProperty("user.home"), ".config/hoshi-reader/release-signing.env"))
+}
+val releaseSigningFromFile = if (releaseSigningFromEnvironment.values.any { it != null }) {
+    emptyMap()
+} else {
+    parseReleaseSigningEnv(providers.fileContents(localReleaseSigningFile).asText.orNull)
+}
+fun releaseSigningValue(name: String): String? =
+    releaseSigningFromEnvironment[name] ?: releaseSigningFromFile[name]?.takeIf { it.isNotBlank() }
+
+val releaseKeystorePath = releaseSigningValue("ANDROID_KEYSTORE_FILE")
+val releaseKeystorePassword = releaseSigningValue("ANDROID_KEYSTORE_PASSWORD")
+val releaseKeyAlias = releaseSigningValue("ANDROID_KEY_ALIAS")
+val releaseKeyPassword = releaseSigningValue("ANDROID_KEY_PASSWORD")
 val releaseAbi = providers.gradleProperty("releaseAbi").getOrElse("arm64-v8a")
 require(releaseAbi in listOf("arm64-v8a", "armeabi-v7a", "x86_64"))
 val releaseVersionName = providers.gradleProperty("releaseVersionName").orNull
@@ -43,8 +66,48 @@ val isReleaseSigningConfigured = releaseSigningValues.all { !it.isNullOrBlank() 
 if (isReleaseSigningRequested && !isReleaseSigningConfigured) {
     throw GradleException(
         "Release signing requires ANDROID_KEYSTORE_FILE, ANDROID_KEYSTORE_PASSWORD, " +
-            "ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD, and the keystore file must exist."
+            "ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD, and the keystore file must exist. " +
+            "Local builds read ~/.config/hoshi-reader/release-signing.env when those variables are unset."
     )
+}
+
+fun parseReleaseSigningEnv(text: String?): Map<String, String> {
+    if (text.isNullOrBlank()) return emptyMap()
+    val values = linkedMapOf<String, String>()
+    text.lineSequence().forEach { raw ->
+        val line = raw.trim()
+        if (line.isEmpty() || line.startsWith("#")) return@forEach
+        val separator = line.indexOf('=')
+        if (separator <= 0) return@forEach
+        val key = line.substring(0, separator).removePrefix("export ").trim()
+        if (key.isEmpty()) return@forEach
+        values[key] = unescapeReleaseSigningValue(line.substring(separator + 1).trim())
+    }
+    return values
+}
+
+fun unescapeReleaseSigningValue(raw: String): String {
+    if (raw.length >= 2 && raw.first() == '\'' && raw.last() == '\'') {
+        return raw.substring(1, raw.lastIndex).replace("'\"'\"'", "'")
+    }
+    if (raw.length >= 2 && raw.first() == '"' && raw.last() == '"') {
+        val body = raw.substring(1, raw.lastIndex)
+        return buildString {
+            var escaped = false
+            for (character in body) {
+                if (escaped) {
+                    append(character)
+                    escaped = false
+                } else if (character == '\\') {
+                    escaped = true
+                } else {
+                    append(character)
+                }
+            }
+            if (escaped) append('\\')
+        }
+    }
+    return raw
 }
 
 val hostLibExtension = when {
