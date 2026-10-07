@@ -1,0 +1,53 @@
+---
+name: Bridge CI
+
+"on":
+  pull_request:
+    paths:
+      - "bridge/**"
+      - ".github/workflows/bridge-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "bridge/**"
+      - ".github/workflows/bridge-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Vet and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: bridge
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: bridge/go.mod
+          cache-dependency-path: bridge/go.sum
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build release binaries
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o /dev/null ./cmd/hoshi-bridge
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -o /dev/null ./cmd/vnhook

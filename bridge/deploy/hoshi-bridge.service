@@ -1,0 +1,24 @@
+[Unit]
+Description=Hoshi bridge (VN text hooker and screenshots -> Hoshi Reader over Tailscale)
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/hoshi-bridge
+Restart=always
+RestartSec=3
+# The daemon finds the graphical session on its own: gamescope's Wayland
+# socket in $XDG_RUNTIME_DIR (Game Mode), Xwayland sockets in /tmp/.X11-unix,
+# and KDE's wayland-0 + xauth_* (Desktop Mode). It works across Game Mode /
+# Desktop Mode switches without restarting. Pin these only if auto-detection
+# picks the wrong display:
+#Environment=GAMESCOPE_WAYLAND_DISPLAY=gamescope-0
+#Environment=DISPLAY=:0
+#Environment=WAYLAND_DISPLAY=wayland-0
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# Keep journald readable; use "logLevel": "debug" in config.json for more.
+StandardOutput=journal
+StandardError=journal
+Nice=5
+
+[Install]
+WantedBy=default.target

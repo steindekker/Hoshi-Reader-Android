@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vn-extractor</title>
+<style>
+  :root { color-scheme: light dark; --bg:#fafafa; --fg:#1d1d1f; --muted:#6b6b70; --card:#fff; --line:#e3e3e6; --ok:#1f8a3b; --bad:#c0392b; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#151517; --fg:#ececf0; --muted:#9a9aa2; --card:#1e1e21; --line:#2c2c31; --ok:#4cc26b; --bad:#ff6b5e; } }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, sans-serif; }
+  main { max-width:900px; margin:0 auto; padding:16px; }
+  h1 { font-size:18px; margin:0 0 12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-bottom:12px; }
+  .muted { color:var(--muted); font-size:13px; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  td, th { text-align:left; padding:3px 8px 3px 0; vertical-align:top; overflow-wrap:anywhere; }
+  #log { list-style:none; margin:0; padding:0; }
+  #log li { padding:6px 0; border-top:1px solid var(--line); font-size:17px; }
+  #log li:first-child { border-top:0; }
+  #log .meta { color:var(--muted); font-size:12px; margin-right:8px; font-variant-numeric:tabular-nums; }
+  button, input { font:inherit; padding:4px 10px; }
+  #shot { max-width:100%; margin-top:8px; border-radius:6px; display:none; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>vn-extractor <span id="conn" class="muted">connecting…</span></h1>
+  <div class="card">
+    <div class="row">
+      <input id="token" type="password" placeholder="token (if configured)" size="24">
+      <button id="save">Use token</button>
+      <button id="snap">Screenshot</button>
+      <span id="snapinfo" class="muted"></span>
+    </div>
+    <img id="shot" alt="">
+  </div>
+  <div class="card"><table id="status"></table></div>
+  <div class="card"><div class="muted">Text threads</div><ul id="threads"><li class="muted">No game hooked yet.</li></ul></div>
+  <div class="card"><ul id="log"></ul></div>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  let token = "";
+  try { token = new URLSearchParams(location.hash.slice(1)).get("token") || localStorage.getItem("vnx-token") || ""; } catch (_) {}
+  $("token").value = token;
+  const headers = () => token ? { Authorization: "Bearer " + token } : {};
+  let ws, lastId = null, retry;
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+  function renderStatus(st) {
+    const rows = [["host", esc(st.hostname) + " · v" + esc(st.version) + " · protocol " + st.protocol],
+                  ["latest line", st.latestLineId],
+                  ["screenshot", st.screenshot.available ? '<span class="ok">' + esc(st.screenshot.backend) + "</span>" : '<span class="bad">unavailable</span>']];
+    if (st.hook) {
+      const h = st.hook;
+      let v = esc(h.state || "");
+      if (h.game) v += " · " + esc(h.game);
+      if (h.mode) v += " · " + esc(h.mode);
+      if (h.engine) v += " · " + esc(h.engine);
+      if (h.error) v += "<br><span class='bad'>" + esc(h.error) + "</span>";
+      rows.push(["hook", v]);
+    }
+    for (const s of st.sources) {
+      rows.push([esc(s.id) + " <span class='muted'>(" + esc(s.kind) + ")</span>",
+        (s.connected ? '<span class="ok">connected</span>' : '<span class="bad">disconnected</span>') +
+        " <span class='muted'>" + esc(s.target) + "</span>" + (s.lastError ? "<br><span class='muted'>" + esc(s.lastError) + "</span>" : "")]);
+    }
+    $("status").innerHTML = rows.map(r => "<tr><th>" + r[0] + "</th><td>" + r[1] + "</td></tr>").join("");
+  }
+
+  function addLine(l) {
+    if (lastId !== null && l.id <= lastId) return;
+    lastId = l.id;
+    const li = document.createElement("li");
+    const t = new Date(l.receivedAt).toLocaleTimeString();
+    li.innerHTML = "<span class='meta'>#" + l.id + " " + t + " " + esc(l.source) + "</span>" + esc(l.text);
+    $("log").prepend(li);
+    while ($("log").children.length > 300) $("log").lastChild.remove();
+  }
+
+  function renderThreads(list) {
+    const items = (list && list.threads) || [];
+    if (!items.length) {
+      $("threads").innerHTML = "<li class='muted'>No text threads yet. Advance the game's dialogue.</li>";
+      return;
+    }
+    $("threads").innerHTML = items.map(t => {
+      const sample = t.samples && t.samples.length ? t.samples[t.samples.length - 1].text : "";
+      return "<li>" + (t.selected ? "<b>selected</b> " : "") + esc(t.name || t.hookCode) +
+        " <span class='muted'>" + esc(t.score) + "</span><br>" + esc(sample) +
+        " <button data-thread='" + esc(t.id) + "'>use</button></li>";
+    }).join("") + "<li><button id='hook-auto'>automatic</button></li>";
+  }
+
+  $("threads").onclick = async (ev) => {
+    const btn = ev.target.closest("button");
+    if (!btn) return;
+    const body = btn.id === "hook-auto" ? { threadId: null } : { threadId: btn.dataset.thread };
+    const r = await fetch("api/hook/threads/select", {
+      method: "POST", headers: Object.assign({ "Content-Type": "application/json" }, headers()),
+      body: JSON.stringify(body)
+    });
+    if (r.ok) renderThreads(await r.json());
+  };
+
+  function connect() {
+    clearTimeout(retry);
+    if (ws) { ws.onclose = null; ws.close(); }
+    const u = new URL("api/ws", location.href);
+    u.protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    if (lastId !== null) u.searchParams.set("after", lastId);
+    if (token) u.searchParams.set("token", token);
+    ws = new WebSocket(u);
+    ws.onopen = () => { $("conn").textContent = "live"; $("conn").className = "ok"; };
+    ws.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      if (m.type === "hello") { renderStatus(m.status); m.lines.forEach(addLine); }
+      else if (m.type === "line") addLine(m.line);
+      else if (m.type === "status") renderStatus(m.status);
+      else if (m.type === "threads") renderThreads(m);
+    };
+    ws.onclose = () => { $("conn").textContent = "disconnected, retrying…"; $("conn").className = "bad"; retry = setTimeout(connect, 2000); };
+  }
+
+  $("save").onclick = () => {
+    token = $("token").value.trim();
+    try { localStorage.setItem("vnx-token", token); } catch (_) {}
+    connect();
+  };
+
+  $("snap").onclick = async () => {
+    $("snapinfo").textContent = "capturing…";
+    const t0 = performance.now();
+    try {
+      const r = await fetch("api/screenshot?maxWidth=1280&quality=85", { method: "POST", headers: headers() });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || r.status); }
+      const blob = await r.blob();
+      $("shot").src = URL.createObjectURL(blob);
+      $("shot").style.display = "block";
+      $("snapinfo").textContent = Math.round(blob.size / 1024) + " KB in " + Math.round(performance.now() - t0) + " ms";
+    } catch (e) { $("snapinfo").textContent = "failed: " + e.message; }
+  };
+
+  connect();
+})();
+</script>
+</body>
+</html>

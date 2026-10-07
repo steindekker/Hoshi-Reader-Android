@@ -1,0 +1,19 @@
+[Unit]
+Description=Hoshi bridge (mpv subtitles, sentence audio and clips -> Hoshi Reader over Tailscale)
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/hoshi-bridge
+Restart=always
+RestartSec=3
+# The bridge talks to mpv over its JSON IPC socket (input-ipc-server in
+# mpv.conf, default /tmp/mpvsocket) and runs ffmpeg/mpv for media, so both
+# must be on PATH.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+StandardOutput=journal
+StandardError=journal
+Nice=5
+
+[Install]
+WantedBy=default.target

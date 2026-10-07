@@ -1,0 +1,4 @@
+/hoshi-bridge
+/dist/
+*.test
+*.out
