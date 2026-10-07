@@ -130,7 +130,7 @@ fi
 cat <<MSG
 
 Done. Check it from this machine:
-    curl -s http://127.0.0.1:${port}/api/status
+    curl -s http://127.0.0.1:${port}/v2/status
     journalctl --user -u hoshi-bridge -f
 In Hoshi Reader (Settings > Live) add the host: $(uname -n), port ${port}${addr:+   (or $addr)}
 Edit ~/.config/hoshi-bridge/config.json, then: systemctl --user restart hoshi-bridge

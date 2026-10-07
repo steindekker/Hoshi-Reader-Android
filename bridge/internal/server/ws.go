@@ -4,50 +4,84 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/coder/websocket"
 
-	"github.com/steindekker/hoshi-reader/bridge/internal/hook"
-	"github.com/steindekker/hoshi-reader/bridge/internal/store"
+	"github.com/steindekker/hoshi-reader/bridge/internal/session"
 )
 
 const (
-	helloLastLines = 50
-	helloMaxLines  = 1000
-	wsBuffer       = 512
-	writeTimeout   = 10 * time.Second
+	wsBuffer     = 1024
+	writeTimeout = 10 * time.Second
 )
 
 type helloMsg struct {
-	Type     string       `json:"type"`
-	Protocol int          `json:"protocol"`
-	Status   Status       `json:"status"`
-	Lines    []store.Line `json:"lines"`
+	Type     string             `json:"type"`
+	Protocol int                `json:"protocol"`
+	Now      int64              `json:"now"`
+	Bridge   Bridge             `json:"bridge"`
+	Sessions []session.Snapshot `json:"sessions"`
 }
 
-type lineMsg struct {
-	Type string     `json:"type"`
-	Line store.Line `json:"line"`
-}
-
-type statusMsg struct {
+type bridgeMsg struct {
 	Type   string `json:"type"`
-	Status Status `json:"status"`
+	Bridge Bridge `json:"bridge"`
+}
+
+type sessionMsg struct {
+	Type    string       `json:"type"`
+	Session session.Info `json:"session"`
+}
+
+type sessionEndedMsg struct {
+	Type      string `json:"type"`
+	SessionID string `json:"sessionId"`
+}
+
+type cuesMsg struct {
+	Type      string        `json:"type"`
+	SessionID string        `json:"sessionId"`
+	TrackID   string        `json:"trackId"`
+	Mode      string        `json:"mode"`
+	Cues      []session.Cue `json:"cues"`
+}
+
+type playbackMsg struct {
+	Type      string `json:"type"`
+	SessionID string `json:"sessionId"`
+	session.Playback
+}
+
+type threadsMsg struct {
+	Type string `json:"type"`
+	threadsResponse
+}
+
+// wsMessage turns a hub event into its WebSocket frame, or nil.
+func (s *Server) wsMessage(v any) any {
+	switch ev := v.(type) {
+	case session.SessionEvent:
+		return sessionMsg{Type: "session", Session: ev.Info}
+	case session.EndedEvent:
+		return sessionEndedMsg{Type: "sessionEnded", SessionID: ev.ID}
+	case session.CuesEvent:
+		cues := ev.Cues
+		if cues == nil {
+			cues = []session.Cue{}
+		}
+		return cuesMsg{Type: "cues", SessionID: ev.SessionID, TrackID: ev.TrackID, Mode: ev.Mode, Cues: cues}
+	case session.PlaybackEvent:
+		return playbackMsg{Type: "playback", SessionID: ev.SessionID, Playback: ev.Playback}
+	case StatusChanged:
+		return bridgeMsg{Type: "bridge", Bridge: s.Bridge()}
+	case ThreadsChanged:
+		return threadsMsg{Type: "threads", threadsResponse: s.threads()}
+	}
+	return nil
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
-	var after int64
-	hasAfter := false
-	if v := r.URL.Query().Get("after"); v != "" {
-		n, err := strconv.ParseInt(v, 10, 64)
-		if err != nil || n < 0 {
-			writeError(w, http.StatusBadRequest, "after must be a non-negative integer")
-			return
-		}
-		after, hasAfter = n, true
-	}
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: s.opts.AllowedOrigins})
 	if err != nil {
 		return // Accept already wrote the HTTP error
@@ -74,42 +108,18 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// Subscribe before taking the snapshot so no line can fall in between;
-	// duplicates are filtered by id below.
-	sub := s.opts.Hub.Subscribe(wsBuffer)
+	// The snapshot and the subscription are taken atomically, so the event
+	// stream continues exactly where the hello leaves off.
+	sub, sessions := s.opts.Registry.Subscribe(wsBuffer)
 	defer sub.Close()
-
-	var lines []store.Line
-	if hasAfter {
-		lines = s.opts.Store.After(after, helloMaxLines)
-	} else {
-		lines = s.opts.Store.Last(helloLastLines)
+	for i := range sessions {
+		if sessions[i].Cues == nil {
+			sessions[i].Cues = []session.Cue{}
+		}
 	}
-	lastSent := after
-	if n := len(lines); n > 0 {
-		lastSent = lines[n-1].ID
-	} else if !hasAfter {
-		lastSent = s.opts.Store.LatestID()
-	}
-	hello := helloMsg{Type: "hello", Protocol: Protocol, Status: s.Status(), Lines: s.decorate(lines)}
+	hello := helloMsg{Type: "hello", Protocol: Protocol, Now: time.Now().UnixMilli(), Bridge: s.Bridge(), Sessions: sessions}
 	if err := writeMsg(ctx, c, hello); err != nil {
 		return
-	}
-	// A reconnecting client further behind than the hello cap gets the rest
-	// of its backlog as ordinary line messages, so it never has a gap.
-	if hasAfter && len(lines) == helloMaxLines {
-		for {
-			more := s.opts.Store.After(lastSent, helloMaxLines)
-			if len(more) == 0 {
-				break
-			}
-			for _, l := range s.decorate(more) {
-				if err := writeMsg(ctx, c, lineMsg{Type: "line", Line: l}); err != nil {
-					return
-				}
-				lastSent = l.ID
-			}
-		}
 	}
 
 	ping := time.NewTicker(s.opts.PingInterval)
@@ -123,31 +133,12 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			return
 		case v, ok := <-sub.C:
 			if !ok {
-				// Too slow to keep up; the client reconnects with ?after=.
+				// Too slow to keep up; the client reconnects and gets a fresh hello.
 				c.Close(websocket.StatusTryAgainLater, "client too slow")
 				return
 			}
-			var msg any
-			switch ev := v.(type) {
-			case store.Line:
-				if ev.ID <= lastSent {
-					continue
-				}
-				lastSent = ev.ID
-				ev.HasScreenshot = s.opts.Cache.Has(ev.ID)
-				msg = lineMsg{Type: "line", Line: ev}
-			case StatusChanged:
-				msg = statusMsg{Type: "status", Status: s.Status()}
-			case ThreadsChanged:
-				body := threadsFrom(hook.Snapshot{Mode: hook.ModeAuto})
-				if s.opts.Hooks != nil {
-					body = threadsFrom(s.opts.Hooks.Threads())
-				}
-				msg = struct {
-					Type string `json:"type"`
-					threadsResponse
-				}{Type: "threads", threadsResponse: body}
-			default:
+			msg := s.wsMessage(v)
+			if msg == nil {
 				continue
 			}
 			if err := writeMsg(ctx, c, msg); err != nil {

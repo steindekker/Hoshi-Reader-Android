@@ -22,9 +22,11 @@ import (
 	"github.com/steindekker/hoshi-reader/bridge/internal/hub"
 	"github.com/steindekker/hoshi-reader/bridge/internal/screenshot"
 	"github.com/steindekker/hoshi-reader/bridge/internal/server"
+	"github.com/steindekker/hoshi-reader/bridge/internal/session"
 	"github.com/steindekker/hoshi-reader/bridge/internal/sources"
 	"github.com/steindekker/hoshi-reader/bridge/internal/status"
 	"github.com/steindekker/hoshi-reader/bridge/internal/store"
+	"github.com/steindekker/hoshi-reader/bridge/internal/vn"
 )
 
 // version is overridden at build time with -ldflags "-X main.version=...".
@@ -131,18 +133,35 @@ func run() error {
 	}
 
 	h := hub.New()
+	reg := session.NewRegistry(h)
+	cache := screenshot.NewCache(cfg.Shot.CacheSize)
+	var vnCapturer vn.Capturer
+	if shots != nil {
+		vnCapturer = shots
+	}
+	vnSession := vn.New(reg, vnCapturer, cache)
+	lineIDs := make(chan int64, 16)
 	st, err := store.Open(store.Options{
 		Path:       filepath.Join(config.ExpandHome(cfg.DataDir), "lines.jsonl"),
 		MaxLines:   cfg.MaxLines,
 		Dedupe:     cfg.Dedupe,
 		Normalizer: mustNormalizer(cfg.Filters),
-		OnAdd:      func(l store.Line) { h.Publish(l) },
-		Log:        log,
+		OnAdd: func(l store.Line) {
+			vnSession.Add(l)
+			select {
+			case lineIDs <- l.ID:
+			default: // on-line screenshot worker busy or off; it only cares about the newest line
+			}
+		},
+		Log: log,
 	})
 	if err != nil {
 		return fmt.Errorf("open line store: %w", err)
 	}
 	defer st.Close()
+	if cfg.VNEnabled() {
+		vnSession.Register(st.Last(vn.MaxCues))
+	}
 
 	var wg sync.WaitGroup
 	tracker := status.NewTracker()
@@ -176,7 +195,7 @@ func run() error {
 		FlushMs:   cfg.Hook.FlushMs,
 		Interval:  time.Duration(cfg.Hook.ScanIntervalMs) * time.Millisecond,
 		Selector:  sel,
-		OnState:   func(connected bool, err error) { hookHandle.Set(connected, err) },
+		OnState:   func(connected bool, err error) { hookHandle.Set(connected, err); h.Publish(hookStateChanged{}) },
 		OnThreads: func() { h.Publish(server.ThreadsChanged{}) },
 		Log:       log,
 	})
@@ -213,22 +232,19 @@ func run() error {
 		log.Info("source started", "id", sc.ID, "kind", sc.Kind, "target", target)
 	}
 
-	cache := screenshot.NewCache(cfg.Shot.CacheSize)
-	var capturer server.Capturer
 	if shots != nil {
-		capturer = shots
 		wg.Add(1)
 		go func() { defer wg.Done(); probeLoop(ctx, shots, tracker, log) }()
 		if cfg.Shot.OnLine {
-			ids := make(chan int64, 16)
-			wg.Add(2)
-			go func() { defer wg.Done(); forwardLineIDs(ctx, h, ids) }()
+			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				screenshot.OnLineWorker(ctx, ids, time.Duration(cfg.Shot.OnLineDelayMs)*time.Millisecond, shots, cache, log)
+				screenshot.OnLineWorker(ctx, lineIDs, time.Duration(cfg.Shot.OnLineDelayMs)*time.Millisecond, shots, cache, log)
 			}()
 		}
 	}
+	wg.Add(1)
+	go func() { defer wg.Done(); followHookTitle(ctx, h, hooks, vnSession) }()
 
 	hostname, _ := os.Hostname()
 	srv := server.New(server.Options{
@@ -236,13 +252,12 @@ func run() error {
 		Hostname:       hostname,
 		Token:          cfg.Token,
 		AllowedOrigins: cfg.AllowedOrigins,
-		Store:          st,
-		Hub:            h,
+		Registry:       reg,
+		Lines:          st,
 		Tracker:        tracker,
-		Shots:          capturer,
-		Cache:          cache,
 		Hooks:          hooks,
 		Log:            log,
+		ReservedIDs:    []string{vn.SessionID, "mpv"},
 	})
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
@@ -350,9 +365,14 @@ func probeLoop(ctx context.Context, m *screenshot.Manager, t *status.Tracker, lo
 	}
 }
 
-func forwardLineIDs(ctx context.Context, h *hub.Hub, out chan<- int64) {
+// hookStateChanged is published when the LunaHook state changes, so the VN
+// session title can follow the hooked game.
+type hookStateChanged struct{}
+
+func followHookTitle(ctx context.Context, h *hub.Hub, hooks *hook.Supervisor, s *vn.Session) {
 	for ctx.Err() == nil {
-		sub := h.Subscribe(256)
+		sub := h.Subscribe(64)
+		s.SetTitle(vn.GameTitle(hooks.View().Game))
 		func() {
 			defer sub.Close()
 			for {
@@ -363,11 +383,8 @@ func forwardLineIDs(ctx context.Context, h *hub.Hub, out chan<- int64) {
 					if !ok {
 						return
 					}
-					if l, isLine := v.(store.Line); isLine {
-						select {
-						case out <- l.ID:
-						default: // worker busy; it only cares about the newest line
-						}
+					if _, is := v.(hookStateChanged); is {
+						s.SetTitle(vn.GameTitle(hooks.View().Game))
 					}
 				}
 			}

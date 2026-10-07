@@ -104,7 +104,7 @@ func Default() Config {
 			{ID: "clipboard", Kind: KindClipboard, Enabled: false, Command: "", IntervalMs: 500},
 		},
 		Hook: Hook{
-			Enabled:        true,
+			Enabled:        IsSteamOS(),
 			Allow:          []string{},
 			Deny:           []string{},
 			CodePage:       932,
@@ -124,6 +124,39 @@ func Default() Config {
 			Env:           map[string]string{},
 		},
 	}
+}
+
+// VNEnabled reports whether a visual-novel text source is configured, so
+// the bridge offers its "vn" session from the start (it also appears on the
+// first line ingested over HTTP).
+func (c *Config) VNEnabled() bool {
+	if c.Hook.Enabled {
+		return true
+	}
+	for _, s := range c.Sources {
+		if s.Enabled {
+			return true
+		}
+	}
+	return false
+}
+
+// osRelease is read by IsSteamOS (a variable for tests).
+var osRelease = "/etc/os-release"
+
+// IsSteamOS reports whether the bridge runs on SteamOS. Automatic LunaHook
+// injection defaults to on only there.
+func IsSteamOS() bool {
+	data, err := os.ReadFile(osRelease)
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == "ID=steamos" || strings.TrimSpace(line) == `ID="steamos"` {
+			return true
+		}
+	}
+	return false
 }
 
 // DefaultPath is ~/.config/hoshi-bridge/config.json (honouring

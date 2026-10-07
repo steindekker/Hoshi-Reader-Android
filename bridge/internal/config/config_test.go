@@ -8,6 +8,8 @@ import (
 )
 
 func TestLoadCreatesDefault(t *testing.T) {
+	osRelease = writeOSRelease(t, "NAME=\"SteamOS\"\nID=steamos\n")
+	t.Cleanup(func() { osRelease = "/etc/os-release" })
 	path := filepath.Join(t.TempDir(), "sub", "config.json")
 	cfg, created, err := Load(path)
 	if err != nil || !created {
@@ -113,5 +115,27 @@ func TestLoadOrMigrateCopiesLegacyConfig(t *testing.T) {
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("migrated config not written: %v", err)
+	}
+}
+
+func writeOSRelease(t *testing.T, content string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "os-release")
+	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestHookDefaultsOffOutsideSteamOS(t *testing.T) {
+	osRelease = writeOSRelease(t, "NAME=\"Arch Linux\"\nID=arch\n")
+	t.Cleanup(func() { osRelease = "/etc/os-release" })
+	cfg := Default()
+	if cfg.Hook.Enabled || cfg.VNEnabled() {
+		t.Fatalf("hooking must default off on a PC: %+v", cfg.Hook)
+	}
+	cfg.Sources[2].Enabled = true
+	if !cfg.VNEnabled() {
+		t.Fatal("an enabled text source makes the VN session available")
 	}
 }
