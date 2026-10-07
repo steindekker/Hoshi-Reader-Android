@@ -295,9 +295,7 @@ internal fun LiveView(
         viewModel.onEffectiveProfileChanged(profileState.effectiveProfile.id)
     }
     LaunchedEffect(uiState.rootPopupId) { childHistories = emptyMap() }
-    // Snackbars wait for the add-card celebration, so media warnings follow it instead of overlapping.
-    LaunchedEffect(uiState.message, uiState.celebration != null) {
-        if (uiState.celebration != null) return@LaunchedEffect
+    LaunchedEffect(uiState.message) {
         val message = uiState.message ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(message.resolve(context))
         viewModel.consumeMessage(message)
@@ -373,13 +371,13 @@ internal fun LiveView(
                         onWarning = viewModel::showMessage,
                     ) { mined ->
                         replyIframeMessage(message.popupId, messageId, mined.toString())
-                        viewModel.onCardMined(mined, liveMinedTerm(message.payloadJson))
+                        viewModel.onCardMined(mined)
                     }
                 } else {
                     val miningContext = popupById(message.popupId)?.state?.ankiContext ?: return
                     ankiViewModel.mineEntryAsync(message.formatId, message.payloadJson, miningContext) { mined ->
                         replyIframeMessage(message.popupId, messageId, mined.toString())
-                        viewModel.onCardMined(mined, liveMinedTerm(message.payloadJson))
+                        viewModel.onCardMined(mined)
                     }
                 }
             }
@@ -564,11 +562,6 @@ internal fun LiveView(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
         )
-        LiveMinedCelebration(
-            celebration = uiState.celebration,
-            onFinished = viewModel::consumeCelebration,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
-        )
         val preview = when (val state = uiState.preview) {
             LivePreviewState.Idle -> MineScreenshotPreview(path = null, loading = false)
             LivePreviewState.Loading -> MineScreenshotPreview(path = null, loading = true)
@@ -585,7 +578,7 @@ internal fun LiveView(
                     onWarning = viewModel::showMessage,
                 ) { mined ->
                     onResult(mined)
-                    viewModel.onCardMined(mined, liveMinedTerm(payloadJson))
+                    viewModel.onCardMined(mined)
                 }
             },
             reply = ::replyIframeMessage,

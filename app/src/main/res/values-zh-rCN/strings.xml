@@ -967,9 +967,9 @@
     <string name="live_media_reason_invalid">桥接服务没有返回文件</string>
     <string name="live_media_reason_no_host">该主机已不在设置中</string>
     <string name="live_media_reason_track_changed">字幕轨道已变更</string>
-    <string name="live_card_added">已添加卡片</string>
-    <string name="live_card_added_to_anki">已加入 Anki</string>
-    <plurals name="live_card_added_session_count">
+    <string name="anki_card_added">已添加卡片</string>
+    <string name="anki_card_added_to_anki">已加入 Anki</string>
+    <plurals name="anki_card_added_session_count">
         <item quantity="one">已加入 Anki · 本次第 %1$d 张</item>
         <item quantity="other">已加入 Anki · 本次第 %1$d 张</item>
     </plurals>

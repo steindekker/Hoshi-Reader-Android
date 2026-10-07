@@ -32,6 +32,7 @@ internal class AnkiRepository(
     private val loadDictionaryMedia: (DictionaryMedia) -> ByteArray?,
     private val loadTermDictionaries: () -> List<AnkiTermDictionary>,
     private val liveMediaSource: AnkiLiveMediaSource,
+    private val cardAddedEvents: AnkiCardAddedEvents,
 ) {
     @Inject
     constructor(
@@ -41,6 +42,7 @@ internal class AnkiRepository(
         localAudioRepository: LocalAudioRepository,
         dictionaryRepository: DictionaryRepository,
         liveMediaSource: AnkiLiveMediaSource,
+        cardAddedEvents: AnkiCardAddedEvents,
     ) : this(
         context = context,
         backend = backend,
@@ -59,6 +61,7 @@ internal class AnkiRepository(
             }
         },
         liveMediaSource = liveMediaSource,
+        cardAddedEvents = cardAddedEvents,
     )
 
     internal constructor(
@@ -71,6 +74,7 @@ internal class AnkiRepository(
         },
         loadTermDictionaries: () -> List<AnkiTermDictionary> = { emptyList() },
         liveMediaSource: AnkiLiveMediaSource = UnavailableAnkiLiveMediaSource,
+        cardAddedEvents: AnkiCardAddedEvents = AnkiCardAddedEvents(),
     ) : this(
         context = context,
         backend = backend,
@@ -80,6 +84,7 @@ internal class AnkiRepository(
         loadDictionaryMedia = { null },
         loadTermDictionaries = loadTermDictionaries,
         liveMediaSource = liveMediaSource,
+        cardAddedEvents = cardAddedEvents,
     )
 
     val settings: Flow<AnkiSettings> = settingsRepository.settings
@@ -302,6 +307,7 @@ internal class AnkiRepository(
             checkDuplicatesAcrossAllModels = settings.checkDuplicatesAcrossAllModels,
         )
         if (added) {
+            cardAddedEvents.publish(AnkiCardAdded(payload.expression))
             when (settings.backendKind) {
                 AnkiBackendKind.AnkiConnect -> if (settings.ankiConnectForceSync) activeBackend.sync()
                 AnkiBackendKind.AnkiDroid -> if (settings.ankiDroidForceSync) activeBackend.sync()

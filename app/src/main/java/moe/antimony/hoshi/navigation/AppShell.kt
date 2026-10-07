@@ -35,6 +35,11 @@ import androidx.navigation3.ui.NavDisplay
 import moe.antimony.hoshi.LocalHoshiUiDependencies
 import moe.antimony.hoshi.epub.BookSortOption
 import moe.antimony.hoshi.features.anki.AnkiView
+import moe.antimony.hoshi.features.anki.AnkiCardAddedCelebrationHost
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import moe.antimony.hoshi.features.anki.AnkiAdvancedView
 import moe.antimony.hoshi.features.anki.AnkiCardFormatView
 import moe.antimony.hoshi.features.bookshelf.BookshelfView
@@ -469,6 +474,13 @@ fun AppShell(
                 predictivePopTransitionSpec = NoPredictiveNavContentTransition,
             )
         }
+        // One overlay for every tab, so a card added anywhere celebrates exactly once.
+        AnkiCardAddedCelebrationHost(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 8.dp),
+        )
     }
 }
 

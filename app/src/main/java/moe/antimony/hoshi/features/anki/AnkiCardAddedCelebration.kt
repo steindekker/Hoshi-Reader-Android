@@ -1,4 +1,4 @@
-package moe.antimony.hoshi.features.live
+package moe.antimony.hoshi.features.anki
 
 import android.provider.Settings
 import androidx.compose.animation.core.Animatable
@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,17 +53,70 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import moe.antimony.hoshi.R
 
 /**
- * A small pill that pops in when a card is added from Live: a check that springs in with a
- * short sparkle burst, the mined term, and a haptic tick. It draws over the content without
- * taking touches, then fades out after [CelebrationHoldMillis] and reports [onFinished].
+ * A card was just added. [id] is unique per add so repeated adds of the same term restart the
+ * celebration; [count] is the number of cards added since the app process started.
+ */
+internal data class AnkiCardAddedCelebrationState(
+    val id: Long,
+    val term: String,
+    val count: Int,
+)
+
+/** Turns [AnkiCardAddedEvents] into the single celebration currently on screen. */
+@HiltViewModel
+internal class AnkiCardAddedCelebrationViewModel @Inject constructor(
+    events: AnkiCardAddedEvents,
+) : ViewModel() {
+    private val state = MutableStateFlow<AnkiCardAddedCelebrationState?>(null)
+    private var count = 0
+
+    val celebration: StateFlow<AnkiCardAddedCelebrationState?> = state.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            events.added.collect { event ->
+                count += 1
+                state.value = AnkiCardAddedCelebrationState(id = count.toLong(), term = event.term.trim(), count = count)
+            }
+        }
+    }
+
+    fun consume(id: Long) {
+        state.update { if (it?.id == id) null else it }
+    }
+}
+
+/** The app-wide add-card celebration, shown once over whatever screen mined the card. */
+@Composable
+internal fun AnkiCardAddedCelebrationHost(
+    modifier: Modifier = Modifier,
+    viewModel: AnkiCardAddedCelebrationViewModel = hiltViewModel(),
+) {
+    val celebration by viewModel.celebration.collectAsState()
+    AnkiCardAddedCelebration(celebration = celebration, onFinished = viewModel::consume, modifier = modifier)
+}
+
+/**
+ * A small pill that drops in when a card is added: a check that springs in with a short
+ * sparkle burst, the mined term, and a haptic tick. It draws over the content without taking
+ * touches, then fades out after [CelebrationHoldMillis] and reports [onFinished].
  */
 @Composable
-internal fun LiveMinedCelebration(
-    celebration: LiveCelebration?,
+internal fun AnkiCardAddedCelebration(
+    celebration: AnkiCardAddedCelebrationState?,
     onFinished: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -70,7 +124,7 @@ internal fun LiveMinedCelebration(
     val density = LocalDensity.current
     val haptics = LocalHapticFeedback.current
     val currentOnFinished by rememberUpdatedState(onFinished)
-    var shown by remember { mutableStateOf<LiveCelebration?>(null) }
+    var shown by remember { mutableStateOf<AnkiCardAddedCelebrationState?>(null) }
     val pill = remember { Animatable(0f) }
     val alpha = remember { Animatable(0f) }
     val check = remember { Animatable(0f) }
@@ -113,10 +167,10 @@ internal fun LiveMinedCelebration(
     }
 
     val current = shown ?: return
-    val headline = current.term.ifBlank { stringResource(R.string.live_card_added) }
+    val headline = current.term.ifBlank { stringResource(R.string.anki_card_added) }
     val subtitle = when {
-        current.count > 1 -> pluralStringResource(R.plurals.live_card_added_session_count, current.count, current.count)
-        current.term.isNotBlank() -> stringResource(R.string.live_card_added_to_anki)
+        current.count > 1 -> pluralStringResource(R.plurals.anki_card_added_session_count, current.count, current.count)
+        current.term.isNotBlank() -> stringResource(R.string.anki_card_added_to_anki)
         else -> null
     }
     val shape = RoundedCornerShape(percent = 50)
@@ -132,7 +186,7 @@ internal fun LiveMinedCelebration(
                 val scale = 0.7f + 0.3f * pill.value
                 scaleX = scale
                 scaleY = scale
-                translationY = riseOffset * (1f - pill.value)
+                translationY = -riseOffset * (1f - pill.value)
                 this.alpha = alpha.value.coerceIn(0f, 1f)
             }
             // No clip so the sparkles may spill past the pill's edge.
@@ -219,7 +273,7 @@ private fun DrawScope.drawStar(center: Offset, radius: Float, color: Color) {
 }
 
 private val CheckSize = 36.dp
-private val EnterRise = 16.dp
+private val EnterRise = 16.dp // Entry slide distance, downward from above.
 private val CelebrationLocale = LocaleList("ja")
 private const val SparkleCount = 8
 private const val EnterFadeMillis = 120

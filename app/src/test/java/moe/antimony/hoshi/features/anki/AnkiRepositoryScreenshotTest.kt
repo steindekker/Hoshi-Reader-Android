@@ -2,9 +2,12 @@ package moe.antimony.hoshi.features.anki
 
 import android.content.ContextWrapper
 import java.nio.file.Files
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.audio.LocalAudioRepository
 import moe.antimony.hoshi.ui.UiText
@@ -178,6 +181,24 @@ class AnkiRepositoryScreenshotTest {
     }
 
     @Test
+    fun addedCardsArePublishedWithTheirTerm() = runBlocking {
+        val events = AnkiCardAddedEvents()
+        val published = mutableListOf<AnkiCardAdded>()
+        val collector = launch(start = CoroutineStart.UNDISPATCHED) { events.added.collect { published += it } }
+        val source = RecordingScreenshotSource(AnkiLiveMediaResult.Failure(UiText.Resource(R.string.live_card_failed)))
+        val result = repository(source, mapOf("Expression" to "{expression}"), events).mineEntryWithResult(
+            rawPayload = """{"expression":"読む"}""",
+            context = AnkiMiningContext(sentence = "本を読む"),
+            decks = emptyList(),
+            noteTypes = emptyList(),
+        )
+        yield()
+        collector.cancel()
+        assertTrue(result.added)
+        assertEquals(listOf(AnkiCardAdded("読む")), published)
+    }
+
+    @Test
     fun sentenceAudioIsNotFetchedWhenUnreferenced() = runBlocking {
         val source = RecordingScreenshotSource(AnkiLiveMediaResult.Success(byteArrayOf(1), "audio/mpeg"))
         repository(source, mapOf("Expression" to "{expression}", "Sentence" to "{sentence}")).mineEntryWithResult(
@@ -232,6 +253,7 @@ class AnkiRepositoryScreenshotTest {
     private fun repository(
         source: AnkiLiveMediaSource,
         mappings: Map<String, String> = mapOf("Expression" to "{expression}", "Picture" to "{image}"),
+        cardAddedEvents: AnkiCardAddedEvents = AnkiCardAddedEvents(),
     ): AnkiRepository = AnkiRepository(
         context = object : ContextWrapper(null) {
             override fun getCacheDir(): java.io.File = ankiCacheDir
@@ -257,6 +279,7 @@ class AnkiRepositoryScreenshotTest {
         localAudioRepository = LocalAudioRepository(Files.createTempDirectory("hoshi-anki-audio").toFile()),
         ankiConnectBackendFactory = { _, _ -> backend },
         liveMediaSource = source,
+        cardAddedEvents = cardAddedEvents,
     )
 
     private class RecordingScreenshotSource(private val result: AnkiLiveMediaResult) : AnkiLiveMediaSource {

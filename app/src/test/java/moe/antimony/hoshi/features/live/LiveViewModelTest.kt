@@ -254,7 +254,7 @@ class LiveViewModelTest {
     @Test
     fun messagesQueueInOrderAndCollapseConsecutiveDuplicates() = runTest {
         val viewModel = viewModel()
-        val added = UiText.Resource(R.string.live_card_added)
+        val added = UiText.Resource(R.string.live_card_failed)
         val warning = UiText.Resource(R.string.live_picture_attach_failed)
         viewModel.showMessage(added)
         viewModel.showMessage(added)
@@ -270,45 +270,14 @@ class LiveViewModelTest {
     }
 
     @Test
-    fun addedCardsCelebrateWithTheTermAndASessionCount() = runTest {
+    fun failedMinesReportASnackbarAndSuccessesDoNot() = runTest {
         val viewModel = viewModel()
-        viewModel.onCardMined(mined = true, term = " 猫 ")
+        viewModel.onCardMined(mined = true)
         runCurrent()
-        val first = viewModel.uiState.value.celebration!!
-        assertEquals("猫", first.term)
-        assertEquals(1, first.count)
         assertNull(viewModel.uiState.value.message)
-
-        viewModel.onCardMined(mined = true, term = "猫")
-        runCurrent()
-        val second = viewModel.uiState.value.celebration!!
-        assertEquals(2, second.count)
-        assertTrue(second.id != first.id)
-
-        // A stale finish from the replaced celebration does not hide the new one.
-        viewModel.consumeCelebration(first.id)
-        runCurrent()
-        assertEquals(second, viewModel.uiState.value.celebration)
-        viewModel.consumeCelebration(second.id)
-        runCurrent()
-        assertNull(viewModel.uiState.value.celebration)
-    }
-
-    @Test
-    fun failuresAndMediaWarningsStayOnTheSnackbarQueue() = runTest {
-        val viewModel = viewModel()
-        val warning = UiText.Resource(R.string.live_picture_attach_failed)
-        viewModel.onCardMined(mined = true, term = "猫")
-        viewModel.showMessage(warning)
-        runCurrent()
-        assertEquals("猫", viewModel.uiState.value.celebration?.term)
-        assertEquals(warning, viewModel.uiState.value.message)
-
-        viewModel.consumeMessage(warning)
-        viewModel.onCardMined(mined = false, term = "犬")
+        viewModel.onCardMined(mined = false)
         runCurrent()
         assertEquals(UiText.Resource(R.string.live_card_failed), viewModel.uiState.value.message)
-        assertEquals(1, viewModel.uiState.value.celebration?.count)
     }
 
     private fun lookupResult(matched: String): LookupResult = LookupResult(

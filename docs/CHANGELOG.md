@@ -18,8 +18,8 @@ Historical release notes before v1.3.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
   (can be turned off). Mining uses the line as `{sentence}`; video cards get the line's
   audio through the new `{sentence-audio}` and a short animated clip through `{image}`,
   titled with the episode time, while visual novel cards get a Deck screenshot (picked
-  web images take precedence). Adding a card pops up a small badge with the word and a
-  count of cards added this session. `{sentence-audio}` also resolves to the Sasayaki cue audio
+  web images take precedence). Adding a card from any tab pops up a small badge with the
+  word and a count of cards added this session. `{sentence-audio}` also resolves to the Sasayaki cue audio
   in Reader and is the new default for SentenceAudio fields.
 
 ## [v1.4.0] - 2026-09-24
