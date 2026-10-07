@@ -352,18 +352,21 @@ internal class AnkiRepository(
         backendKind: AnkiBackendKind,
     ): MediaAttachment {
         val attachFailed = UiText.Resource(R.string.live_picture_attach_failed)
-        request.localPath?.takeIf { File(it).isFile }?.let { path ->
-            val ref = runCatching { addHashedMediaFile(path, "hoshi_screenshot", activeBackend, backendKind) }
-                .getOrNull()
-            return MediaAttachment(ref, if (ref == null) attachFailed else null)
-        }
-        val result = try {
-            liveMediaSource.fetchScreenshot(request)
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            runCatching { Log.w(TAG, "Failed to fetch screenshot", e) }
-            AnkiLiveMediaResult.Failure(LivePictureFailed)
+        // A fetched preview lives outside the FileProvider-shared anki-media cache, so its bytes
+        // go through the same attach path as a fresh fetch instead of being shared in place.
+        val preview = request.localPath?.let(::File)?.takeIf { it.isFile }
+        val result = if (preview != null) {
+            runCatching { AnkiLiveMediaResult.Success(preview.readBytes(), mimeTypeForPath(preview.name)) }
+                .getOrElse { return MediaAttachment(null, attachFailed) }
+        } else {
+            try {
+                liveMediaSource.fetchScreenshot(request)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                runCatching { Log.w(TAG, "Failed to fetch screenshot", e) }
+                AnkiLiveMediaResult.Failure(LivePictureFailed)
+            }
         }
         return when (result) {
             is AnkiLiveMediaResult.Failure -> MediaAttachment(null, result.message)
