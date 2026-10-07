@@ -371,11 +371,15 @@ internal fun LiveView(
                         rawPayload = message.payloadJson,
                         context = miningContext,
                         onWarning = viewModel::showMessage,
-                    ) { mined -> replyIframeMessage(message.popupId, messageId, mined.toString()) }
+                    ) { mined ->
+                        replyIframeMessage(message.popupId, messageId, mined.toString())
+                        viewModel.showMessage(liveMineResultMessage(mined))
+                    }
                 } else {
                     val miningContext = popupById(message.popupId)?.state?.ankiContext ?: return
                     ankiViewModel.mineEntryAsync(message.formatId, message.payloadJson, miningContext) { mined ->
                         replyIframeMessage(message.popupId, messageId, mined.toString())
+                        viewModel.showMessage(liveMineResultMessage(mined))
                     }
                 }
             }
@@ -577,8 +581,10 @@ internal fun LiveView(
                     rawPayload = payloadJson,
                     context = miningContext,
                     onWarning = viewModel::showMessage,
-                    onResult = onResult,
-                )
+                ) { mined ->
+                    onResult(mined)
+                    viewModel.showMessage(liveMineResultMessage(mined))
+                }
             },
             reply = ::replyIframeMessage,
             onClose = {
@@ -590,6 +596,9 @@ internal fun LiveView(
         )
     }
 }
+
+private fun liveMineResultMessage(mined: Boolean): UiText =
+    UiText.Resource(if (mined) R.string.live_card_added else R.string.live_card_failed)
 
 private const val TranscriptHeightFraction = 0.4f
 private const val ManualScrollHoldMillis = 4_000L

@@ -1,5 +1,7 @@
 package moe.antimony.hoshi.features.live
 
+import moe.antimony.hoshi.R
+import moe.antimony.hoshi.ui.UiText
 import de.manhhao.hoshi.FrequencyEntry
 import de.manhhao.hoshi.GlossaryEntry
 import de.manhhao.hoshi.LookupOptions
@@ -245,6 +247,24 @@ class LiveViewModelTest {
         assertEquals(LivePreviewState.Failed, viewModel.uiState.value.preview)
         val message = viewModel.uiState.value.message!!
         viewModel.consumeMessage(message)
+        runCurrent()
+        assertNull(viewModel.uiState.value.message)
+    }
+
+    @Test
+    fun messagesQueueInOrderAndCollapseConsecutiveDuplicates() = runTest {
+        val viewModel = viewModel()
+        val added = UiText.Resource(R.string.live_card_added)
+        val warning = UiText.Resource(R.string.live_picture_attach_failed)
+        viewModel.showMessage(added)
+        viewModel.showMessage(added)
+        viewModel.showMessage(warning)
+        runCurrent()
+        assertEquals(added, viewModel.uiState.value.message)
+        viewModel.consumeMessage(added)
+        runCurrent()
+        assertEquals(warning, viewModel.uiState.value.message)
+        viewModel.consumeMessage(warning)
         runCurrent()
         assertNull(viewModel.uiState.value.message)
     }

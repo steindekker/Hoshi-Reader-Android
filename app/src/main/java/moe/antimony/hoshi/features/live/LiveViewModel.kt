@@ -99,7 +99,8 @@ private data class LiveLocalState(
     val dictionarySettings: DictionarySettings = DictionarySettings(),
     val audioSettings: AudioSettings = AudioSettings(),
     val preview: LivePreviewState = LivePreviewState.Idle,
-    val message: UiText? = null,
+    /** Snackbar queue; consecutive duplicates are collapsed so the head always changes on consume. */
+    val messages: List<UiText> = emptyList(),
 )
 
 @HiltViewModel
@@ -158,7 +159,7 @@ internal class LiveViewModel internal constructor(
             dictionarySettings = local.dictionarySettings,
             audioSettings = local.audioSettings,
             preview = local.preview,
-            message = local.message,
+            message = local.messages.firstOrNull(),
         )
     }
 
@@ -409,11 +410,11 @@ internal class LiveViewModel internal constructor(
     }
 
     fun showMessage(message: UiText) {
-        local.update { it.copy(message = message) }
+        local.update { if (it.messages.lastOrNull() == message) it else it.copy(messages = it.messages + message) }
     }
 
     fun consumeMessage(message: UiText) {
-        local.update { if (it.message == message) it.copy(message = null) else it }
+        local.update { if (it.messages.firstOrNull() == message) it.copy(messages = it.messages.drop(1)) else it }
     }
 
     private fun updateLookup(transform: (LiveLookupState) -> LiveLookupState) {

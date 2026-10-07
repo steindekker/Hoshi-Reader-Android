@@ -1217,7 +1217,7 @@ async function mineEntry(expression, reading, frequencies, pitches, rules, match
     return await webkit.messageHandlers.mineEntry.postMessage({ formatId, payload });
 }
 
-async function mineEntryWithOptions(entryIndex) {
+async function mineEntryWithOptions(entryIndex, buttonsContainer = null) {
     const idx = entryIndex || 0;
     const entry = window.lookupEntries?.[idx];
     if (!entry) { return false; }
@@ -1259,13 +1259,7 @@ async function mineEntryWithOptions(entryIndex) {
         dictionaryMedia: JSON.stringify([...dictionaryMedia.values()])
     });
     if (mined) {
-        updateButtonSlot(getButtonSlot('mineOptions', idx), { enabled: false });
-        const refreshDuplicate = async () => {
-            await refreshAnkiDuplicateStates(idx, null);
-            updateButtonSlot(getButtonSlot('mineOptions', idx), {
-                enabled: Boolean(window.ankiBackendAvailable)
-            });
-        };
+        const refreshDuplicate = () => refreshAnkiDuplicateStates(idx, buttonsContainer);
         if (window.useAnkiConnect) {
             await refreshDuplicate();
         } else {
@@ -1926,63 +1920,69 @@ function createButtonSlot(kind, entryIndex, enabled = true, formatId = null, for
         'data-format-icon': formatIcon
     });
     slot.type = 'button';
-    slot.setAttribute('aria-label', kind === 'audio' ? 'Play audio' : kind === 'notes' ? 'Show Anki notes' : kind === 'mineOptions' ? 'Mine with options' : 'Add to Anki');
-    let audioLongPressTimer = null;
-    let audioLongPressed = false;
-    let audioPointerStart = null;
-    const cancelAudioLongPress = () => {
-        clearTimeout(audioLongPressTimer);
-        audioLongPressTimer = null;
-        audioPointerStart = null;
+    slot.setAttribute('aria-label', kind === 'audio' ? 'Play audio' : kind === 'notes' ? 'Show Anki notes' : 'Add to Anki');
+    // Audio: tap plays, long press picks a source. Mine: tap opens mine with options,
+    // long press adds the card directly.
+    const mineButtonsContainer = () => {
+        const parent = slot.parentElement;
+        return parent?.className === 'anki-format-actions' ? parent.parentElement : parent;
     };
-    if (kind === 'audio') {
+    const longPressAction = kind === 'audio'
+        ? () => showAudioCandidateMenu(entryIndex, slot)
+        : kind === 'mine'
+            ? () => mineEntryAtIndex(entryIndex, formatId, mineButtonsContainer())
+            : null;
+    let longPressTimer = null;
+    let longPressed = false;
+    let pointerStart = null;
+    const cancelLongPress = () => {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+        pointerStart = null;
+    };
+    if (longPressAction) {
         slot.addEventListener('pointerdown', event => {
             if (slot.dataset.enabled === 'false') return;
-            audioLongPressed = false;
-            audioPointerStart = { x: event.clientX, y: event.clientY };
-            audioLongPressTimer = setTimeout(() => {
-                audioLongPressTimer = null;
-                audioLongPressed = true;
-                showAudioCandidateMenu(entryIndex, slot);
+            longPressed = false;
+            pointerStart = { x: event.clientX, y: event.clientY };
+            longPressTimer = setTimeout(() => {
+                longPressTimer = null;
+                longPressed = true;
+                longPressAction();
             }, 400);
         });
         slot.addEventListener('pointermove', event => {
-            if (!audioPointerStart) return;
-            if (Math.abs(event.clientX - audioPointerStart.x) > 10 || Math.abs(event.clientY - audioPointerStart.y) > 10) {
-                cancelAudioLongPress();
+            if (!pointerStart) return;
+            if (Math.abs(event.clientX - pointerStart.x) > 10 || Math.abs(event.clientY - pointerStart.y) > 10) {
+                cancelLongPress();
             }
         });
-        slot.addEventListener('pointerup', cancelAudioLongPress);
-        slot.addEventListener('pointercancel', cancelAudioLongPress);
+        slot.addEventListener('pointerup', cancelLongPress);
+        slot.addEventListener('pointercancel', cancelLongPress);
         slot.addEventListener('contextmenu', event => {
             event.preventDefault();
             event.stopPropagation();
-            if (!audioLongPressed) {
-                audioLongPressed = true;
-                showAudioCandidateMenu(entryIndex, slot);
+            if (!longPressed && slot.dataset.enabled !== 'false') {
+                cancelLongPress();
+                longPressed = true;
+                longPressAction();
             }
         });
     }
     slot.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
+        if (longPressed) {
+            longPressed = false;
+            return;
+        }
         if (slot.dataset.enabled === 'false') { return; }
         if (kind === 'audio') {
-            if (audioLongPressed) {
-                audioLongPressed = false;
-                return;
-            }
             playEntryAudio(entryIndex);
         } else if (kind === 'mine') {
-            const parent = slot.parentElement;
-            const buttonsContainer = parent?.className === 'anki-format-actions'
-                ? parent.parentElement
-                : parent;
-            mineEntryAtIndex(entryIndex, formatId, buttonsContainer);
+            mineEntryWithOptions(entryIndex, mineButtonsContainer());
         } else if (kind === 'notes') {
             showNotesAtIndex(entryIndex, formatId);
-        } else if (kind === 'mineOptions') {
-            mineEntryWithOptions(entryIndex);
         }
     });
     slot.appendChild(el('span', { className: 'button-slot-icon' }));
@@ -2017,7 +2017,6 @@ function applyButtonSlotVisualState(slot) {
     const iconName = kind === 'audio'
         ? (state === 'error' ? 'volume_off' : 'volume_up')
         : kind === 'notes' ? 'search'
-        : kind === 'mineOptions' ? 'note_add'
         : formatIcon === 'circle' ? (state === 'duplicate' ? 'check_circle' : 'add_circle')
         : formatIcon === 'diamond' ? (state === 'duplicate' ? 'diamond_fill' : 'diamond')
         : (state === 'duplicate' ? 'check_box' : 'add_box');
@@ -2069,25 +2068,19 @@ async function mineEntryAtIndex(entryIndex, formatId, buttonsContainer = null) {
     const { expression, reading, frequencies, pitches, rules, matched } = entry;
     const formats = Array.isArray(window.ankiFormats) ? window.ankiFormats : [];
     const mineSlot = buttonSlotInContainer(buttonsContainer, 'mine', entryIndex, formatId);
-    const mineOptionsSlot = getButtonSlot('mineOptions', entryIndex);
 
     lastSelection = getPopupSelectionText();
     formats.forEach((format) => updateButtonSlot(
         buttonSlotInContainer(buttonsContainer, 'mine', entryIndex, format.id),
         { enabled: false },
     ));
-    updateButtonSlot(mineOptionsSlot, { enabled: false });
 
     const mined = await mineEntry(expression, reading, frequencies, pitches, rules, matched, entryIndex, lastSelection, formatId);
     if (!mined) {
         updateButtonSlot(mineSlot, { state: 'error', enabled: false });
-        updateButtonSlot(mineOptionsSlot, { enabled: Boolean(window.ankiBackendAvailable) });
         return;
     }
-    const checkDuplicate = async () => {
-        await refreshAnkiDuplicateStates(entryIndex, buttonsContainer);
-        updateButtonSlot(mineOptionsSlot, { enabled: Boolean(window.ankiBackendAvailable) });
-    };
+    const checkDuplicate = () => refreshAnkiDuplicateStates(entryIndex, buttonsContainer);
 
     if (window.useAnkiConnect) {
         await checkDuplicate();
@@ -2222,9 +2215,6 @@ function createEntryHeader(entry, idx) {
     if (window.audioSources?.length) {
         buttonsContainer.appendChild(createButtonSlot('audio', idx));
     }
-
-    const mineOptionsSlot = createButtonSlot('mineOptions', idx, Boolean(window.ankiBackendAvailable));
-    buttonsContainer.appendChild(mineOptionsSlot);
 
     header.appendChild(buttonsContainer);
 

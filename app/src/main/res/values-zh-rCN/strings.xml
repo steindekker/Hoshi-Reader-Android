@@ -969,6 +969,8 @@
     <string name="live_media_reason_invalid">桥接服务没有返回文件</string>
     <string name="live_media_reason_no_host">该主机已不在设置中</string>
     <string name="live_media_reason_track_changed">字幕轨道已变更</string>
+    <string name="live_card_added">已添加卡片</string>
+    <string name="live_card_failed">无法添加卡片</string>
     <string name="live_picture_attach_failed">无法将图片附加到卡片</string>
     <string name="live_audio_attach_failed">无法将例句音频附加到卡片</string>
     <string name="mine_with_options_image_screenshot">Live 截图</string>
