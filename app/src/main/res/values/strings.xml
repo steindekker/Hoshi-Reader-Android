@@ -924,8 +924,6 @@
     <string name="live_reason_invalid_response">This doesn\'t look like hoshi-bridge</string>
     <string name="live_reason_incompatible">Incompatible bridge protocol (v%1$d); update the app or hoshi-bridge</string>
     <string name="live_reason_invalid_settings">Invalid host or port</string>
-    <string name="live_back_to_playing">Back to playing</string>
-    <string name="live_show_latest">Show latest</string>
     <string name="live_empty_waiting">Waiting for text…</string>
     <string name="live_empty_waiting_hint">Text appears here as soon as a bridge sends it: a visual novel on the Steam Deck or subtitles playing in mpv. Tap a word to look it up.</string>
     <string name="live_empty_not_configured">Look up words from games and videos</string>

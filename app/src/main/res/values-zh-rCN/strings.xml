@@ -922,8 +922,6 @@
     <string name="live_reason_invalid_response">这似乎不是 hoshi-bridge</string>
     <string name="live_reason_incompatible">桥接协议不兼容（v%1$d），请更新应用或 hoshi-bridge</string>
     <string name="live_reason_invalid_settings">主机或端口无效</string>
-    <string name="live_back_to_playing">回到播放位置</string>
-    <string name="live_show_latest">显示最新</string>
     <string name="live_empty_waiting">正在等待文本…</string>
     <string name="live_empty_waiting_hint">桥接服务发送文本后会立即显示在这里：Steam Deck 上的视觉小说或 mpv 正在播放的字幕。点按词语即可查词。</string>
     <string name="live_empty_not_configured">在游戏和视频中查词</string>

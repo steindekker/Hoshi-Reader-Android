@@ -7,7 +7,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,11 +19,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -37,7 +34,6 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.VerticalAlignBottom
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -62,6 +58,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -505,10 +503,6 @@ internal fun LiveView(
                 onRetry = viewModel::retryConnection,
                 onTogglePlayback = viewModel::togglePlayback,
                 onOpenSettings = onOpenSettings,
-                modifier = Modifier.statusBarsPadding(),
-            )
-            LiveSessionBar(
-                state = uiState,
                 onSelectSession = { key ->
                     childHistories = emptyMap()
                     viewModel.selectSession(key)
@@ -517,6 +511,7 @@ internal fun LiveView(
                     childHistories = emptyMap()
                     viewModel.backToPlaying()
                 },
+                modifier = Modifier.statusBarsPadding(),
             )
             Box(
                 modifier = Modifier
@@ -652,12 +647,15 @@ private fun rememberPlaybackPosition(session: LiveSessionState?): Long? {
     return position
 }
 
+/** The single Live header: status, session (a switcher when there are several), and actions. */
 @Composable
 private fun LiveHeader(
     state: LiveUiState,
     onRetry: () -> Unit,
     onTogglePlayback: () -> Unit,
     onOpenSettings: () -> Unit,
+    onSelectSession: (String?) -> Unit,
+    onBackToPlaying: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val presentation = liveStatusPresentation(state)
@@ -669,6 +667,8 @@ private fun LiveHeader(
     }
     val session = state.activeSession
     val position = rememberPlaybackPosition(session?.takeIf { it.kind.isTimed })
+    val canSwitch = session != null && (state.sessions.size > 1 || state.sessionPinned)
+    var menuOpen by remember { mutableStateOf(false) }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -681,27 +681,67 @@ private fun LiveHeader(
                 .size(10.dp)
                 .background(indicatorColor, CircleShape),
         )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = session?.let { liveSessionTitle(it, state) } ?: presentation.title.asString(),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            val details = when {
-                session == null -> UiText.Joined(presentation.details, separator = " · ").asString()
-                position != null -> stringResource(R.string.live_session_on_host, state.hostName(session.hostId), liveClockText(position))
-                else -> state.hostName(session.hostId)
+        Box(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = if (canSwitch) Modifier.clickable { menuOpen = true } else Modifier,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f, fill = false)) {
+                    Text(
+                        text = session?.let { liveSessionTitle(it, state) } ?: presentation.title.asString(),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    val details = when {
+                        session == null -> UiText.Joined(presentation.details, separator = " · ").asString()
+                        position != null -> stringResource(R.string.live_session_on_host, state.hostName(session.hostId), liveClockText(position))
+                        else -> state.hostName(session.hostId)
+                    }
+                    if (details.isNotEmpty()) {
+                        Text(
+                            text = details,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (canSwitch) {
+                    Icon(Icons.Rounded.ArrowDropDown, contentDescription = null)
+                }
             }
-            if (details.isNotEmpty()) {
-                Text(
-                    text = details,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            if (session != null) {
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.live_session_auto)) },
+                        onClick = {
+                            menuOpen = false
+                            onSelectSession(null)
+                        },
+                    )
+                    state.sessions.forEach { option ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = stringResource(R.string.live_session_on_host, liveSessionTitle(option, state), state.hostName(option.hostId)),
+                                    fontWeight = if (option.key == session.key) FontWeight.SemiBold else null,
+                                )
+                            },
+                            onClick = {
+                                menuOpen = false
+                                onSelectSession(option.key)
+                            },
+                        )
+                    }
+                }
+            }
+        }
+        if (state.showBackToPlaying) {
+            IconButton(onClick = onBackToPlaying) {
+                Icon(Icons.Rounded.VerticalAlignBottom, contentDescription = null)
             }
         }
         if (state.canControl) {
@@ -732,78 +772,6 @@ private fun liveSessionTitle(session: LiveSessionState, state: LiveUiState): Str
             },
         )
     }
-
-/** Session switcher chip (with several sessions) and the "back to playing" chip. */
-@Composable
-private fun LiveSessionBar(
-    state: LiveUiState,
-    onSelectSession: (String?) -> Unit,
-    onBackToPlaying: () -> Unit,
-) {
-    val active = state.activeSession ?: return
-    val showSwitcher = state.sessions.size > 1 || state.sessionPinned
-    if (!showSwitcher && !state.showBackToPlaying) return
-    var menuOpen by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (showSwitcher) {
-            Box {
-                AssistChip(
-                    onClick = { menuOpen = true },
-                    label = {
-                        Text(
-                            text = stringResource(R.string.live_session_on_host, liveSessionTitle(active, state), state.hostName(active.hostId)),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.widthIn(max = 260.dp),
-                        )
-                    },
-                    trailingIcon = { Icon(Icons.Rounded.ArrowDropDown, contentDescription = null) },
-                )
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.live_session_auto)) },
-                        onClick = {
-                            menuOpen = false
-                            onSelectSession(null)
-                        },
-                    )
-                    state.sessions.forEach { session ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = stringResource(R.string.live_session_on_host, liveSessionTitle(session, state), state.hostName(session.hostId)),
-                                    fontWeight = if (session.key == active.key) FontWeight.SemiBold else null,
-                                )
-                            },
-                            onClick = {
-                                menuOpen = false
-                                onSelectSession(session.key)
-                            },
-                        )
-                    }
-                }
-            }
-        }
-        if (state.showBackToPlaying) {
-            AssistChip(
-                onClick = onBackToPlaying,
-                label = {
-                    Text(
-                        stringResource(if (active.kind.isTimed) R.string.live_back_to_playing else R.string.live_show_latest),
-                    )
-                },
-                leadingIcon = { Icon(Icons.Rounded.VerticalAlignBottom, contentDescription = null) },
-            )
-        }
-    }
-}
 
 @Composable
 private fun LiveEmptyState(
@@ -859,6 +827,7 @@ private fun LiveTranscript(
     val canSeek = session.info.has(LiveCapability.Control)
     val timeFormat = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
     val listState = rememberLazyListState()
+    val haptics = LocalHapticFeedback.current
     var manualScrollAt by remember { mutableLongStateOf(0L) }
     var autoScrolling by remember { mutableStateOf(false) }
     LaunchedEffect(listState) {
@@ -924,7 +893,17 @@ private fun LiveTranscript(
                                         else -> Color.Transparent
                                     },
                                 )
-                                .clickable { onFocus(item.id) }
+                                .combinedClickable(
+                                    onClick = { onFocus(item.id) },
+                                    onLongClick = if (canSeek && item.startMs != null) {
+                                        {
+                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onSeek(item.id)
+                                        }
+                                    } else {
+                                        null
+                                    },
+                                )
                                 .padding(horizontal = 16.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
@@ -934,12 +913,7 @@ private fun LiveTranscript(
                                     text = liveClockText(start),
                                     style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
                                     color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier
-                                        .combinedClickable(
-                                            onClick = { onFocus(item.id) },
-                                            onLongClick = if (canSeek) ({ onSeek(item.id) }) else null,
-                                        )
-                                        .padding(top = 2.dp),
+                                    modifier = Modifier.padding(top = 2.dp),
                                 )
                             }
                             Text(
