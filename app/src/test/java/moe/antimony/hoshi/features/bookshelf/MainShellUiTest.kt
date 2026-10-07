@@ -26,13 +26,13 @@ import java.nio.file.Files
 class MainShellUiTest {
     @Test
     fun mainTabsMatchIosOrder() {
-        assertEquals(listOf(MainTab.Books, MainTab.Dictionary, MainTab.Live, MainTab.Statistics, MainTab.Settings), MainTab.entries)
+        assertEquals(listOf(MainTab.Books, MainTab.Statistics, MainTab.Dictionary, MainTab.Live, MainTab.Settings), MainTab.entries)
         assertEquals(
             listOf(
                 R.string.main_tab_books,
+                R.string.main_tab_statistics,
                 R.string.main_tab_dictionary,
                 R.string.main_tab_live,
-                R.string.main_tab_statistics,
                 R.string.main_tab_settings,
             ),
             MainTab.entries.map { it.labelRes },
