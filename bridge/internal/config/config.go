@@ -31,6 +31,7 @@ type Config struct {
 	Sources        []Source   `json:"sources"`
 	Shot           Screenshot `json:"screenshot"`
 	Hook           Hook       `json:"hook"`
+	MPV            MPV        `json:"mpv"`
 	LogLevel       string     `json:"logLevel"`
 	AllowedOrigins []string   `json:"allowedOrigins"`
 }
@@ -43,6 +44,12 @@ type Hook struct {
 	CodePage       int      `json:"codePage"`
 	FlushMs        int      `json:"flushMs"`
 	ScanIntervalMs int      `json:"scanIntervalMs"`
+}
+
+// MPV is the mpv source (a video session following mpv's IPC socket).
+type MPV struct {
+	Enabled bool   `json:"enabled"`
+	Socket  string `json:"socket"` // mpv.conf: input-ipc-server=<socket>
 }
 
 // Filters clean incoming text.
@@ -110,6 +117,10 @@ func Default() Config {
 			CodePage:       932,
 			FlushMs:        500,
 			ScanIntervalMs: 2000,
+		},
+		MPV: MPV{
+			Enabled: true,
+			Socket:  "/tmp/mpvsocket",
 		},
 		AllowedOrigins: []string{},
 		Shot: Screenshot{
@@ -306,6 +317,9 @@ func (c *Config) Validate() error {
 		if _, err := path.Match(g, "game.exe"); err != nil {
 			return fmt.Errorf("hook glob %q: %w", g, err)
 		}
+	}
+	if c.MPV.Enabled && strings.TrimSpace(c.MPV.Socket) == "" {
+		return errors.New("mpv.socket must not be empty when mpv is enabled")
 	}
 	if c.Shot.CacheSize < 1 {
 		c.Shot.CacheSize = 1

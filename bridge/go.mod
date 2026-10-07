@@ -7,3 +7,5 @@ require (
 	github.com/jezek/xgb v1.3.1
 	golang.org/x/image v0.46.0
 )
+
+require golang.org/x/text v0.42.0

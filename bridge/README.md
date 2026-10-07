@@ -1,26 +1,69 @@
-# steamdeck-vn-extractor
+# hoshi-bridge
 
-`vn-extractor` is a small daemon for the Steam Deck that collects the sentences
-your text hooker extracts from a Japanese visual novel, keeps them in a log,
-and pushes them live to your phone (Hoshi Reader's VN tab) over Tailscale.
-When you mine a card on the phone, the phone asks the Deck for a screenshot of
-the game for the card's image field.
+`hoshi-bridge` is the small companion daemon of Hoshi Reader's **Live** tab.
+One copy runs on every machine that produces Japanese text and streams it to
+the phone over Tailscale:
+
+- **Steam Deck**: the sentences your text hooker extracts from a visual novel
+  (LunaHook is injected automatically), plus game screenshots for cards.
+- **Linux PC**: the subtitles of whatever mpv is playing, the playback
+  position, pause/play/seek from the phone, and per-cue sentence audio,
+  screenshots and short animated clips for cards.
 
 ```
- VN (Proton/Wine) ─► LunaHook, injected automatically ─► vn-extractor ─► phone
-                                                              │  :7277 HTTP + WebSocket
-                                                              └─ screenshots via gamescope / KWin
+ VN (Proton/Wine) ─► LunaHook ─► hoshi-bridge (Deck) ─┐
+                                                      ├─► phone (Live tab), :7277 HTTP + WebSocket
+ mpv ─► JSON IPC socket ─► hoshi-bridge (PC) ─────────┘
 ```
 
-- Single static binary (Go, no cgo). Everything lives in the `deck` user's home
-  directory, so SteamOS's read-only root and OS updates don't matter and no
-  packages or `sudo` are needed.
-- Text comes from LunaHook, which the daemon injects into whatever Proton game
-  you launch. Textractor, LunaTranslator, the clipboard, and `POST /api/lines`
-  remain available as optional sources.
-- Screenshots work in Game Mode (talks to gamescope directly) and Desktop Mode
-  (Spectacle), with auto-detection and a custom-command escape hatch.
-- The API is specified in [PROTOCOL.md](PROTOCOL.md).
+- Single static binary (Go, no cgo). Everything lives in the user's home
+  directory, so SteamOS's read-only root does not matter and no `sudo` is
+  needed.
+- Sources are enabled by configuration and detection: LunaHook defaults to on
+  only on SteamOS, mpv is followed whenever its socket exists.
+- The API is specified in [PROTOCOL.md](PROTOCOL.md) (v2: sessions, cue
+  tracks, playback, commands).
+
+## Install on the PC (mpv)
+
+Needs `mpv` and `ffmpeg` on `PATH` (ffmpeg with libmp3lame and libwebp, as
+on Arch). From this directory:
+
+```sh
+make install-pc       # builds dist/, installs ~/.local/bin/hoshi-bridge and the user unit
+```
+
+Then tell mpv to open its IPC socket at the path the bridge watches. Add to
+`~/.config/mpv/mpv.conf`:
+
+```
+input-ipc-server=/tmp/mpvsocket
+```
+
+Restart mpv; the bridge connects within two seconds and reconnects whenever
+mpv restarts (a different path goes into `"mpv": {"socket": …}` in the
+config). In Hoshi Reader, open **Settings > Live**, add the PC's Tailscale
+name with port 7277, and press **Test**.
+
+What the bridge does with mpv:
+
+- Reads the **whole cue list** of the selected subtitle track: external
+  SRT/ASS/VTT files are parsed directly (UTF-8, UTF-16 or Shift-JIS);
+  embedded text tracks are extracted once with ffmpeg and cached in
+  `~/.cache/hoshi-bridge/subs`; for image subtitles (PGS/VobSub) it uses an
+  OCR'd `<name>.<lang>.ocr<N>.srt` next to the video or in
+  `~/.cache/mpv-anki/ocr` (what mpv-anki writes). When none of that works
+  (e.g. `bd://` sources), it streams mpv's `sub-text` as it appears. ASS sign
+  and song lines are kept as they are.
+- Applies `sub-delay`; changing the delay, the track or the file sends a new
+  track to the phone.
+- Pushes playback (position, pause, speed) on every change and every 2 s.
+- Serves sentence audio (ffmpeg cut of the selected audio track, MP3 192 kb/s
+  48 kHz, padded by 150 ms), a still frame (from mpv itself when paused inside
+  the cue, else from the file), and an animated WebP clip of the cue (≤ 6 s,
+  480 px, 12 fps, usually 100–500 KB; GIF if ffmpeg lacks libwebp). Sources
+  ffmpeg cannot open (`bd://`, `dvd://`, disc folders, URLs) are cut with
+  `mpv -o` using the same open options.
 
 ## Install on the Deck
 
@@ -28,7 +71,7 @@ You need the release tarball on the Deck. Build it on any Linux/macOS machine
 with Go 1.26+:
 
 ```sh
-make release          # dist/vn-extractor + dist/vn-extractor-<ver>-linux-amd64.tar.gz
+make release          # dist/hoshi-bridge + dist/hoshi-bridge-<ver>-linux-amd64.tar.gz
 ```
 
 Copy it over and install (Tailscale MagicDNS name `steamdeck` shown; enable
@@ -36,17 +79,19 @@ SSH on the Deck first: Desktop Mode → `passwd`, then `sudo systemctl enable --
 or use Tailscale SSH):
 
 ```sh
-scp dist/vn-extractor-*-linux-amd64.tar.gz deck@steamdeck:/tmp/
-ssh deck@steamdeck 'cd /tmp && tar xzf vn-extractor-*-linux-amd64.tar.gz && ./vn-extractor-*-linux-amd64/install.sh'
+scp dist/hoshi-bridge-*-linux-amd64.tar.gz deck@steamdeck:/tmp/
+ssh deck@steamdeck 'cd /tmp && tar xzf hoshi-bridge-*-linux-amd64.tar.gz && ./hoshi-bridge-*-linux-amd64/install.sh'
 # or simply: make deploy DECK=deck@steamdeck
 ```
 
 Without SSH, copy the tarball any other way (USB stick, KDE Connect, a browser
 download), then in Desktop Mode open Konsole, extract it and run `./install.sh`.
 
-`install.sh` puts the binary in `~/.local/bin/vn-extractor`, writes
-`~/.config/steamdeck-vn-extractor/config.json` if it does not exist, installs
-and starts the systemd **user** unit `~/.config/systemd/user/vn-extractor.service`.
+`install.sh` puts the binary in `~/.local/bin/hoshi-bridge`, writes
+`~/.config/hoshi-bridge/config.json` if it does not exist, installs
+and starts the systemd **user** unit `~/.config/systemd/user/hoshi-bridge.service`.
+Upgrading from steamdeck-vn-extractor (the bridge's former name) removes the
+old `vn-extractor` unit and migrates its config, keeping its data directory.
 Re-running it upgrades in place; `./install.sh --uninstall` removes it (config
 and log are kept).
 
@@ -59,23 +104,23 @@ authentication).
 Check it:
 
 ```sh
-systemctl --user status vn-extractor
-journalctl --user -u vn-extractor -f
-curl -s http://127.0.0.1:7277/api/status
-vn-extractor -detect                       # which screenshot backends work right now
-vn-extractor -screenshot-test /tmp/t.jpg   # take one screenshot and report the backend
+systemctl --user status hoshi-bridge
+journalctl --user -u hoshi-bridge -f
+curl -s http://127.0.0.1:7277/v2/status
+hoshi-bridge -detect                       # which screenshot backends work right now
+hoshi-bridge -screenshot-test /tmp/t.jpg   # take one screenshot and report the backend
 ```
 
-Then point the phone at `http://steamdeck:7277` (or the Deck's `100.x.y.z`
-Tailscale IP). Open the same URL in a browser for a live debug page.
+Then add `steamdeck` (or the Deck's `100.x.y.z` Tailscale IP), port 7277,
+as a host under Settings > Live on the phone. Open the same URL in a browser for a live debug page.
 
 ## Use
 
 1. Install once, as above. `install.sh` also downloads the pinned LunaHook
    DLLs (LunaTranslator v12.0.0) into
-   `~/.local/share/steamdeck-vn-extractor/lunahook/`.
-2. On the phone, open Hoshi Reader's **VN** tab. The host is `steamdeck`,
-   port `7277`. Tailscale has to be connected on the phone and the Deck.
+   `~/.local/share/hoshi-bridge/lunahook/`.
+2. On the phone, open Hoshi Reader's **Live** tab (host `steamdeck`, port
+   `7277`). Tailscale has to be connected on the phone and the Deck.
 3. Start the visual novel from Steam. The Deck attaches by itself a few
    seconds after the game process appears. Advance one line of dialogue and
    the sentence shows on the phone.
@@ -86,7 +131,7 @@ There is no Textractor window, no Attach button, and no thread you have to
 pick. The daemon follows the thread that looks like dialogue and remembers
 that choice for the next session of the same executable. If it follows the
 wrong one, open `http://steamdeck:7277/` and press **use** on the right
-thread, or `POST /api/hook/threads/select` (see [PROTOCOL.md](PROTOCOL.md)).
+thread, or `POST /v2/hook/threads/select` (see [PROTOCOL.md](PROTOCOL.md)).
 **automatic** returns to scoring and forgets the pin.
 
 To turn this off, set `"hook": {"enabled": false}` in the config and restart
@@ -100,20 +145,20 @@ you also want a token (recommended if other people share your tailnet), set
 
 ## Configuration
 
-`~/.config/steamdeck-vn-extractor/config.json` (created on first run;
-restart the service after editing: `systemctl --user restart vn-extractor`).
+`~/.config/hoshi-bridge/config.json` (created on first run;
+restart the service after editing: `systemctl --user restart hoshi-bridge`).
 Unknown keys are rejected so typos don't go unnoticed. Command-line flags
 override the file: `-config`, `-listen`, `-token`, `-data-dir`, `-log-level`.
 
 ```jsonc
 {
   "listen": "0.0.0.0:7277",        // reachable over Tailscale; use 127.0.0.1:7277 + `tailscale serve` to restrict
-  "token": "",                     // if set: every /api/* request needs "Authorization: Bearer <token>"
-  "dataDir": "~/.local/share/steamdeck-vn-extractor",   // lines.jsonl lives here
+  "token": "",                     // if set: every /v2/* request needs "Authorization: Bearer <token>"
+  "dataDir": "~/.local/share/hoshi-bridge",   // lines.jsonl lives here
   "maxLines": 5000,                // lines retained (older ones are compacted away; ids keep increasing)
   "dedupe": true,                  // drop a line identical to the previous one
   "logLevel": "info",              // debug logs every line and screenshot
-  "allowedOrigins": [],            // extra browser origins allowed to open /api/ws (e.g. "localhost:5173")
+  "allowedOrigins": [],            // extra browser origins allowed to open /v2/ws (e.g. "localhost:5173")
   "filters": {
     "drop": [],                    // regexes; a line matching any is discarded, e.g. "^\\d+$"
     "strip": [],                   // regexes removed from the text, e.g. "<[^>]+>" or "【[^】]*】"
@@ -125,8 +170,12 @@ override the file: `-config`, `-listen`, `-token`, `-data-dir`, `-log-level`.
     {"id": "lunatranslator", "kind": "websocket", "enabled": false, "url": "ws://127.0.0.1:2333/api/ws/text/origin"},
     {"id": "clipboard", "kind": "clipboard", "enabled": false, "command": "", "intervalMs": 500}
   ],
+  "mpv": {
+    "enabled": true,               // follow mpv when its IPC socket exists
+    "socket": "/tmp/mpvsocket"     // mpv.conf: input-ipc-server=/tmp/mpvsocket
+  },
   "hook": {
-    "enabled": true,               // inject LunaHook into Proton games
+    "enabled": true,               // inject LunaHook into Proton games (default: on only on SteamOS)
     "allow": [],                   // exe globs; empty = every game that is not denied
     "deny": [],                    // extra exe names never hooked (steam.exe and friends are always skipped)
     "codePage": 932,               // Shift-JIS, used by hooks that are not already Unicode
@@ -150,7 +199,7 @@ override the file: `-config`, `-listen`, `-token`, `-data-dir`, `-log-level`.
 The file is plain JSON; the comments above are documentation only.
 
 Each source runs independently, reconnects with backoff, and reports
-`connected` / `lastError` in `/api/status`. Text is trimmed, empty lines are
+`connected` / `lastError` in `/v2/status`. Text is trimmed, empty lines are
 dropped, and consecutive duplicates (e.g. a hook firing twice) are dropped.
 
 ### Automatic hooking
@@ -166,10 +215,10 @@ stored with source id `lunahook`.
 
 The helper and the DLLs live in `dataDir/lunahook/`. DLLs are checked against
 the hashes pinned in the source and downloaded from the LunaTranslator
-v12.0.0 release when they are missing. `vn-extractor -setup` does that
+v12.0.0 release when they are missing. `hoshi-bridge -setup` does that
 download on its own. Nothing under this directory is committed to the repo.
 
-`/api/status` includes a `hook` object (`idle`, `injecting`, `attached`,
+`/v2/status` includes a `hook` object (`idle`, `injecting`, `attached`,
 `error`). While the state is `attached`, the `lunahook` source reports
 `connected`, which is what the phone uses to decide that a text source is
 online.
@@ -226,15 +275,15 @@ Content present when the daemon starts is not emitted; only changes are.
 Anything can push a line:
 
 ```sh
-curl -X POST --data-binary '「おはよう」' -H 'Content-Type: text/plain' http://127.0.0.1:7277/api/lines
-curl -X POST -H 'Content-Type: application/json' -d '{"text":"「おはよう」","source":"myscript"}' http://127.0.0.1:7277/api/lines
+curl -X POST --data-binary '「おはよう」' -H 'Content-Type: text/plain' http://127.0.0.1:7277/v2/ingest/lines
+curl -X POST -H 'Content-Type: application/json' -d '{"text":"「おはよう」","source":"myscript"}' http://127.0.0.1:7277/v2/ingest/lines
 ```
 
 ## Screenshots
 
-`POST /api/screenshot` tries the backends below in order and uses the first
+`POST /v2/sessions/vn/screenshot` tries the backends below in order and uses the first
 that is available and succeeds. `"backends"` can restrict/reorder them. The
-image is decoded, scaled to `maxWidth` and re-encoded as JPEG. `/api/status`
+image is decoded, scaled to `maxWidth` and re-encoded as JPEG. `/v2/status`
 shows the backend that is currently usable (re-checked every 10 s, so it
 follows Game Mode ↔ Desktop Mode switches).
 
@@ -264,19 +313,19 @@ Notes on Game Mode:
   non-debug `GAMESCOPECTRL_REQUEST_SCREENSHOT` is the one meant for the Steam
   client's own screenshot feature, and its file name is fixed
   (`/tmp/gamescope.png`), so the Wayland route is preferred.
-- Screenshots are written to `$XDG_RUNTIME_DIR/vn-extractor/` (a per-user
+- Screenshots are written to `$XDG_RUNTIME_DIR/hoshi-bridge/` (a per-user
   tmpfs) and deleted after reading.
 
 With `"onLine": true` the daemon captures a screenshot ~300 ms after each new
 line (debounced: while you skip text quickly only the last line is captured)
-and keeps the last `cacheSize` of them in memory (lost on restart). Lines with a cached screenshot have
-`hasScreenshot: true`, and `POST /api/screenshot?lineId=<id>` returns that
-exact screenshot even if you mine the sentence later.
+and keeps the last `cacheSize` of them in memory (lost on restart). `POST /v2/sessions/vn/screenshot` with
+`{"cueId": <id>}` returns that exact screenshot even if you mine the sentence
+later.
 
 ### Troubleshooting
 
-- `vn-extractor -detect` lists every backend and why it is unavailable;
-  `vn-extractor -screenshot-test /tmp/t.jpg` runs one capture end to end and
+- `hoshi-bridge -detect` lists every backend and why it is unavailable;
+  `hoshi-bridge -screenshot-test /tmp/t.jpg` runs one capture end to end and
   prints the backend used. Run them over SSH while the game is running in
   Game Mode. They need the same environment as the service; over SSH
   `XDG_RUNTIME_DIR` is normally set (`/run/user/1000`).
@@ -292,50 +341,46 @@ exact screenshot even if you mine the sentence later.
 - Custom command examples: `"command": "spectacle -b -n -f -o {output}"`,
   `"command": "grim -o eDP-1 {output}"`, or any script that writes a PNG/JPEG to
   `{output}`. The file may also appear after the command exits (async tools).
-- `journalctl --user -u vn-extractor -f` with `"logLevel": "debug"` logs every
+- `journalctl --user -u hoshi-bridge -f` with `"logLevel": "debug"` logs every
   line and capture attempt.
 
 ## API
 
-See [PROTOCOL.md](PROTOCOL.md). Summary: `GET /api/status`,
-`GET /api/lines?after=&limit=`, `POST /api/lines`, `GET /api/ws[?after=]`
-(WebSocket `hello` / `line` / `status` messages, pings every 20 s),
-`POST /api/screenshot?lineId=&maxWidth=&quality=`, and `GET /` (debug page).
-
-Implementation notes beyond the contract (all additive):
-
-- `POST /api/lines` returns `200 {"duplicate": false, "filtered": true}` when a
-  configured filter dropped the line.
-- `GET /api/screenshot` works like `POST` (handy in a browser).
-- A WebSocket client reconnecting with `?after=` that is more than 1000 lines
-  behind gets the first 1000 in `hello` and the rest immediately afterwards as
-  ordinary `line` messages, so it never has a gap.
-- Errors are `{"error": "..."}` with 400 for bad parameters, 401 for auth,
-  404 for unknown `/api/` paths, 503 when no screenshot could be taken.
+See [PROTOCOL.md](PROTOCOL.md). Summary: `GET /v2/status`, `GET /v2/ws`
+(WebSocket `hello` snapshot, then `session` / `sessionEnded` / `cues` /
+`playback` / `bridge` / `threads` messages), `POST /v2/sessions/{id}/control`,
+`…/screenshot`, `…/audio`, `…/clip`, `POST /v2/ingest/lines`,
+`POST|DELETE /v2/ingest/sessions/{id}`, the hook thread API under `/v2/hook`,
+and `GET /` (debug page with live sessions and media buttons).
 
 ### Quick test
 
 ```sh
-curl -s http://steamdeck:7277/api/status | jq
-curl -s -X POST --data-binary 'テストです。' -H 'Content-Type: text/plain' http://steamdeck:7277/api/lines
-curl -s 'http://steamdeck:7277/api/lines?limit=5' | jq
-websocat 'ws://steamdeck:7277/api/ws?after=0'          # or: curl --no-buffer 'ws://steamdeck:7277/api/ws'
-curl -s -X POST -o shot.jpg -D - 'http://steamdeck:7277/api/screenshot?maxWidth=1280&quality=85'
+curl -s http://steamdeck:7277/v2/status | jq
+curl -s -X POST --data-binary 'テストです。' -H 'Content-Type: text/plain' http://steamdeck:7277/v2/ingest/lines
+websocat 'ws://pc:7277/v2/ws'
+curl -s -X POST -d '{"cueId": 12}' -o line.mp3 http://pc:7277/v2/sessions/mpv/audio
+curl -s -X POST -d '{"cueId": 12}' -o line.webp http://pc:7277/v2/sessions/mpv/clip
+curl -s -X POST -d '{"action": "pause"}' http://pc:7277/v2/sessions/mpv/control
 # with a token:
-curl -H 'Authorization: Bearer SECRET' http://steamdeck:7277/api/status
-websocat 'ws://steamdeck:7277/api/ws?token=SECRET'
+curl -H 'Authorization: Bearer SECRET' http://steamdeck:7277/v2/status
 ```
 
 ## Development
 
 ```sh
-make            # vet, test, build ./vn-extractor
+make            # vet, test, build ./hoshi-bridge
 make race       # tests with the race detector
 make release    # static linux/amd64 binary + tarball in dist/
 VNX_TEST_DISPLAY=:0 go test ./internal/x11/   # optional X11 clipboard test against a real X server
+# media and mpv tests use ffmpeg/mpv when installed and skip otherwise
 ```
 
-Layout: `cmd/vn-extractor` (wiring, flags), `internal/config`,
+Layout: `cmd/hoshi-bridge` (wiring, flags), `internal/config`,
+`internal/session` (v2 session registry), `internal/vn` (text-hooker log as
+the `vn` session), `internal/sources/mpv` (mpv IPC client and video session),
+`internal/subs` (SRT/VTT/ASS parsing), `internal/media` (ffmpeg/mpv audio,
+clip and frame cutting),
 `internal/store` (JSONL line log, filters), `internal/sources` (WebSocket and
 clipboard inputs), `internal/screenshot` (backend chain, JPEG encoding,
 per-line cache), `internal/gamescope` (minimal `gamescope_control` Wayland
@@ -346,4 +391,4 @@ client), `internal/x11` (pure-Go X11 helpers: gamescope request, clipboard),
 
 A real gamescope can be tested without a Deck:
 `gamescope --backend headless -W 1280 -H 800 -- vkcube` and then
-`vn-extractor -detect` / `-screenshot-test` in another terminal.
+`hoshi-bridge -detect` / `-screenshot-test` in another terminal.

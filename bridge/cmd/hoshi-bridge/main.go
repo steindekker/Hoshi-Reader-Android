@@ -20,10 +20,12 @@ import (
 	"github.com/steindekker/hoshi-reader/bridge/internal/config"
 	"github.com/steindekker/hoshi-reader/bridge/internal/hook"
 	"github.com/steindekker/hoshi-reader/bridge/internal/hub"
+	"github.com/steindekker/hoshi-reader/bridge/internal/media"
 	"github.com/steindekker/hoshi-reader/bridge/internal/screenshot"
 	"github.com/steindekker/hoshi-reader/bridge/internal/server"
 	"github.com/steindekker/hoshi-reader/bridge/internal/session"
 	"github.com/steindekker/hoshi-reader/bridge/internal/sources"
+	"github.com/steindekker/hoshi-reader/bridge/internal/sources/mpv"
 	"github.com/steindekker/hoshi-reader/bridge/internal/status"
 	"github.com/steindekker/hoshi-reader/bridge/internal/store"
 	"github.com/steindekker/hoshi-reader/bridge/internal/vn"
@@ -166,10 +168,13 @@ func run() error {
 	var wg sync.WaitGroup
 	tracker := status.NewTracker()
 	tracker.SetOnChange(func() { h.Publish(server.StatusChanged{}) })
-	tracker.Register("http", "http", "POST /api/lines", true)
+	tracker.Register("http", "http", "POST /v2/ingest/lines", true)
 
 	dataPath := config.ExpandHome(cfg.DataDir)
-	hookHandle := tracker.Register(hook.SourceID, "hook", "LunaHook", false)
+	var hookHandle *status.Handle
+	if cfg.Hook.Enabled {
+		hookHandle = tracker.Register(hook.SourceID, "hook", "LunaHook", false)
+	}
 	mem, err := hook.OpenMemory(filepath.Join(dataPath, "hook-threads.json"))
 	if err != nil {
 		log.Warn("thread memory unreadable; starting without remembered choices", "err", err)
@@ -188,14 +193,19 @@ func run() error {
 		},
 	})
 	hooks := hook.NewSupervisor(hook.SupervisorOptions{
-		Enabled:   cfg.Hook.Enabled,
-		DataDir:   dataPath,
-		Filter:    hook.Filter{Allow: cfg.Hook.Allow, Deny: cfg.Hook.Deny},
-		CodePage:  cfg.Hook.CodePage,
-		FlushMs:   cfg.Hook.FlushMs,
-		Interval:  time.Duration(cfg.Hook.ScanIntervalMs) * time.Millisecond,
-		Selector:  sel,
-		OnState:   func(connected bool, err error) { hookHandle.Set(connected, err); h.Publish(hookStateChanged{}) },
+		Enabled:  cfg.Hook.Enabled,
+		DataDir:  dataPath,
+		Filter:   hook.Filter{Allow: cfg.Hook.Allow, Deny: cfg.Hook.Deny},
+		CodePage: cfg.Hook.CodePage,
+		FlushMs:  cfg.Hook.FlushMs,
+		Interval: time.Duration(cfg.Hook.ScanIntervalMs) * time.Millisecond,
+		Selector: sel,
+		OnState: func(connected bool, err error) {
+			if hookHandle != nil {
+				hookHandle.Set(connected, err)
+			}
+			h.Publish(hookStateChanged{})
+		},
 		OnThreads: func() { h.Publish(server.ThreadsChanged{}) },
 		Log:       log,
 	})
@@ -232,6 +242,28 @@ func run() error {
 		log.Info("source started", "id", sc.ID, "kind", sc.Kind, "target", target)
 	}
 
+	if cfg.MPV.Enabled {
+		socket := config.ExpandHome(cfg.MPV.Socket)
+		handle := tracker.Register(mpv.SessionID, "mpv", socket, false)
+		cacheHome := os.Getenv("XDG_CACHE_HOME")
+		if cacheHome == "" {
+			home, _ := os.UserHomeDir()
+			cacheHome = filepath.Join(home, ".cache")
+		}
+		src := mpv.New(mpv.Options{
+			Socket:   socket,
+			Registry: reg,
+			Media:    &media.Tools{WorkDir: filepath.Join(os.TempDir(), fmt.Sprintf("hoshi-bridge-%d", os.Getuid()))},
+			CacheDir: filepath.Join(cacheHome, "hoshi-bridge", "subs"),
+			OCRDirs:  []string{filepath.Join(cacheHome, "mpv-anki", "ocr")},
+			Report:   reportLogger(log, mpv.SessionID, socket, handle),
+			Log:      log,
+		})
+		wg.Add(1)
+		go func() { defer wg.Done(); src.Run(ctx) }()
+		log.Info("mpv source enabled", "socket", socket)
+	}
+
 	if shots != nil {
 		wg.Add(1)
 		go func() { defer wg.Done(); probeLoop(ctx, shots, tracker, log) }()
@@ -257,7 +289,7 @@ func run() error {
 		Tracker:        tracker,
 		Hooks:          hooks,
 		Log:            log,
-		ReservedIDs:    []string{vn.SessionID, "mpv"},
+		ReservedIDs:    []string{vn.SessionID, mpv.SessionID},
 	})
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
