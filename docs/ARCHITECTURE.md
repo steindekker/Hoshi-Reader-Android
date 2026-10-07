@@ -394,7 +394,7 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   Source groups update in configured order, and available rows select by URL
   without waiting for other sources; closed/reset menus ignore late results.
 - Shared iframe frame payloads accept optional root `sourceText` for Dictionary
-  search, Process Text, and the VN tab; Reader and recursive child frames omit it. Shared
+  search, Process Text, and the Live tab; Reader and recursive child frames omit it. Shared
   popup assets render character spans, look up exact suffixes on tap, mark the
   match, and preserve scroll on successful source redirects. Popup geometry
   converts the source-enabled entries minimum height to one visual viewport
@@ -444,34 +444,45 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   the built-in reader provider. Publishing failures do not block Reader
   loading, and the integration does not request broad storage access.
 - Anki work stays behind the Anki backend/repository boundary.
-- The VN tab (`features.texthooker`, unrelated to the Reader's VN layout mode) shows
-  live game text from the separate steamdeck-vn-extractor server (see its
-  `PROTOCOL.md`, v1) over HTTP/WebSocket, typically via Tailscale. DataStore-backed
-  `TextHookerSettingsRepository` stores host (default `steamdeck`; blank disables),
-  port 7277, optional Bearer token and screenshot width. The singleton
-  `TextHookerRepository` owns the OkHttp WebSocket only while its `StateFlow` has
-  subscribers (the visible tab, via `WhileSubscribed`), reconnects with 1–30 s
-  exponential backoff, resumes with `?after=<latest id>`, and keeps a 200-line
-  in-memory log deduplicated by id; a lower server `latestLineId` replaces the log,
-  endpoint changes clear it, and an incompatible `hello.protocol` stops retrying.
-  Network calls go through the `TextHookerTransport` boundary on the IO dispatcher.
-- The VN tab reuses the Dictionary embedded-root iframe path: the displayed line is
-  the root `sourceText` under a per-line root popup id, source taps run root
-  redirects with exact-suffix mining offsets, and recursive popups, audio, Kanji and
-  Anki messages use the shared bridge. `TextHookerViewModel` follows the newest line
-  unless the root has results or child popups (or an older line was selected); then
-  the line stays and a jump-to-latest banner is shown.
-- `AnkiMiningContext.screenshot` carries a VN line id (and an optional fetched
-  preview). Only when the format's fields reference `{image}` (or its aliases) and no
-  web image was picked does `AnkiRepository` ask the Hilt-bound
-  `AnkiScreenshotSource` (the texthooker repository) for `POST /api/screenshot`,
-  attaching it as a hashed `hoshi_screenshot_*` media file and deleting the temp copy.
-  `{image}` resolves picked web image, then screenshot, then cover. Screenshot
-  failures never block mining: the note is added and `mineEntryWithResult` returns
-  a localized warning shown as a Snackbar. VN cards use the Deck hostname as
-  `{document-title}`; recursive popup mining keeps Dictionary behavior without a
-  screenshot. The mine-with-options sheet offers the fetched screenshot as the
-  default image when its context carries a screenshot request.
+- The Live tab (`features.live`) shows Japanese text streamed by `hoshi-bridge`, the Go
+  daemon in `bridge/` (one binary per machine: LunaHook/text hookers and screenshots on the
+  Steam Deck, mpv on a PC). `bridge/PROTOCOL.md` (v2) is the contract both sides follow:
+  a bridge hosts sessions (`vn`, `video`, `web`), each with a cue track identified by
+  `trackId`, optional playback state and capabilities (`control`, `screenshot`, `audio`,
+  `clip`). Every WebSocket (re)connect starts with a full `hello` snapshot (whole track for
+  video, last 200 cues for VN); later `session`/`sessionEnded`/`cues` (replace|append)/
+  `playback` events update it. Media and control are HTTP commands per session; the
+  bridge resolves cue times (with `sub-delay` applied) and answers 409 for stale tracks.
+- DataStore-backed `LiveSettingsRepository` (file `texthooker-settings`) stores the host
+  list (host, port 7277, optional Bearer token; JSON), screenshot width and auto-pause;
+  the VN tab's single-host keys migrate into the list. The singleton `LiveRepository` holds
+  one OkHttp WebSocket per host only while its `StateFlow` has subscribers (the visible
+  tab, via `WhileSubscribed`); each host reconnects with its own 1–30 s backoff, loses its
+  sessions on disconnect, and stops retrying on an incompatible protocol (a v1 server's
+  404/410 counts as v1). Session activity converts bridge `activeAt` with the `hello.now`
+  clock offset and is refreshed by cues and play/pause/seek; playback position is
+  extrapolated from the local receipt time. Network calls go through the `LiveTransport`
+  boundary on the IO dispatcher.
+- `LiveViewModel` shows the pinned session or else the most recently active one. A
+  250 ms ticker re-evaluates the playing cue (last cue started at the extrapolated
+  position; the newest cue for VN). `LiveFocus` follows the playing cue unless a root
+  lookup is active or another cue was picked; "back to playing" resumes following. The
+  focused cue is the shared Dictionary embedded-root `sourceText` under a per-session,
+  per-cue root popup id, so source taps, recursive popups, audio, Kanji and Anki use the
+  shared bridge. A successful root lookup sends `pause` when the session supports control
+  and auto-pause is on. The transcript is a Compose `LazyColumn`; long-press on a timestamp
+  seeks.
+- `AnkiMiningContext.screenshot` carries an `AnkiScreenshotRequest` (host, session,
+  track, cue; `animated` for timed video cues with `clip`) and optional fetched preview;
+  `sentenceAudio` carries the cue for `{sentence-audio}`. `AnkiRepository` asks the
+  Hilt-bound `AnkiLiveMediaSource` (`LiveRepository`) only for handlebars the format
+  references: `{image}` (picked web image, then Live picture, then cover; a WebP clip is
+  embedded with `<img>`) and `{sentence-audio}` (Live cue audio as `hoshi_sentence_*.mp3`,
+  else the exported Sasayaki cue; `{sasayaki-audio}` stays Sasayaki-only and the Reader
+  exports the cue for either). Media failures never block mining: the note is added and
+  `mineEntryWithResult` returns localized warnings shown as a Snackbar. Live cards use the
+  session title (with `(MMmSSs)` of the cue start for timed cues) or the host name as
+  `{document-title}`.
 - Anki settings are stored per active profile in
   `Profiles/<profileId>/anki_config.json`. Schema version 2 owns one to three
   stable-ID `AnkiCardFormat` values, each with its own icon, deck, note type,

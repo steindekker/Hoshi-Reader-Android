@@ -8,12 +8,18 @@ Historical release notes before v1.3.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 
 ### Added
 
-- Add a VN tab for visual novels played on a Steam Deck: it shows the current in-game
-  line and recent lines from steamdeck-vn-extractor live, with connection status. Tap a word for the usual lookup and Anki actions; the
-  game sentence becomes `{sentence}` and a Deck screenshot fills `{image}` (picked web
-  images take precedence). Mine with options offers the screenshot as the default
-  picture. New lines advance automatically unless you are looking something up. Set
-  the host, port, and optional token under Settings > VN / Steam Deck.
+- Add a Live tab for Japanese text streamed by hoshi-bridge from your own machines,
+  for example over Tailscale: visual novels on a Steam Deck and subtitles playing in mpv
+  on a PC. Add several hosts with an optional token under Settings > Live and test each
+  one; the tab connects to all of them and follows the most recently active session, with
+  a chip to switch. The current line sits above a transcript of the whole subtitle track
+  that highlights and follows playback. Tap a transcript line to show it for lookup,
+  long-press a timestamp to seek, and pause or resume mpv from the header; looking up a word pauses the video
+  (can be turned off). Mining uses the line as `{sentence}`; video cards get the line's
+  audio through the new `{sentence-audio}` and a short animated clip through `{image}`,
+  titled with the episode time, while visual novel cards get a Deck screenshot (picked
+  web images take precedence). `{sentence-audio}` also resolves to the Sasayaki cue audio
+  in Reader and is the new default for SentenceAudio fields.
 
 ## [v1.4.0] - 2026-09-24
 

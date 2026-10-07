@@ -18,7 +18,7 @@ It adds a **Mine with options** button next to the usual one-tap card button. Be
 
 <p align="center"><sub><i>The book cover is the default; here a Bing image is picked instead.</i></sub></p>
 
-It also adds a **VN** tab for visual novels played on a Steam Deck. A small companion server, `steamdeck-vn-extractor`, runs on the Deck. It collects each in-game line from a text hooker and streams it to the phone over Tailscale. Tap a word in the current line to look it up and mine it as usual. The game line becomes the card sentence, and a screenshot from the Deck fills the `{image}` field. Set the host (default `steamdeck`), port (7277), and optional token under **Settings > VN / Steam Deck**.
+It also adds a **Live** tab for Japanese text streamed from your own machines over Tailscale: visual novels played on a Steam Deck and subtitles of whatever mpv is playing on a PC. A small companion daemon, [`hoshi-bridge`](bridge/README.md), runs on each machine. The tab follows the most recently active session, shows the current line for lookup above a transcript of the whole subtitle track, and can pause, resume and seek mpv. Mining uses the line as the sentence; video cards get the line's audio through `{sentence-audio}` and a short animated clip through `{image}`, visual novel cards a Deck screenshot. Add hosts (host, port 7277, optional token) under **Settings > Live**.
 
 <hr>
 

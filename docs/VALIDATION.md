@@ -71,6 +71,13 @@ For reader web asset changes, run the focused JavaScript tests:
 node --test app/src/test/js/*.test.mjs
 ```
 
+For `hoshi-bridge` changes (`bridge/`), run from `bridge/` (media and mpv
+tests use ffmpeg/mpv when installed and skip otherwise; CI installs ffmpeg):
+
+```bash
+go vet ./... && go test ./...
+```
+
 ## Sasayaki Subtitle Export
 
 - From Resources, export the current match using both Subtitles and Transcription.
@@ -82,6 +89,33 @@ node --test app/src/test/js/*.test.mjs
   `SasayakiSrtTest` covers both-source rematching and timestamp rounding;
   `SasayakiSubtitleExportTest` covers readable shared URIs, snapshot persistence,
   picker cancellation, and save failure recovery using test-owned cache files.
+
+## Live Tab
+
+- Bridge on the PC: build and install with `make install-pc` in `bridge/`, add
+  `input-ipc-server=/tmp/mpvsocket` to `~/.config/mpv/mpv.conf`, and check
+  `curl -s http://127.0.0.1:7277/v2/status` and the debug page at
+  `http://<pc>:7277/`. Without a real phone, `mpv --vo=null --ao=null --pause
+  --input-ipc-server=<short path> --sub-file=x.srt video.mkv` plus a config with
+  that socket exercises the mpv session (unix socket paths must stay under 108
+  bytes).
+- mpv matrix: external SRT/ASS/VTT, embedded ASS and SRT (first extraction is
+  cached), PGS with an mpv-anki `*.ocrN.srt` beside the file, PGS without OCR and a
+  `bd://` source (live sub-text fallback). Change the subtitle track and
+  `sub-delay` (new track, re-timed transcript), restart mpv (session ends and
+  returns), seek and pause in mpv (header position and transcript follow).
+- Phone: add the Deck and the PC as hosts and test each; take one offline (the other
+  keeps streaming, the offline one backs off quietly). The most recently active
+  session is shown; the chip switches and returns to automatic. Tap a word while a
+  video plays: playback pauses (unless turned off), the focused cue stays while the
+  transcript follows, "Back to playing" snaps back. Long-press a timestamp to seek;
+  the header button resumes.
+- Mining from a video cue: `{sentence-audio}` holds the padded cue audio,
+  `{image}` an animated WebP that plays in AnkiDroid, Anki desktop and AnkiMobile,
+  `{document-title}` reads `<title> (MMmSSs)`. Mine with options previews the clip.
+  Stop the bridge and mine again: the card is added with warnings. From a VN cue the
+  picture is a Deck screenshot and no audio is requested. In Reader,
+  `{sentence-audio}` still exports the Sasayaki cue.
 
 ## Device And Emulator Safety
 
