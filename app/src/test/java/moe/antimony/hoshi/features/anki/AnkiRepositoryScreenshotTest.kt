@@ -180,13 +180,25 @@ class AnkiRepositoryScreenshotTest {
     @Test
     fun sentenceAudioIsNotFetchedWhenUnreferenced() = runBlocking {
         val source = RecordingScreenshotSource(AnkiLiveMediaResult.Success(byteArrayOf(1), "audio/mpeg"))
-        repository(source, mapOf("Expression" to "{expression}", "Picture" to "{sasayaki-audio}")).mineEntryWithResult(
+        repository(source, mapOf("Expression" to "{expression}", "Sentence" to "{sentence}")).mineEntryWithResult(
             rawPayload = """{"expression":"読む"}""",
             context = AnkiMiningContext(sentence = "本を読む", sentenceAudio = cue(8)),
             decks = emptyList(),
             noteTypes = emptyList(),
         )
         assertTrue(source.audioRequests.isEmpty())
+    }
+
+    @Test
+    fun legacySasayakiAudioMappingFetchesLiveSentenceAudio() = runBlocking {
+        val source = RecordingScreenshotSource(AnkiLiveMediaResult.Success(byteArrayOf(1), "audio/mpeg"))
+        repository(source, mapOf("Expression" to "{expression}", "Picture" to "{sasayaki-audio}")).mineEntryWithResult(
+            rawPayload = """{"expression":"読む"}""",
+            context = AnkiMiningContext(sentence = "本を読む", sentenceAudio = cue(8)),
+            decks = emptyList(),
+            noteTypes = emptyList(),
+        )
+        assertEquals(listOf(cue(8)), source.audioRequests)
     }
 
     @Test
@@ -199,8 +211,9 @@ class AnkiRepositoryScreenshotTest {
         val both = AnkiMiningContext(sentence = "s", sasayakiAudioPath = "[sound:cue.m4a]", sentenceAudioPath = "[sound:live.mp3]")
         assertEquals("[sound:live.mp3]", render(both))
         assertEquals("[sound:cue.m4a]", render(both.copy(sentenceAudioPath = null)))
-        // {sasayaki-audio} keeps its meaning.
+        // {sasayaki-audio} prefers the Sasayaki cue and falls back to the Live clip.
         assertEquals("[sound:cue.m4a]", render(both, "{sasayaki-audio}"))
+        assertEquals("[sound:live.mp3]", render(both.copy(sasayakiAudioPath = null), "{sasayaki-audio}"))
     }
 
     @Test

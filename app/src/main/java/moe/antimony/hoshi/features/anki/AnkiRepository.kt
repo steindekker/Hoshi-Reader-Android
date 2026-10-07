@@ -240,8 +240,11 @@ internal class AnkiRepository(
         val screenshot = context.screenshot
             ?.takeIf { needsImage && context.webImageUrl.isNullOrBlank() }
             ?.let { addScreenshot(it, activeBackend, settings.backendKind) }
-        val needsSentenceAudio = fieldMappings.referencesAnkiHandlebar("{sentence-audio}")
-        val needsSasayakiAudio = needsSentenceAudio || fieldMappings.referencesAnkiHandlebar("{sasayaki-audio}")
+        // {sentence-audio} and the older {sasayaki-audio} both take whichever sentence audio the
+        // context has: the Sasayaki cue in the reader or the Live cue clip.
+        val needsSentenceAudio = fieldMappings.referencesAnkiHandlebar("{sentence-audio}") ||
+            fieldMappings.referencesAnkiHandlebar("{sasayaki-audio}")
+        val needsSasayakiAudio = needsSentenceAudio
         val sentenceAudio = context.sentenceAudio
             ?.takeIf { needsSentenceAudio }
             ?.let { addLiveSentenceAudio(it, activeBackend, settings.backendKind) }
