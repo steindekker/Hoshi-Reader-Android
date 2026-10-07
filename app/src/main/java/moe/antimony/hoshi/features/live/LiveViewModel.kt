@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import moe.antimony.hoshi.R
 import moe.antimony.hoshi.di.IoDispatcher
 import moe.antimony.hoshi.features.anki.AnkiLiveCueRef
 import moe.antimony.hoshi.features.anki.AnkiMiningContext
@@ -63,6 +64,16 @@ internal sealed interface LivePreviewState {
     data object Failed : LivePreviewState
 }
 
+/**
+ * A card was just added from Live. [id] is unique per mine so repeated mines of the same term
+ * restart the celebration; [count] is the number of cards added since the Live screen opened.
+ */
+internal data class LiveCelebration(
+    val id: Long,
+    val term: String,
+    val count: Int,
+)
+
 internal data class LiveUiState(
     val settings: LiveSettings = LiveSettings(),
     val hosts: List<LiveHostState> = emptyList(),
@@ -79,6 +90,7 @@ internal data class LiveUiState(
     val audioSettings: AudioSettings = AudioSettings(),
     val preview: LivePreviewState = LivePreviewState.Idle,
     val message: UiText? = null,
+    val celebration: LiveCelebration? = null,
 ) {
     val focusedCue: LiveCue? get() = focus.cueId?.let { id -> activeSession?.cues?.firstOrNull { it.id == id } }
     val showBackToPlaying: Boolean get() = playingCueId != null && focusedCue != null && focusedCue?.id != playingCueId
@@ -101,6 +113,8 @@ private data class LiveLocalState(
     val preview: LivePreviewState = LivePreviewState.Idle,
     /** Snackbar queue; consecutive duplicates are collapsed so the head always changes on consume. */
     val messages: List<UiText> = emptyList(),
+    val celebration: LiveCelebration? = null,
+    val minedCount: Int = 0,
 )
 
 @HiltViewModel
@@ -160,6 +174,7 @@ internal class LiveViewModel internal constructor(
             audioSettings = local.audioSettings,
             preview = local.preview,
             message = local.messages.firstOrNull(),
+            celebration = local.celebration,
         )
     }
 
@@ -407,6 +422,28 @@ internal class LiveViewModel internal constructor(
     fun clearPreview() {
         previewJob?.cancel()
         local.update { it.copy(preview = LivePreviewState.Idle) }
+    }
+
+    /**
+     * Reports the outcome of mining [term]: a success celebrates the card (and counts it), a
+     * failure queues an error snackbar. Media warnings stay on the snackbar queue via [showMessage].
+     */
+    fun onCardMined(mined: Boolean, term: String) {
+        if (!mined) {
+            showMessage(UiText.Resource(R.string.live_card_failed))
+            return
+        }
+        local.update { state ->
+            val count = state.minedCount + 1
+            state.copy(
+                minedCount = count,
+                celebration = LiveCelebration(id = count.toLong(), term = term.trim(), count = count),
+            )
+        }
+    }
+
+    fun consumeCelebration(id: Long) {
+        local.update { if (it.celebration?.id == id) it.copy(celebration = null) else it }
     }
 
     fun showMessage(message: UiText) {

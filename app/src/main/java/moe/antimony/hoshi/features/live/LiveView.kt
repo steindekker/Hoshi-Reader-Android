@@ -295,7 +295,9 @@ internal fun LiveView(
         viewModel.onEffectiveProfileChanged(profileState.effectiveProfile.id)
     }
     LaunchedEffect(uiState.rootPopupId) { childHistories = emptyMap() }
-    LaunchedEffect(uiState.message) {
+    // Snackbars wait for the add-card celebration, so media warnings follow it instead of overlapping.
+    LaunchedEffect(uiState.message, uiState.celebration != null) {
+        if (uiState.celebration != null) return@LaunchedEffect
         val message = uiState.message ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(message.resolve(context))
         viewModel.consumeMessage(message)
@@ -371,20 +373,20 @@ internal fun LiveView(
                         onWarning = viewModel::showMessage,
                     ) { mined ->
                         replyIframeMessage(message.popupId, messageId, mined.toString())
-                        viewModel.showMessage(liveMineResultMessage(mined))
+                        viewModel.onCardMined(mined, liveMinedTerm(message.payloadJson))
                     }
                 } else {
                     val miningContext = popupById(message.popupId)?.state?.ankiContext ?: return
                     ankiViewModel.mineEntryAsync(message.formatId, message.payloadJson, miningContext) { mined ->
                         replyIframeMessage(message.popupId, messageId, mined.toString())
-                        viewModel.showMessage(liveMineResultMessage(mined))
+                        viewModel.onCardMined(mined, liveMinedTerm(message.payloadJson))
                     }
                 }
             }
             is ReaderLookupPopupBridgeMessage.MineWithOptions -> {
                 val messageId = message.messageId ?: return
                 val baseContext = if (isRoot) viewModel.rootMiningContext() else popupById(message.popupId)?.state?.ankiContext
-                val term = runCatching { AnkiMiningPayload.fromJson(message.payloadJson).expression }.getOrNull().orEmpty()
+                val term = liveMinedTerm(message.payloadJson)
                 if (baseContext == null || term.isBlank()) {
                     replyIframeMessage(message.popupId, messageId, false.toString())
                     return
@@ -562,6 +564,11 @@ internal fun LiveView(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
         )
+        LiveMinedCelebration(
+            celebration = uiState.celebration,
+            onFinished = viewModel::consumeCelebration,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
+        )
         val preview = when (val state = uiState.preview) {
             LivePreviewState.Idle -> MineScreenshotPreview(path = null, loading = false)
             LivePreviewState.Loading -> MineScreenshotPreview(path = null, loading = true)
@@ -578,7 +585,7 @@ internal fun LiveView(
                     onWarning = viewModel::showMessage,
                 ) { mined ->
                     onResult(mined)
-                    viewModel.showMessage(liveMineResultMessage(mined))
+                    viewModel.onCardMined(mined, liveMinedTerm(payloadJson))
                 }
             },
             reply = ::replyIframeMessage,
@@ -592,8 +599,8 @@ internal fun LiveView(
     }
 }
 
-private fun liveMineResultMessage(mined: Boolean): UiText =
-    UiText.Resource(if (mined) R.string.live_card_added else R.string.live_card_failed)
+private fun liveMinedTerm(payloadJson: String): String =
+    runCatching { AnkiMiningPayload.fromJson(payloadJson).expression }.getOrNull().orEmpty()
 
 private const val TranscriptHeightFraction = 0.4f
 private const val ManualScrollHoldMillis = 4_000L

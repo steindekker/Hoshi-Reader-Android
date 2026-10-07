@@ -970,6 +970,11 @@
     <string name="live_media_reason_no_host">the host is no longer in Settings</string>
     <string name="live_media_reason_track_changed">the subtitle track changed</string>
     <string name="live_card_added">Card added</string>
+    <string name="live_card_added_to_anki">Added to Anki</string>
+    <plurals name="live_card_added_session_count">
+        <item quantity="one">Added to Anki · %1$d card this session</item>
+        <item quantity="other">Added to Anki · %1$d cards this session</item>
+    </plurals>
     <string name="live_card_failed">Couldn\'t add the card</string>
     <string name="live_picture_attach_failed">Couldn\'t attach the picture to the card</string>
     <string name="live_audio_attach_failed">Couldn\'t attach the sentence audio to the card</string>
