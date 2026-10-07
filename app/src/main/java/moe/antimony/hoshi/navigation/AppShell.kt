@@ -474,15 +474,19 @@ fun AppShell(
                 predictivePopTransitionSpec = NoPredictiveNavContentTransition,
             )
         }
-        // One overlay for every tab, so a card added anywhere celebrates exactly once.
+        // One overlay for every tab, so a card added anywhere celebrates exactly once. It sits
+        // below the tabs' top bars rather than over them.
         AnkiCardAddedCelebrationHost(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .statusBarsPadding()
-                .padding(top = 8.dp),
+                .padding(top = CelebrationTopBarClearance),
         )
     }
 }
+
+/** Clears a standard 64dp top app bar plus a small gap. */
+private val CelebrationTopBarClearance = 72.dp
 
 @Composable
 private fun rememberAppNavEntryDecorators(): List<NavEntryDecorator<NavKey>> = listOf(

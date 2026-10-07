@@ -975,6 +975,18 @@
         <item quantity="one">Added to Anki · %1$d card this session</item>
         <item quantity="other">Added to Anki · %1$d cards this session</item>
     </plurals>
+    <string-array name="anki_card_added_kaomoji" translatable="false">
+        <item>(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧</item>
+        <item>ヽ(&gt;∀&lt;☆)ノ</item>
+        <item>(๑˃ᴗ˂)ﻭ</item>
+        <item>٩(◕‿◕｡)۶</item>
+        <item>(≧▽≦)</item>
+        <item>(*^▽^*)</item>
+        <item>ฅ^•ﻌ•^ฅ</item>
+        <item>(｡•̀ᴗ-)✧</item>
+        <item>(˶ᵔ ᵕ ᵔ˶)</item>
+        <item>₍₍ ◝(●˙꒳˙●)◜ ₎₎</item>
+    </string-array>
     <string name="live_card_failed">Couldn\'t add the card</string>
     <string name="live_picture_attach_failed">Couldn\'t attach the picture to the card</string>
     <string name="live_audio_attach_failed">Couldn\'t attach the sentence audio to the card</string>

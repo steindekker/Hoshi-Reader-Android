@@ -4,6 +4,7 @@ import android.provider.Settings
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -43,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.intl.LocaleList
@@ -129,6 +131,7 @@ internal fun AnkiCardAddedCelebration(
     val alpha = remember { Animatable(0f) }
     val check = remember { Animatable(0f) }
     val burst = remember { Animatable(1f) }
+    val hop = remember { Animatable(0f) }
     var sparkles by remember { mutableStateOf(true) }
 
     LaunchedEffect(celebration?.id) {
@@ -140,6 +143,7 @@ internal fun AnkiCardAddedCelebration(
             alpha.snapTo(0f)
             check.snapTo(0f)
             burst.snapTo(0f)
+            hop.snapTo(0f)
             haptics.performHapticFeedback(HapticFeedbackType.Confirm)
             coroutineScope {
                 launch { alpha.animateTo(1f, tween(EnterFadeMillis)) }
@@ -147,6 +151,20 @@ internal fun AnkiCardAddedCelebration(
                 launch {
                     delay(CheckDelayMillis)
                     check.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessMedium))
+                }
+                launch {
+                    delay(HopDelayMillis)
+                    // Two happy hops: up, land, a smaller hop, settle.
+                    hop.animateTo(
+                        0f,
+                        keyframes {
+                            durationMillis = HopMillis
+                            1f at HopMillis * 2 / 10
+                            0f at HopMillis * 4 / 10
+                            0.55f at HopMillis * 6 / 10
+                            0f at HopMillis * 8 / 10
+                        },
+                    )
                 }
                 if (sparkles) {
                     launch {
@@ -177,6 +195,9 @@ internal fun AnkiCardAddedCelebration(
     val colors = MaterialTheme.colorScheme
     val sparkleColors = listOf(colors.primary, colors.tertiary)
     val riseOffset = with(density) { EnterRise.toPx() }
+    val hopHeight = with(density) { HopHeight.toPx() }
+    val kaomojiOptions = stringArrayResource(R.array.anki_card_added_kaomoji)
+    val kaomoji = remember(current.id) { kaomojiOptions.random() }
     Box(
         modifier = modifier
             .padding(horizontal = 16.dp)
@@ -213,7 +234,7 @@ internal fun AnkiCardAddedCelebration(
                     modifier = Modifier.size(22.dp),
                 )
             }
-            Column {
+            Column(modifier = Modifier.weight(1f, fill = false)) {
                 Text(
                     text = headline,
                     style = MaterialTheme.typography.titleMedium.copy(localeList = CelebrationLocale),
@@ -232,6 +253,16 @@ internal fun AnkiCardAddedCelebration(
                     )
                 }
             }
+            Text(
+                text = kaomoji,
+                style = MaterialTheme.typography.titleMedium.copy(localeList = CelebrationLocale),
+                color = colors.primary,
+                maxLines = 1,
+                modifier = Modifier.graphicsLayer {
+                    translationY = -hopHeight * hop.value
+                    rotationZ = HopTiltDegrees * hop.value
+                },
+            )
         }
     }
 }
@@ -275,11 +306,15 @@ private fun DrawScope.drawStar(center: Offset, radius: Float, color: Color) {
 private val CheckSize = 36.dp
 private val EnterRise = 16.dp // Entry slide distance, downward from above.
 private val CelebrationLocale = LocaleList("ja")
+private val HopHeight = 6.dp
+private const val HopTiltDegrees = -8f
+private const val HopDelayMillis = 160L
+private const val HopMillis = 700
 private const val SparkleCount = 8
 private const val EnterFadeMillis = 120
 private const val CheckDelayMillis = 70L
 private const val BurstDelayMillis = 110L
 private const val BurstMillis = 650
-private const val CelebrationHoldMillis = 900L
+private const val CelebrationHoldMillis = 1_100L
 private const val ExitMillis = 200
 private const val ExitPillValue = 0.75f
