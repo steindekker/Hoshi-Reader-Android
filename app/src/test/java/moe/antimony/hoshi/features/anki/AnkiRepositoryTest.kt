@@ -156,7 +156,7 @@ class AnkiRepositoryTest {
                 "reading" to "{reading}",
                 "definition" to "{glossary-first}",
                 "wordAudio" to "{audio}",
-                "sentenceAudio" to "{sasayaki-audio}",
+                "sentenceAudio" to "{sentence-audio}",
                 "freqSort" to "{frequency-harmonic-rank}",
             ),
             fieldMappingsAfterFetch(noteType, AnkiSettings()),

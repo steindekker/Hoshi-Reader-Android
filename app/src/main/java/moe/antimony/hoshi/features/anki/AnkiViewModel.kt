@@ -85,7 +85,8 @@ data class AnkiUiState(
                 isBackendAvailable = backendAvailable,
                 useAnkiConnect = settings.backendKind == AnkiBackendKind.AnkiConnect,
                 needsAudio = activeMappings.any { "{audio}" in it },
-                needsSasayakiAudio = activeMappings.any { "{sasayaki-audio}" in it },
+                // {sentence-audio} resolves to the Sasayaki cue in the reader, so it needs the export too.
+                needsSasayakiAudio = activeMappings.any { "{sasayaki-audio}" in it || "{sentence-audio}" in it },
                 allowDupes = settings.allowDupes,
                 compactGlossaries = settings.compactGlossaries,
                 disableShowNotes = settings.disableShowNotes,

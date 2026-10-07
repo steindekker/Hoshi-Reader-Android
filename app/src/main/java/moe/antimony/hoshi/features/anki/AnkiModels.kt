@@ -326,6 +326,8 @@ data class AnkiMiningContext(
     val screenshotPath: String? = null,
     /** The Live cue whose audio the bridge cuts for {sentence-audio}. */
     val sentenceAudio: AnkiLiveCueRef? = null,
+    /** The Anki-attached Live sentence audio ref (resolved in mineEntry). */
+    val sentenceAudioPath: String? = null,
 )
 
 internal data class AnkiTermDictionary(
@@ -483,6 +485,8 @@ internal object AnkiHandlebarRenderer {
             // Deprecated aliases (pre-merge {book-cover}/{web-image}); resolve to the chosen image.
             "{book-cover}", "{web-image}" -> context.imageValue()
             "{sasayaki-audio}" -> context.sasayakiAudioPath.orEmpty()
+            // The sentence's audio from wherever this surface has it: the Live cue, else Sasayaki.
+            "{sentence-audio}" -> context.sentenceAudioPath?.takeIf { it.isNotBlank() } ?: context.sasayakiAudioPath.orEmpty()
             else -> ""
         }
     }

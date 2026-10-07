@@ -240,7 +240,11 @@ internal class AnkiRepository(
         val screenshot = context.screenshot
             ?.takeIf { needsImage && context.webImageUrl.isNullOrBlank() }
             ?.let { addScreenshot(it, activeBackend, settings.backendKind) }
-        val needsSasayakiAudio = fieldMappings.referencesAnkiHandlebar("{sasayaki-audio}")
+        val needsSentenceAudio = fieldMappings.referencesAnkiHandlebar("{sentence-audio}")
+        val needsSasayakiAudio = needsSentenceAudio || fieldMappings.referencesAnkiHandlebar("{sasayaki-audio}")
+        val sentenceAudio = context.sentenceAudio
+            ?.takeIf { needsSentenceAudio }
+            ?.let { addLiveSentenceAudio(it, activeBackend, settings.backendKind) }
         val needsAudio = fieldMappings.referencesAnkiHandlebar("{audio}")
         val mediaContext = AnkiMiningContext(
             sentence = context.sentence,
@@ -256,6 +260,7 @@ internal class AnkiRepository(
                 addRemoteImage(it, activeBackend, settings.backendKind)
             },
             screenshotPath = screenshot?.ref,
+            sentenceAudioPath = sentenceAudio?.ref,
         )
         val mediaPayload = payload.copy(
             audio = payload.audio.takeIf { needsAudio && it.isNotBlank() }
@@ -301,23 +306,56 @@ internal class AnkiRepository(
         }
         AnkiMineResult(
             added = added,
-            warnings = listOfNotNull(screenshot?.warning).takeIf { added }.orEmpty(),
+            warnings = listOfNotNull(screenshot?.warning, sentenceAudio?.warning).takeIf { added }.orEmpty(),
         )
     }
 
-    private data class ScreenshotAttachment(val ref: String?, val warning: UiText?)
+    private data class MediaAttachment(val ref: String?, val warning: UiText?)
+
+    /** Attaches the Live cue's sentence audio; any failure only produces a warning so mining continues. */
+    private suspend fun addLiveSentenceAudio(
+        cue: AnkiLiveCueRef,
+        activeBackend: AnkiBackend,
+        backendKind: AnkiBackendKind,
+    ): MediaAttachment {
+        val result = try {
+            liveMediaSource.fetchSentenceAudio(cue)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            runCatching { Log.w(TAG, "Failed to fetch sentence audio", e) }
+            AnkiLiveMediaResult.Failure(
+                UiText.Resource(R.string.live_audio_failed, UiText.Resource(R.string.live_media_reason_invalid)),
+            )
+        }
+        return when (result) {
+            is AnkiLiveMediaResult.Failure -> MediaAttachment(null, result.message)
+            is AnkiLiveMediaResult.Success -> {
+                val file = mediaCacheFile("hoshi_sentence_${sha1Hex(result.bytes)}.mp3")
+                val ref = try {
+                    file.writeBytes(result.bytes)
+                    addMediaFile(file.absolutePath, file.name, "audio/mpeg", activeBackend, backendKind)
+                } catch (e: java.io.IOException) {
+                    null
+                } finally {
+                    file.delete()
+                }
+                MediaAttachment(ref, if (ref == null) UiText.Resource(R.string.live_audio_attach_failed) else null)
+            }
+        }
+    }
 
     /** Attaches the game screenshot; any failure only produces a warning so mining continues. */
     private suspend fun addScreenshot(
         request: AnkiScreenshotRequest,
         activeBackend: AnkiBackend,
         backendKind: AnkiBackendKind,
-    ): ScreenshotAttachment {
+    ): MediaAttachment {
         val attachFailed = UiText.Resource(R.string.live_picture_attach_failed)
         request.localPath?.takeIf { File(it).isFile }?.let { path ->
             val ref = runCatching { addHashedMediaFile(path, "hoshi_screenshot", activeBackend, backendKind) }
                 .getOrNull()
-            return ScreenshotAttachment(ref, if (ref == null) attachFailed else null)
+            return MediaAttachment(ref, if (ref == null) attachFailed else null)
         }
         val result = try {
             liveMediaSource.fetchScreenshot(request)
@@ -328,7 +366,7 @@ internal class AnkiRepository(
             AnkiLiveMediaResult.Failure(LivePictureFailed)
         }
         return when (result) {
-            is AnkiLiveMediaResult.Failure -> ScreenshotAttachment(null, result.message)
+            is AnkiLiveMediaResult.Failure -> MediaAttachment(null, result.message)
             is AnkiLiveMediaResult.Success -> {
                 val extension = liveImageExtension(result.mimeType)
                 val file = mediaCacheFile("hoshi_screenshot_${sha1Hex(result.bytes)}.$extension")
@@ -340,7 +378,7 @@ internal class AnkiRepository(
                 } finally {
                     file.delete()
                 }
-                ScreenshotAttachment(ref, if (ref == null) attachFailed else null)
+                MediaAttachment(ref, if (ref == null) attachFailed else null)
             }
         }
     }

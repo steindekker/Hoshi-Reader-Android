@@ -913,11 +913,11 @@
     <string name="live_status_not_configured">尚未设置 Live 主机</string>
     <string name="live_status_connecting">正在连接 %1$s…</string>
     <string name="live_status_connected">已连接 %1$s</string>
-    <string name="live_status_disconnected">无法访问 %1$s</string>
+    <string name="live_status_disconnected" comment="Header status for an unreachable Live host; matches the lowercase media warning reason by design.">无法访问 %1$s</string>
     <string name="live_retry_in">%1$d 秒后重试</string>
     <string name="live_reason_unreachable">无法访问桥接服务</string>
-    <string name="live_reason_unauthorized">桥接服务拒绝了访问令牌</string>
-    <string name="live_reason_http">服务器错误（HTTP %1$d）</string>
+    <string name="live_reason_unauthorized" comment="Connection status reason; matches the lowercase media warning reason by design.">桥接服务拒绝了访问令牌</string>
+    <string name="live_reason_http" comment="Connection status reason; matches the lowercase media warning reason by design.">服务器错误（HTTP %1$d）</string>
     <string name="live_reason_closed">桥接服务关闭了连接</string>
     <string name="live_reason_invalid_response">这似乎不是 hoshi-bridge</string>
     <string name="live_reason_incompatible">桥接协议不兼容（v%1$d），请更新应用或 hoshi-bridge</string>
@@ -941,7 +941,6 @@
     <string name="live_settings_no_hosts">还没有主机。请添加运行 hoshi-bridge 的 Steam Deck 或电脑。</string>
     <string name="live_settings_add_host">添加主机</string>
     <string name="live_settings_edit_host">编辑主机</string>
-    <string name="live_settings_remove_host">移除主机</string>
     <string name="live_settings_host">主机</string>
     <string name="live_settings_host_hint">Tailscale MagicDNS 名称或 IP 地址</string>
     <string name="live_settings_port">端口</string>
@@ -963,10 +962,10 @@
     <string name="live_settings_screenshot_help">在 Live 标签页制卡且卡片格式使用 {image} 时，桥接服务会为视觉小说添加截图，为视频添加简短的动图片段。{sentence-audio} 会获取视频中该句的音频。手动选择的网络图片优先。</string>
     <string name="live_picture_failed">未添加图片：%1$s</string>
     <string name="live_audio_failed">未添加例句音频：%1$s</string>
-    <string name="live_media_reason_unreachable">无法访问 %1$s</string>
-    <string name="live_media_reason_unauthorized">桥接服务拒绝了访问令牌</string>
+    <string name="live_media_reason_unreachable" comment="Lowercase reason inside a media warning sentence; matches the Live header status by design.">无法访问 %1$s</string>
+    <string name="live_media_reason_unauthorized" comment="Lowercase reason inside a media warning sentence; matches the connection status reason by design.">桥接服务拒绝了访问令牌</string>
     <string name="live_media_reason_unavailable">桥接服务无法生成（%1$s）</string>
-    <string name="live_media_reason_http">服务器错误（HTTP %1$d）</string>
+    <string name="live_media_reason_http" comment="Lowercase reason inside a media warning sentence; matches the connection status reason by design.">服务器错误（HTTP %1$d）</string>
     <string name="live_media_reason_invalid">桥接服务没有返回文件</string>
     <string name="live_media_reason_no_host">该主机已不在设置中</string>
     <string name="live_media_reason_track_changed">字幕轨道已变更</string>

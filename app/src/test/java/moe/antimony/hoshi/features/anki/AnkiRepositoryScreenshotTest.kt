@@ -152,6 +152,58 @@ class AnkiRepositoryScreenshotTest {
     }
 
     @Test
+    fun attachesLiveSentenceAudioAndReportsItsFailure() = runBlocking {
+        val source = RecordingScreenshotSource(AnkiLiveMediaResult.Success(byteArrayOf(73, 68, 51), "audio/mpeg"))
+        val mappings = mapOf("Expression" to "{expression}", "Picture" to "{sentence-audio}")
+        val result = repository(source, mappings).mineEntryWithResult(
+            rawPayload = """{"expression":"読む"}""",
+            context = AnkiMiningContext(sentence = "本を読む", sentenceAudio = cue(8)),
+            decks = emptyList(),
+            noteTypes = emptyList(),
+        )
+        assertTrue(result.added)
+        assertEquals(listOf(8L), source.audioRequests.map { it.cueId })
+        assertTrue(backend.lastMediaName.startsWith("hoshi_sentence_") && backend.lastMediaName.endsWith(".mp3"))
+        assertEquals(listOf(73, 68, 51), backend.lastMediaBytes.map { it.toInt() })
+
+        val warning = UiText.Resource(R.string.live_audio_failed, UiText.Resource(R.string.live_media_reason_track_changed))
+        val failing = repository(RecordingScreenshotSource(AnkiLiveMediaResult.Failure(warning)), mappings).mineEntryWithResult(
+            rawPayload = """{"expression":"読む"}""",
+            context = AnkiMiningContext(sentence = "本を読む", sentenceAudio = cue(8)),
+            decks = emptyList(),
+            noteTypes = emptyList(),
+        )
+        assertTrue(failing.added)
+        assertEquals(listOf<UiText>(warning), failing.warnings)
+    }
+
+    @Test
+    fun sentenceAudioIsNotFetchedWhenUnreferenced() = runBlocking {
+        val source = RecordingScreenshotSource(AnkiLiveMediaResult.Success(byteArrayOf(1), "audio/mpeg"))
+        repository(source, mapOf("Expression" to "{expression}", "Picture" to "{sasayaki-audio}")).mineEntryWithResult(
+            rawPayload = """{"expression":"読む"}""",
+            context = AnkiMiningContext(sentence = "本を読む", sentenceAudio = cue(8)),
+            decks = emptyList(),
+            noteTypes = emptyList(),
+        )
+        assertTrue(source.audioRequests.isEmpty())
+    }
+
+    @Test
+    fun sentenceAudioPrefersTheLiveCueThenSasayaki() {
+        fun render(context: AnkiMiningContext, template: String = "{sentence-audio}") = AnkiHandlebarRenderer.render(
+            template = template,
+            payload = AnkiMiningPayload.fromJson("""{"expression":"本"}"""),
+            context = context,
+        )
+        val both = AnkiMiningContext(sentence = "s", sasayakiAudioPath = "[sound:cue.m4a]", sentenceAudioPath = "[sound:live.mp3]")
+        assertEquals("[sound:live.mp3]", render(both))
+        assertEquals("[sound:cue.m4a]", render(both.copy(sentenceAudioPath = null)))
+        // {sasayaki-audio} keeps its meaning.
+        assertEquals("[sound:cue.m4a]", render(both, "{sasayaki-audio}"))
+    }
+
+    @Test
     fun rendererPrefersWebImageThenScreenshotThenCover() {
         fun render(context: AnkiMiningContext) = AnkiHandlebarRenderer.render(
             template = "{image}",
@@ -196,13 +248,17 @@ class AnkiRepositoryScreenshotTest {
 
     private class RecordingScreenshotSource(private val result: AnkiLiveMediaResult) : AnkiLiveMediaSource {
         val requests = mutableListOf<AnkiScreenshotRequest>()
+        val audioRequests = mutableListOf<AnkiLiveCueRef>()
 
         override suspend fun fetchScreenshot(request: AnkiScreenshotRequest): AnkiLiveMediaResult {
             requests += request
             return result
         }
 
-        override suspend fun fetchSentenceAudio(cue: AnkiLiveCueRef): AnkiLiveMediaResult = result
+        override suspend fun fetchSentenceAudio(cue: AnkiLiveCueRef): AnkiLiveMediaResult {
+            audioRequests += cue
+            return result
+        }
     }
 
     private class ImageRecordingBackend(

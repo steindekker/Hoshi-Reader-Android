@@ -915,11 +915,11 @@
     <string name="live_status_not_configured">No Live hosts set up</string>
     <string name="live_status_connecting">Connecting to %1$s…</string>
     <string name="live_status_connected">Connected to %1$s</string>
-    <string name="live_status_disconnected">Can\'t reach %1$s</string>
+    <string name="live_status_disconnected" comment="Header status for an unreachable Live host; matches the lowercase media warning reason by design.">Can\'t reach %1$s</string>
     <string name="live_retry_in">Retrying in %1$d s</string>
     <string name="live_reason_unreachable">Can\'t reach the bridge</string>
-    <string name="live_reason_unauthorized">The bridge rejected the access token</string>
-    <string name="live_reason_http">Server error (HTTP %1$d)</string>
+    <string name="live_reason_unauthorized" comment="Connection status reason; matches the lowercase media warning reason by design.">The bridge rejected the access token</string>
+    <string name="live_reason_http" comment="Connection status reason; matches the lowercase media warning reason by design.">Server error (HTTP %1$d)</string>
     <string name="live_reason_closed">The bridge closed the connection</string>
     <string name="live_reason_invalid_response">This doesn\'t look like hoshi-bridge</string>
     <string name="live_reason_incompatible">Incompatible bridge protocol (v%1$d); update the app or hoshi-bridge</string>
@@ -943,7 +943,6 @@
     <string name="live_settings_no_hosts">No hosts yet. Add the Steam Deck or a PC running hoshi-bridge.</string>
     <string name="live_settings_add_host">Add host</string>
     <string name="live_settings_edit_host">Edit host</string>
-    <string name="live_settings_remove_host">Remove host</string>
     <string name="live_settings_host">Host</string>
     <string name="live_settings_host_hint">Tailscale MagicDNS name or IP address</string>
     <string name="live_settings_port">Port</string>
@@ -965,10 +964,10 @@
     <string name="live_settings_screenshot_help">When you mine in the Live tab and the card format uses {image}, the bridge adds a screenshot for visual novels or a short animated clip for videos. {sentence-audio} gets the cue\'s audio from videos. A picked web image takes precedence.</string>
     <string name="live_picture_failed">No picture added: %1$s</string>
     <string name="live_audio_failed">No sentence audio added: %1$s</string>
-    <string name="live_media_reason_unreachable">can\'t reach %1$s</string>
-    <string name="live_media_reason_unauthorized">the bridge rejected the access token</string>
+    <string name="live_media_reason_unreachable" comment="Lowercase reason inside a media warning sentence; matches the Live header status by design.">can\'t reach %1$s</string>
+    <string name="live_media_reason_unauthorized" comment="Lowercase reason inside a media warning sentence; matches the connection status reason by design.">the bridge rejected the access token</string>
     <string name="live_media_reason_unavailable">the bridge couldn\'t produce it (%1$s)</string>
-    <string name="live_media_reason_http">server error (HTTP %1$d)</string>
+    <string name="live_media_reason_http" comment="Lowercase reason inside a media warning sentence; matches the connection status reason by design.">server error (HTTP %1$d)</string>
     <string name="live_media_reason_invalid">the bridge didn\'t return a file</string>
     <string name="live_media_reason_no_host">the host is no longer in Settings</string>
     <string name="live_media_reason_track_changed">the subtitle track changed</string>
