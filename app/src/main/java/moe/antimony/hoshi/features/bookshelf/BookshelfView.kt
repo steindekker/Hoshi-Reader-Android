@@ -58,13 +58,13 @@ import androidx.compose.material.icons.rounded.FormatSize
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.LiveTv
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.ReportProblem
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.Translate
 import moe.antimony.hoshi.ui.HoshiAlertDialog as AlertDialog
 import moe.antimony.hoshi.ui.HoshiButton as Button
@@ -2334,7 +2334,7 @@ private fun BottomTabGlyph(tab: MainTab, modifier: Modifier = Modifier) {
     val icon = when (tab) {
         MainTab.Books -> Icons.AutoMirrored.Rounded.MenuBook
         MainTab.Dictionary -> Icons.Rounded.Translate
-        MainTab.TextHooker -> Icons.Rounded.SportsEsports
+        MainTab.Live -> Icons.Rounded.LiveTv
         MainTab.Statistics -> Icons.AutoMirrored.Rounded.ShowChart
         MainTab.Settings -> Icons.Rounded.Settings
     }
@@ -2351,7 +2351,7 @@ private fun SettingsGlyph(destination: SettingsDestination, color: Color, modifi
     val icon = when (destination) {
         SettingsDestination.Dictionaries -> Icons.AutoMirrored.Rounded.MenuBook
         SettingsDestination.Anki -> Icons.Rounded.Inventory2
-        SettingsDestination.TextHooker -> Icons.Rounded.SportsEsports
+        SettingsDestination.Live -> Icons.Rounded.LiveTv
         SettingsDestination.Profiles -> Icons.Rounded.Person
         SettingsDestination.Display -> Icons.Rounded.Palette
         SettingsDestination.Appearance -> Icons.Rounded.FormatSize

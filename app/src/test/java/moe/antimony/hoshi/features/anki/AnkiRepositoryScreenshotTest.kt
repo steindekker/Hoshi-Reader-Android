@@ -19,19 +19,35 @@ class AnkiRepositoryScreenshotTest {
     private val backend = ImageRecordingBackend(deck, noteType)
     private val ankiCacheDir = Files.createTempDirectory("hoshi-anki-screenshot").toFile()
 
+    private fun cue(id: Long) = AnkiLiveCueRef("pc", "mpv", "t1", id)
+
+    @Test
+    fun animatedClipIsAttachedAsWebp() = runBlocking {
+        val source = RecordingScreenshotSource(AnkiLiveMediaResult.Success(byteArrayOf(82, 73), "image/webp"))
+        repository(source).mineEntryWithResult(
+            rawPayload = """{"expression":"読む"}""",
+            context = AnkiMiningContext(sentence = "本を読む", screenshot = AnkiScreenshotRequest(cue(5), animated = true)),
+            decks = emptyList(),
+            noteTypes = emptyList(),
+        )
+        assertTrue(source.requests.single().animated)
+        assertTrue(backend.lastMediaName.endsWith(".webp"))
+        assertEquals("<img src=\"${backend.lastMediaName}\">", backend.lastFields["Picture"])
+    }
+
     @Test
     fun attachesFetchedScreenshotForImageHandlebarAndCleansUpTempFile() = runBlocking {
-        val source = RecordingScreenshotSource(AnkiScreenshotResult.Success(byteArrayOf(9, 8, 7), "image/jpeg"))
+        val source = RecordingScreenshotSource(AnkiLiveMediaResult.Success(byteArrayOf(9, 8, 7), "image/jpeg"))
         val result = repository(source).mineEntryWithResult(
             rawPayload = """{"expression":"読む"}""",
-            context = AnkiMiningContext(sentence = "本を読む", screenshot = AnkiScreenshotRequest(lineId = 42)),
+            context = AnkiMiningContext(sentence = "本を読む", screenshot = AnkiScreenshotRequest(cue(42))),
             decks = emptyList(),
             noteTypes = emptyList(),
         )
 
         assertTrue(result.added)
         assertTrue(result.warnings.isEmpty())
-        assertEquals(listOf<Long?>(42L), source.requests.map { it.lineId })
+        assertEquals(listOf(42L), source.requests.map { it.cue.cueId })
         assertEquals(listOf(9, 8, 7), backend.lastMediaBytes.map { it.toInt() })
         assertTrue(backend.lastMediaName.startsWith("hoshi_screenshot_"))
         assertEquals("<img src=\"${backend.lastMediaName}\">", backend.lastFields["Picture"])
@@ -41,13 +57,13 @@ class AnkiRepositoryScreenshotTest {
     @Test
     fun screenshotWinsOverCover() = runBlocking {
         val cover = Files.createTempFile("cover", ".png").also { Files.write(it, byteArrayOf(1)) }
-        val source = RecordingScreenshotSource(AnkiScreenshotResult.Success(byteArrayOf(5), "image/jpeg"))
+        val source = RecordingScreenshotSource(AnkiLiveMediaResult.Success(byteArrayOf(5), "image/jpeg"))
         repository(source).mineEntryWithResult(
             rawPayload = """{"expression":"読む"}""",
             context = AnkiMiningContext(
                 sentence = "本を読む",
                 coverPath = cover.toString(),
-                screenshot = AnkiScreenshotRequest(lineId = 1),
+                screenshot = AnkiScreenshotRequest(cue(1)),
             ),
             decks = emptyList(),
             noteTypes = emptyList(),
@@ -57,11 +73,11 @@ class AnkiRepositoryScreenshotTest {
 
     @Test
     fun failedScreenshotStillAddsCardWithWarning() = runBlocking {
-        val warning = UiText.Resource(R.string.texthooker_screenshot_unreachable)
-        val source = RecordingScreenshotSource(AnkiScreenshotResult.Failure(warning))
+        val warning = UiText.Resource(R.string.live_picture_failed, UiText.Resource(R.string.live_media_reason_unreachable, "pc"))
+        val source = RecordingScreenshotSource(AnkiLiveMediaResult.Failure(warning))
         val result = repository(source).mineEntryWithResult(
             rawPayload = """{"expression":"読む"}""",
-            context = AnkiMiningContext(sentence = "本を読む", screenshot = AnkiScreenshotRequest(lineId = 3)),
+            context = AnkiMiningContext(sentence = "本を読む", screenshot = AnkiScreenshotRequest(cue(3))),
             decks = emptyList(),
             noteTypes = emptyList(),
         )
@@ -72,26 +88,32 @@ class AnkiRepositoryScreenshotTest {
 
     @Test
     fun throwingSourceIsReportedAsWarning() = runBlocking {
-        val source = AnkiScreenshotSource { error("boom") }
+        val source = object : AnkiLiveMediaSource {
+            override suspend fun fetchScreenshot(request: AnkiScreenshotRequest): AnkiLiveMediaResult = error("boom")
+            override suspend fun fetchSentenceAudio(cue: AnkiLiveCueRef): AnkiLiveMediaResult = error("boom")
+        }
         val result = repository(source).mineEntryWithResult(
             rawPayload = """{"expression":"読む"}""",
-            context = AnkiMiningContext(sentence = "本を読む", screenshot = AnkiScreenshotRequest(lineId = 3)),
+            context = AnkiMiningContext(sentence = "本を読む", screenshot = AnkiScreenshotRequest(cue(3))),
             decks = emptyList(),
             noteTypes = emptyList(),
         )
         assertTrue(result.added)
-        assertEquals(listOf<UiText>(UiText.Resource(R.string.texthooker_screenshot_failed)), result.warnings)
+        assertEquals(
+            listOf<UiText>(UiText.Resource(R.string.live_picture_failed, UiText.Resource(R.string.live_media_reason_invalid))),
+            result.warnings,
+        )
     }
 
     @Test
     fun usesFetchedPreviewWithoutContactingTheDeck() = runBlocking {
         val preview = Files.createTempFile("preview", ".jpg").also { Files.write(it, byteArrayOf(4, 4)) }
-        val source = RecordingScreenshotSource(AnkiScreenshotResult.Failure(UiText.Literal("unused")))
+        val source = RecordingScreenshotSource(AnkiLiveMediaResult.Failure(UiText.Literal("unused")))
         val result = repository(source).mineEntryWithResult(
             rawPayload = """{"expression":"読む"}""",
             context = AnkiMiningContext(
                 sentence = "本を読む",
-                screenshot = AnkiScreenshotRequest(lineId = 3, localPath = preview.toString()),
+                screenshot = AnkiScreenshotRequest(cue(3), localPath = preview.toString()),
             ),
             decks = emptyList(),
             noteTypes = emptyList(),
@@ -104,10 +126,10 @@ class AnkiRepositoryScreenshotTest {
 
     @Test
     fun doesNotContactTheDeckWhenImageIsUnreferencedOrWebImagePicked() = runBlocking {
-        val source = RecordingScreenshotSource(AnkiScreenshotResult.Success(byteArrayOf(1), "image/jpeg"))
+        val source = RecordingScreenshotSource(AnkiLiveMediaResult.Success(byteArrayOf(1), "image/jpeg"))
         repository(source, mappings = mapOf("Expression" to "{expression}")).mineEntryWithResult(
             rawPayload = """{"expression":"読む"}""",
-            context = AnkiMiningContext(sentence = "本を読む", screenshot = AnkiScreenshotRequest(lineId = 3)),
+            context = AnkiMiningContext(sentence = "本を読む", screenshot = AnkiScreenshotRequest(cue(3))),
             decks = emptyList(),
             noteTypes = emptyList(),
         )
@@ -119,7 +141,7 @@ class AnkiRepositoryScreenshotTest {
                 context = AnkiMiningContext(
                     sentence = "本を読む",
                     webImageUrl = "http://127.0.0.1:1/picked.jpg",
-                    screenshot = AnkiScreenshotRequest(lineId = 3),
+                    screenshot = AnkiScreenshotRequest(cue(3)),
                 ),
                 decks = emptyList(),
                 noteTypes = emptyList(),
@@ -143,7 +165,7 @@ class AnkiRepositoryScreenshotTest {
     }
 
     private fun repository(
-        source: AnkiScreenshotSource,
+        source: AnkiLiveMediaSource,
         mappings: Map<String, String> = mapOf("Expression" to "{expression}", "Picture" to "{image}"),
     ): AnkiRepository = AnkiRepository(
         context = object : ContextWrapper(null) {
@@ -169,16 +191,18 @@ class AnkiRepositoryScreenshotTest {
         },
         localAudioRepository = LocalAudioRepository(Files.createTempDirectory("hoshi-anki-audio").toFile()),
         ankiConnectBackendFactory = { _, _ -> backend },
-        screenshotSource = source,
+        liveMediaSource = source,
     )
 
-    private class RecordingScreenshotSource(private val result: AnkiScreenshotResult) : AnkiScreenshotSource {
+    private class RecordingScreenshotSource(private val result: AnkiLiveMediaResult) : AnkiLiveMediaSource {
         val requests = mutableListOf<AnkiScreenshotRequest>()
 
-        override suspend fun fetchScreenshot(request: AnkiScreenshotRequest): AnkiScreenshotResult {
+        override suspend fun fetchScreenshot(request: AnkiScreenshotRequest): AnkiLiveMediaResult {
             requests += request
             return result
         }
+
+        override suspend fun fetchSentenceAudio(cue: AnkiLiveCueRef): AnkiLiveMediaResult = result
     }
 
     private class ImageRecordingBackend(

@@ -58,8 +58,8 @@ import moe.antimony.hoshi.features.settings.AdvancedSettingsView
 import moe.antimony.hoshi.features.statistics.StatisticsView
 import moe.antimony.hoshi.features.statistics.StatisticsSettingsView
 import moe.antimony.hoshi.features.statistics.StatisticsBookView
-import moe.antimony.hoshi.features.texthooker.TextHookerSettingsView
-import moe.antimony.hoshi.features.texthooker.TextHookerView
+import moe.antimony.hoshi.features.live.LiveSettingsView
+import moe.antimony.hoshi.features.live.LiveView
 import moe.antimony.hoshi.features.update.AboutScreen
 import kotlinx.coroutines.launch
 
@@ -97,7 +97,7 @@ fun AppShell(
     val booksBackStack = rememberNavBackStack(AppRoute.BooksRoute)
     val dictionaryBackStack = rememberNavBackStack(AppRoute.DictionaryRoute)
     val dictionarySession = rememberDictionarySearchSession()
-    val textHookerBackStack = rememberNavBackStack(AppRoute.TextHookerRoute)
+    val liveBackStack = rememberNavBackStack(AppRoute.LiveRoute)
     val textHookerSession = rememberDictionarySearchSession()
     val statisticsBackStack = rememberNavBackStack(AppRoute.StatisticsRoute)
     val settingsBackStack = rememberNavBackStack(AppRoute.SettingsRoute)
@@ -140,7 +140,7 @@ fun AppShell(
     fun selectedBackStack(): MutableList<NavKey> = when (selectedTab) {
         MainTab.Books -> booksBackStack
         MainTab.Dictionary -> dictionaryBackStack
-        MainTab.TextHooker -> textHookerBackStack
+        MainTab.Live -> liveBackStack
         MainTab.Statistics -> statisticsBackStack
         MainTab.Settings -> settingsBackStack
     }
@@ -296,11 +296,11 @@ fun AppShell(
                     pendingDictionaryLookupRequest = currentPendingDictionaryLookupRequest,
                     onPendingDictionaryLookupConsumed = currentOnPendingDictionaryLookupConsumed,
                 )
-                AppRoute.TextHookerRoute -> TopLevelRouteContent(
-                    selectedTab = MainTab.TextHooker,
+                AppRoute.LiveRoute -> TopLevelRouteContent(
+                    selectedTab = MainTab.Live,
                     textHookerSession = textHookerSession,
-                    onOpenTextHookerSettings = {
-                        textHookerBackStack.add(AppRoute.SettingsDetailRoute(SettingsDetailSection.TextHooker))
+                    onOpenLiveSettings = {
+                        liveBackStack.add(AppRoute.SettingsDetailRoute(SettingsDetailSection.Live))
                     },
                     pendingImportUri = currentPendingImportUri,
                     onPendingImportConsumed = currentOnPendingImportConsumed,
@@ -410,8 +410,8 @@ fun AppShell(
         entryDecorators = rememberAppNavEntryDecorators(),
         entryProvider = entryProvider,
     )
-    val textHookerEntries = rememberDecoratedNavEntries(
-        backStack = textHookerBackStack,
+    val liveEntries = rememberDecoratedNavEntries(
+        backStack = liveBackStack,
         entryDecorators = rememberAppNavEntryDecorators(),
         entryProvider = entryProvider,
     )
@@ -428,7 +428,7 @@ fun AppShell(
     val currentEntries = when (selectedTab) {
         MainTab.Books -> booksEntries
         MainTab.Dictionary -> dictionaryEntries
-        MainTab.TextHooker -> textHookerEntries
+        MainTab.Live -> liveEntries
         MainTab.Statistics -> statisticsEntries
         MainTab.Settings -> settingsEntries
     }
@@ -447,9 +447,9 @@ fun AppShell(
         }
         // The VN tab keeps its lookup WebView retained like Dictionary; its connection still
         // closes while hidden because the retained lifecycle stops UI state collection.
-        RetainedTabContent(active = selectedTab == MainTab.TextHooker) {
+        RetainedTabContent(active = selectedTab == MainTab.Live) {
             NavDisplay(
-                entries = textHookerEntries,
+                entries = liveEntries,
                 modifier = Modifier.fillMaxSize(),
                 onBack = ::popRoute,
                 sceneDecoratorStrategies = listOf(mainShellSceneDecorator),
@@ -458,7 +458,7 @@ fun AppShell(
                 predictivePopTransitionSpec = NoPredictiveNavContentTransition,
             )
         }
-        if (selectedTab != MainTab.Dictionary && selectedTab != MainTab.TextHooker) {
+        if (selectedTab != MainTab.Dictionary && selectedTab != MainTab.Live) {
             NavDisplay(
                 entries = currentEntries,
                 modifier = Modifier.fillMaxSize(),
@@ -506,7 +506,7 @@ private fun TopLevelRouteContent(
     onPendingDictionaryLookupConsumed: () -> Unit = {},
     dictionarySession: DictionarySearchSession? = null,
     textHookerSession: DictionarySearchSession? = null,
-    onOpenTextHookerSettings: () -> Unit = {},
+    onOpenLiveSettings: () -> Unit = {},
     isActive: Boolean = true,
     onSettingsDestination: (SettingsDestination) -> Unit = {},
     onOpenStatisticsSettings: () -> Unit = {},
@@ -531,10 +531,10 @@ private fun TopLevelRouteContent(
             onPendingLookupConsumed = onPendingDictionaryLookupConsumed,
             modifier = Modifier.fillMaxSize(),
         )
-        MainTab.TextHooker -> TextHookerView(
+        MainTab.Live -> LiveView(
             session = requireNotNull(textHookerSession),
             readerSettings = readerSettings,
-            onOpenSettings = onOpenTextHookerSettings,
+            onOpenSettings = onOpenLiveSettings,
             modifier = Modifier.fillMaxSize(),
         )
         MainTab.Statistics -> StatisticsView(
@@ -577,7 +577,7 @@ private fun SettingsDetailDestination(
             onOpenAdvanced = onOpenAnkiAdvanced,
             modifier = Modifier.fillMaxSize(),
         )
-        SettingsDetailSection.TextHooker -> TextHookerSettingsView(
+        SettingsDetailSection.Live -> LiveSettingsView(
             onClose = onClose,
             modifier = Modifier.fillMaxSize(),
         )
@@ -626,7 +626,7 @@ private fun SettingsDetailDestination(
 private fun MainTab.toRoute(): AppRoute = when (this) {
     MainTab.Books -> AppRoute.BooksRoute
     MainTab.Dictionary -> AppRoute.DictionaryRoute
-    MainTab.TextHooker -> AppRoute.TextHookerRoute
+    MainTab.Live -> AppRoute.LiveRoute
     MainTab.Statistics -> AppRoute.StatisticsRoute
     MainTab.Settings -> AppRoute.SettingsRoute
 }
@@ -645,7 +645,7 @@ internal fun nextDictionaryFocusRequestKey(
 private fun AppRoute.toMainTab(): MainTab = when (this) {
     AppRoute.MainRoute, AppRoute.BooksRoute -> MainTab.Books
     AppRoute.DictionaryRoute -> MainTab.Dictionary
-    AppRoute.TextHookerRoute -> MainTab.TextHooker
+    AppRoute.LiveRoute -> MainTab.Live
     AppRoute.StatisticsRoute, AppRoute.StatisticsSettingsRoute, is AppRoute.StatisticsBookRoute -> MainTab.Statistics
     AppRoute.SettingsRoute -> MainTab.Settings
     is AppRoute.ReaderRoute -> MainTab.Books
@@ -656,7 +656,7 @@ private fun AppRoute.toMainTab(): MainTab = when (this) {
 private fun SettingsDestination.toSection(): SettingsDetailSection = when (this) {
     SettingsDestination.Dictionaries -> SettingsDetailSection.Dictionaries
     SettingsDestination.Anki -> SettingsDetailSection.Anki
-    SettingsDestination.TextHooker -> SettingsDetailSection.TextHooker
+    SettingsDestination.Live -> SettingsDetailSection.Live
     SettingsDestination.Profiles -> SettingsDetailSection.Profiles
     SettingsDestination.Display -> SettingsDetailSection.Display
     SettingsDestination.Appearance -> SettingsDetailSection.Appearance

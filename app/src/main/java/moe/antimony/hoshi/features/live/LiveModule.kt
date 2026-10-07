@@ -1,4 +1,4 @@
-package moe.antimony.hoshi.features.texthooker
+package moe.antimony.hoshi.features.live
 
 import android.content.Context
 import dagger.Binds
@@ -9,25 +9,25 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
-import moe.antimony.hoshi.features.anki.AnkiScreenshotSource
+import moe.antimony.hoshi.features.anki.AnkiLiveMediaSource
 import okhttp3.OkHttpClient
 
 @Module
 @InstallIn(SingletonComponent::class)
-internal object TextHookerProvidesModule {
+internal object LiveProvidesModule {
     @Provides
     @Singleton
-    fun provideTextHookerSettingsRepository(@ApplicationContext context: Context): TextHookerSettingsRepository =
-        context.textHookerSettingsRepository()
+    fun provideLiveSettingsRepository(@ApplicationContext context: Context): LiveSettingsRepository =
+        context.liveSettingsRepository()
 
     /**
-     * Short timeouts keep a sleeping or unreachable Deck from stalling mining; the client pings
-     * the socket so a silently dropped Tailscale path is detected and reconnected.
+     * Short timeouts keep a sleeping or unreachable host from stalling the tab; the client pings
+     * the sockets so a silently dropped Tailscale path is detected and reconnected.
      */
     @Provides
     @Singleton
-    @TextHookerHttpClient
-    fun provideTextHookerHttpClient(): OkHttpClient =
+    @LiveHttpClient
+    fun provideLiveHttpClient(): OkHttpClient =
         OkHttpClient.Builder()
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.SECONDS)
@@ -39,11 +39,11 @@ internal object TextHookerProvidesModule {
 
 @Module
 @InstallIn(SingletonComponent::class)
-internal interface TextHookerBindingsModule {
+internal interface LiveBindingsModule {
     @Binds
     @Singleton
-    fun bindTextHookerTransport(transport: OkHttpTextHookerTransport): TextHookerTransport
+    fun bindLiveTransport(transport: OkHttpLiveTransport): LiveTransport
 
     @Binds
-    fun bindAnkiScreenshotSource(repository: TextHookerRepository): AnkiScreenshotSource
+    fun bindAnkiLiveMediaSource(repository: LiveRepository): AnkiLiveMediaSource
 }

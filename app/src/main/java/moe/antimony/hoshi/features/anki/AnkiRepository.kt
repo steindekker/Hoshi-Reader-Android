@@ -31,7 +31,7 @@ internal class AnkiRepository(
     private val ankiConnectBackendFactory: (String, String) -> AnkiBackend,
     private val loadDictionaryMedia: (DictionaryMedia) -> ByteArray?,
     private val loadTermDictionaries: () -> List<AnkiTermDictionary>,
-    private val screenshotSource: AnkiScreenshotSource,
+    private val liveMediaSource: AnkiLiveMediaSource,
 ) {
     @Inject
     constructor(
@@ -40,7 +40,7 @@ internal class AnkiRepository(
         settingsRepository: AnkiSettingsRepository,
         localAudioRepository: LocalAudioRepository,
         dictionaryRepository: DictionaryRepository,
-        screenshotSource: AnkiScreenshotSource,
+        liveMediaSource: AnkiLiveMediaSource,
     ) : this(
         context = context,
         backend = backend,
@@ -58,7 +58,7 @@ internal class AnkiRepository(
                 )
             }
         },
-        screenshotSource = screenshotSource,
+        liveMediaSource = liveMediaSource,
     )
 
     internal constructor(
@@ -70,7 +70,7 @@ internal class AnkiRepository(
             AnkiConnectBackend(endpoint, apiKey = apiKey)
         },
         loadTermDictionaries: () -> List<AnkiTermDictionary> = { emptyList() },
-        screenshotSource: AnkiScreenshotSource = UnavailableAnkiScreenshotSource,
+        liveMediaSource: AnkiLiveMediaSource = UnavailableAnkiLiveMediaSource,
     ) : this(
         context = context,
         backend = backend,
@@ -79,7 +79,7 @@ internal class AnkiRepository(
         ankiConnectBackendFactory = ankiConnectBackendFactory,
         loadDictionaryMedia = { null },
         loadTermDictionaries = loadTermDictionaries,
-        screenshotSource = screenshotSource,
+        liveMediaSource = liveMediaSource,
     )
 
     val settings: Flow<AnkiSettings> = settingsRepository.settings
@@ -313,24 +313,24 @@ internal class AnkiRepository(
         activeBackend: AnkiBackend,
         backendKind: AnkiBackendKind,
     ): ScreenshotAttachment {
-        val attachFailed = UiText.Resource(R.string.texthooker_screenshot_attach_failed)
+        val attachFailed = UiText.Resource(R.string.live_picture_attach_failed)
         request.localPath?.takeIf { File(it).isFile }?.let { path ->
             val ref = runCatching { addHashedMediaFile(path, "hoshi_screenshot", activeBackend, backendKind) }
                 .getOrNull()
             return ScreenshotAttachment(ref, if (ref == null) attachFailed else null)
         }
         val result = try {
-            screenshotSource.fetchScreenshot(request)
+            liveMediaSource.fetchScreenshot(request)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
             runCatching { Log.w(TAG, "Failed to fetch screenshot", e) }
-            AnkiScreenshotResult.Failure(UiText.Resource(R.string.texthooker_screenshot_failed))
+            AnkiLiveMediaResult.Failure(LivePictureFailed)
         }
         return when (result) {
-            is AnkiScreenshotResult.Failure -> ScreenshotAttachment(null, result.message)
-            is AnkiScreenshotResult.Success -> {
-                val extension = if (result.mimeType == "image/png") "png" else "jpg"
+            is AnkiLiveMediaResult.Failure -> ScreenshotAttachment(null, result.message)
+            is AnkiLiveMediaResult.Success -> {
+                val extension = liveImageExtension(result.mimeType)
                 val file = mediaCacheFile("hoshi_screenshot_${sha1Hex(result.bytes)}.$extension")
                 val ref = try {
                     file.writeBytes(result.bytes)
@@ -613,8 +613,25 @@ private fun sha1Hex(data: ByteArray): String =
 
 private const val TAG = "AnkiRepository"
 
-private val UnavailableAnkiScreenshotSource = AnkiScreenshotSource {
-    AnkiScreenshotResult.Failure(UiText.Resource(R.string.texthooker_screenshot_failed))
+private val LivePictureFailed: UiText =
+    UiText.Resource(R.string.live_picture_failed, UiText.Resource(R.string.live_media_reason_invalid))
+
+private val UnavailableAnkiLiveMediaSource = object : AnkiLiveMediaSource {
+    override suspend fun fetchScreenshot(request: AnkiScreenshotRequest): AnkiLiveMediaResult =
+        AnkiLiveMediaResult.Failure(LivePictureFailed)
+
+    override suspend fun fetchSentenceAudio(cue: AnkiLiveCueRef): AnkiLiveMediaResult =
+        AnkiLiveMediaResult.Failure(
+            UiText.Resource(R.string.live_audio_failed, UiText.Resource(R.string.live_media_reason_invalid)),
+        )
+}
+
+/** File extension of a Live picture (an animated WebP/GIF clip or a JPEG/PNG still). */
+internal fun liveImageExtension(mimeType: String): String = when (mimeType) {
+    "image/png" -> "png"
+    "image/webp" -> "webp"
+    "image/gif" -> "gif"
+    else -> "jpg"
 }
 
 private fun logAnkiFetchFailure(message: String, error: Throwable) {

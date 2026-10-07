@@ -1,6 +1,7 @@
 package moe.antimony.hoshi.features.reader
 
 import moe.antimony.hoshi.features.anki.AnkiMiningContext
+import moe.antimony.hoshi.features.anki.AnkiLiveCueRef
 import moe.antimony.hoshi.features.anki.AnkiScreenshotRequest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -50,13 +51,13 @@ class MineWithOptionsContextTest {
     private val vnBase = AnkiMiningContext(
         sentence = "game sentence",
         sentenceOffset = 2,
-        screenshot = AnkiScreenshotRequest(lineId = 7),
+        screenshot = AnkiScreenshotRequest(AnkiLiveCueRef("deck", "vn", "log", 7)),
     )
 
     @Test
     fun screenshotChoiceKeepsRequestWithPreviewPath() {
         val result = augmentedMiningContext(vnBase, picked = null, image = MineImageChoice.Screenshot("/cache/p.jpg"))
-        assertEquals(AnkiScreenshotRequest(lineId = 7, localPath = "/cache/p.jpg"), result.screenshot)
+        assertEquals(AnkiScreenshotRequest(AnkiLiveCueRef("deck", "vn", "log", 7), localPath = "/cache/p.jpg"), result.screenshot)
         assertNull(result.webImageUrl)
         assertEquals(2, result.sentenceOffset)
     }

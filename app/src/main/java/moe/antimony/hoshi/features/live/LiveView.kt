@@ -1,33 +1,45 @@
-package moe.antimony.hoshi.features.texthooker
+package moe.antimony.hoshi.features.live
 
 import android.annotation.SuppressLint
 import android.webkit.WebView
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.LiveTv
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.SportsEsports
+import androidx.compose.material.icons.rounded.VerticalAlignBottom
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,15 +48,17 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -54,6 +68,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.intl.LocaleList
 import androidx.compose.ui.text.style.TextOverflow
@@ -64,6 +79,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.text.DateFormat
 import java.util.Date
+import kotlinx.coroutines.delay
 import moe.antimony.hoshi.LocalHoshiUiDependencies
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.anki.AnkiMiningPayload
@@ -101,6 +117,8 @@ import moe.antimony.hoshi.features.reader.ReaderPopupHistoryCounts
 import moe.antimony.hoshi.features.reader.ReaderSettings
 import moe.antimony.hoshi.features.reader.readerLookupPopupIframeUrl
 import moe.antimony.hoshi.features.reader.readerPopupBooleanMapJson
+import moe.antimony.hoshi.ui.HoshiDropdownMenu as DropdownMenu
+import moe.antimony.hoshi.ui.UiText
 import moe.antimony.hoshi.ui.asString
 import moe.antimony.hoshi.ui.resolve
 import moe.antimony.hoshi.ui.theme.hoshiContainerBorder
@@ -108,10 +126,11 @@ import moe.antimony.hoshi.ui.theme.hoshiSurfaces
 import moe.antimony.hoshi.webview.applyHoshiWebViewSecurityDefaults
 import org.json.JSONObject.quote
 
-/** Builds the iframe stack: the embedded root (tappable line + results) followed by recursive popups. */
-internal fun textHookerIframePayloads(
-    line: TextHookerLine?,
-    lookup: TextHookerLookupState,
+/** Builds the iframe stack: the embedded root (tappable cue + results) followed by recursive popups. */
+internal fun liveIframePayloads(
+    rootPopupId: String?,
+    cue: LiveCue?,
+    lookup: LiveLookupState,
     childPopups: List<LookupPopupItem>,
     childHistories: Map<String, ReaderPopupHistoryCounts>,
     viewport: ReaderLookupPopupViewport,
@@ -119,7 +138,7 @@ internal fun textHookerIframePayloads(
     eInkMode: Boolean,
     iframeUrl: String,
 ): List<ReaderLookupPopupFramePayload> {
-    line ?: return emptyList()
+    if (cue == null || rootPopupId == null) return emptyList()
     val root = dictionarySearchRootFramePayload(
         results = lookup.results,
         viewport = viewport,
@@ -129,10 +148,10 @@ internal fun textHookerIframePayloads(
         iframeUrl = iframeUrl,
         clearSelectionSignal = lookup.clearSelectionSignal,
         rootHistory = ReaderPopupHistoryCounts(lookup.backCount, lookup.forwardCount),
-        sourceText = line.text,
+        sourceText = cue.text,
         sourceSentenceOffset = lookup.sentenceOffset,
-        // A per-line id makes the popup host render the new sentence even when it has no results yet.
-    ).copy(id = textHookerRootPopupId(line.id))
+        // A per-cue id makes the popup host render the new sentence even when it has no results yet.
+    ).copy(id = rootPopupId)
     return listOf(root) + childPopups.mapIndexed { index, popup ->
         val history = childHistories[popup.id] ?: ReaderPopupHistoryCounts()
         ReaderLookupPopupFramePayload.fromPopup(
@@ -147,7 +166,7 @@ internal fun textHookerIframePayloads(
 }
 
 @Composable
-internal fun TextHookerView(
+internal fun LiveView(
     session: DictionarySearchSession,
     readerSettings: ReaderSettings,
     onOpenSettings: () -> Unit,
@@ -156,7 +175,7 @@ internal fun TextHookerView(
     val context = LocalContext.current
     val density = LocalDensity.current
     val appContainer = LocalHoshiUiDependencies.current
-    val viewModel: TextHookerViewModel = hiltViewModel()
+    val viewModel: LiveViewModel = hiltViewModel()
     val ankiViewModel: AnkiViewModel = hiltViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val ankiUiState by ankiViewModel.uiState.collectAsStateWithLifecycle()
@@ -171,10 +190,10 @@ internal fun TextHookerView(
     var iframeHostWebView by remember(session) { mutableStateOf(session.webView) }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     var mineWithOptionsRequest by remember { mutableStateOf<MineWithOptionsRequest?>(null) }
-    var logExpanded by rememberSaveable { mutableStateOf(true) }
+    var transcriptExpanded by rememberSaveable { mutableStateOf(true) }
     val snackbarHostState = remember { SnackbarHostState() }
     val popupDarkMode = hoshiSurfaces.page.luminance() < 0.5f
-    val line = uiState.displayedLine
+    val cue = uiState.focusedCue
     val lookup = uiState.lookup
     val popupOptions = dictionarySearchPopupOptions(
         readerSettings = readerSettings,
@@ -251,9 +270,11 @@ internal fun TextHookerView(
             iframeDocument = { currentIframeDocument.value },
         )
     }
-    val iframePayloads = remember(line, lookup, themedPopups, childHistories, viewport, popupDarkMode, readerSettings.eInkMode, iframeUrl) {
-        textHookerIframePayloads(
-            line = line,
+    val rootPopupId = uiState.rootPopupId
+    val iframePayloads = remember(rootPopupId, cue, lookup, themedPopups, childHistories, viewport, popupDarkMode, readerSettings.eInkMode, iframeUrl) {
+        liveIframePayloads(
+            rootPopupId = rootPopupId,
+            cue = cue,
             lookup = lookup,
             childPopups = themedPopups,
             childHistories = childHistories,
@@ -305,7 +326,7 @@ internal fun TextHookerView(
         childHistories = childHistories + (popupId to next)
     }
     fun handleBridgeMessage(message: ReaderLookupPopupBridgeMessage) {
-        val isRoot = isTextHookerRootPopupId(message.popupId)
+        val isRoot = isLiveRootPopupId(message.popupId)
         if (isRoot && message.popupId != uiState.rootPopupId) return
         when (message) {
             is ReaderLookupPopupBridgeMessage.OpenLink -> context.openPopupExternalLink(message.url)
@@ -366,7 +387,7 @@ internal fun TextHookerView(
                     replyIframeMessage(message.popupId, messageId, false.toString())
                     return
                 }
-                baseContext.screenshot?.let { viewModel.requestScreenshotPreview(it.lineId) }
+                baseContext.screenshot?.let(viewModel::requestPreview)
                 mineWithOptionsRequest = MineWithOptionsRequest(
                     popupId = message.popupId,
                     messageId = messageId,
@@ -475,33 +496,39 @@ internal fun TextHookerView(
 
     Box(modifier = modifier.fillMaxSize().background(hoshiSurfaces.page)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            TextHookerStatusHeader(
+            LiveHeader(
                 state = uiState,
                 onRetry = viewModel::retryConnection,
+                onTogglePlayback = viewModel::togglePlayback,
                 onOpenSettings = onOpenSettings,
                 modifier = Modifier.statusBarsPadding(),
             )
-            if (uiState.hasNewerLine) {
-                TextHookerNewLineBanner(onShowLatest = {
+            LiveSessionBar(
+                state = uiState,
+                onSelectSession = { key ->
                     childHistories = emptyMap()
-                    viewModel.jumpToLatest()
-                })
-            }
+                    viewModel.selectSession(key)
+                },
+                onBackToPlaying = {
+                    childHistories = emptyMap()
+                    viewModel.backToPlaying()
+                },
+            )
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .onSizeChanged { viewportSize = it },
             ) {
-                // The retained WebView stays attached even without a line so its state survives.
-                TextHookerIframeHost(
+                // The retained WebView stays attached even without a cue so its state survives.
+                LiveIframeHost(
                     session = session,
                     resourceHandler = resourceHandler,
                     onWebViewChanged = { iframeHostWebView = it },
                     modifier = Modifier.fillMaxSize(),
                 )
-                if (line == null) {
-                    TextHookerEmptyState(
+                if (cue == null) {
+                    LiveEmptyState(
                         configured = uiState.settings.isConfigured,
                         onOpenSettings = onOpenSettings,
                         modifier = Modifier.fillMaxSize().background(hoshiSurfaces.page),
@@ -515,16 +542,20 @@ internal fun TextHookerView(
                     )
                 }
             }
-            if (uiState.lines.isNotEmpty()) {
-                TextHookerLineLog(
-                    lines = uiState.lines,
-                    displayedLineId = line?.id,
-                    expanded = logExpanded,
-                    onToggleExpanded = { logExpanded = !logExpanded },
-                    onSelect = { lineId ->
+            val active = uiState.activeSession
+            if (active != null && active.cues.isNotEmpty()) {
+                LiveTranscript(
+                    session = active,
+                    playingCueId = uiState.playingCueId,
+                    focusedCueId = cue?.id,
+                    expanded = transcriptExpanded,
+                    onToggleExpanded = { transcriptExpanded = !transcriptExpanded },
+                    onFocus = { cueId ->
                         childHistories = emptyMap()
-                        viewModel.selectLine(lineId)
+                        viewModel.focusCue(cueId)
                     },
+                    onSeek = viewModel::seekToCue,
+                    modifier = if (transcriptExpanded) Modifier.fillMaxHeight(TranscriptHeightFraction) else Modifier,
                 )
             }
         }
@@ -532,11 +563,11 @@ internal fun TextHookerView(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
         )
-        val preview = when (val state = uiState.screenshotPreview) {
-            TextHookerScreenshotPreviewState.Idle -> MineScreenshotPreview(path = null, loading = false)
-            is TextHookerScreenshotPreviewState.Loading -> MineScreenshotPreview(path = null, loading = true)
-            is TextHookerScreenshotPreviewState.Ready -> MineScreenshotPreview(path = state.path, loading = false)
-            is TextHookerScreenshotPreviewState.Failed -> MineScreenshotPreview(path = null, loading = false)
+        val preview = when (val state = uiState.preview) {
+            LivePreviewState.Idle -> MineScreenshotPreview(path = null, loading = false)
+            LivePreviewState.Loading -> MineScreenshotPreview(path = null, loading = true)
+            is LivePreviewState.Ready -> MineScreenshotPreview(path = state.path, loading = false)
+            LivePreviewState.Failed -> MineScreenshotPreview(path = null, loading = false)
         }
         MineWithOptionsSheetHost(
             request = mineWithOptionsRequest,
@@ -552,7 +583,7 @@ internal fun TextHookerView(
             reply = ::replyIframeMessage,
             onClose = {
                 mineWithOptionsRequest = null
-                viewModel.clearScreenshotPreview()
+                viewModel.clearPreview()
             },
             sentenceMode = MineSentenceMode.InBookSentence,
             screenshotPreview = preview,
@@ -560,9 +591,12 @@ internal fun TextHookerView(
     }
 }
 
+private const val TranscriptHeightFraction = 0.4f
+private const val ManualScrollHoldMillis = 4_000L
+
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-private fun TextHookerIframeHost(
+private fun LiveIframeHost(
     session: DictionarySearchSession,
     resourceHandler: ReaderLookupPopupResourceHandler,
     onWebViewChanged: (WebView) -> Unit,
@@ -580,7 +614,7 @@ private fun TextHookerIframeHost(
                 ReaderLookupPopupWebBridge.install(this, session.bridge)
                 webViewClient = LookupPopupIframeWebViewClient(resourceHandler)
                 loadDataWithBaseURL(
-                    "https://appassets.androidplatform.net/texthooker/iframe-host.html",
+                    "https://appassets.androidplatform.net/live/iframe-host.html",
                     lookupPopupIframeHostHtml(),
                     "text/html",
                     "UTF-8",
@@ -596,20 +630,36 @@ private fun TextHookerIframeHost(
     )
 }
 
+/** The extrapolated playback position of [session], refreshed while it plays. */
 @Composable
-private fun TextHookerStatusHeader(
-    state: TextHookerUiState,
+private fun rememberPlaybackPosition(session: LiveSessionState?): Long? {
+    val position by produceState(session?.positionAt(LiveClock.System.elapsedMillis()), session) {
+        while (true) {
+            value = session?.positionAt(LiveClock.System.elapsedMillis())
+            if (session?.playback?.paused != false) break
+            delay(500)
+        }
+    }
+    return position
+}
+
+@Composable
+private fun LiveHeader(
+    state: LiveUiState,
     onRetry: () -> Unit,
+    onTogglePlayback: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val presentation = textHookerStatusPresentation(state)
+    val presentation = liveStatusPresentation(state)
     val indicatorColor = when (presentation.tone) {
-        TextHookerStatusTone.Connected -> MaterialTheme.colorScheme.primary
-        TextHookerStatusTone.Pending -> MaterialTheme.colorScheme.tertiary
-        TextHookerStatusTone.Problem -> MaterialTheme.colorScheme.error
-        TextHookerStatusTone.Inactive -> MaterialTheme.colorScheme.outline
+        LiveStatusTone.Connected -> MaterialTheme.colorScheme.primary
+        LiveStatusTone.Pending -> MaterialTheme.colorScheme.tertiary
+        LiveStatusTone.Problem -> MaterialTheme.colorScheme.error
+        LiveStatusTone.Inactive -> MaterialTheme.colorScheme.outline
     }
+    val session = state.activeSession
+    val position = rememberPlaybackPosition(session?.takeIf { it.kind.isTimed })
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -624,20 +674,30 @@ private fun TextHookerStatusHeader(
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = presentation.title.asString(),
+                text = session?.let { liveSessionTitle(it, state) } ?: presentation.title.asString(),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            presentation.details.forEach { detail ->
+            val details = when {
+                session == null -> UiText.Joined(presentation.details, separator = " · ").asString()
+                position != null -> stringResource(R.string.live_session_on_host, state.hostName(session.hostId), liveClockText(position))
+                else -> state.hostName(session.hostId)
+            }
+            if (details.isNotEmpty()) {
                 Text(
-                    text = detail.asString(),
+                    text = details,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+        }
+        if (state.canControl) {
+            IconButton(onClick = onTogglePlayback) {
+                Icon(if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, contentDescription = null)
             }
         }
         if (presentation.canRetry) {
@@ -653,30 +713,91 @@ private fun TextHookerStatusHeader(
 }
 
 @Composable
-private fun TextHookerNewLineBanner(onShowLatest: () -> Unit) {
-    Surface(
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        modifier = Modifier.fillMaxWidth(),
+private fun liveSessionTitle(session: LiveSessionState, state: LiveUiState): String =
+    session.info.title.ifBlank {
+        stringResource(
+            when (session.kind) {
+                LiveSessionKind.Vn -> R.string.live_session_kind_vn
+                LiveSessionKind.Video -> R.string.live_session_kind_video
+                LiveSessionKind.Web -> R.string.live_session_kind_web
+            },
+        )
+    }
+
+/** Session switcher chip (with several sessions) and the "back to playing" chip. */
+@Composable
+private fun LiveSessionBar(
+    state: LiveUiState,
+    onSelectSession: (String?) -> Unit,
+    onBackToPlaying: () -> Unit,
+) {
+    val active = state.activeSession ?: return
+    val showSwitcher = state.sessions.size > 1 || state.sessionPinned
+    if (!showSwitcher && !state.showBackToPlaying) return
+    var menuOpen by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.padding(start = 16.dp, end = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.texthooker_new_line),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = onShowLatest) {
-                Text(stringResource(R.string.texthooker_show_latest))
+        if (showSwitcher) {
+            Box {
+                AssistChip(
+                    onClick = { menuOpen = true },
+                    label = {
+                        Text(
+                            text = stringResource(R.string.live_session_on_host, liveSessionTitle(active, state), state.hostName(active.hostId)),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.widthIn(max = 260.dp),
+                        )
+                    },
+                    trailingIcon = { Icon(Icons.Rounded.ArrowDropDown, contentDescription = null) },
+                )
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.live_session_auto)) },
+                        onClick = {
+                            menuOpen = false
+                            onSelectSession(null)
+                        },
+                    )
+                    state.sessions.forEach { session ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = stringResource(R.string.live_session_on_host, liveSessionTitle(session, state), state.hostName(session.hostId)),
+                                    fontWeight = if (session.key == active.key) FontWeight.SemiBold else null,
+                                )
+                            },
+                            onClick = {
+                                menuOpen = false
+                                onSelectSession(session.key)
+                            },
+                        )
+                    }
+                }
             }
+        }
+        if (state.showBackToPlaying) {
+            AssistChip(
+                onClick = onBackToPlaying,
+                label = {
+                    Text(
+                        stringResource(if (active.kind.isTimed) R.string.live_back_to_playing else R.string.live_show_latest),
+                    )
+                },
+                leadingIcon = { Icon(Icons.Rounded.VerticalAlignBottom, contentDescription = null) },
+            )
         }
     }
 }
 
 @Composable
-private fun TextHookerEmptyState(
+private fun LiveEmptyState(
     configured: Boolean,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
@@ -687,50 +808,72 @@ private fun TextHookerEmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(
-            imageVector = Icons.Rounded.SportsEsports,
+            imageVector = Icons.Rounded.LiveTv,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(48.dp),
         )
         Spacer(Modifier.size(16.dp))
         Text(
-            text = stringResource(
-                if (configured) R.string.texthooker_empty_waiting else R.string.texthooker_empty_not_configured,
-            ),
+            text = stringResource(if (configured) R.string.live_empty_waiting else R.string.live_empty_not_configured),
             style = MaterialTheme.typography.titleMedium,
         )
         Spacer(Modifier.size(8.dp))
         Text(
-            text = stringResource(
-                if (configured) R.string.texthooker_empty_waiting_hint else R.string.texthooker_empty_not_configured_hint,
-            ),
+            text = stringResource(if (configured) R.string.live_empty_waiting_hint else R.string.live_empty_not_configured_hint),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (!configured) {
             Spacer(Modifier.size(16.dp))
             Button(onClick = onOpenSettings) {
-                Text(stringResource(R.string.texthooker_action_set_up))
+                Text(stringResource(R.string.live_action_set_up))
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TextHookerLineLog(
-    lines: List<TextHookerLine>,
-    displayedLineId: Long?,
+private fun LiveTranscript(
+    session: LiveSessionState,
+    playingCueId: Long?,
+    focusedCueId: Long?,
     expanded: Boolean,
     onToggleExpanded: () -> Unit,
-    onSelect: (Long) -> Unit,
+    onFocus: (Long) -> Unit,
+    onSeek: (Long) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val newestFirst = remember(lines) { lines.asReversed() }
-    val timeFormat = remember { DateFormat.getTimeInstance(DateFormat.MEDIUM) }
+    val cues = session.cues
+    val timed = session.kind.isTimed
+    val canSeek = session.info.has(LiveCapability.Control)
+    val timeFormat = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
+    val listState = rememberLazyListState()
+    var manualScrollAt by remember { mutableLongStateOf(0L) }
+    var autoScrolling by remember { mutableStateOf(false) }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
+            if (scrolling && !autoScrolling) manualScrollAt = System.currentTimeMillis()
+        }
+    }
+    // Follow the playing cue unless the user scrolled the transcript a moment ago.
+    LaunchedEffect(playingCueId, session.key, expanded) {
+        if (!expanded) return@LaunchedEffect
+        val index = cues.indexOfFirst { it.id == playingCueId }.takeIf { it >= 0 } ?: return@LaunchedEffect
+        if (System.currentTimeMillis() - manualScrollAt < ManualScrollHoldMillis) return@LaunchedEffect
+        autoScrolling = true
+        try {
+            listState.animateScrollToItem((index - 2).coerceAtLeast(0))
+        } finally {
+            autoScrolling = false
+        }
+    }
     Surface(
         color = hoshiSurfaces.group,
         border = hoshiContainerBorder(),
         shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
     ) {
         Column {
             Row(
@@ -741,12 +884,12 @@ private fun TextHookerLineLog(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = stringResource(R.string.texthooker_history_title),
+                    text = stringResource(R.string.live_transcript_title),
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = pluralStringResource(R.plurals.texthooker_history_count, lines.size, lines.size),
+                    text = pluralStringResource(R.plurals.live_transcript_count, cues.size, cues.size),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
@@ -758,29 +901,49 @@ private fun TextHookerLineLog(
             }
             if (expanded) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp)) {
-                    items(newestFirst, key = { it.id }) { line ->
-                        val selected = line.id == displayedLineId
+                LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().weight(1f)) {
+                    itemsIndexed(cues, key = { _, item -> item.id }) { _, item ->
+                        val playing = item.id == playingCueId
+                        val focused = item.id == focusedCueId
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .background(
-                                    if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                                    when {
+                                        playing -> MaterialTheme.colorScheme.secondaryContainer
+                                        focused -> MaterialTheme.colorScheme.surfaceVariant
+                                        else -> Color.Transparent
+                                    },
                                 )
-                                .clickable { onSelect(line.id) }
+                                .clickable { onFocus(item.id) }
                                 .padding(horizontal = 16.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
+                            val start = item.startMs
+                            if (timed && start != null) {
+                                Text(
+                                    text = liveClockText(start),
+                                    style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .combinedClickable(
+                                            onClick = { onFocus(item.id) },
+                                            onLongClick = if (canSeek) ({ onSeek(item.id) }) else null,
+                                        )
+                                        .padding(top = 2.dp),
+                                )
+                            }
                             Text(
-                                text = line.text,
+                                text = item.text,
                                 style = MaterialTheme.typography.bodyMedium.copy(localeList = JapaneseLocale),
-                                maxLines = 2,
+                                fontWeight = if (focused) FontWeight.SemiBold else null,
+                                maxLines = 3,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f),
                             )
-                            if (line.receivedAt > 0) {
+                            if (!timed && item.at > 0) {
                                 Text(
-                                    text = timeFormat.format(Date(line.receivedAt)),
+                                    text = timeFormat.format(Date(item.at)),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )

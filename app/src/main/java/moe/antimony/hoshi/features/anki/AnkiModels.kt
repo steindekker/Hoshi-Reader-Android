@@ -317,10 +317,15 @@ data class AnkiMiningContext(
     val webImageUrl: String? = null,
     /** The downloaded, Anki-attached image ref the renderer emits (resolved in mineEntry). */
     val webImagePath: String? = null,
-    /** A game screenshot to attach for {image} (VN tab); resolved after the web image, before the cover. */
+    /**
+     * A Live picture to attach for {image} (an animated clip of a video cue, or a screenshot);
+     * resolved after the web image, before the cover.
+     */
     val screenshot: AnkiScreenshotRequest? = null,
-    /** The Anki-attached screenshot ref the renderer emits (resolved in mineEntry). */
+    /** The Anki-attached picture ref the renderer emits (resolved in mineEntry). */
     val screenshotPath: String? = null,
+    /** The Live cue whose audio the bridge cuts for {sentence-audio}. */
+    val sentenceAudio: AnkiLiveCueRef? = null,
 )
 
 internal data class AnkiTermDictionary(
@@ -482,7 +487,7 @@ internal object AnkiHandlebarRenderer {
         }
     }
 
-    /** The mined Picture: the picked web image, else the game screenshot, else the book cover. */
+    /** The mined Picture: the picked web image, else the Live picture, else the book cover. */
     private fun AnkiMiningContext.imageValue(): String =
         webImagePath?.takeIf { it.isNotBlank() }
             ?: screenshotPath?.takeIf { it.isNotBlank() }
