@@ -1,15 +1,17 @@
-"""Headless enrichment suite. Order: audio -> loudness -> pitch -> sentences ->
-furigana -> definitions -> frequency -> examples -> cloze. Dedupe is destructive
-and lives in its own command, not here.
+"""Headless enrichment suite. Order: audio -> loudness -> sentences -> furigana ->
+fields (definition, examples, pitch, frequency — from the Hoshi pack) -> cloze.
+Dedupe is destructive and lives in its own command, not here.
 
 Dry-run unless apply=True; a verified backup is taken before any write.
 
 Optional note_ids restricts every pass to those note ids (used by add --apply
 to enrich only the newly created note).
 """
-from . import audio, cloze, config, collection, furigana, pitch
+import sqlite3
+
+from . import audio, cloze, config, collection, fill, furigana, pack
 from .audio import build as audio_build, index as audio_index
-from .defs import build as def_build, enrich
+from .defs import build as def_build
 from .examples import build as ex_build
 from .freq import build as freq_build
 
@@ -68,55 +70,25 @@ def _step_furigana(col, apply: bool, note_ids) -> dict:
     return {"fixed": len(plan)}
 
 
-def _step_enrich(col, apply: bool, def_index: str, overwrite: bool, note_ids) -> dict:
-    if def_index == "no-source":
+def _step_fields(col, apply: bool, overwrite: bool, note_ids) -> dict:
+    """Build the indexes when missing, rebuild the pack when a source is newer,
+    then fill from the pack — the exact values the app writes."""
+    if def_build.ensure() == "no-source":
         return {"skipped": "defs.sqlite missing and no dict source to build it"}
-    from .defs import index
-    conn = index.open_index()
+    ex_build.ensure()
+    freq_build.ensure()
+    pack.ensure()
+    conn = sqlite3.connect(pack.pack_path())
     try:
-        if apply:
-            return enrich.enrich_notes(col, conn, overwrite=overwrite, note_ids=note_ids)
-        plan = enrich.build_plan(col, conn, overwrite=overwrite, note_ids=note_ids)
-        return {"to_write": plan["to_write"], "terms": plan["terms"], **plan["counts"]}
-    finally:
-        conn.close()
-
-
-def _step_frequency(col, apply: bool, note_ids) -> dict:
-    state = freq_build.ensure()
-    if state == "no-source":
-        return {"skipped": "freq.sqlite missing and no JPDB source (dicts/jpdb) to build it"}
-    from .freq import index, enrich as freq_enrich
-    conn = index.open_index()
-    try:
-        if apply:
-            return freq_enrich.enrich_notes(col, conn, note_ids=note_ids)
-        return freq_enrich.build_plan(col, conn, note_ids=note_ids)
-    finally:
-        conn.close()
-
-
-def _step_examples(col, apply: bool, overwrite: bool, note_ids) -> dict:
-    ex_index = ex_build.ensure()
-    if ex_index == "no-source":
-        return {"skipped": "examples.sqlite missing and no dict/Tatoeba source to build it"}
-    from .examples import index, enrich as ex_enrich
-    conn = index.open_index()
-    try:
-        if apply:
-            return ex_enrich.enrich_notes(col, conn, overwrite=overwrite, note_ids=note_ids)
-        plan = ex_enrich.build_plan(col, conn, overwrite=overwrite, note_ids=note_ids)
-        return {"to_write": plan["to_write"], **plan["counts"]}
+        return fill.run(col, conn, apply=apply, overwrite=overwrite, note_ids=note_ids)
     finally:
         conn.close()
 
 
 def run(col, *, apply=False, overwrite_cloze=False, overwrite_audio=False,
-        overwrite_sentences=False, overwrite_defs=False, overwrite_examples=False,
-        note_ids=None) -> dict:
-    def_index = def_build.ensure()
+        overwrite_sentences=False, overwrite_fields=False, note_ids=None) -> dict:
     scanned = len(collection.note_ids_in_scope(col, note_ids))
-    out = {"def_index": def_index, "scanned": scanned, "backup": None, "steps": {}}
+    out = {"scanned": scanned, "backup": None, "steps": {}}
 
     if apply:
         out["backup"] = collection.backup(col)
@@ -124,14 +96,9 @@ def run(col, *, apply=False, overwrite_cloze=False, overwrite_audio=False,
     steps = [
         ("audio", "audio", lambda: _step_audio(col, apply, overwrite_audio, note_ids)),
         ("loudness", "loudness", lambda: _step_loudness(col, apply, note_ids)),
-        ("pitch", "pitch", lambda: (
-            pitch.run_backfill(col, note_ids=note_ids) if apply
-            else pitch.plan_backfill(col, note_ids=note_ids)["counts"])),
         ("sentences", "sentence", lambda: _step_sentences(col, apply, overwrite_sentences, note_ids)),
         ("furigana", "furigana", lambda: _step_furigana(col, apply, note_ids)),
-        ("enrich", "defs", lambda: _step_enrich(col, apply, def_index, overwrite_defs, note_ids)),
-        ("frequency", "frequency", lambda: _step_frequency(col, apply, note_ids)),
-        ("examples", "examples", lambda: _step_examples(col, apply, overwrite_examples, note_ids)),
+        ("fields", "fields", lambda: _step_fields(col, apply, overwrite_fields, note_ids)),
         ("cloze", "cloze", lambda: cloze.run(col, apply=apply, overwrite=overwrite_cloze, note_ids=note_ids)),
     ]
     for key, name, fn in steps:

@@ -97,37 +97,18 @@ def format_report(res, *, apply, pull_action, push_action=None, error=None) -> s
         lines.append(_line("loudness", loud["to_normalize"],
                            _detail((loud["notes"], "cards"))))
 
-    pitch = steps["pitch"]
-    lines.append(_line("pitch", pitch["filled"],
-                       _detail((pitch["cleared"], "cleared"),
-                               (pitch["not_found"], "not in dict"),
-                               (pitch["skipped"], "no reading"))))
     lines.append(_line("sentence", steps["sentences"]["filled"]))
     lines.append(_line("furigana", steps["furigana"]["fixed"]))
 
-    defs = steps["enrich"]
-    if "skipped" in defs:
-        lines.append(_skipped("defs", defs["skipped"]))
-    elif apply:
-        lines.append(_line("defs", defs["written"], _detail((defs["dropped"], "dropped"))))
+    fields = steps["fields"]
+    if "skipped" in fields:
+        lines.append(_skipped("defs", fields["skipped"]))
     else:
-        lines.append(_line("defs", defs["to_write"], _detail((defs["nohit"], "no-hit"))))
-
-    freq = steps["frequency"]
-    if "skipped" in freq:
-        lines.append(_skipped("frequency", freq["skipped"]))
-    elif apply:
-        lines.append(_line("frequency", freq["written"], _detail((freq["none"], "no rank"))))
-    else:
-        lines.append(_line("frequency", freq["to_write"], _detail((freq["none"], "no rank"))))
-
-    examples = steps["examples"]
-    if "skipped" in examples:
-        lines.append(_skipped("examples", examples["skipped"]))
-    elif apply:
-        lines.append(_line("examples", examples["written"], _detail((examples["none_tagged"], "none"))))
-    else:
-        lines.append(_line("examples", examples["to_write"], _detail((examples["none"], "none"))))
+        lines.append(_line("defs", fields["defs"], _detail(
+            (fields["dropped"], "dropped") if fields["dropped"] else (fields["nohit"], "no-hit"))))
+        lines.append(_line("examples", fields["examples"], _detail((fields["no_example"], "none"))))
+        lines.append(_line("pitch", fields["pitch"], _detail((fields["pitch_cleared"], "cleared"))))
+        lines.append(_line("frequency", fields["frequency"]))
 
     cloze = steps["cloze"]
     lines.append(_line("cloze", cloze["filled"], _detail(
@@ -135,7 +116,7 @@ def format_report(res, *, apply, pull_action, push_action=None, error=None) -> s
         (cloze["skipped"], "unlocatable"),
         (cloze.get("mismatched", 0), "flagged"))))
 
-    terms = steps.get("enrich", {}).get("terms") or []
+    terms = steps.get("fields", {}).get("terms") or []
     if terms:
         shown = "、".join(html.escape(t) for t in terms[:_TERM_CAP])
         if len(terms) > _TERM_CAP:

@@ -2,7 +2,7 @@
 
   uv run anki-enrich            # pull latest, dry-run preview of the suite
   uv run anki-enrich --apply    # pull, backup, write, push to AnkiWeb
-  uv run anki-enrich --apply --overwrite   # re-assert pitch/sentences/defs/cloze
+  uv run anki-enrich --apply --overwrite   # re-assert sentences/fields/cloze on every card
   uv run anki-enrich dedupe --apply         # destructive duplicate merge (separate)
   uv run anki-enrich template --apply       # apply repo card design to note type
   uv run anki-enrich add TERM [--reading ...]   # dry-run create+enrich preview
@@ -78,40 +78,25 @@ def _render(res: dict, apply: bool) -> None:
     else:
         print(_row("loudness", _num(loud["to_normalize"]),
                    f"clips on {loud['notes']} cards"))
-    pitch = steps["pitch"]
-    print(_row("pitch", _num(pitch["filled"]),
-               f"{pitch['cleared']} cleared · {pitch['not_found']} not in dict · "
-               f"{pitch['skipped']} no reading"))
     print(_row("sentence", _num(steps["sentences"]["filled"]), "JRP markup"))
     print(_row("furigana", _num(steps["furigana"]["fixed"]), "spacing"))
-    defs = steps["enrich"]
-    if "skipped" in defs:
-        print(_row("defs", _dim("    —"), f"skipped: {defs['skipped']}"))
-    elif apply:
-        print(_row("defs", _num(defs["written"]), f"{defs['dropped']} dropped"))
+    fields = steps["fields"]
+    if "skipped" in fields:
+        print(_row("fields", _dim("    —"), f"skipped: {fields['skipped']}"))
     else:
-        print(_row("defs", _num(defs["to_write"]), f"{defs['nohit']} no-hit"))
-    freq = steps["frequency"]
-    if "skipped" in freq:
-        print(_row("frequency", _dim("    —"), f"skipped: {freq['skipped']}"))
-    elif apply:
-        print(_row("frequency", _num(freq["written"]), f"{freq['none']} no rank"))
-    else:
-        print(_row("frequency", _num(freq["to_write"]), f"{freq['none']} no rank"))
-    examples = steps["examples"]
-    if "skipped" in examples:
-        print(_row("examples", _dim("    —"), f"skipped: {examples['skipped']}"))
-    elif apply:
-        print(_row("examples", _num(examples["written"]), f"{examples['none_tagged']} no-example"))
-    else:
-        print(_row("examples", _num(examples["to_write"]), f"{examples['none']} no-example"))
+        nohit = (f"{fields['dropped']} dropped" if fields["dropped"]
+                 else f"{fields['nohit']} no-hit")
+        print(_row("defs", _num(fields["defs"]), nohit))
+        print(_row("examples", _num(fields["examples"]), f"{fields['no_example']} no-example"))
+        print(_row("pitch", _num(fields["pitch"]), f"{fields['pitch_cleared']} cleared"))
+        print(_row("frequency", _num(fields["frequency"])))
     cloze = steps["cloze"]
     detail = " · ".join(part for part in (
         f"{cloze['resynced']} resynced" if cloze.get("resynced") else "",
         f"{cloze['skipped']} unlocatable",
         f"{cloze['mismatched']} flagged" if cloze.get("mismatched") else "") if part)
     print(_row("cloze", _num(cloze["filled"]), detail))
-    terms = defs.get("terms") or []
+    terms = steps["fields"].get("terms") or []
     if terms:
         print()
         if len(terms) > _TERM_CAP:
@@ -175,8 +160,7 @@ def _run(args) -> int:
                 # not folded into --overwrite: see the flag's definition
                 overwrite_audio=getattr(args, "overwrite_audio", False),
                 overwrite_sentences=args.overwrite_sentences or args.overwrite,
-                overwrite_defs=args.overwrite_defs or args.overwrite,
-                overwrite_examples=args.overwrite_examples or args.overwrite,
+                overwrite_fields=args.overwrite_fields or args.overwrite,
                 overwrite_cloze=args.overwrite_cloze or args.overwrite)
             push_action = None
             if args.apply:
@@ -245,9 +229,9 @@ def main(argv=None) -> int:
                         choices=["run", "dedupe", "template"])
         ap.add_argument("--apply", action="store_true", help="write + push (else dry run)")
         ap.add_argument("--overwrite", action="store_true",
-                        help="re-assert sentences, defs, examples AND cloze on every card "
-                             "(pitch is always re-asserted; audio is NOT — see "
-                             "--overwrite-audio)")
+                        help="re-assert sentences, fields AND cloze on every card "
+                             "(pitch + frequency are always re-asserted; audio is NOT — "
+                             "see --overwrite-audio)")
         # Deliberately outside --overwrite: this replaces mined audio on every
         # card, re-encodes each new clip, and re-uploads the media to AnkiWeb.
         # Too expensive and too destructive to ride along on a blanket flag.
@@ -255,8 +239,9 @@ def main(argv=None) -> int:
                         help="re-assert store audio over EVERY card, replacing mined clips "
                              "(cards the store cannot serve keep their audio)")
         ap.add_argument("--overwrite-sentences", action="store_true")
-        ap.add_argument("--overwrite-defs", action="store_true")
-        ap.add_argument("--overwrite-examples", action="store_true")
+        ap.add_argument("--overwrite-fields", action="store_true",
+                        help="re-assert definition + examples from the pack on every card "
+                             "(e.g. after switching a dictionary source)")
         ap.add_argument("--overwrite-cloze", action="store_true")
         ap.add_argument("--dry-run", action="store_true",
                         help="preview only (the default); bare `--dry-run` opens the wizard")

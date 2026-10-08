@@ -42,7 +42,7 @@ def test_furigana_step_fixes_spacing(tmp_path, monkeypatch):
 
 
 def test_dry_run_reports_steps(tmp_path, monkeypatch):
-    # Force audio + defs + examples to the skip path so the test needs no external assets.
+    # Force audio + fields to the skip path so the test needs no external assets.
     from ankienrich.audio import build as audio_build
     from ankienrich.defs import build
     from ankienrich.examples import build as ex_build
@@ -54,13 +54,10 @@ def test_dry_run_reports_steps(tmp_path, monkeypatch):
     col = _kino_col(str(tmp_path))
     try:
         res = pipeline.run(col, apply=False)
-        assert set(res["steps"]) == {"audio", "loudness", "pitch", "sentences",
-                                     "furigana", "enrich", "frequency", "examples",
-                                     "cloze"}
+        assert set(res["steps"]) == {"audio", "loudness", "sentences", "furigana",
+                                     "fields", "cloze"}
         assert "skipped" in res["steps"]["audio"]
-        assert "skipped" in res["steps"]["enrich"]
-        assert "skipped" in res["steps"]["frequency"]
-        assert "skipped" in res["steps"]["examples"]
+        assert "skipped" in res["steps"]["fields"]
         assert res["backup"] is None
     finally:
         col.close()

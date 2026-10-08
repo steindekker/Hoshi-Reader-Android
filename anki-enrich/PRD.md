@@ -25,20 +25,20 @@ the configured chat); a lock keeps a manual run from colliding with the nightly 
 
 1. **Term audio** — fill where missing; replace jpod audio with a higher-quality
    source. Priority: NHK → Shinmeikai → Forvo → Jpod.
-2. **Pitch graphs** — generate where missing.
-3. **Sentence** — enrich with JRP markup.
-4. **Definitions** — fill where missing: a J-J definition on top (first hit in
-   the chain 三省堂 → 広辞苑 → 実用 → 大辞泉) plus JMdict (J-E) glosses below it,
-   each shown whenever available.
-5. **Cloze** — set the cloze fields correctly.
+2. **Sentence** — enrich with JRP markup.
+3. **Fields** — fill from the Hoshi pack where missing: a J-J definition on top
+   (first hit in the chain 三省堂 → 広辞苑 → 実用 → 大辞泉) plus JMdict (J-E)
+   glosses below it, examples, pitch graph and frequency. Optionally re-assert
+   them over the whole collection (e.g. after switching a source).
+4. **Cloze** — set the cloze fields correctly.
 
 ### Hoshi enrichment pack
 
 Precompute every field that depends only on the word (definition, pitch graph,
 examples, frequency, done-tags) into one file the Hoshi app downloads over
 Tailscale, so cards mined on the phone are final offline. This is the tool's
-primary purpose going forward; the passes above remain for what needs the
-sentence (JRP markup, cloze) until those move too.
+primary purpose going forward. The fields pass above reads the same pack, so the
+app and the collection never disagree.
 
 ### Dedupe
 
