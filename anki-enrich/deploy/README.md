@@ -44,13 +44,14 @@ rather than failing.
 ## Serve the Hoshi enrichment pack
 Every deploy rebuilds `data/pack/` (`anki-enrich pack`): `hoshi-pack.sqlite` plus
 the small `pack.json` manifest the app checks. Publish the folder on the tailnet
-once — `tailscale serve` gives it HTTPS with a real `*.ts.net` certificate and
-supports resumed downloads:
+once on its own port (443 already fronts CouchDB for Obsidian LiveSync) —
+`tailscale serve` gives it HTTPS with a real `*.ts.net` certificate and supports
+resumed downloads:
 ```bash
-ssh $DEPLOY_REMOTE "sudo tailscale serve --bg --set-path /hoshi /opt/anki-enrich/data/pack"
+ssh $DEPLOY_REMOTE "sudo tailscale serve --bg --https=8444 /opt/anki-enrich/data/pack"
 ```
 In Hoshi → Settings → Anki → Enrichment pack, set the URL to
-`https://<box>.<tailnet>.ts.net/hoshi/pack.json` and tap Update.
+`https://<host>.<tailnet>.ts.net:8444/pack.json` and tap Update.
 
 ## Refresh dictionaries
 Rebuild the dicts locally, then just rerun the deploy — it re-pushes the sqlite
