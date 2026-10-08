@@ -995,4 +995,19 @@
         <item quantity="one">%1$d line</item>
         <item quantity="other">%1$d lines</item>
     </plurals>
+    <string name="enrich_pack_title">Enrichment pack</string>
+    <string name="enrich_pack_not_installed">Not installed. Download it to fill {ae-*} handlebars offline.</string>
+    <plurals name="enrich_pack_installed">
+        <item quantity="one">Built %1$s · %2$d word</item>
+        <item quantity="other">Built %1$s · %2$d words</item>
+    </plurals>
+    <string name="enrich_pack_url">Pack URL</string>
+    <string name="enrich_pack_checking">Checking for a new pack…</string>
+    <string name="enrich_pack_downloading">Downloading… %1$d%%</string>
+    <string name="enrich_pack_up_to_date">Up to date</string>
+    <string name="enrich_pack_updated">Pack updated</string>
+    <string name="enrich_pack_error_url_missing">Set the pack URL first.</string>
+    <string name="enrich_pack_error_unreachable">Couldn\'t download the pack. Check the URL and that Tailscale is connected.</string>
+    <string name="enrich_pack_error_invalid">The downloaded pack was damaged. Try again.</string>
+    <string name="enrich_pack_error_format">This pack needs a newer version of the app.</string>
 </resources>

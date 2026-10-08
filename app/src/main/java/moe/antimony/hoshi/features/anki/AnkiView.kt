@@ -1,5 +1,7 @@
 package moe.antimony.hoshi.features.anki
 
+import moe.antimony.hoshi.features.anki.enrich.AnkiEnrichHandlebars
+import moe.antimony.hoshi.features.anki.enrich.EnrichPackCard
 import moe.antimony.hoshi.ui.theme.hoshiSurfaces
 import moe.antimony.hoshi.ui.theme.hoshiContainerBorder
 import android.content.Intent
@@ -266,6 +268,7 @@ fun AnkiView(
                     }
                 }
             }
+            item { EnrichPackCard() }
         }
     }
     if (confirmFetch) {
@@ -907,7 +910,7 @@ internal object AnkiHandlebarOptions {
         "{cloze-body}",
         "{cloze-suffix}",
         "{pitch-accent-graphs-first}",
-    )
+    ) + AnkiEnrichHandlebars.all
 
     fun forTermDictionaries(dictionaryNames: List<String>, showAll: Boolean = false): List<String> =
         CoreOptions + (if (showAll) AdvancedOptions else emptyList()) + dictionaryNames
