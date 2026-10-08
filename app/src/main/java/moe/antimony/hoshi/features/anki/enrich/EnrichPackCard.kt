@@ -67,6 +67,14 @@ internal class EnrichPackViewModel @Inject constructor(
     fun update() = repository.startUpdate()
 }
 
+/** `{ae-*}` field-picker entries for the installed pack; empty when no pack is installed. */
+@Composable
+internal fun rememberEnrichPackHandlebars(): List<String> {
+    val viewModel: EnrichPackViewModel = hiltViewModel()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    return remember(state.info?.keys) { state.info?.keys?.let(AnkiEnrichHandlebars::fieldOptions).orEmpty() }
+}
+
 /** Anki settings card for the anki-enrich pack: installed version, server URL, and Update. */
 @Composable
 internal fun EnrichPackCard() {

@@ -49,6 +49,8 @@ internal data class EnrichPackMeta(
     val zdict: ByteArray,
     val defaults: Map<String, String>,
     val fallbackKeys: Set<String>,
+    /** Keys some row carries, in display order; empty for packs built before the list existed. */
+    val keys: List<String> = emptyList(),
 )
 
 internal data class EnrichPackRow(val reading: String, val data: ByteArray)

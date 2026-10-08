@@ -10,6 +10,7 @@ internal class FakeEnrichPackSource(
     version: String = "v1",
     defaults: Map<String, String> = mapOf("ae-definition" to "{glossary-first}"),
     fallbackKeys: Set<String> = setOf("ae-definition", "ae-definition-source", "ae-examples", "ae-tags"),
+    keys: List<String> = emptyList(),
 ) : EnrichPackSource {
     private val zdict = "<div class=\"aa-jj\" data-dict=\"sankoku8\">".repeat(4).toByteArray()
     private val encoded = rows.map { (term, reading, values) -> Triple(term, reading, compress(values)) }
@@ -24,6 +25,7 @@ internal class FakeEnrichPackSource(
         zdict = zdict,
         defaults = defaults,
         fallbackKeys = fallbackKeys,
+        keys = keys,
     )
 
     override fun row(term: String, reading: String): EnrichPackRow? {

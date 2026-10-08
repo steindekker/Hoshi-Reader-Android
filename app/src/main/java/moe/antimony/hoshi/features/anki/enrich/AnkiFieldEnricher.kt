@@ -9,15 +9,22 @@ package moe.antimony.hoshi.features.anki.enrich
  * `{glossary-first}`; it is substituted before rendering so it renders as usual.
  */
 internal object AnkiEnrichHandlebars {
-    /** Keys the current pack provides, listed in the handlebar picker. Any `{ae-*}` key works. */
-    val all: List<String> = listOf(
-        "{ae-definition}",
-        "{ae-definition-source}",
-        "{ae-pitch}",
-        "{ae-examples}",
-        "{ae-frequency}",
-        "{ae-tags}",
+    /** Keys of packs that predate the pack's own key list. Any `{ae-*}` key works when typed. */
+    val defaultKeys: List<String> = listOf(
+        "ae-definition",
+        "ae-definition-source",
+        "ae-pitch",
+        "ae-examples",
+        "ae-frequency",
+        "ae-tags",
     )
+
+    /** The pack's tag value belongs in the format's Tags, not in a field. */
+    private const val TAGS_KEY = "ae-tags"
+
+    /** Field-picker entries for an installed pack's keys. */
+    fun fieldOptions(keys: List<String>): List<String> =
+        keys.filterNot { it == TAGS_KEY }.map { "{$it}" }
 
     val token = Regex("""\{(ae-[^{}]*)\}""")
 }

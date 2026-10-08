@@ -1,7 +1,7 @@
 package moe.antimony.hoshi.features.anki
 
-import moe.antimony.hoshi.features.anki.enrich.AnkiEnrichHandlebars
 import moe.antimony.hoshi.features.anki.enrich.EnrichPackCard
+import moe.antimony.hoshi.features.anki.enrich.rememberEnrichPackHandlebars
 import moe.antimony.hoshi.ui.theme.hoshiSurfaces
 import moe.antimony.hoshi.ui.theme.hoshiContainerBorder
 import android.content.Intent
@@ -329,6 +329,7 @@ fun AnkiCardFormatView(
             uiState.settings.showAllHandlebars,
         )
     }
+    val enrichPackHandlebars = rememberEnrichPackHandlebars()
     SettingsDetailScaffold(title = format?.name ?: stringResource(R.string.anki_format), onClose = onClose, modifier = modifier) { padding ->
         if (format == null) return@SettingsDetailScaffold
         val noteType = uiState.availableNoteTypes.firstOrNull { it.id == format.selectedNoteTypeId || it.name == format.selectedNoteTypeName }
@@ -376,7 +377,7 @@ fun AnkiCardFormatView(
                 }
             }
             noteType?.fields?.forEach { field ->
-                item(key = field) { AnkiFieldMappingRow(field, format.fieldMappings[field].orEmpty(), handlebarOptions) { viewModel.updateFieldMapping(formatId, field, it) } }
+                item(key = field) { AnkiFieldMappingRow(field, format.fieldMappings[field].orEmpty(), enrichPackHandlebars + handlebarOptions) { viewModel.updateFieldMapping(formatId, field, it) } }
             }
             item { AnkiTextValueRow(stringResource(R.string.anki_tags), format.tags, { viewModel.updateTags(formatId, it) }, stringResource(R.string.anki_tags)) }
         }
@@ -910,7 +911,7 @@ internal object AnkiHandlebarOptions {
         "{cloze-body}",
         "{cloze-suffix}",
         "{pitch-accent-graphs-first}",
-    ) + AnkiEnrichHandlebars.all
+    )
 
     fun forTermDictionaries(dictionaryNames: List<String>, showAll: Boolean = false): List<String> =
         CoreOptions + (if (showAll) AdvancedOptions else emptyList()) + dictionaryNames

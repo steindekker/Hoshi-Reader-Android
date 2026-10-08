@@ -26,6 +26,14 @@ class EnrichPackLookupTest {
     }
 
     @Test
+    fun fieldPickerOffersPackKeysButNotTheTagsKey() {
+        assertEquals(
+            listOf("{ae-definition}", "{ae-sentence}"),
+            AnkiEnrichHandlebars.fieldOptions(listOf("ae-definition", "ae-tags", "ae-sentence")),
+        )
+    }
+
+    @Test
     fun exactReadingGivesEveryValue() {
         val pack = FakeEnrichPackSource(listOf(Triple("生", "なま", mapOf("ae-definition" to "raw", "ae-pitch" to "<svg/>"))))
 

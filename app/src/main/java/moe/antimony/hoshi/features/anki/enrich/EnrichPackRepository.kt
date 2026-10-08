@@ -42,7 +42,12 @@ internal sealed interface EnrichPackStatus {
     data class Failed(val message: UiText) : EnrichPackStatus
 }
 
-internal data class EnrichPackInfo(val version: String, val builtAt: String, val entries: Int)
+internal data class EnrichPackInfo(
+    val version: String,
+    val builtAt: String,
+    val entries: Int,
+    val keys: List<String> = AnkiEnrichHandlebars.defaultKeys,
+)
 
 internal interface EnrichPackSettingsRepository {
     val manifestUrl: Flow<String>
@@ -216,7 +221,16 @@ internal class EnrichPackRepository(
 
     private fun refreshInfo() {
         _info.value = synchronized(sourceLock) {
-            runCatching { currentSource()?.meta?.let { EnrichPackInfo(it.version, it.builtAt, it.entries) } }
+            runCatching {
+                currentSource()?.meta?.let { meta ->
+                    EnrichPackInfo(
+                        version = meta.version,
+                        builtAt = meta.builtAt,
+                        entries = meta.entries,
+                        keys = meta.keys.ifEmpty { AnkiEnrichHandlebars.defaultKeys },
+                    )
+                }
+            }
                 .onFailure { logWarning("Unable to open the enrichment pack", it) }
                 .getOrNull()
         }
@@ -275,6 +289,7 @@ internal class SqliteEnrichPackSource(file: File) : EnrichPackSource {
             zdict = values["zdict"] as? ByteArray ?: ByteArray(0),
             defaults = (values["defaults"] as? String)?.let { json.decodeFromString<Map<String, String>>(it) }.orEmpty(),
             fallbackKeys = (values["fallback_keys"] as? String)?.let { json.decodeFromString<List<String>>(it) }.orEmpty().toSet(),
+            keys = (values["keys"] as? String)?.let { json.decodeFromString<List<String>>(it) }.orEmpty(),
         )
     }
 

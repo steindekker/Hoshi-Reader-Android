@@ -79,6 +79,9 @@ def test_manifest_and_version_are_stable_for_identical_content(tmp_path):
     meta = dict(sqlite3.connect(tmp_path / "out" / pack.PACK_FILE).execute("SELECT key, value FROM meta"))
     assert meta["version"] == first["version"]
     assert meta["format"] == "1"
+    # no frequency index in this fixture, so that key is never offered
+    assert json.loads(meta["keys"]) == [pack.DEFINITION, pack.DEFINITION_SOURCE, pack.PITCH,
+                                        pack.EXAMPLES, pack.TAGS]
     on_disk = json.loads((tmp_path / "out" / pack.MANIFEST_FILE).read_text())
     assert on_disk == first
     assert first["entries"] == 3

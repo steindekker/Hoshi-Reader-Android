@@ -17,6 +17,8 @@ Format (FORMAT 1) — one SQLite file:
     fallback_keys  JSON [key] still valid when the term is known but not under the
                    requested reading (reading-dependent keys like the pitch graph
                    are left out)
+    keys           JSON [key] every key some row carries, in display order; the app
+                   offers these in its handlebar picker (not part of the version)
   entries(term TEXT, reading TEXT, data BLOB), indexed on term
     data = zlib(JSON {key: value}) with zdict; empty values are omitted.
 
@@ -58,6 +60,7 @@ TAGS = "ae-tags"
 # the nightly pass leaves the mined Meaning alone on a no-hit.
 DEFAULTS = {DEFINITION: "{glossary-first}"}
 FALLBACK_KEYS = [DEFINITION, DEFINITION_SOURCE, EXAMPLES, TAGS]
+KEY_ORDER = [DEFINITION, DEFINITION_SOURCE, PITCH, EXAMPLES, FREQUENCY, TAGS]
 
 _ZDICT_SIZE = 32 * 1024
 _ZDICT_SAMPLE_EVERY = 50
@@ -194,11 +197,12 @@ def build(out_dir=None, src: Sources | None = None, progress=None) -> dict:
         for key in ("format", "zdict", "defaults", "fallback_keys"):
             value = meta[key]
             digest.update(value if isinstance(value, bytes) else value.encode("utf-8"))
-        n, batch = 0, []
+        n, batch, seen_keys = 0, [], set()
         for i, (term, reading) in enumerate(pairs):
             values = fields_for(src, term, reading)
             if not values:
                 continue
+            seen_keys.update(values)
             blob = _compress(_encode(values), zdict)
             for part in (term, reading):
                 digest.update(part.encode("utf-8") + b"\0")
@@ -214,7 +218,8 @@ def build(out_dir=None, src: Sources | None = None, progress=None) -> dict:
         conn.execute("CREATE INDEX entries_term ON entries (term)")
         version = digest.hexdigest()[:16]
         built_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-        meta.update(version=version, built_at=built_at, entries=str(n))
+        keys = [k for k in KEY_ORDER if k in seen_keys] + sorted(seen_keys - set(KEY_ORDER))
+        meta.update(version=version, built_at=built_at, entries=str(n), keys=json.dumps(keys))
         conn.executemany("INSERT INTO meta VALUES (?,?)", list(meta.items()))
         conn.commit()
         conn.close()

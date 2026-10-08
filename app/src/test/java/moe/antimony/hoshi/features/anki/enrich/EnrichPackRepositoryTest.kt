@@ -68,6 +68,18 @@ class EnrichPackRepositoryTest {
     }
 
     @Test
+    fun installedPackAdvertisesItsKeysOrTheDefaultsForOlderPacks() = runBlocking {
+        packBytes = "v2".toByteArray()
+        repository().apply { update() }.let { assertEquals(AnkiEnrichHandlebars.defaultKeys, it.info.value?.keys) }
+
+        val withKeys = repository(openPack = { file ->
+            FakeEnrichPackSource(emptyList(), version = file.readText(), keys = listOf("ae-definition", "ae-sentence"))
+        })
+
+        assertEquals(listOf("ae-definition", "ae-sentence"), withKeys.info.value?.keys)
+    }
+
+    @Test
     fun sameVersionIsUpToDateWithoutDownloading() = runBlocking {
         packBytes = "v2".toByteArray()
         val repository = repository()
@@ -118,7 +130,11 @@ class EnrichPackRepositoryTest {
         assertEquals(EnrichPackStatus.Failed(UiText.Resource(R.string.enrich_pack_error_url_missing)), repository.status.value)
     }
 
-    private fun repository(url: String = "http://127.0.0.1:${server.address.port}/hoshi/pack.json") =
+    private fun repository(
+        url: String = "http://127.0.0.1:${server.address.port}/hoshi/pack.json",
+        // A test "pack" is just its version string, so the opened meta can be checked.
+        openPack: (File) -> EnrichPackSource = { file -> FakeEnrichPackSource(emptyList(), version = file.readText()) },
+    ) =
         EnrichPackRepository(
             directory = directory,
             settings = object : EnrichPackSettingsRepository {
@@ -127,8 +143,7 @@ class EnrichPackRepositoryTest {
             },
             scope = CoroutineScope(Dispatchers.Unconfined),
             ioDispatcher = Dispatchers.Unconfined,
-            // A test "pack" is just its version string, so the opened meta can be checked.
-            openPack = { file -> FakeEnrichPackSource(emptyList(), version = file.readText()) },
+            openPack = openPack,
         )
 
     private fun sha256(bytes: ByteArray): String =
