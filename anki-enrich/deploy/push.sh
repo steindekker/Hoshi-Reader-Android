@@ -39,7 +39,7 @@ rsync -az --delete \
   --exclude='.git/' --exclude='.venv/' \
   --exclude='__pycache__/' --exclude='*.pyc' \
   --exclude='.pytest_cache/' --exclude='.ruff_cache/' \
-  --exclude='.idea/' --exclude='.claude/' --exclude='.env' \
+  --exclude='.idea/' --exclude='.claude/' --exclude='.env' --exclude='.envrc' \
   "$REPO_ROOT/" "$REMOTE:$DEST/"
 
 # --- Push build artifacts (always; rsync delta makes reruns cheap) ----------
