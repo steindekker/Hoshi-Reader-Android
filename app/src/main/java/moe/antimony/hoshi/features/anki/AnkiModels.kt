@@ -317,6 +317,17 @@ data class AnkiMiningContext(
     val webImageUrl: String? = null,
     /** The downloaded, Anki-attached image ref the renderer emits (resolved in mineEntry). */
     val webImagePath: String? = null,
+    /**
+     * A Live picture to attach for {image} (an animated clip of a video cue, or a screenshot);
+     * resolved after the web image, before the cover.
+     */
+    val screenshot: AnkiScreenshotRequest? = null,
+    /** The Anki-attached picture ref the renderer emits (resolved in mineEntry). */
+    val screenshotPath: String? = null,
+    /** The Live cue whose audio the bridge cuts for {sentence-audio}. */
+    val sentenceAudio: AnkiLiveCueRef? = null,
+    /** The Anki-attached Live sentence audio ref (resolved in mineEntry). */
+    val sentenceAudioPath: String? = null,
 )
 
 internal data class AnkiTermDictionary(
@@ -473,14 +484,18 @@ internal object AnkiHandlebarRenderer {
             "{image}" -> context.imageValue()
             // Deprecated aliases (pre-merge {book-cover}/{web-image}); resolve to the chosen image.
             "{book-cover}", "{web-image}" -> context.imageValue()
-            "{sasayaki-audio}" -> context.sasayakiAudioPath.orEmpty()
+            "{sasayaki-audio}" -> context.sasayakiAudioPath?.takeIf { it.isNotBlank() } ?: context.sentenceAudioPath.orEmpty()
+            // The sentence's audio from wherever this surface has it: the Live cue, else Sasayaki.
+            "{sentence-audio}" -> context.sentenceAudioPath?.takeIf { it.isNotBlank() } ?: context.sasayakiAudioPath.orEmpty()
             else -> ""
         }
     }
 
-    /** The mined Picture: the picked web image when present, otherwise the book cover. */
+    /** The mined Picture: the picked web image, else the Live picture, else the book cover. */
     private fun AnkiMiningContext.imageValue(): String =
-        webImagePath?.takeIf { it.isNotBlank() } ?: coverPath.orEmpty()
+        webImagePath?.takeIf { it.isNotBlank() }
+            ?: screenshotPath?.takeIf { it.isNotBlank() }
+            ?: coverPath.orEmpty()
 
     private fun AnkiMiningPayload.singleGlossaryHandlebarValue(handlebar: String): String {
         val dictionary = handlebar.removePrefix(SingleGlossaryPrefix).removeSuffix("}")

@@ -87,6 +87,7 @@ internal fun MineWithOptionsSheet(
     onDismiss: () -> Unit,
     currentSentence: ExampleSentence? = null,
     bookCoverPath: String? = null,
+    screenshot: MineScreenshotPreview? = null,
     viewModel: MineWithOptionsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -117,9 +118,23 @@ internal fun MineWithOptionsSheet(
     var selectedOption by remember(term, currentSentence) { mutableStateOf(defaultIndex) }
 
     var step by remember(term) { mutableStateOf(MineStep.Sentence) }
-    // Default to the book cover when this surface has one, else "None".
-    var imageChoice by remember(term, bookCoverPath) {
-        mutableStateOf<MineImageChoice>(if (bookCoverPath != null) MineImageChoice.Cover else MineImageChoice.None)
+    // Default to the game screenshot (VN tab), else the book cover, else "None".
+    val offersScreenshot = screenshot != null
+    var imageChoice by remember(term, bookCoverPath, offersScreenshot) {
+        mutableStateOf(
+            when {
+                offersScreenshot -> MineImageChoice.Screenshot(localPath = null)
+                bookCoverPath != null -> MineImageChoice.Cover
+                else -> MineImageChoice.None
+            },
+        )
+    }
+    // Keep a selected screenshot pointing at the latest fetched preview.
+    val screenshotPath = screenshot?.path
+    LaunchedEffect(screenshotPath) {
+        if (imageChoice is MineImageChoice.Screenshot) {
+            imageChoice = MineImageChoice.Screenshot(localPath = screenshotPath)
+        }
     }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -182,6 +197,7 @@ internal fun MineWithOptionsSheet(
                     ImageStep(
                         state = state,
                         bookCoverPath = bookCoverPath,
+                        screenshot = screenshot,
                         selected = imageChoice,
                         onSelect = { imageChoice = it },
                     )
@@ -234,6 +250,7 @@ private val IMAGE_GRID_SPACING = 8.dp
 private fun ImageStep(
     state: MineWithOptionsUiState,
     bookCoverPath: String?,
+    screenshot: MineScreenshotPreview?,
     selected: MineImageChoice,
     onSelect: (MineImageChoice) -> Unit,
 ) {
@@ -246,11 +263,29 @@ private fun ImageStep(
     )
     val selectedUrl = (selected as? MineImageChoice.Web)?.url
     val coverDescription = stringResource(R.string.mine_with_options_image_cover)
-    val webImages = state.imageCandidates.take(IMAGE_GRID_MAX_TILES - if (bookCoverPath != null) 1 else 0)
+    val screenshotDescription = stringResource(R.string.mine_with_options_image_screenshot)
+    val leadingTiles = (if (screenshot != null) 1 else 0) + (if (bookCoverPath != null) 1 else 0)
+    val webImages = state.imageCandidates.take(IMAGE_GRID_MAX_TILES - leadingTiles)
 
     // A plain Row-per-line grid (no LazyVerticalGrid) so the whole step lives inside the
     // sheet's outer scroll; GridCells width-math is unneeded — Row weights split each line.
     val tiles: List<@Composable () -> Unit> = buildList {
+        // The game screenshot leads the grid in the VN tab, selected by default.
+        if (screenshot != null) {
+            add {
+                Thumb(
+                    cacheKey = screenshot.path ?: screenshot.loading,
+                    loadBitmap = {
+                        if (screenshot.loading) null else screenshot.path?.let(::decodeFileBitmap)
+                    },
+                    contentDescription = screenshotDescription,
+                    selected = selected is MineImageChoice.Screenshot,
+                    onSelect = { onSelect(MineImageChoice.Screenshot(localPath = screenshot.path)) },
+                    modifier = Modifier.testTag("mine-with-options-image-screenshot"),
+                    loading = screenshot.loading,
+                )
+            }
+        }
         // The book cover leads the grid, selected by default in the reader.
         if (bookCoverPath != null) {
             add {
@@ -299,7 +334,7 @@ private fun ImageStep(
             CircularProgressIndicator()
             Text(stringResource(R.string.mine_with_options_image_loading))
         }
-    } else if (state.imageCandidates.isEmpty() && bookCoverPath == null) {
+    } else if (state.imageCandidates.isEmpty() && bookCoverPath == null && screenshot == null) {
         Text(
             text = stringResource(R.string.mine_with_options_no_images),
             style = MaterialTheme.typography.bodyMedium,
@@ -344,12 +379,13 @@ private fun Thumb(
     onSelect: () -> Unit,
     modifier: Modifier = Modifier,
     cached: ImageBitmap? = null,
+    loading: Boolean = false,
 ) {
     val thumb by produceState<ThumbState>(
         cached?.let { ThumbState.Loaded(it) } ?: ThumbState.Loading,
         cacheKey,
     ) {
-        if (cached == null) {
+        if (cached == null && !loading) {
             value = withContext(Dispatchers.IO) {
                 loadBitmap()?.let { ThumbState.Loaded(it) } ?: ThumbState.Failed
             }

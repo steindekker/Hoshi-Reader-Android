@@ -87,6 +87,15 @@ class AnkiUiStateTest {
     }
 
     @Test
+    fun sentenceAudioNeedsTheSasayakiExport() {
+        val state = AnkiUiState(
+            settings = AnkiSettings(fieldMappings = mapOf("SentenceAudio" to "{sentence-audio}")),
+        )
+
+        assertTrue(state.popupSettings.needsSasayakiAudio)
+    }
+
+    @Test
     fun popupMediaNeedsAreOffWhenMediaHandlebarsAreAbsent() {
         val state = AnkiUiState(
             settings = AnkiSettings(fieldMappings = mapOf("Expression" to "{expression}")),

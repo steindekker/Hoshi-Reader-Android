@@ -6,6 +6,22 @@ Historical release notes before v1.3.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 
 ## [Unreleased]
 
+### Added
+
+- Add a Live tab for Japanese text streamed by hoshi-bridge from your own machines,
+  for example over Tailscale: visual novels on a Steam Deck and subtitles playing in mpv
+  on a PC. Add several hosts with an optional token under Settings > Live and test each
+  one; the tab connects to all of them and follows the most recently active session, with
+  a chip to switch. The current line sits above a transcript of the whole subtitle track
+  that highlights and follows playback. Tap a transcript line to show it for lookup,
+  long-press a timestamp to seek, and pause or resume mpv from the header; looking up a word pauses the video
+  (can be turned off). Mining uses the line as `{sentence}`; video cards get the line's
+  audio through the new `{sentence-audio}` and a short animated clip through `{image}`,
+  titled with the episode time, while visual novel cards get a Deck screenshot (picked
+  web images take precedence). Adding a card from any tab pops up a small badge with the
+  word and a count of cards added this session. `{sentence-audio}` also resolves to the Sasayaki cue audio
+  in Reader and is the new default for SentenceAudio fields.
+
 ## [v1.4.0] - 2026-09-24
 
 ### Added

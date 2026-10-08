@@ -15,6 +15,9 @@ sealed interface AppRoute : NavKey {
     data object DictionaryRoute : AppRoute
 
     @Serializable
+    data object LiveRoute : AppRoute
+
+    @Serializable
     data object StatisticsRoute : AppRoute
 
     @Serializable
@@ -49,6 +52,7 @@ sealed interface AppRoute : NavKey {
 enum class SettingsDetailSection {
     Dictionaries,
     Anki,
+    Live,
     Profiles,
     Display,
     Appearance,

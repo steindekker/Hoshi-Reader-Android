@@ -197,6 +197,7 @@ function popupContext({
     const selectTextCalls = [];
     const tapOutsideMessages = [];
     const mineEntryMessages = [];
+    const mineWithOptionsMessages = [];
     const duplicateCheckMessages = [];
     const showNotesMessages = [];
     const playWordAudioMessages = [];
@@ -242,6 +243,12 @@ function popupContext({
                     postMessage(message) {
                         mineEntryMessages.push(message);
                         return true;
+                    },
+                },
+                mineWithOptions: {
+                    postMessage(message) {
+                        mineWithOptionsMessages.push(message);
+                        return false;
                     },
                 },
                 duplicateCheck: {
@@ -301,6 +308,7 @@ function popupContext({
         selectTextCalls,
         tapOutsideMessages,
         mineEntryMessages,
+        mineWithOptionsMessages,
         duplicateCheckMessages,
         showNotesMessages,
         playWordAudioMessages,
@@ -1245,6 +1253,35 @@ test('popup builds Yomitan-compatible phonetic transcriptions Anki HTML', () => 
         html,
         '<ul><li class="pronunciation" data-pronunciation-type="phonetic-transcription">/riːd/</li><li class="pronunciation" data-pronunciation-type="phonetic-transcription">/rɛd/</li></ul>',
     );
+});
+
+test('mine button tap opens mine with options and long press adds directly', async () => {
+    const { context, mineEntryMessages, mineWithOptionsMessages } = popupContext({
+        duplicateStates: { word: false },
+    });
+    context.window.ankiBackendAvailable = true;
+    context.window.ankiFormats = [{ id: 'word', icon: 'square', isValid: true }];
+    context.window.lookupEntries = [{ expression: '猫', reading: 'ねこ', glossaries: [] }];
+    const header = context.createEntryHeader({ expression: '猫', reading: 'ねこ' }, 0);
+    const buttons = header.children.find((child) => child.className === 'header-buttons');
+    const mineSlot = descendants(buttons).find((child) => child.dataset.kind === 'mine');
+    const event = { preventDefault() {}, stopPropagation() {} };
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(descendants(buttons).some((child) => child.dataset.kind === 'mineOptions'), false);
+
+    mineSlot.dispatch('click', event);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(mineWithOptionsMessages.length, 1);
+    assert.equal(mineWithOptionsMessages[0].expression, '猫');
+    assert.equal(mineEntryMessages.length, 0);
+
+    mineSlot.dispatch('contextmenu', event);
+    mineSlot.dispatch('click', event);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(mineEntryMessages.length, 1);
+    assert.equal(mineEntryMessages[0].formatId, 'word');
+    assert.equal(mineWithOptionsMessages.length, 1);
 });
 
 test('mineEntry posts phonetic transcriptions for Anki handlebar rendering', async () => {

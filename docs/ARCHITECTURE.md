@@ -32,14 +32,14 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   manual, fallback and accent-preview schemes share this treatment. E-ink
   bypasses it to retain pure black/white fills and boundaries.
 - Navigation uses Navigation3 typed route keys, `AppShell`, and `NavDisplay`.
-  Top-level Books, Dictionary, Statistics, and Settings tabs each own an
+  Top-level Books, Dictionary, VN, Statistics, and Settings tabs each own an
   independent Nav3 back stack with its own saveable entry state and per-entry
   ViewModel stores. The shared main navigation chrome is owned by a Nav3 scene
   decorator around top-level root scenes, while Reader and Settings detail
-  routes remain full-screen outside that shell. Once visited, the Dictionary
-  NavDisplay stays composed and attached across tab switches to retain its WebView
-  compositor. `RetainedTabContent` leaves it unplaced while inactive and caps its
-  lifecycle at CREATED, disabling hidden back handlers and lifecycle collection.
+  routes remain full-screen outside that shell. Once visited, the Dictionary and
+  VN NavDisplays stay composed and attached across tab switches to retain their
+  WebView compositors. `RetainedTabContent` leaves them unplaced while inactive and
+  caps their lifecycle at CREATED, disabling hidden back handlers and lifecycle collection.
 - Production dependency injection is Hilt-backed. `HoshiApplication` owns the
   app component through `@HiltAndroidApp`, and Android entry points receive
   dependencies from the Hilt graph.
@@ -394,7 +394,7 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   Source groups update in configured order, and available rows select by URL
   without waiting for other sources; closed/reset menus ignore late results.
 - Shared iframe frame payloads accept optional root `sourceText` for Dictionary
-  search and Process Text; Reader and recursive child frames omit it. Shared
+  search, Process Text, and the Live tab; Reader and recursive child frames omit it. Shared
   popup assets render character spans, look up exact suffixes on tap, mark the
   match, and preserve scroll on successful source redirects. Popup geometry
   converts the source-enabled entries minimum height to one visual viewport
@@ -444,6 +444,45 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   the built-in reader provider. Publishing failures do not block Reader
   loading, and the integration does not request broad storage access.
 - Anki work stays behind the Anki backend/repository boundary.
+- The Live tab (`features.live`) shows Japanese text streamed by `hoshi-bridge`, the Go
+  daemon in `bridge/` (one binary per machine: LunaHook/text hookers and screenshots on the
+  Steam Deck, mpv on a PC). `bridge/PROTOCOL.md` (v2) is the contract both sides follow:
+  a bridge hosts sessions (`vn`, `video`, `web`), each with a cue track identified by
+  `trackId`, optional playback state and capabilities (`control`, `screenshot`, `audio`,
+  `clip`). Every WebSocket (re)connect starts with a full `hello` snapshot (whole track for
+  video, last 200 cues for VN); later `session`/`sessionEnded`/`cues` (replace|append)/
+  `playback` events update it. Media and control are HTTP commands per session; the
+  bridge resolves cue times (with `sub-delay` applied) and answers 409 for stale tracks.
+- DataStore-backed `LiveSettingsRepository` (file `texthooker-settings`) stores the host
+  list (host, port 7277, optional Bearer token; JSON), screenshot width and auto-pause;
+  the VN tab's single-host keys migrate into the list. The singleton `LiveRepository` holds
+  one OkHttp WebSocket per host only while its `StateFlow` has subscribers (the visible
+  tab, via `WhileSubscribed`); each host reconnects with its own 1–30 s backoff, loses its
+  sessions on disconnect, and stops retrying on an incompatible protocol (a v1 server's
+  404/410 counts as v1). Session activity converts bridge `activeAt` with the `hello.now`
+  clock offset and is refreshed by cues and play/pause/seek; playback position is
+  extrapolated from the local receipt time. Network calls go through the `LiveTransport`
+  boundary on the IO dispatcher.
+- `LiveViewModel` shows the pinned session or else the most recently active one. A
+  250 ms ticker re-evaluates the playing cue (last cue started at the extrapolated
+  position; the newest cue for VN). `LiveFocus` follows the playing cue unless a root
+  lookup is active or another cue was picked; "back to playing" resumes following. The
+  focused cue is the shared Dictionary embedded-root `sourceText` under a per-session,
+  per-cue root popup id, so source taps, recursive popups, audio, Kanji and Anki use the
+  shared bridge. A successful root lookup sends `pause` when the session supports control
+  and auto-pause is on. The transcript is a Compose `LazyColumn`; long-press on a timestamp
+  seeks.
+- `AnkiMiningContext.screenshot` carries an `AnkiScreenshotRequest` (host, session,
+  track, cue; `animated` for timed video cues with `clip`) and optional fetched preview;
+  `sentenceAudio` carries the cue for `{sentence-audio}`. `AnkiRepository` asks the
+  Hilt-bound `AnkiLiveMediaSource` (`LiveRepository`) only for handlebars the format
+  references: `{image}` (picked web image, then Live picture, then cover; a WebP clip is
+  embedded with `<img>`) and `{sentence-audio}` (Live cue audio as `hoshi_sentence_*.mp3`,
+  else the exported Sasayaki cue; `{sasayaki-audio}` stays Sasayaki-only and the Reader
+  exports the cue for either). Media failures never block mining: the note is added and
+  `mineEntryWithResult` returns localized warnings shown as a Snackbar. Live cards use the
+  session title (with `(MMmSSs)` of the cue start for timed cues) or the host name as
+  `{document-title}`.
 - Anki settings are stored per active profile in
   `Profiles/<profileId>/anki_config.json`. Schema version 2 owns one to three
   stable-ID `AnkiCardFormat` values, each with its own icon, deck, note type,

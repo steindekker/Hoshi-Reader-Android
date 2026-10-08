@@ -27,6 +27,7 @@ internal fun appRouteUsesMainShell(route: AppRoute): Boolean = when (route) {
     AppRoute.MainRoute,
     AppRoute.BooksRoute,
     AppRoute.DictionaryRoute,
+    AppRoute.LiveRoute,
     AppRoute.StatisticsRoute,
     AppRoute.SettingsRoute,
     -> true

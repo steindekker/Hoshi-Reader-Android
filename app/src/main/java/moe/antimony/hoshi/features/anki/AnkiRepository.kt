@@ -31,6 +31,8 @@ internal class AnkiRepository(
     private val ankiConnectBackendFactory: (String, String) -> AnkiBackend,
     private val loadDictionaryMedia: (DictionaryMedia) -> ByteArray?,
     private val loadTermDictionaries: () -> List<AnkiTermDictionary>,
+    private val liveMediaSource: AnkiLiveMediaSource,
+    private val cardAddedEvents: AnkiCardAddedEvents,
 ) {
     @Inject
     constructor(
@@ -39,6 +41,8 @@ internal class AnkiRepository(
         settingsRepository: AnkiSettingsRepository,
         localAudioRepository: LocalAudioRepository,
         dictionaryRepository: DictionaryRepository,
+        liveMediaSource: AnkiLiveMediaSource,
+        cardAddedEvents: AnkiCardAddedEvents,
     ) : this(
         context = context,
         backend = backend,
@@ -56,6 +60,8 @@ internal class AnkiRepository(
                 )
             }
         },
+        liveMediaSource = liveMediaSource,
+        cardAddedEvents = cardAddedEvents,
     )
 
     internal constructor(
@@ -67,6 +73,8 @@ internal class AnkiRepository(
             AnkiConnectBackend(endpoint, apiKey = apiKey)
         },
         loadTermDictionaries: () -> List<AnkiTermDictionary> = { emptyList() },
+        liveMediaSource: AnkiLiveMediaSource = UnavailableAnkiLiveMediaSource,
+        cardAddedEvents: AnkiCardAddedEvents = AnkiCardAddedEvents(),
     ) : this(
         context = context,
         backend = backend,
@@ -75,6 +83,8 @@ internal class AnkiRepository(
         ankiConnectBackendFactory = ankiConnectBackendFactory,
         loadDictionaryMedia = { null },
         loadTermDictionaries = loadTermDictionaries,
+        liveMediaSource = liveMediaSource,
+        cardAddedEvents = cardAddedEvents,
     )
 
     val settings: Flow<AnkiSettings> = settingsRepository.settings
@@ -200,29 +210,49 @@ internal class AnkiRepository(
         decks: List<AnkiDeck>,
         noteTypes: List<AnkiNoteType>,
         formatId: String? = null,
-    ): Boolean = withContext(Dispatchers.IO) {
+    ): Boolean = mineEntryWithResult(rawPayload, context, decks, noteTypes, formatId).added
+
+    suspend fun mineEntryWithResult(
+        rawPayload: String,
+        context: AnkiMiningContext,
+        decks: List<AnkiDeck>,
+        noteTypes: List<AnkiNoteType>,
+        formatId: String? = null,
+    ): AnkiMineResult = withContext(Dispatchers.IO) {
+        val notAdded = AnkiMineResult(added = false)
         val settings = settings.first()
         val termDictionaries = loadTermDictionaries()
-        val format = settings.resolveAnkiCardFormat(formatId) ?: return@withContext false
-        val activeBackend = activeBackendOrError(settings).getOrElse { return@withContext false }
-        if (!activeBackend.isAvailable()) return@withContext false
+        val format = settings.resolveAnkiCardFormat(formatId) ?: return@withContext notAdded
+        val activeBackend = activeBackendOrError(settings).getOrElse { return@withContext notAdded }
+        if (!activeBackend.isAvailable()) return@withContext notAdded
         val availableDecks = decks.ifEmpty { activeBackend.fetchDecks() }
         val availableNoteTypes = noteTypes.ifEmpty { activeBackend.fetchNoteTypes() }
         val deck = availableDecks.firstOrNull { it.id == format.selectedDeckId }
             ?: format.selectedDeckName?.let { name -> availableDecks.firstOrNull { it.name == name } }
-            ?: return@withContext false
+            ?: return@withContext notAdded
         val noteType = availableNoteTypes.firstOrNull { it.id == format.selectedNoteTypeId }
             ?: format.selectedNoteTypeName?.let { name -> availableNoteTypes.firstOrNull { it.name == name } }
-            ?: return@withContext false
+            ?: return@withContext notAdded
         val fieldMappings = format.fieldMappings.activeAnkiFieldMappings(noteType)
         val payload = runCatching { AnkiMiningPayload.fromJson(rawPayload) }.getOrNull()
-            ?: return@withContext false
+            ?: return@withContext notAdded
         // The merged {image} marker (plus the deprecated {book-cover}/{web-image} aliases) gates
-        // both the cover and the picked web image — only one is ever set on the context at a time.
+        // the picked web image, the game screenshot, and the cover (in that precedence).
         val needsImage = fieldMappings.referencesAnkiHandlebar("{image}") ||
             fieldMappings.referencesAnkiHandlebar("{book-cover}") ||
             fieldMappings.referencesAnkiHandlebar("{web-image}")
-        val needsSasayakiAudio = fieldMappings.referencesAnkiHandlebar("{sasayaki-audio}")
+        // An explicitly picked web image wins, so the Deck is only contacted without one.
+        val screenshot = context.screenshot
+            ?.takeIf { needsImage && context.webImageUrl.isNullOrBlank() }
+            ?.let { addScreenshot(it, activeBackend, settings.backendKind) }
+        // {sentence-audio} and the older {sasayaki-audio} both take whichever sentence audio the
+        // context has: the Sasayaki cue in the reader or the Live cue clip.
+        val needsSentenceAudio = fieldMappings.referencesAnkiHandlebar("{sentence-audio}") ||
+            fieldMappings.referencesAnkiHandlebar("{sasayaki-audio}")
+        val needsSasayakiAudio = needsSentenceAudio
+        val sentenceAudio = context.sentenceAudio
+            ?.takeIf { needsSentenceAudio }
+            ?.let { addLiveSentenceAudio(it, activeBackend, settings.backendKind) }
         val needsAudio = fieldMappings.referencesAnkiHandlebar("{audio}")
         val mediaContext = AnkiMiningContext(
             sentence = context.sentence,
@@ -237,6 +267,8 @@ internal class AnkiRepository(
             webImagePath = context.webImageUrl?.takeIf { needsImage }?.let {
                 addRemoteImage(it, activeBackend, settings.backendKind)
             },
+            screenshotPath = screenshot?.ref,
+            sentenceAudioPath = sentenceAudio?.ref,
         )
         val mediaPayload = payload.copy(
             audio = payload.audio.takeIf { needsAudio && it.isNotBlank() }
@@ -275,12 +307,92 @@ internal class AnkiRepository(
             checkDuplicatesAcrossAllModels = settings.checkDuplicatesAcrossAllModels,
         )
         if (added) {
+            cardAddedEvents.publish(AnkiCardAdded(payload.expression))
             when (settings.backendKind) {
                 AnkiBackendKind.AnkiConnect -> if (settings.ankiConnectForceSync) activeBackend.sync()
                 AnkiBackendKind.AnkiDroid -> if (settings.ankiDroidForceSync) activeBackend.sync()
             }
         }
-        added
+        AnkiMineResult(
+            added = added,
+            warnings = listOfNotNull(screenshot?.warning, sentenceAudio?.warning).takeIf { added }.orEmpty(),
+        )
+    }
+
+    private data class MediaAttachment(val ref: String?, val warning: UiText?)
+
+    /** Attaches the Live cue's sentence audio; any failure only produces a warning so mining continues. */
+    private suspend fun addLiveSentenceAudio(
+        cue: AnkiLiveCueRef,
+        activeBackend: AnkiBackend,
+        backendKind: AnkiBackendKind,
+    ): MediaAttachment {
+        val result = try {
+            liveMediaSource.fetchSentenceAudio(cue)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            runCatching { Log.w(TAG, "Failed to fetch sentence audio", e) }
+            AnkiLiveMediaResult.Failure(
+                UiText.Resource(R.string.live_audio_failed, UiText.Resource(R.string.live_media_reason_invalid)),
+            )
+        }
+        return when (result) {
+            is AnkiLiveMediaResult.Failure -> MediaAttachment(null, result.message)
+            is AnkiLiveMediaResult.Success -> {
+                val file = mediaCacheFile("hoshi_sentence_${sha1Hex(result.bytes)}.mp3")
+                val ref = try {
+                    file.writeBytes(result.bytes)
+                    addMediaFile(file.absolutePath, file.name, "audio/mpeg", activeBackend, backendKind)
+                } catch (e: java.io.IOException) {
+                    null
+                } finally {
+                    file.delete()
+                }
+                MediaAttachment(ref, if (ref == null) UiText.Resource(R.string.live_audio_attach_failed) else null)
+            }
+        }
+    }
+
+    /** Attaches the game screenshot; any failure only produces a warning so mining continues. */
+    private suspend fun addScreenshot(
+        request: AnkiScreenshotRequest,
+        activeBackend: AnkiBackend,
+        backendKind: AnkiBackendKind,
+    ): MediaAttachment {
+        val attachFailed = UiText.Resource(R.string.live_picture_attach_failed)
+        // A fetched preview lives outside the FileProvider-shared anki-media cache, so its bytes
+        // go through the same attach path as a fresh fetch instead of being shared in place.
+        val preview = request.localPath?.let(::File)?.takeIf { it.isFile }
+        val result = if (preview != null) {
+            runCatching { AnkiLiveMediaResult.Success(preview.readBytes(), mimeTypeForPath(preview.name)) }
+                .getOrElse { return MediaAttachment(null, attachFailed) }
+        } else {
+            try {
+                liveMediaSource.fetchScreenshot(request)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                runCatching { Log.w(TAG, "Failed to fetch screenshot", e) }
+                AnkiLiveMediaResult.Failure(LivePictureFailed)
+            }
+        }
+        return when (result) {
+            is AnkiLiveMediaResult.Failure -> MediaAttachment(null, result.message)
+            is AnkiLiveMediaResult.Success -> {
+                val extension = liveImageExtension(result.mimeType)
+                val file = mediaCacheFile("hoshi_screenshot_${sha1Hex(result.bytes)}.$extension")
+                val ref = try {
+                    file.writeBytes(result.bytes)
+                    addMediaFile(file.absolutePath, file.name, mimeTypeForPath(file.name), activeBackend, backendKind)
+                } catch (e: java.io.IOException) {
+                    null
+                } finally {
+                    file.delete()
+                }
+                MediaAttachment(ref, if (ref == null) attachFailed else null)
+            }
+        }
     }
 
     suspend fun duplicateStates(
@@ -550,6 +662,27 @@ private fun sha1Hex(data: ByteArray): String =
     MessageDigest.getInstance("SHA-1").digest(data).joinToString("") { "%02x".format(it) }
 
 private const val TAG = "AnkiRepository"
+
+private val LivePictureFailed: UiText =
+    UiText.Resource(R.string.live_picture_failed, UiText.Resource(R.string.live_media_reason_invalid))
+
+private val UnavailableAnkiLiveMediaSource = object : AnkiLiveMediaSource {
+    override suspend fun fetchScreenshot(request: AnkiScreenshotRequest): AnkiLiveMediaResult =
+        AnkiLiveMediaResult.Failure(LivePictureFailed)
+
+    override suspend fun fetchSentenceAudio(cue: AnkiLiveCueRef): AnkiLiveMediaResult =
+        AnkiLiveMediaResult.Failure(
+            UiText.Resource(R.string.live_audio_failed, UiText.Resource(R.string.live_media_reason_invalid)),
+        )
+}
+
+/** File extension of a Live picture (an animated WebP/GIF clip or a JPEG/PNG still). */
+internal fun liveImageExtension(mimeType: String): String = when (mimeType) {
+    "image/png" -> "png"
+    "image/webp" -> "webp"
+    "image/gif" -> "gif"
+    else -> "jpg"
+}
 
 private fun logAnkiFetchFailure(message: String, error: Throwable) {
     runCatching { Log.w(TAG, message, error) }

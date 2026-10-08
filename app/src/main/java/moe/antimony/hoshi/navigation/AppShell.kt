@@ -35,6 +35,11 @@ import androidx.navigation3.ui.NavDisplay
 import moe.antimony.hoshi.LocalHoshiUiDependencies
 import moe.antimony.hoshi.epub.BookSortOption
 import moe.antimony.hoshi.features.anki.AnkiView
+import moe.antimony.hoshi.features.anki.AnkiCardAddedCelebrationHost
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import moe.antimony.hoshi.features.anki.AnkiAdvancedView
 import moe.antimony.hoshi.features.anki.AnkiCardFormatView
 import moe.antimony.hoshi.features.bookshelf.BookshelfView
@@ -58,6 +63,8 @@ import moe.antimony.hoshi.features.settings.AdvancedSettingsView
 import moe.antimony.hoshi.features.statistics.StatisticsView
 import moe.antimony.hoshi.features.statistics.StatisticsSettingsView
 import moe.antimony.hoshi.features.statistics.StatisticsBookView
+import moe.antimony.hoshi.features.live.LiveSettingsView
+import moe.antimony.hoshi.features.live.LiveView
 import moe.antimony.hoshi.features.update.AboutScreen
 import kotlinx.coroutines.launch
 
@@ -95,6 +102,8 @@ fun AppShell(
     val booksBackStack = rememberNavBackStack(AppRoute.BooksRoute)
     val dictionaryBackStack = rememberNavBackStack(AppRoute.DictionaryRoute)
     val dictionarySession = rememberDictionarySearchSession()
+    val liveBackStack = rememberNavBackStack(AppRoute.LiveRoute)
+    val textHookerSession = rememberDictionarySearchSession()
     val statisticsBackStack = rememberNavBackStack(AppRoute.StatisticsRoute)
     val settingsBackStack = rememberNavBackStack(AppRoute.SettingsRoute)
     val bookRepository = appContainer.bookRepository
@@ -136,6 +145,7 @@ fun AppShell(
     fun selectedBackStack(): MutableList<NavKey> = when (selectedTab) {
         MainTab.Books -> booksBackStack
         MainTab.Dictionary -> dictionaryBackStack
+        MainTab.Live -> liveBackStack
         MainTab.Statistics -> statisticsBackStack
         MainTab.Settings -> settingsBackStack
     }
@@ -291,6 +301,20 @@ fun AppShell(
                     pendingDictionaryLookupRequest = currentPendingDictionaryLookupRequest,
                     onPendingDictionaryLookupConsumed = currentOnPendingDictionaryLookupConsumed,
                 )
+                AppRoute.LiveRoute -> TopLevelRouteContent(
+                    selectedTab = MainTab.Live,
+                    textHookerSession = textHookerSession,
+                    onOpenLiveSettings = {
+                        liveBackStack.add(AppRoute.SettingsDetailRoute(SettingsDetailSection.Live))
+                    },
+                    pendingImportUri = currentPendingImportUri,
+                    onPendingImportConsumed = currentOnPendingImportConsumed,
+                    readerSettings = currentReaderSettings,
+                    onReaderSettingsChange = currentOnReaderSettingsChange,
+                    onOpenReader = ::openReader,
+                    bookshelfRefreshKey = bookshelfRefreshKey,
+                    dictionaryFocusRequestKey = dictionaryFocusRequestKey,
+                )
                 AppRoute.StatisticsRoute -> TopLevelRouteContent(
                     selectedTab = MainTab.Statistics,
                     onOpenStatisticsSettings = { statisticsBackStack.add(AppRoute.StatisticsSettingsRoute) },
@@ -391,6 +415,11 @@ fun AppShell(
         entryDecorators = rememberAppNavEntryDecorators(),
         entryProvider = entryProvider,
     )
+    val liveEntries = rememberDecoratedNavEntries(
+        backStack = liveBackStack,
+        entryDecorators = rememberAppNavEntryDecorators(),
+        entryProvider = entryProvider,
+    )
     val settingsEntries = rememberDecoratedNavEntries(
         backStack = settingsBackStack,
         entryDecorators = rememberAppNavEntryDecorators(),
@@ -404,6 +433,7 @@ fun AppShell(
     val currentEntries = when (selectedTab) {
         MainTab.Books -> booksEntries
         MainTab.Dictionary -> dictionaryEntries
+        MainTab.Live -> liveEntries
         MainTab.Statistics -> statisticsEntries
         MainTab.Settings -> settingsEntries
     }
@@ -420,7 +450,20 @@ fun AppShell(
                 predictivePopTransitionSpec = NoPredictiveNavContentTransition,
             )
         }
-        if (selectedTab != MainTab.Dictionary) {
+        // The VN tab keeps its lookup WebView retained like Dictionary; its connection still
+        // closes while hidden because the retained lifecycle stops UI state collection.
+        RetainedTabContent(active = selectedTab == MainTab.Live) {
+            NavDisplay(
+                entries = liveEntries,
+                modifier = Modifier.fillMaxSize(),
+                onBack = ::popRoute,
+                sceneDecoratorStrategies = listOf(mainShellSceneDecorator),
+                transitionSpec = NoNavContentTransition,
+                popTransitionSpec = NoNavContentTransition,
+                predictivePopTransitionSpec = NoPredictiveNavContentTransition,
+            )
+        }
+        if (selectedTab != MainTab.Dictionary && selectedTab != MainTab.Live) {
             NavDisplay(
                 entries = currentEntries,
                 modifier = Modifier.fillMaxSize(),
@@ -431,8 +474,19 @@ fun AppShell(
                 predictivePopTransitionSpec = NoPredictiveNavContentTransition,
             )
         }
+        // One overlay for every tab, so a card added anywhere celebrates exactly once. It sits
+        // below the tabs' top bars rather than over them.
+        AnkiCardAddedCelebrationHost(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = CelebrationTopBarClearance),
+        )
     }
 }
+
+/** Clears a standard 64dp top app bar plus a small gap. */
+private val CelebrationTopBarClearance = 72.dp
 
 @Composable
 private fun rememberAppNavEntryDecorators(): List<NavEntryDecorator<NavKey>> = listOf(
@@ -467,6 +521,8 @@ private fun TopLevelRouteContent(
     pendingDictionaryLookupRequest: PendingDictionaryLookupRequest? = null,
     onPendingDictionaryLookupConsumed: () -> Unit = {},
     dictionarySession: DictionarySearchSession? = null,
+    textHookerSession: DictionarySearchSession? = null,
+    onOpenLiveSettings: () -> Unit = {},
     isActive: Boolean = true,
     onSettingsDestination: (SettingsDestination) -> Unit = {},
     onOpenStatisticsSettings: () -> Unit = {},
@@ -489,6 +545,12 @@ private fun TopLevelRouteContent(
             focusRequestKey = dictionaryFocusRequestKey,
             pendingLookupRequest = pendingDictionaryLookupRequest,
             onPendingLookupConsumed = onPendingDictionaryLookupConsumed,
+            modifier = Modifier.fillMaxSize(),
+        )
+        MainTab.Live -> LiveView(
+            session = requireNotNull(textHookerSession),
+            readerSettings = readerSettings,
+            onOpenSettings = onOpenLiveSettings,
             modifier = Modifier.fillMaxSize(),
         )
         MainTab.Statistics -> StatisticsView(
@@ -529,6 +591,10 @@ private fun SettingsDetailDestination(
             onClose = onClose,
             onOpenFormat = onOpenAnkiFormat,
             onOpenAdvanced = onOpenAnkiAdvanced,
+            modifier = Modifier.fillMaxSize(),
+        )
+        SettingsDetailSection.Live -> LiveSettingsView(
+            onClose = onClose,
             modifier = Modifier.fillMaxSize(),
         )
         SettingsDetailSection.Profiles -> ProfilesView(
@@ -576,6 +642,7 @@ private fun SettingsDetailDestination(
 private fun MainTab.toRoute(): AppRoute = when (this) {
     MainTab.Books -> AppRoute.BooksRoute
     MainTab.Dictionary -> AppRoute.DictionaryRoute
+    MainTab.Live -> AppRoute.LiveRoute
     MainTab.Statistics -> AppRoute.StatisticsRoute
     MainTab.Settings -> AppRoute.SettingsRoute
 }
@@ -594,6 +661,7 @@ internal fun nextDictionaryFocusRequestKey(
 private fun AppRoute.toMainTab(): MainTab = when (this) {
     AppRoute.MainRoute, AppRoute.BooksRoute -> MainTab.Books
     AppRoute.DictionaryRoute -> MainTab.Dictionary
+    AppRoute.LiveRoute -> MainTab.Live
     AppRoute.StatisticsRoute, AppRoute.StatisticsSettingsRoute, is AppRoute.StatisticsBookRoute -> MainTab.Statistics
     AppRoute.SettingsRoute -> MainTab.Settings
     is AppRoute.ReaderRoute -> MainTab.Books
@@ -604,6 +672,7 @@ private fun AppRoute.toMainTab(): MainTab = when (this) {
 private fun SettingsDestination.toSection(): SettingsDetailSection = when (this) {
     SettingsDestination.Dictionaries -> SettingsDetailSection.Dictionaries
     SettingsDestination.Anki -> SettingsDetailSection.Anki
+    SettingsDestination.Live -> SettingsDetailSection.Live
     SettingsDestination.Profiles -> SettingsDetailSection.Profiles
     SettingsDestination.Display -> SettingsDetailSection.Display
     SettingsDestination.Appearance -> SettingsDetailSection.Appearance

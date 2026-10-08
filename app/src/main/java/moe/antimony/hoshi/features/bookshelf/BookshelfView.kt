@@ -58,6 +58,7 @@ import androidx.compose.material.icons.rounded.FormatSize
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.LiveTv
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Person
@@ -2333,6 +2334,7 @@ private fun BottomTabGlyph(tab: MainTab, modifier: Modifier = Modifier) {
     val icon = when (tab) {
         MainTab.Books -> Icons.AutoMirrored.Rounded.MenuBook
         MainTab.Dictionary -> Icons.Rounded.Translate
+        MainTab.Live -> Icons.Rounded.LiveTv
         MainTab.Statistics -> Icons.AutoMirrored.Rounded.ShowChart
         MainTab.Settings -> Icons.Rounded.Settings
     }
@@ -2349,6 +2351,7 @@ private fun SettingsGlyph(destination: SettingsDestination, color: Color, modifi
     val icon = when (destination) {
         SettingsDestination.Dictionaries -> Icons.AutoMirrored.Rounded.MenuBook
         SettingsDestination.Anki -> Icons.Rounded.Inventory2
+        SettingsDestination.Live -> Icons.Rounded.LiveTv
         SettingsDestination.Profiles -> Icons.Rounded.Person
         SettingsDestination.Display -> Icons.Rounded.Palette
         SettingsDestination.Appearance -> Icons.Rounded.FormatSize

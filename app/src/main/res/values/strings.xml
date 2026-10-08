@@ -409,7 +409,7 @@
     <string name="reader_appearance_mode" comment="Reader appearance setting label, intentionally matching dictionary mode.">Mode</string>
     <string name="reader_appearance_paginated">Paginated</string>
     <string name="reader_appearance_continuous">Continuous</string>
-    <string name="reader_appearance_visual_novel">VN</string>
+    <string name="reader_appearance_visual_novel" comment="Reader VN layout mode label, intentionally matching the VN main tab label.">VN</string>
     <string name="reader_visual_novel_reveal_speed">Text Reveal Speed</string>
     <string name="reader_visual_novel_reveal_speed_instant">Instant</string>
     <string name="reader_visual_novel_screen_mode">Screen Content</string>
@@ -421,7 +421,7 @@
     <string name="reader_visual_novel_merge_cross_screen_sasayaki_cues">Keep Sasayaki Text Together</string>
     <string name="reader_appearance_chapter_swipe_distance">Chapter Swipe Distance</string>
     <string name="reader_appearance_page_swipe_threshold">Page Swipe Threshold</string>
-    <string name="reader_appearance_page_swipe_threshold_value">%1$d px</string>
+    <string name="reader_appearance_page_swipe_threshold_value" comment="Pixel value label, intentionally matching the Live screenshot width value.">%1$d px</string>
     <string name="reader_appearance_page_swipe_disabled" comment="Paginated and VN Reader swipe-threshold value; intentionally matches other off labels.">Off</string>
     <string name="reader_appearance_horizontal_padding">Horizontal Padding</string>
     <string name="reader_appearance_vertical_padding">Vertical Padding</string>
@@ -909,4 +909,90 @@
     <string name="sasayaki_transcription_light_description">Uses fewer resources, with slower transcription.</string>
     <string name="sasayaki_transcription_balanced_description">Balances transcription speed and everyday use.</string>
     <string name="sasayaki_transcription_fast_description">Faster transcription; may generate more heat.</string>
+    <!-- Live tab (hoshi-bridge: Steam Deck visual novels, mpv subtitles) -->
+    <string name="main_tab_live" comment="Main navigation tab for live text from hoshi-bridge, intentionally matching the Live settings row.">Live</string>
+    <string name="settings_live" comment="Settings row for the Live tab connection, intentionally matching the Live tab label.">Live</string>
+    <string name="live_status_not_configured">No Live hosts set up</string>
+    <string name="live_status_connecting">Connecting to %1$s…</string>
+    <string name="live_status_connected">Connected to %1$s</string>
+    <string name="live_status_disconnected" comment="Header status for an unreachable Live host; matches the lowercase media warning reason by design.">Can\'t reach %1$s</string>
+    <string name="live_retry_in">Retrying in %1$d s</string>
+    <string name="live_reason_unreachable">Can\'t reach the bridge</string>
+    <string name="live_reason_unauthorized" comment="Connection status reason; matches the lowercase media warning reason by design.">The bridge rejected the access token</string>
+    <string name="live_reason_http" comment="Connection status reason; matches the lowercase media warning reason by design.">Server error (HTTP %1$d)</string>
+    <string name="live_reason_closed">The bridge closed the connection</string>
+    <string name="live_reason_invalid_response">This doesn\'t look like hoshi-bridge</string>
+    <string name="live_reason_incompatible">Incompatible bridge protocol (v%1$d); update the app or hoshi-bridge</string>
+    <string name="live_reason_invalid_settings">Invalid host or port</string>
+    <string name="live_empty_waiting">Waiting for text…</string>
+    <string name="live_empty_waiting_hint">Text appears here as soon as a bridge sends it: a visual novel on the Steam Deck or subtitles playing in mpv. Tap a word to look it up.</string>
+    <string name="live_empty_not_configured">Look up words from games and videos</string>
+    <string name="live_empty_not_configured_hint">Add the machines running hoshi-bridge, such as a Steam Deck or a PC with mpv, to see their text here.</string>
+    <string name="live_action_set_up">Add a host</string>
+    <string name="live_transcript_title">Transcript</string>
+    <string name="live_session_auto">Most recent session</string>
+    <string name="live_session_kind_vn">Visual novel</string>
+    <string name="live_session_kind_video">Video</string>
+    <string name="live_session_kind_web">Web</string>
+    <string name="live_session_on_host" comment="Session title followed by its host name, intentionally matching the statistics meta format.">%1$s · %2$s</string>
+    <string name="live_control_failed">Couldn\'t control playback: %1$s</string>
+    <string name="live_settings_description">Live shows text streamed by hoshi-bridge from your machines, for example over Tailscale: visual novels on the Steam Deck and subtitles from mpv on a PC. While the Live tab is open it connects to every host and follows the most recent session.</string>
+    <string name="live_settings_hosts">Hosts</string>
+    <string name="live_settings_no_hosts">No hosts yet. Add the Steam Deck or a PC running hoshi-bridge.</string>
+    <string name="live_settings_add_host">Add host</string>
+    <string name="live_settings_edit_host">Edit host</string>
+    <string name="live_settings_host">Host</string>
+    <string name="live_settings_host_hint">Tailscale MagicDNS name or IP address</string>
+    <string name="live_settings_port">Port</string>
+    <string name="live_settings_token">Access token (optional)</string>
+    <string name="live_settings_token_hint">Only needed when the bridge is configured with a token.</string>
+    <string name="live_settings_token_set">Access token set</string>
+    <string name="live_settings_test">Test connection</string>
+    <string name="live_settings_test_success">Connected to %1$s (hoshi-bridge %2$s)</string>
+    <string name="live_settings_test_failed">Connection failed: %1$s</string>
+    <string name="live_settings_error_host">Enter a host name or IP address without http:// or a port</string>
+    <string name="live_settings_error_duplicate">This host and port are already in the list</string>
+    <string name="live_settings_error_port">Enter a port between 1 and 65535</string>
+    <string name="live_settings_error_token">The token can\'t contain control characters</string>
+    <string name="live_settings_auto_pause">Pause on lookup</string>
+    <string name="live_settings_auto_pause_help">Tapping a word in the Live tab pauses the video. Resume with the play button.</string>
+    <string name="live_settings_screenshot_width">Screenshot width</string>
+    <string name="live_settings_screenshot_width_value" comment="Screenshot width in pixels, intentionally matching the page swipe threshold value.">%1$d px</string>
+    <string name="live_settings_screenshot_original">Original resolution</string>
+    <string name="live_settings_screenshot_help">When you mine in the Live tab and the card format uses {image}, the bridge adds a screenshot for visual novels or a short animated clip for videos. {sentence-audio} gets the cue\'s audio from videos. A picked web image takes precedence.</string>
+    <string name="live_picture_failed">No picture added: %1$s</string>
+    <string name="live_audio_failed">No sentence audio added: %1$s</string>
+    <string name="live_media_reason_unreachable" comment="Lowercase reason inside a media warning sentence; matches the Live header status by design.">can\'t reach %1$s</string>
+    <string name="live_media_reason_unauthorized" comment="Lowercase reason inside a media warning sentence; matches the connection status reason by design.">the bridge rejected the access token</string>
+    <string name="live_media_reason_unavailable">the bridge couldn\'t produce it (%1$s)</string>
+    <string name="live_media_reason_http" comment="Lowercase reason inside a media warning sentence; matches the connection status reason by design.">server error (HTTP %1$d)</string>
+    <string name="live_media_reason_invalid">the bridge didn\'t return a file</string>
+    <string name="live_media_reason_no_host">the host is no longer in Settings</string>
+    <string name="live_media_reason_track_changed">the subtitle track changed</string>
+    <string name="anki_card_added">Card added</string>
+    <string name="anki_card_added_to_anki">Added to Anki</string>
+    <plurals name="anki_card_added_session_count">
+        <item quantity="one">Added to Anki · %1$d card this session</item>
+        <item quantity="other">Added to Anki · %1$d cards this session</item>
+    </plurals>
+    <string-array name="anki_card_added_kaomoji" translatable="false">
+        <item>(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧</item>
+        <item>ヽ(&gt;∀&lt;☆)ノ</item>
+        <item>(๑˃ᴗ˂)ﻭ</item>
+        <item>٩(◕‿◕｡)۶</item>
+        <item>(≧▽≦)</item>
+        <item>(*^▽^*)</item>
+        <item>ฅ^•ﻌ•^ฅ</item>
+        <item>(｡•̀ᴗ-)✧</item>
+        <item>(˶ᵔ ᵕ ᵔ˶)</item>
+        <item>₍₍ ◝(●˙꒳˙●)◜ ₎₎</item>
+    </string-array>
+    <string name="live_card_failed">Couldn\'t add the card</string>
+    <string name="live_picture_attach_failed">Couldn\'t attach the picture to the card</string>
+    <string name="live_audio_attach_failed">Couldn\'t attach the sentence audio to the card</string>
+    <string name="mine_with_options_image_screenshot">Live screenshot</string>
+    <plurals name="live_transcript_count">
+        <item quantity="one">%1$d line</item>
+        <item quantity="other">%1$d lines</item>
+    </plurals>
 </resources>

@@ -147,7 +147,7 @@ class AnkiRepositoryFetchTest {
                 "reading" to "{reading}",
                 "definition" to "{glossary-first}",
                 "wordAudio" to "{audio}",
-                "sentenceAudio" to "{sasayaki-audio}",
+                "sentenceAudio" to "{sentence-audio}",
             ),
             format.fieldMappings,
         )
