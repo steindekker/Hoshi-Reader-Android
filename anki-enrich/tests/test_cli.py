@@ -25,9 +25,9 @@ def test_overwrite_fans_out(monkeypatch):
     def fake_run(col, **kw):
         captured.update(kw)
         return {"scanned": 0, "backup": None, "steps": {
-            "audio": {"skipped": "x"}, "loudness": {"skipped": "x"}, "pitch": {"filled": 0, "cleared": 0, "not_found": 0, "skipped": 0},
-            "sentences": {"filled": 0}, "furigana": {"fixed": 0}, "enrich": {"skipped": "x"}, "frequency": {"skipped": "x"},
-            "examples": {"skipped": "x"}, "cloze": {"filled": 0, "skipped": 0}}}
+            "audio": {"skipped": "x"}, "loudness": {"skipped": "x"}, 
+            "sentences": {"filled": 0}, "furigana": {"fixed": 0}, "fields": {"skipped": "x"},
+            "cloze": {"filled": 0, "skipped": 0}}}
 
     class FakeCol:
         def close(self): pass
@@ -38,8 +38,7 @@ def test_overwrite_fans_out(monkeypatch):
     monkeypatch.setattr(cli.pipeline, "run", fake_run)
     cli.main(["--overwrite"])
     assert captured["overwrite_cloze"]
-    assert captured["overwrite_sentences"] and captured["overwrite_defs"]
-    assert captured["overwrite_examples"]
+    assert captured["overwrite_sentences"] and captured["overwrite_fields"]
     assert "overwrite_pitch" not in captured   # pitch is always re-asserted
 
 
@@ -60,8 +59,7 @@ def test_dry_run_flag_is_accepted_and_does_not_apply(monkeypatch):
 def _apply_run_namespace():
     return argparse.Namespace(
         command="run", apply=True, overwrite=False,
-        overwrite_sentences=False, overwrite_defs=False,
-        overwrite_examples=False, overwrite_cloze=False)
+        overwrite_sentences=False, overwrite_fields=False, overwrite_cloze=False)
 
 
 def test_wizard_drives_main_when_triggered(monkeypatch):
@@ -70,9 +68,9 @@ def test_wizard_drives_main_when_triggered(monkeypatch):
     def fake_run(col, **kw):
         captured["called"] = True
         return {"scanned": 0, "backup": None, "steps": {
-            "audio": {"skipped": "x"}, "loudness": {"skipped": "x"}, "pitch": {"filled": 0, "cleared": 0, "not_found": 0, "skipped": 0},
-            "sentences": {"filled": 0}, "furigana": {"fixed": 0}, "enrich": {"skipped": "x"}, "frequency": {"skipped": "x"},
-            "examples": {"skipped": "x"}, "cloze": {"filled": 0, "skipped": 0}}}
+            "audio": {"skipped": "x"}, "loudness": {"skipped": "x"}, 
+            "sentences": {"filled": 0}, "furigana": {"fixed": 0}, "fields": {"skipped": "x"},
+            "cloze": {"filled": 0, "skipped": 0}}}
 
     class FakeCol:
         def close(self): pass
@@ -105,9 +103,9 @@ def test_wizard_quit_is_clean_noop(monkeypatch):
 
 def _ok_res():
     return {"scanned": 0, "backup": None, "steps": {
-        "audio": {"skipped": "x"}, "loudness": {"skipped": "x"}, "pitch": {"filled": 0, "cleared": 0, "not_found": 0, "skipped": 0},
-        "sentences": {"filled": 0}, "furigana": {"fixed": 0}, "enrich": {"skipped": "x"}, "frequency": {"skipped": "x"},
-        "examples": {"skipped": "x"}, "cloze": {"filled": 0, "skipped": 0}}}
+        "audio": {"skipped": "x"}, "loudness": {"skipped": "x"}, 
+        "sentences": {"filled": 0}, "furigana": {"fixed": 0}, "fields": {"skipped": "x"},
+        "cloze": {"filled": 0, "skipped": 0}}}
 
 
 def _wire_run(monkeypatch, run_fn, *, push=("none", None)):

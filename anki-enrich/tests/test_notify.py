@@ -75,16 +75,19 @@ def test_send_message_posts_via_requests(monkeypatch):
     assert calls["timeout"] is not None
 
 
+def _fields(dropped):
+    return {"defs": 10, "examples": 7, "no_example": 2, "pitch": 8, "pitch_cleared": 3,
+            "frequency": 6, "notes": 20, "nohit": dropped, "dropped": dropped,
+            "terms": ["猫", "犬"]}
+
+
 def _dry_res():
     return {"scanned": 1234, "backup": None, "steps": {
         "audio": {"will_fill": 12, "by_source": {"nhk16": 8, "forvo": 4}, "none": 4, "missing_file": 0},
         "loudness": {"to_normalize": 15, "notes": 14},
-        "pitch": {"filled": 8, "cleared": 3, "not_found": 2, "skipped": 1},
         "sentences": {"filled": 5},
         "furigana": {"fixed": 3},
-        "enrich": {"to_write": 10, "nohit": 1, "terms": ["猫", "犬"]},
-        "frequency": {"to_write": 6, "none": 3},
-        "examples": {"to_write": 7, "none": 2},
+        "fields": _fields(dropped=1),
         "cloze": {"filled": 4, "skipped": 1}}}
 
 
@@ -93,12 +96,9 @@ def _apply_res():
         "audio": {"filled": {"nhk16": 9, "forvo": 3}, "errors": 0},
         "loudness": {"normalized": 15, "notes": 14, "unchanged": 2, "missing": 0,
                      "median_gain": 3.4, "errors": 0},
-        "pitch": {"filled": 8, "cleared": 3, "not_found": 2, "skipped": 1},
         "sentences": {"filled": 5},
         "furigana": {"fixed": 3},
-        "enrich": {"written": 10, "dropped": 0, "terms": ["猫", "犬"]},
-        "frequency": {"written": 6, "none": 3},
-        "examples": {"written": 7, "none_tagged": 2},
+        "fields": _fields(dropped=0),
         "cloze": {"filled": 4, "skipped": 1}}}
 
 
@@ -120,7 +120,7 @@ def test_format_report_lists_new_terms():
 
 def test_format_report_caps_term_list():
     res = _dry_res()
-    res["steps"]["enrich"]["terms"] = [f"語{i}" for i in range(25)]
+    res["steps"]["fields"]["terms"] = [f"語{i}" for i in range(25)]
     out = notify.format_report(res, apply=False, pull_action="none")
     assert "語0" in out and "語19" in out
     assert "語20" not in out
@@ -129,7 +129,7 @@ def test_format_report_caps_term_list():
 
 def test_format_report_omits_term_line_when_empty():
     res = _dry_res()
-    res["steps"]["enrich"]["terms"] = []
+    res["steps"]["fields"]["terms"] = []
     out = notify.format_report(res, apply=False, pull_action="none")
     assert "🆕" not in out
 

@@ -15,12 +15,12 @@ safe. See [`PRD.md`](PRD.md) for the full behavior spec.
 
 - **Term audio** — fill where missing; prefer NHK → Shinmeikai → Forvo → Jpod
   (the prebuilt android.db term-audio store at `var/audio.sqlite`).
-- **Pitch graphs** — generate accent graphs where missing.
 - **Sentence** — add JRP markup (Sudachi tokenization + アクセント辞典v2 accents).
-- **Definitions** — a J-J definition (三省堂 → 広辞苑 → 実用 → 大辞泉) plus JMdict
-  J-E glosses below it.
-- **Examples** — an expandable 例文 block (≤3, deduped) from
-  Jitendex/Saito/Yourei + the Tatoeba dump.
+- **Fields** — fill the word-level fields from the Hoshi pack (below), the same
+  values the app writes at mining time:
+  - a J-J definition (三省堂 → 広辞苑 → 実用 → 大辞泉) plus JMdict J-E glosses below it;
+  - an expandable 例文 block (≤3, deduped) from Jitendex/Saito/Yourei + the Tatoeba dump;
+  - the pitch-accent graph and the JPDB frequency rank.
 - **Cloze** — set the cloze fields.
 
 A separate `dedupe` pass merges duplicate cards while preserving review history.
@@ -33,8 +33,13 @@ JPDB rank, and the tags that tell these passes a card is done — for all ~845k
 dictionary headwords, into one SQLite file (`var/pack/hoshi-pack.sqlite`, ~380 MB,
 plus a `pack.json` manifest). The Hoshi Reader fork downloads it over Tailscale
 and fills `{ae-*}` handlebars offline at mining time, so phone-mined cards are
-already final. Format and lookup contract: `ankienrich/pack.py`. The sentence
-passes (JRP markup, cloze resync) and audio levelling still run here nightly.
+already final. Format and lookup contract: `ankienrich/pack.py`.
+
+The nightly fields pass reads the same pack (`ankienrich/fill.py`), so there is one
+route: sources → pack → app and collection. A run rebuilds the pack first when a
+source index is newer. To push a changed source over every existing card, rebuild
+its index and run `anki-enrich --apply --overwrite-fields`. The sentence passes
+(JRP markup, cloze resync) and audio levelling still run here nightly.
 
 ## Setup
 
@@ -71,6 +76,7 @@ Optional sources, skipped (not failed) when absent:
 uv run anki-enrich              # pull latest, dry-run preview (no writes)
 uv run anki-enrich --apply      # back up, write in place, push to AnkiWeb
 uv run anki-enrich --apply --notify   # also send the result to Telegram
+uv run anki-enrich --apply --overwrite-fields   # re-assert defs + examples on every card
 uv run anki-enrich dedupe --apply     # destructive duplicate merge
 uv run anki-enrich pack               # build the Hoshi enrichment pack (offline)
 uv run anki-enrich-bot          # Telegram listener (see below)

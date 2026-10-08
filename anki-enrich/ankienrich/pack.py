@@ -1,7 +1,7 @@
 """Hoshi enrichment pack: every Kinomoto field this tool derives from (term, reading)
 alone, precomputed per dictionary headword. The Hoshi app downloads the pack and
-fills a card offline at mining time with exactly what the nightly passes would
-write, so those passes find nothing left to do on phone-mined cards.
+fills a card offline at mining time; the nightly fields pass (fill.py) fills the
+collection from the same pack by the same lookup, so the two never disagree.
 
 Format (FORMAT 1) — one SQLite file:
 
@@ -96,8 +96,7 @@ def _open_optional(path, module):
 
 
 def fields_for(src: Sources, term: str, reading: str) -> dict[str, str]:
-    """Every pack value for one note, computed by the same functions the nightly
-    passes call, so the two can never disagree."""
+    """Every pack value for one (term, reading) headword."""
     meaning, source, kind = defs_enrich.definition_for(src.defs, term, reading)
     if kind == "nohit":
         return {}
@@ -251,17 +250,44 @@ def _file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def lookup(conn: sqlite3.Connection, term: str, reading: str) -> dict[str, str]:
-    """The app's lookup contract, for tests and inspection."""
-    meta = dict(conn.execute("SELECT key, value FROM meta"))
-    zdict = meta["zdict"]
+def find(conn: sqlite3.Connection, term: str, reading: str) -> dict[str, str] | None:
+    """The lookup contract without the defaults: None when the pack does not know
+    the term at all (a definition no-hit)."""
+    meta = dict(conn.execute("SELECT key, value FROM meta WHERE key IN ('zdict', 'fallback_keys')"))
     row = conn.execute(
         "SELECT reading, data FROM entries WHERE term=? ORDER BY reading=? DESC, rowid LIMIT 1",
         (term, reading)).fetchone()
     if row is None:
-        return json.loads(meta["defaults"])
-    values = decompress(row[1], zdict)
+        return None
+    values = decompress(row[1], meta["zdict"])
     if row[0] == reading:
         return values
     keep = set(json.loads(meta["fallback_keys"]))
     return {k: v for k, v in values.items() if k in keep}
+
+
+def lookup(conn: sqlite3.Connection, term: str, reading: str) -> dict[str, str]:
+    """The app's lookup contract, for tests and inspection."""
+    values = find(conn, term, reading)
+    if values is None:
+        return json.loads(conn.execute("SELECT value FROM meta WHERE key='defaults'").fetchone()[0])
+    return values
+
+
+def pack_path(out_dir=None) -> Path:
+    return Path(out_dir or Path(paths.VAR_DIR, "pack")) / PACK_FILE
+
+
+def ensure(out_dir=None) -> str:
+    """'present' when the pack is newer than every source index, 'built' after
+    (re)building it, 'no-source' without a definition index. A rebuilt index (a
+    new dictionary, say) therefore reaches the next run and the app by itself."""
+    if not Path(paths.DEFS_DB).exists():
+        return "no-source"
+    target = pack_path(out_dir)
+    sources = [paths.DEFS_DB, paths.EXAMPLES_DB, paths.FREQ_DB, paths.ACCENT_INDEX]
+    newest = max(os.path.getmtime(s) for s in sources if os.path.exists(s))
+    if target.exists() and target.stat().st_mtime >= newest:
+        return "present"
+    build(out_dir)
+    return "built"

@@ -80,7 +80,7 @@ DICT_STYLES_MARKER = "/* ---- AnkiAlign dict styles (generated) ---- */"
 
 # Frequency enrichment. The Frequency field holds the JPDB rank (raw integer as a
 # string), asserted on every card from the freq index — a pure (term, reading)
-# function, so no tags/overwrite flag (see freq/enrich.py).
+# function, so no tags/overwrite flag (see fill.py).
 FREQUENCY = "Frequency"
 IMAGE = "Image"
 

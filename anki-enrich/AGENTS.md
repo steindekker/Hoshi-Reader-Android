@@ -50,10 +50,14 @@ tiny and intentionally omits implementation detail.
 the Hoshi Reader app (format + lookup contract documented in
 `ankienrich/pack.py`). Every value comes from the same functions the passes call
 (`definition_for`, `examples_for`, `accents_for` + `pitch_svg`, the freq lookup),
-so a card the app fills is already what the nightly run would write. Adding a
-key to `fields_for` reaches the app as `{ae-<key>}` with no app change. This is
-becoming the tool's main job; the in-collection passes are being phased out.
-`deploy/push.sh` rebuilds the pack on the box; `tailscale serve` publishes it.
+and the nightly fields pass (`ankienrich/fill.py`) fills the collection from the
+pack itself through `pack.find`, the app's lookup — one route, sources → pack →
+app and collection. Don't add word-level note writing outside `fill.py`. Adding a
+key to `fields_for` reaches the app as `{ae-<key>}` with no app change (map it to
+a field in `fill.py` for the collection). A run rebuilds the pack when a source
+index is newer (`pack.ensure`); `--overwrite-fields` re-asserts definitions and
+examples over every card. `deploy/push.sh` rebuilds the pack on the box;
+`tailscale serve` publishes it.
 
 ## The Telegram bot
 

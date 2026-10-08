@@ -13,8 +13,8 @@ def test_argv_for_empty_is_fill_missing():
 
 
 def test_argv_for_single_field():
-    assert bot.argv_for({"defs"}) == [
-        "anki-enrich", "--apply", "--overwrite-defs", "--notify"]
+    assert bot.argv_for({"fields"}) == [
+        "anki-enrich", "--apply", "--overwrite-fields", "--notify"]
 
 
 def test_argv_for_sentence_uses_plural_flag():
@@ -32,22 +32,21 @@ def test_argv_for_orders_flags_canonically_regardless_of_set_order():
 def test_argv_for_all_fields():
     assert bot.argv_for(set(bot.OVERWRITE_FIELDS)) == [
         "anki-enrich", "--apply",
-        "--overwrite-sentences", "--overwrite-defs",
-        "--overwrite-examples", "--overwrite-cloze", "--notify"]
+        "--overwrite-sentences", "--overwrite-fields", "--overwrite-cloze", "--notify"]
 
 
 # --- toggled / select_all_toggle: pure set transitions ----------------------
 
 def test_toggled_adds_when_absent():
-    assert bot.toggled(set(), "defs") == {"defs"}
+    assert bot.toggled(set(), "fields") == {"fields"}
 
 
 def test_toggled_removes_when_present():
-    assert bot.toggled({"cloze", "defs"}, "cloze") == {"defs"}
+    assert bot.toggled({"cloze", "fields"}, "cloze") == {"fields"}
 
 
 def test_select_all_toggle_selects_all_from_partial():
-    assert bot.select_all_toggle({"defs"}) == set(bot.OVERWRITE_FIELDS)
+    assert bot.select_all_toggle({"fields"}) == set(bot.OVERWRITE_FIELDS)
 
 
 def test_select_all_toggle_clears_when_all_selected():
@@ -57,9 +56,9 @@ def test_select_all_toggle_clears_when_all_selected():
 # --- keyboard_for: reflects selection, exposes the right callbacks ----------
 
 def test_keyboard_for_marks_selected_fields():
-    kb = bot.keyboard_for({"defs"})
+    kb = bot.keyboard_for({"fields"})
     labels = {b.text: b.callback_data for row in kb.keyboard for b in row}
-    assert labels[f"✅ {bot.FIELD_LABELS['defs']}"] == "toggle:defs"
+    assert labels[f"✅ {bot.FIELD_LABELS['fields']}"] == "toggle:fields"
     assert labels[f"⬜ {bot.FIELD_LABELS['cloze']}"] == "toggle:cloze"
 
 
@@ -73,7 +72,7 @@ def test_keyboard_for_has_all_apply_cancel_and_one_toggle_per_field():
 
 
 def test_keyboard_all_button_label_flips_when_all_selected():
-    partial = [b.text for row in bot.keyboard_for({"defs"}).keyboard for b in row]
+    partial = [b.text for row in bot.keyboard_for({"fields"}).keyboard for b in row]
     full = [b.text for row in bot.keyboard_for(set(bot.OVERWRITE_FIELDS)).keyboard for b in row]
     assert "Overwrite all" in partial
     assert "Clear all" in full
