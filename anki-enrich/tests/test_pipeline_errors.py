@@ -9,7 +9,7 @@ def test_step_failure_is_tagged_with_pass_name(monkeypatch):
     class FakeCol:
         def find_notes(self, q): return []
 
-    def boom(col, apply, overwrite):
+    def boom(col, apply, overwrite, note_ids=None):
         raise RuntimeError("kaboom")
 
     monkeypatch.setattr(pipeline, "_step_audio", boom)

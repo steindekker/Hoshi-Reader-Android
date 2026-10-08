@@ -140,7 +140,7 @@ def _set_tag(note, tag: str, present: bool) -> bool:
     return False
 
 
-def run(col, *, apply: bool = False, acc=None, overwrite=False) -> dict:
+def run(col, *, apply: bool = False, acc=None, overwrite=False, note_ids=None) -> dict:
     """Fill/repair cloze (Before/Inside/After) from Sentence. Returns counts
     {'filled', 'resynced', 'skipped', 'mismatched'}.
 
@@ -166,7 +166,7 @@ def run(col, *, apply: bool = False, acc=None, overwrite=False) -> dict:
 
     filled = resynced = skipped = mismatched = 0
     batch = []
-    for nid in col.find_notes(notetype_search()):
+    for nid in col.find_notes(notetype_search(note_ids)):
         note = col.get_note(nid)
         f = note.fields
         if not f[iS].strip():

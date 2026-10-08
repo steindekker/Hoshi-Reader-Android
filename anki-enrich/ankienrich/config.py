@@ -3,6 +3,7 @@ logical-role -> field-name map, and AnkiWeb credentials."""
 import os
 
 NOTETYPE = "jidoujisho Kinomoto"
+DEFAULT_DECK = "Default"
 
 # Logical role -> real Kinomoto field name. The one place to retarget fields.
 TERM = "Term"
@@ -81,6 +82,7 @@ DICT_STYLES_MARKER = "/* ---- AnkiAlign dict styles (generated) ---- */"
 # string), asserted on every card from the freq index — a pure (term, reading)
 # function, so no tags/overwrite flag (see freq/enrich.py).
 FREQUENCY = "Frequency"
+IMAGE = "Image"
 
 # How many before/after samples to show in dry-run output.
 SAMPLE_N = 5

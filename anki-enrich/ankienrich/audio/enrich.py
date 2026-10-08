@@ -121,15 +121,15 @@ def media_name(pick: Pick) -> str:
 
 # --- collection-level pass (anki, no aqt) ---------------------------------------
 
-def select_targets(col, *, overwrite: bool = False) -> list:
+def select_targets(col, *, overwrite: bool = False, note_ids=None) -> list:
     """In-scope Kinomoto note ids with an empty Term Audio field — or every
     in-scope note when `overwrite`, so store audio supersedes mined clips."""
     if col.models.by_name(config.NOTETYPE) is None:
         return []
     if overwrite:
-        return list(col.find_notes(notetype_search()))
+        return list(col.find_notes(notetype_search(note_ids)))
     # `"Term Audio:"` matches notes whose Term Audio field is empty.
-    return list(col.find_notes(f'{notetype_search()} "{config.TERM_AUDIO}:"'))
+    return list(col.find_notes(f'{notetype_search(note_ids)} "{config.TERM_AUDIO}:"'))
 
 
 def final_name(pick) -> str:
@@ -154,7 +154,7 @@ def already_picked(note, pick) -> bool:
     return len(clips) == 1 and clips[0] == final_name(pick)
 
 
-def plan_backfill(col, conn, *, overwrite: bool = False) -> dict:
+def plan_backfill(col, conn, *, overwrite: bool = False, note_ids=None) -> dict:
     """Read-only. For every target note, resolve a Pick and classify it.
 
     Returns {'total', 'by_source', 'filled', 'nothing', 'missing_file',
@@ -166,7 +166,7 @@ def plan_backfill(col, conn, *, overwrite: bool = False) -> dict:
     nothing = missing_file = 0
     samples = []
     picks = {}
-    for nid in select_targets(col, overwrite=overwrite):
+    for nid in select_targets(col, overwrite=overwrite, note_ids=note_ids):
         note = col.get_note(nid)
         term, reading = note[config.TERM], note[config.READING]
         pick = lookup(conn, term, reading)
@@ -204,7 +204,7 @@ def _level(job):
     return nid, pick, levelled[0], True
 
 
-def run_backfill(col, conn, *, overwrite: bool = False) -> dict:
+def run_backfill(col, conn, *, overwrite: bool = False, note_ids=None) -> dict:
     """Write each picked recording's bytes into collection.media and set
     `[sound:...]` on the note's Term Audio. Caller backs up first.
 
@@ -224,7 +224,7 @@ def run_backfill(col, conn, *, overwrite: bool = False) -> dict:
     and note writes stay on this thread. Per-card error isolation.
     Returns {'filled': {src: n}, 'unchanged': n, 'errors': [(nid, repr)]}.
     """
-    plan = plan_backfill(col, conn, overwrite=overwrite)
+    plan = plan_backfill(col, conn, overwrite=overwrite, note_ids=note_ids)
     filled = Counter()
     unchanged = 0
     errors = []

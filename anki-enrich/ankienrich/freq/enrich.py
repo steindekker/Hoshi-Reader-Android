@@ -33,12 +33,12 @@ def _rank(conn, term, reading) -> str:
     return str(hit[0]) if hit else ""
 
 
-def build_plan(col, conn):
+def build_plan(col, conn, *, note_ids=None):
     """Dry-run: how many in-scope notes would change, plus a sample. `none` counts
     notes whose word has no rank (left as-is)."""
     to_write, none, samples = 0, 0, []
     fld = {f["name"] for f in col.models.by_name(config.NOTETYPE)["flds"]}
-    for nid in col.find_notes(notetype_search()):
+    for nid in col.find_notes(notetype_search(note_ids)):
         note = col.get_note(nid)
         term, reading = _term_reading(note, fld)
         if not term:
@@ -55,13 +55,13 @@ def build_plan(col, conn):
     return {"to_write": to_write, "none": none, "samples": samples}
 
 
-def enrich_notes(col, conn):
+def enrich_notes(col, conn, *, note_ids=None):
     """Assert the Frequency rank on every in-scope note, writing only on change.
     Returns counts; `none` = in-scope notes whose word has no rank."""
     ensure_field(col)
     fld = {f["name"] for f in col.models.by_name(config.NOTETYPE)["flds"]}
     written, none = 0, 0
-    for nid in col.find_notes(notetype_search()):
+    for nid in col.find_notes(notetype_search(note_ids)):
         note = col.get_note(nid)
         term, reading = _term_reading(note, fld)
         if not term:

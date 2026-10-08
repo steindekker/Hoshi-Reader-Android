@@ -43,11 +43,11 @@ def _term_reading(note, fld):
     return term, reading
 
 
-def build_plan(col, conn, *, overwrite=False):
+def build_plan(col, conn, *, overwrite=False, note_ids=None):
     counts = {"fill": 0, "none": 0}
     to_write, samples, errors = 0, [], []
     fld = {f["name"] for f in col.models.by_name(config.NOTETYPE)["flds"]}
-    for nid in col.find_notes(notetype_search()):
+    for nid in col.find_notes(notetype_search(note_ids)):
         note = col.get_note(nid)
         term, reading = _term_reading(note, fld)
         if not term:
@@ -68,12 +68,12 @@ def build_plan(col, conn, *, overwrite=False):
     return {"counts": counts, "to_write": to_write, "samples": samples, "errors": errors}
 
 
-def enrich_notes(col, conn, *, overwrite=False):
+def enrich_notes(col, conn, *, overwrite=False, note_ids=None):
     """Fill Examples for in-scope Kinomoto notes. Returns counts."""
     ensure_field(col)
     fld = {f["name"] for f in col.models.by_name(config.NOTETYPE)["flds"]}
     written, none_tagged = 0, 0
-    for nid in col.find_notes(notetype_search()):
+    for nid in col.find_notes(notetype_search(note_ids)):
         note = col.get_note(nid)
         term, reading = _term_reading(note, fld)
         if not term:

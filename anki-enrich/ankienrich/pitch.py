@@ -37,7 +37,7 @@ def primary_accent(idx: AccentIndex, term: str, reading: str) -> int | None:
     return positions[0] if positions else None
 
 
-def _iter_targets(col, idx):
+def _iter_targets(col, idx, note_ids=None):
     """Yield (note, action, value) for every note whose Pitch field needs a write.
 
     The field is reconciled to the accent dicts on every run — the invariant is
@@ -53,7 +53,7 @@ def _iter_targets(col, idx):
 
     An already-correct graph is a silent no-op; our own graph the dicts can't
     cover is kept (can't be regenerated, so never cleared)."""
-    for nid in col.find_notes(notetype_search()):
+    for nid in col.find_notes(notetype_search(note_ids)):
         note = col.get_note(nid)
         field = note[_FIELD]
         has_graph = "<svg" in field
@@ -74,19 +74,19 @@ def _iter_targets(col, idx):
             yield note, "skipped", None
 
 
-def plan_backfill(col) -> dict:
+def plan_backfill(col, *, note_ids=None) -> dict:
     """Read-only: counts + a few (term, reading, svg) samples. No mutation."""
     idx = AccentIndex.load(_INDEX_PATH)
     counts = {"filled": 0, "cleared": 0, "not_found": 0, "skipped": 0}
     samples = []
-    for note, action, value in _iter_targets(col, idx):
+    for note, action, value in _iter_targets(col, idx, note_ids):
         counts[action] += 1
         if action == "filled" and len(samples) < config.SAMPLE_N:
             samples.append((note[config.TERM], note[config.READING], value))
     return {"counts": counts, "samples": samples}
 
 
-def run_backfill(col) -> dict:
+def run_backfill(col, *, note_ids=None) -> dict:
     """Reconcile every Pitch field to the accent dicts. Returns action counts.
 
     Always re-asserts: empty fields and non-graph formats are filled where the
@@ -94,7 +94,7 @@ def run_backfill(col) -> dict:
     content the dicts can't cover is cleared. See _iter_targets."""
     idx = AccentIndex.load(_INDEX_PATH)
     res = {"filled": 0, "cleared": 0, "not_found": 0, "skipped": 0}
-    for note, action, value in _iter_targets(col, idx):
+    for note, action, value in _iter_targets(col, idx, note_ids):
         res[action] += 1
         if value is not None:
             note[_FIELD] = value

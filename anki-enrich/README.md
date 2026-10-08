@@ -92,3 +92,28 @@ fills missing fields only — and the spawned run sends its own report.
 ```sh
 uv run pytest
 ```
+
+## Add a note (`anki-enrich add`)
+
+Create a **jidoujisho Kinomoto** note, then fill-missing enrich **that note only**.
+Shares the working collection with the normal enrich VAR
+(`ANKI_ENRICH_VAR`, default `<repo>/var`; on <host> use
+`/opt/anki-enrich/data`).
+
+Dry-run (default) — preview fields, dedup, lock; no write/push:
+
+```bash
+export ANKI_ENRICH_VAR=/opt/anki-enrich/data   # share live data on <host>
+uv run anki-enrich add 食べる --reading たべる --sentence "寿司を食べる。"
+uv run anki-enrich add 朝顔 --reading あさがお --image /abs/path/to/shot.png
+```
+
+Apply — pull → add (dedup) → enrich that note (fill-missing) → single AnkiWeb push:
+
+```bash
+uv run anki-enrich add 食べる --reading たべる --sentence "寿司を食べる。" --apply
+```
+
+Flags: `TERM`, `--reading`, `--sentence`, `--furigana`, `--image PATH` (absolute),
+`--deck` (default Default), `--apply`. Exit 2 on duplicate Term(/Reading); exit 3 if
+`run.lock` is held.

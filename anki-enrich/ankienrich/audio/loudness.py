@@ -160,7 +160,7 @@ def is_normalized(fname: str) -> bool:
     return os.path.basename(fname).startswith(config.AUDIO_NORM_PREFIX)
 
 
-def select_targets(col) -> dict[str, list]:
+def select_targets(col, *, note_ids=None) -> dict[str, list]:
     """{clip filename: [note id, …]} for every in-scope clip not yet leveled.
 
     Keyed by file rather than note, so a clip two cards share is measured and
@@ -170,7 +170,7 @@ def select_targets(col) -> dict[str, list]:
         return {}
     targets = defaultdict(list)
     # `-"Term Audio:"` matches notes whose Term Audio field is NOT empty.
-    for nid in col.find_notes(f'{notetype_search()} -"{config.TERM_AUDIO}:"'):
+    for nid in col.find_notes(f'{notetype_search(note_ids)} -"{config.TERM_AUDIO}:"'):
         note = col.get_note(nid)
         for fname in _SOUND.findall(note[config.TERM_AUDIO] or ""):
             if not is_normalized(fname) and _ext(fname) in ENCODERS:
@@ -178,9 +178,9 @@ def select_targets(col) -> dict[str, list]:
     return dict(targets)
 
 
-def plan_backfill(col) -> dict:
+def plan_backfill(col, *, note_ids=None) -> dict:
     """Read-only. {'to_normalize': clips, 'notes': cards they sit on}."""
-    targets = select_targets(col)
+    targets = select_targets(col, note_ids=note_ids)
     return {"to_normalize": len(targets),
             "notes": len({nid for nids in targets.values() for nid in nids})}
 
@@ -204,7 +204,7 @@ def _batched(items: list, size: int):
         yield items[i:i + size]
 
 
-def run_backfill(col) -> dict:
+def run_backfill(col, *, note_ids=None) -> dict:
     """Level every un-leveled Term Audio clip and repoint the notes at it.
 
     Caller backs up first. ffmpeg runs in a thread pool, a batch at a time so
@@ -212,7 +212,7 @@ def run_backfill(col) -> dict:
     thread. Per-clip and per-note error isolation. Returns
     {'normalized', 'notes', 'unchanged', 'missing', 'median_gain', 'errors'}.
     """
-    targets = select_targets(col)
+    targets = select_targets(col, note_ids=note_ids)
     media_dir = col.media.dir()
     gains: list[float] = []
     touched: set = set()

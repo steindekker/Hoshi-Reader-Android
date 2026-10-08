@@ -5,12 +5,14 @@
   uv run anki-enrich --apply --overwrite   # re-assert pitch/sentences/defs/cloze
   uv run anki-enrich dedupe --apply         # destructive duplicate merge (separate)
   uv run anki-enrich template --apply       # apply repo card design to note type
+  uv run anki-enrich add TERM [--reading ...]   # dry-run create+enrich preview
+  uv run anki-enrich add TERM --apply           # pull, add, enrich that note, push
   uv run anki-enrich pack                   # build the Hoshi enrichment pack (offline)
 """
 import argparse
 import sys
 
-from . import collection, dedupe as _dedupe, notify, pipeline, runlock, sync, template, wizard
+from . import addcli, collection, dedupe as _dedupe, notify, pipeline, runlock, sync, template, wizard
 
 # tiny ANSI helpers — no deps, plain text when stdout is not a TTY
 _TTY = sys.stdout.isatty()
@@ -226,6 +228,9 @@ def _pack(argv) -> int:
 def main(argv=None) -> int:
     if argv is None:
         argv = sys.argv[1:]
+    # Subcommand with its own argv shape (TERM + flags) — dispatch before wizard/parser.
+    if argv and argv[0] == "add":
+        return addcli.main(argv[1:])
     if argv[:1] == ["pack"]:
         return _pack(argv[1:])
     if wizard.should_run_wizard(argv, sys.stdin.isatty() and sys.stdout.isatty()):

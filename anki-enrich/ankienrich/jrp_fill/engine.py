@@ -19,7 +19,8 @@ class Fill:
 
 
 def build_plan(col, note_type: str, field: str,
-               generate: Callable[[str], str], regenerate: bool = False) -> list[Fill]:
+               generate: Callable[[str], str], regenerate: bool = False,
+               note_ids=None) -> list[Fill]:
     """Generate the diff. `generate(plain_text) -> markup` is injected so this
     function stays testable without Sudachi.
 
@@ -37,7 +38,11 @@ def build_plan(col, note_type: str, field: str,
         raise ValueError(f"field {field!r} not found in note type {note_type!r}")
     fi = names.index(field)
     plan: list[Fill] = []
-    for nid in col.models.nids(model):
+    nids = list(col.models.nids(model))
+    if note_ids is not None:
+        wanted = set(int(n) for n in note_ids)
+        nids = [n for n in nids if n in wanted]
+    for nid in nids:
         note = col.get_note(nid)
         old = note.fields[fi]
         if not old.strip():
@@ -74,7 +79,7 @@ def apply_plan(col, plan: list[Fill], field: str = "Sentence") -> int:
 
 def apply_to_fixpoint(col, note_type: str, field: str,
                       generate: Callable[[str], str], *, regenerate: bool = False,
-                      max_passes: int = 6) -> int:
+                      max_passes: int = 6, note_ids=None) -> int:
     """Plan + apply repeatedly until no note changes (or max_passes).
 
     A single splice pass isn't a fixpoint: `generate` can emit a bare kanji that
@@ -86,7 +91,7 @@ def apply_to_fixpoint(col, note_type: str, field: str,
     total notes written."""
     total = 0
     for _ in range(max_passes):
-        plan = build_plan(col, note_type, field, generate, regenerate=regenerate)
+        plan = build_plan(col, note_type, field, generate, regenerate=regenerate, note_ids=note_ids)
         if not plan:
             break
         total += apply_plan(col, plan, field)

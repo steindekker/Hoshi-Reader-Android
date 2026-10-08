@@ -24,7 +24,7 @@ class Fix:
     new: str
 
 
-def build_plan(col) -> list[Fix]:
+def build_plan(col, *, note_ids=None) -> list[Fix]:
     mid = col.models.id_for_name(config.NOTETYPE)
     if mid is None:
         return []
@@ -32,7 +32,11 @@ def build_plan(col) -> list[Fix]:
     names = [f["name"] for f in model["flds"]]
     idx = {f: names.index(f) for f in _FIELDS if f in names}
     plan: list[Fix] = []
-    for nid in col.models.nids(model):
+    nids = list(col.models.nids(model))
+    if note_ids is not None:
+        wanted = set(int(n) for n in note_ids)
+        nids = [n for n in nids if n in wanted]
+    for nid in nids:
         note = col.get_note(nid)
         for field, fi in idx.items():
             old = note.fields[fi]

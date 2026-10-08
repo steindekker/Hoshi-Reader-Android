@@ -58,8 +58,8 @@ def definition_for(conn, term, reading):
     return _compute(conn, term, reading)
 
 
-def _in_scope_nids(col):
-    return col.find_notes(notetype_search())
+def _in_scope_nids(col, note_ids=None):
+    return col.find_notes(notetype_search(note_ids))
 
 
 def _will_write(note, meaning, source, fld, overwrite) -> bool:
@@ -75,12 +75,12 @@ def _will_write(note, meaning, source, fld, overwrite) -> bool:
     return not (note[config.DEFINITION] == meaning and cur_src == source)
 
 
-def build_plan(col, conn, *, overwrite=False):
+def build_plan(col, conn, *, overwrite=False, note_ids=None):
     counts = {"enrich": 0, "english": 0, "nohit": 0}
     nohit_nids, samples, errors, terms = [], [], [], []
     to_write = 0
     fld = {f["name"] for f in col.models.by_name(config.NOTETYPE)["flds"]}
-    for nid in _in_scope_nids(col):
+    for nid in _in_scope_nids(col, note_ids):
         note = col.get_note(nid)
         term = note[config.TERM].strip() if config.TERM in fld else ""
         if not term:
@@ -104,7 +104,7 @@ def build_plan(col, conn, *, overwrite=False):
             "samples": samples, "errors": errors, "terms": terms}
 
 
-def enrich_notes(col, conn, styles_path=None, *, overwrite=False):
+def enrich_notes(col, conn, styles_path=None, *, overwrite=False, note_ids=None):
     """Rewrite Meaning for in-scope Kinomoto notes. Returns counts. Idempotent.
 
     By default only notes that have never been enriched are written, so manual
@@ -123,7 +123,7 @@ def enrich_notes(col, conn, styles_path=None, *, overwrite=False):
     written = 0
     first_enriched_nids = []
     nohit_nids, terms = [], []
-    for nid in _in_scope_nids(col):
+    for nid in _in_scope_nids(col, note_ids):
         note = col.get_note(nid)
         term = note[config.TERM].strip() if config.TERM in fld else ""
         if not term:
