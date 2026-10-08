@@ -5,6 +5,7 @@
   uv run anki-enrich --apply --overwrite   # re-assert pitch/sentences/defs/cloze
   uv run anki-enrich dedupe --apply         # destructive duplicate merge (separate)
   uv run anki-enrich template --apply       # apply repo card design to note type
+  uv run anki-enrich pack                   # build the Hoshi enrichment pack (offline)
 """
 import argparse
 import sys
@@ -204,9 +205,29 @@ def _run(args) -> int:
     return 0
 
 
+def _pack(argv) -> int:
+    """`anki-enrich pack [--out DIR]`: build the Hoshi enrichment pack. Offline —
+    reads the local indexes only, never the collection or AnkiWeb."""
+    from . import pack
+    ap = argparse.ArgumentParser(prog="anki-enrich pack",
+                                 description="Build the Hoshi enrichment pack.")
+    ap.add_argument("--out", help="output dir (default var/pack)")
+    args = ap.parse_args(argv)
+
+    def progress(done, total):
+        print(f"\r  {_dim('building')} {done}/{total}", end="", flush=True)
+
+    manifest = pack.build(args.out, progress=progress if _TTY else None)
+    print("\r" + _row("pack", _green(manifest["version"]),
+                      f"{manifest['entries']} entries · {manifest['size'] / 1e6:.0f} MB") + " " * 10)
+    return 0
+
+
 def main(argv=None) -> int:
     if argv is None:
         argv = sys.argv[1:]
+    if argv[:1] == ["pack"]:
+        return _pack(argv[1:])
     if wizard.should_run_wizard(argv, sys.stdin.isatty() and sys.stdout.isatty()):
         args = wizard.run(dry_run="--dry-run" in argv)
         if args is None:

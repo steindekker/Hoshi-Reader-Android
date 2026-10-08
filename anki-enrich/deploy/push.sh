@@ -79,6 +79,13 @@ EOF
 say "Building image and (re)starting the bot"
 ssh "$REMOTE" "cd '$DEST' && docker compose up -d --build"
 
+# --- Rebuild the Hoshi enrichment pack from the freshly pushed indexes -------
+# Writes data/pack/{hoshi-pack.sqlite,pack.json}; the phone downloads it over
+# Tailscale (see deploy/README.md). Unchanged content keeps the same version, so
+# the app only re-downloads when a value actually changed.
+say "Building the Hoshi enrichment pack"
+ssh "$REMOTE" "cd '$DEST' && docker compose run --rm bot anki-enrich pack"
+
 # --- Install / refresh the nightly timer -----------------------------------
 # /etc/systemd/system is root-owned, so this block needs sudo even though the
 # rest of the deploy runs as the unprivileged deploy user.

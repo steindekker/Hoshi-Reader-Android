@@ -32,6 +32,14 @@ the configured chat); a lock keeps a manual run from colliding with the nightly 
    each shown whenever available.
 5. **Cloze** — set the cloze fields correctly.
 
+### Hoshi enrichment pack
+
+Precompute every field that depends only on the word (definition, pitch graph,
+examples, frequency, done-tags) into one file the Hoshi app downloads over
+Tailscale, so cards mined on the phone are final offline. This is the tool's
+primary purpose going forward; the passes above remain for what needs the
+sentence (JRP markup, cloze) until those move too.
+
 ### Dedupe
 
 Merge duplicate cards, preserving review history.

@@ -41,6 +41,17 @@ export (local-audio-yomichan / AnkiConnect-Android format), placed at
 file, so the box always ships with audio; the runtime self-skips a missing store
 rather than failing.
 
+## Serve the Hoshi enrichment pack
+Every deploy rebuilds `data/pack/` (`anki-enrich pack`): `hoshi-pack.sqlite` plus
+the small `pack.json` manifest the app checks. Publish the folder on the tailnet
+once — `tailscale serve` gives it HTTPS with a real `*.ts.net` certificate and
+supports resumed downloads:
+```bash
+ssh $DEPLOY_REMOTE "sudo tailscale serve --bg --set-path /hoshi /opt/anki-enrich/data/pack"
+```
+In Hoshi → Settings → Anki → Enrichment pack, set the URL to
+`https://<box>.<tailnet>.ts.net/hoshi/pack.json` and tap Update.
+
 ## Refresh dictionaries
 Rebuild the dicts locally, then just rerun the deploy — it re-pushes the sqlite
 and restarts the bot:

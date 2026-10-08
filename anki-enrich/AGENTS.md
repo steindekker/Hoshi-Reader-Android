@@ -44,6 +44,17 @@ tiny and intentionally omits implementation detail.
   the pass is idempotent and stays correct across a swapped audio store. Needs
   ffmpeg on PATH (installed in the image); absent it the step is skipped.
 
+## The Hoshi enrichment pack
+
+`uv run anki-enrich pack` builds `var/pack/hoshi-pack.sqlite` + `pack.json` for
+the Hoshi Reader app (format + lookup contract documented in
+`ankienrich/pack.py`). Every value comes from the same functions the passes call
+(`definition_for`, `examples_for`, `accents_for` + `pitch_svg`, the freq lookup),
+so a card the app fills is already what the nightly run would write. Adding a
+key to `fields_for` reaches the app as `{ae-<key>}` with no app change. This is
+becoming the tool's main job; the in-collection passes are being phased out.
+`deploy/push.sh` rebuilds the pack on the box; `tailscale serve` publishes it.
+
 ## The Telegram bot
 
 `uv run anki-enrich-bot` (needs `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`). A thin,

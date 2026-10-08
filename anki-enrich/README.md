@@ -25,6 +25,17 @@ safe. See [`PRD.md`](PRD.md) for the full behavior spec.
 
 A separate `dedupe` pass merges duplicate cards while preserving review history.
 
+## Hoshi enrichment pack
+
+The main job going forward: `anki-enrich pack` precomputes every field above that
+depends only on (term, reading) — definition + source, pitch graph, 例文 block,
+JPDB rank, and the tags that tell these passes a card is done — for all ~845k
+dictionary headwords, into one SQLite file (`var/pack/hoshi-pack.sqlite`, ~380 MB,
+plus a `pack.json` manifest). The Hoshi Reader fork downloads it over Tailscale
+and fills `{ae-*}` handlebars offline at mining time, so phone-mined cards are
+already final. Format and lookup contract: `ankienrich/pack.py`. The sentence
+passes (JRP markup, cloze resync) and audio levelling still run here nightly.
+
 ## Setup
 
 Requires Python ≥ 3.11 and [`uv`](https://docs.astral.sh/uv/).
@@ -61,6 +72,7 @@ uv run anki-enrich              # pull latest, dry-run preview (no writes)
 uv run anki-enrich --apply      # back up, write in place, push to AnkiWeb
 uv run anki-enrich --apply --notify   # also send the result to Telegram
 uv run anki-enrich dedupe --apply     # destructive duplicate merge
+uv run anki-enrich pack               # build the Hoshi enrichment pack (offline)
 uv run anki-enrich-bot          # Telegram listener (see below)
 ```
 
