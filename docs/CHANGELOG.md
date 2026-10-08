@@ -269,3 +269,9 @@ Historical release notes before v1.3.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 - Add a "Mine with options" button to each dictionary entry — next to the existing one-tap "Add to Anki" — that opens a sheet to adjust a card before adding it. Available wherever lookups appear: the Dictionary tab, the in-book reader, and process-text lookup. One-tap "Add to Anki" is unchanged.
 - In that sheet, choose the card's Sentence from a list of Massif example sentences for the word, instead of the default in-book context line.
 - In that sheet, choose the card's Picture: none, the book cover (the default in the reader), or an image from a Bing search of the word shown as a thumbnail grid. The choice fills the Picture field through a single `{image}` marker (replacing the separate book-cover and web-image markers). Map Picture to `{image}` under Settings → Anki.
+
+## [Unreleased-fork]
+
+### Added
+
+- Fill Anki cards offline with the anki-enrich enrichment pack, so they are final the moment they are mined. Under Settings → Anki → Enrichment pack, set the pack URL (the server's `pack.json`) and tap Update; the pack downloads once, resumes if interrupted, and only downloads again when its content changes. Map `{ae-definition}`, `{ae-definition-source}`, `{ae-pitch}`, `{ae-examples}` and `{ae-frequency}` to fields and add `{ae-tags}` to the card tags (all listed under show all handlebars). A word missing from the pack keeps `{glossary-first}` as its definition.

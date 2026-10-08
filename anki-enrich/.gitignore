@@ -1,0 +1,22 @@
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+
+.playwright-mcp/
+.claude/
+
+.venv/
+
+# Built artifacts and source dicts (large, local-only)
+var/
+dicts/
+
+# IDE / local tooling state
+.idea/
+.pytest_cache/
+
+# direnv local env (creds)
+.envrc
+# real env file (holds secrets, never commit)
+.env

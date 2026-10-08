@@ -981,4 +981,19 @@
         <item quantity="one">%1$d 句</item>
         <item quantity="other">%1$d 句</item>
     </plurals>
+    <string name="enrich_pack_title">增强数据包</string>
+    <string name="enrich_pack_not_installed">未安装。下载后即可离线填充 {ae-*} 占位符。</string>
+    <plurals name="enrich_pack_installed">
+        <item quantity="one">构建于 %1$s · %2$d 个词</item>
+        <item quantity="other">构建于 %1$s · %2$d 个词</item>
+    </plurals>
+    <string name="enrich_pack_url">数据包 URL</string>
+    <string name="enrich_pack_checking">正在检查新数据包…</string>
+    <string name="enrich_pack_downloading">正在下载… %1$d%%</string>
+    <string name="enrich_pack_up_to_date">已是最新</string>
+    <string name="enrich_pack_updated">数据包已更新</string>
+    <string name="enrich_pack_error_url_missing">请先设置数据包 URL。</string>
+    <string name="enrich_pack_error_unreachable">无法下载数据包。请检查 URL 以及 Tailscale 是否已连接。</string>
+    <string name="enrich_pack_error_invalid">下载的数据包已损坏，请重试。</string>
+    <string name="enrich_pack_error_format">此数据包需要更新版本的应用。</string>
 </resources>

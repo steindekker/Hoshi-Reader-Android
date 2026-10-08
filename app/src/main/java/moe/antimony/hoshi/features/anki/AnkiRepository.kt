@@ -9,6 +9,7 @@ import javax.inject.Singleton
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.dictionary.DictionaryRepository
 import moe.antimony.hoshi.dictionary.DictionaryType
+import moe.antimony.hoshi.features.anki.enrich.AnkiFieldEnricher
 import moe.antimony.hoshi.features.audio.LocalAudioFile
 import moe.antimony.hoshi.features.audio.LocalAudioRepository
 import moe.antimony.hoshi.features.audio.LocalAudioResolver
@@ -33,6 +34,7 @@ internal class AnkiRepository(
     private val loadTermDictionaries: () -> List<AnkiTermDictionary>,
     private val liveMediaSource: AnkiLiveMediaSource,
     private val cardAddedEvents: AnkiCardAddedEvents,
+    private val ankiFieldEnricher: AnkiFieldEnricher = AnkiFieldEnricher.None,
 ) {
     @Inject
     constructor(
@@ -43,6 +45,7 @@ internal class AnkiRepository(
         dictionaryRepository: DictionaryRepository,
         liveMediaSource: AnkiLiveMediaSource,
         cardAddedEvents: AnkiCardAddedEvents,
+        ankiFieldEnricher: AnkiFieldEnricher,
     ) : this(
         context = context,
         backend = backend,
@@ -62,6 +65,7 @@ internal class AnkiRepository(
         },
         liveMediaSource = liveMediaSource,
         cardAddedEvents = cardAddedEvents,
+        ankiFieldEnricher = ankiFieldEnricher,
     )
 
     internal constructor(
@@ -236,6 +240,7 @@ internal class AnkiRepository(
         val fieldMappings = format.fieldMappings.activeAnkiFieldMappings(noteType)
         val payload = runCatching { AnkiMiningPayload.fromJson(rawPayload) }.getOrNull()
             ?: return@withContext notAdded
+        val enrichment = ankiFieldEnricher.enrich(payload.expression, payload.reading, fieldMappings.values + format.tags)
         // The merged {image} marker (plus the deprecated {book-cover}/{web-image} aliases) gates
         // the picked web image, the game screenshot, and the cover (in that precedence).
         val needsImage = fieldMappings.referencesAnkiHandlebar("{image}") ||
@@ -281,13 +286,14 @@ internal class AnkiRepository(
         val fields = fieldMappings.mapValues { (_, template) ->
             dictionaryMediaTags.entries.fold(
                 AnkiHandlebarRenderer.render(
-                    template = template,
+                    template = enrichment.protect(template),
                     payload = mediaPayload,
                     context = mediaContext,
                     selectedGlossaryFallback = settings.selectedGlossaryFallback,
                     termDictionaries = termDictionaries,
                 ),
             ) { value, (filename, tag) -> value.replace(filename, tag) }
+                .let(enrichment::fill)
                 .let(::normalizeAnkiDictionaryHtml)
         }.filterValues { it.isNotBlank() }
 
@@ -296,12 +302,12 @@ internal class AnkiRepository(
             noteType = noteType,
             fieldsByName = fields,
             tags = AnkiHandlebarRenderer.renderTags(
-                template = format.tags,
+                template = enrichment.protect(format.tags),
                 payload = mediaPayload,
                 context = mediaContext,
                 selectedGlossaryFallback = settings.selectedGlossaryFallback,
                 termDictionaries = termDictionaries,
-            ).split(Regex("\\s+")).filter { it.isNotBlank() }.toSet(),
+            ).let(enrichment::fill).split(Regex("\\s+")).filter { it.isNotBlank() }.toSet(),
             allowDupes = settings.allowDupes,
             duplicateScope = settings.duplicateScope,
             checkDuplicatesAcrossAllModels = settings.checkDuplicatesAcrossAllModels,
