@@ -89,7 +89,7 @@ internal fun sessionJson(
     append("}")
 }
 
-internal fun helloJson(vararg sessions: String, now: Long = 0, hostname: String = "steamdeck", protocol: Int = 2): String =
+internal fun helloJson(vararg sessions: String, now: Long = 0, hostname: String = "deck", protocol: Int = 2): String =
     """{"type":"hello","protocol":$protocol,"now":$now,"bridge":{"name":"hoshi-bridge","version":"0.2.0","protocol":$protocol,"hostname":"$hostname"},""" +
         """"sessions":[${sessions.joinToString(",")}]}"""
 

@@ -74,14 +74,14 @@ with Go 1.26+:
 make release          # dist/hoshi-bridge + dist/hoshi-bridge-<ver>-linux-amd64.tar.gz
 ```
 
-Copy it over and install (Tailscale MagicDNS name `steamdeck` shown; enable
+Copy it over and install (Tailscale MagicDNS name `deck` shown; enable
 SSH on the Deck first: Desktop Mode → `passwd`, then `sudo systemctl enable --now sshd`,
 or use Tailscale SSH):
 
 ```sh
-scp dist/hoshi-bridge-*-linux-amd64.tar.gz deck@steamdeck:/tmp/
-ssh deck@steamdeck 'cd /tmp && tar xzf hoshi-bridge-*-linux-amd64.tar.gz && ./hoshi-bridge-*-linux-amd64/install.sh'
-# or simply: make deploy DECK=deck@steamdeck
+scp dist/hoshi-bridge-*-linux-amd64.tar.gz deck@deck:/tmp/
+ssh deck@deck 'cd /tmp && tar xzf hoshi-bridge-*-linux-amd64.tar.gz && ./hoshi-bridge-*-linux-amd64/install.sh'
+# or simply: make deploy DECK=deck@deck
 ```
 
 Without SSH, copy the tarball any other way (USB stick, KDE Connect, a browser
@@ -90,7 +90,7 @@ download), then in Desktop Mode open Konsole, extract it and run `./install.sh`.
 `install.sh` puts the binary in `~/.local/bin/hoshi-bridge`, writes
 `~/.config/hoshi-bridge/config.json` if it does not exist, installs
 and starts the systemd **user** unit `~/.config/systemd/user/hoshi-bridge.service`.
-Upgrading from steamdeck-vn-extractor (the bridge's former name) removes the
+Upgrading from deck-vn-extractor (the bridge's former name) removes the
 old `vn-extractor` unit and migrates its config, keeping its data directory.
 Re-running it upgrades in place; `./install.sh --uninstall` removes it (config
 and log are kept).
@@ -111,7 +111,7 @@ hoshi-bridge -detect                       # which screenshot backends work righ
 hoshi-bridge -screenshot-test /tmp/t.jpg   # take one screenshot and report the backend
 ```
 
-Then add `steamdeck` (or the Deck's `100.x.y.z` Tailscale IP), port 7277,
+Then add `deck` (or the Deck's `100.x.y.z` Tailscale IP), port 7277,
 as a host under Settings > Live on the phone. Open the same URL in a browser for a live debug page.
 
 ## Use
@@ -119,7 +119,7 @@ as a host under Settings > Live on the phone. Open the same URL in a browser for
 1. Install once, as above. `install.sh` also downloads the pinned LunaHook
    DLLs (LunaTranslator v12.0.0) into
    `~/.local/share/hoshi-bridge/lunahook/`.
-2. On the phone, open Hoshi Reader's **Live** tab (host `steamdeck`, port
+2. On the phone, open Hoshi Reader's **Live** tab (host `deck`, port
    `7277`). Tailscale has to be connected on the phone and the Deck.
 3. Start the visual novel from Steam. The Deck attaches by itself a few
    seconds after the game process appears. Advance one line of dialogue and
@@ -130,7 +130,7 @@ as a host under Settings > Live on the phone. Open the same URL in a browser for
 There is no Textractor window, no Attach button, and no thread you have to
 pick. The daemon follows the thread that looks like dialogue and remembers
 that choice for the next session of the same executable. If it follows the
-wrong one, open `http://steamdeck:7277/` and press **use** on the right
+wrong one, open `http://deck:7277/` and press **use** on the right
 thread, or `POST /v2/hook/threads/select` (see [PROTOCOL.md](PROTOCOL.md)).
 **automatic** returns to scoring and forgets the pin.
 
@@ -356,14 +356,14 @@ and `GET /` (debug page with live sessions and media buttons).
 ### Quick test
 
 ```sh
-curl -s http://steamdeck:7277/v2/status | jq
-curl -s -X POST --data-binary 'テストです。' -H 'Content-Type: text/plain' http://steamdeck:7277/v2/ingest/lines
+curl -s http://deck:7277/v2/status | jq
+curl -s -X POST --data-binary 'テストです。' -H 'Content-Type: text/plain' http://deck:7277/v2/ingest/lines
 websocat 'ws://pc:7277/v2/ws'
 curl -s -X POST -d '{"cueId": 12}' -o line.mp3 http://pc:7277/v2/sessions/mpv/audio
 curl -s -X POST -d '{"cueId": 12}' -o line.webp http://pc:7277/v2/sessions/mpv/clip
 curl -s -X POST -d '{"action": "pause"}' http://pc:7277/v2/sessions/mpv/control
 # with a token:
-curl -H 'Authorization: Bearer SECRET' http://steamdeck:7277/v2/status
+curl -H 'Authorization: Bearer SECRET' http://deck:7277/v2/status
 ```
 
 ## Development

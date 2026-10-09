@@ -33,7 +33,7 @@ import org.junit.Test
 class LiveViewModelTest {
     private val transport = FakeLiveTransport()
     private val lookup = FakeLookupRepository()
-    private val settings = MutableStateFlow(LiveSettings(hosts = listOf(LiveHost("deck", "steamdeck"), LiveHost("pc", "pc"))))
+    private val settings = MutableStateFlow(LiveSettings(hosts = listOf(LiveHost("deck", "deck"), LiveHost("pc", "pc"))))
 
     private fun TestScope.viewModel(): LiveViewModel {
         val dispatcher = StandardTestDispatcher(testScheduler)
@@ -232,7 +232,7 @@ class LiveViewModelTest {
         receive("deck", helloJson(sessionJson("vn", "vn", listOf(vnCueJson(4, "「本を読む」")), capabilities = listOf("screenshot"))))
         tick()
         val context = viewModel.rootMiningContext()!!
-        assertEquals("steamdeck", context.documentTitle)
+        assertEquals("deck", context.documentTitle)
         assertEquals(AnkiScreenshotRequest(AnkiLiveCueRef("deck", "vn", "t1", 4)), context.screenshot)
         assertNull(context.sentenceAudio)
         assertNull(context.coverPath)

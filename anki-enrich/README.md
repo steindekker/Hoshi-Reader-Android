@@ -103,13 +103,13 @@ uv run pytest
 
 Create a **jidoujisho Kinomoto** note, then fill-missing enrich **that note only**.
 Shares the working collection with the normal enrich VAR
-(`ANKI_ENRICH_VAR`, default `<repo>/var`; on <host> use
+(`ANKI_ENRICH_VAR`, default `<repo>/var`; on box use
 `/opt/anki-enrich/data`).
 
 Dry-run (default) — preview fields, dedup, lock; no write/push:
 
 ```bash
-export ANKI_ENRICH_VAR=/opt/anki-enrich/data   # share live data on <host>
+export ANKI_ENRICH_VAR=/opt/anki-enrich/data   # share live data on box
 uv run anki-enrich add 食べる --reading たべる --sentence "寿司を食べる。"
 uv run anki-enrich add 朝顔 --reading あさがお --image /abs/path/to/shot.png
 ```

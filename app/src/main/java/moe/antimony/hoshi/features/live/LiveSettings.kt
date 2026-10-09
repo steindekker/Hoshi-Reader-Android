@@ -15,7 +15,7 @@ import kotlinx.serialization.Serializable
 import okhttp3.HttpUrl
 
 internal object LiveDefaults {
-    const val Host = "steamdeck"
+    const val Host = "deck"
     const val Port = 7277
     const val ScreenshotMaxWidth = 1280
     const val ScreenshotQuality = 85

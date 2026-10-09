@@ -1,7 +1,7 @@
 """Filesystem locations. Repo-root relative so `uv run` from the project works.
 
 Override the working data dir with ANKI_ENRICH_VAR (e.g. /opt/anki-enrich/data on
-<host>) so a source checkout shares the live collection/media/indexes/lock with
+box) so a source checkout shares the live collection/media/indexes/lock with
 the docker install — do not invent a second tree.
 """
 from __future__ import annotations

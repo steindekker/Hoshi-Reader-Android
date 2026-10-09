@@ -33,7 +33,7 @@ internal class TestLiveClock(private val scope: TestScope) : LiveClock {
 @OptIn(ExperimentalCoroutinesApi::class)
 class LiveRepositoryTest {
     private val transport = FakeLiveTransport()
-    private val deck = LiveHost("deck", "steamdeck")
+    private val deck = LiveHost("deck", "deck")
     private val pc = LiveHost("pc", "pc", token = "tok")
     private val settings = MutableStateFlow(LiveSettings(hosts = listOf(deck, pc)))
 

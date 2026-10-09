@@ -32,7 +32,7 @@ mpv offers all four; ingest sessions offer none.
 ## Transport
 
 - Plain HTTP + WebSocket on one port, default **7277**, bound to `0.0.0.0`
-  (reached over Tailscale, e.g. `http://steamdeck:7277`).
+  (reached over Tailscale, e.g. `http://deck:7277`).
 - All JSON is UTF-8. Timestamps (`at`, `activeAt`, `now`) are Unix epoch
   **milliseconds**; media positions (`startMs`, `positionMs`, …) are
   milliseconds from the start of the media.
@@ -95,7 +95,7 @@ time rather than `at` to avoid clock skew between machines).
   "name": "hoshi-bridge",
   "version": "0.2.0",
   "protocol": 2,
-  "hostname": "steamdeck",
+  "hostname": "deck",
   "sources": [
     {"id": "lunahook", "kind": "hook", "target": "LunaHook", "connected": true, "lastError": null},
     {"id": "mpv", "kind": "mpv", "target": "/tmp/mpvsocket", "connected": false, "lastError": "no socket"}

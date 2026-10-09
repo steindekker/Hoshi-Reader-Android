@@ -26,13 +26,13 @@ class LiveSettingsTest {
     val tempFolder = TemporaryFolder()
 
     @Test
-    fun defaultsToTheSteamDeckHost() = withRepository { repository, _ ->
+    fun defaultsToTheDeckHost() = withRepository { repository, _ ->
         val settings = repository.settings.first()
-        assertEquals(listOf("steamdeck"), settings.hosts.map { it.host })
+        assertEquals(listOf("deck"), settings.hosts.map { it.host })
         assertEquals(7277, settings.hosts.single().port)
         assertTrue(settings.autoPause)
         assertEquals(
-            "http://steamdeck:7277/v2/status",
+            "http://deck:7277/v2/status",
             settings.hosts.single().endpointOrNull()?.url("/v2/status").toString(),
         )
     }
@@ -79,7 +79,7 @@ class LiveSettingsTest {
 
     @Test
     fun validatesHostsPortsAndTokens() {
-        listOf("steamdeck", "deck.tail1234.ts.net", "100.101.102.103", "fd7a:115c:a1e0::1", "[fd7a:115c:a1e0::1]")
+        listOf("deck", "deck.tail1234.ts.net", "100.101.102.103", "fd7a:115c:a1e0::1", "[fd7a:115c:a1e0::1]")
             .forEach { assertNull(it, validateLiveHost(it)) }
         listOf("", "steam deck", "http://deck/x", "deck:7277", "user@deck", "deck/path", "deck?x")
             .forEach { assertEquals(it, LiveSettingsError.HostInvalid, validateLiveHost(it)) }
@@ -92,7 +92,7 @@ class LiveSettingsTest {
 
     @Test
     fun normalizesPastedUrlsAndIpv6Literals() {
-        assertEquals("steamdeck", normalizeLiveHost(" http://steamdeck/ "))
+        assertEquals("deck", normalizeLiveHost(" http://deck/ "))
         assertEquals("fd7a::1", normalizeLiveHost("[fd7a::1]"))
         assertEquals("[fd7a::1]:7277", LiveHost("x", "fd7a::1").displayAddress)
         assertEquals("http://[fd7a::1]:7277/v2/ws", LiveHost("x", "fd7a::1").endpointOrNull()?.url("/v2/ws").toString())
@@ -100,15 +100,15 @@ class LiveSettingsTest {
 
     @Test
     fun hostFormValidatesAndRejectsDuplicates() {
-        val saved = LiveSettings(hosts = listOf(LiveHost("deck", "steamdeck", 7277)))
+        val saved = LiveSettings(hosts = listOf(LiveHost("deck", "deck", 7277)))
         val adding = LiveSettingsUiState(loaded = true, saved = saved, form = LiveHostForm(host = "http://pc/"))
         assertTrue(adding.isFormValid)
         assertEquals("pc", adding.formHost()?.host)
-        val duplicate = adding.copy(form = LiveHostForm(host = "SteamDeck", port = "7277"))
+        val duplicate = adding.copy(form = LiveHostForm(host = "Deck", port = "7277"))
         assertEquals(LiveSettingsError.HostDuplicate, duplicate.hostError)
         assertNull(duplicate.formHost())
         // Editing a host may keep its own address.
-        val editing = adding.copy(form = LiveHostForm(editingId = "deck", host = "steamdeck", port = "7277"))
+        val editing = adding.copy(form = LiveHostForm(editingId = "deck", host = "deck", port = "7277"))
         assertNull(editing.hostError)
         assertEquals("deck", editing.formHost()?.id)
         assertEquals(LiveSettingsError.PortInvalid, adding.copy(form = LiveHostForm(host = "pc", port = "70000")).portError)

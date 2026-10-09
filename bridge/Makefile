@@ -3,8 +3,8 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo 0.2.
 LDFLAGS := -s -w -X main.version=$(VERSION)
 DIST    := dist
 PKG     := hoshi-bridge-$(VERSION)-linux-amd64
-# For `make deploy`: ssh destination of the Deck, e.g. deck@steamdeck (Tailscale MagicDNS name).
-DECK    ?= deck@steamdeck
+# For `make deploy`: ssh destination of the Deck, e.g. deck@deck (Tailscale MagicDNS name).
+DECK    ?= deck@deck
 
 .PHONY: all build test vet race release deploy install-pc clean
 

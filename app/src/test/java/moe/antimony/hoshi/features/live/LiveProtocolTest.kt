@@ -18,7 +18,7 @@ class LiveProtocolTest {
         ) as LiveSocketMessage.Hello
         assertEquals(2, hello.protocol)
         assertEquals(1234L, hello.now)
-        assertEquals("steamdeck", hello.bridge.hostname)
+        assertEquals("deck", hello.bridge.hostname)
         val (vn, video) = hello.sessions
         assertEquals(LiveSessionKind.Vn, vn.info.sessionKind)
         assertEquals(listOf(1L), vn.cues.map { it.id })
