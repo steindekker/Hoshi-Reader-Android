@@ -90,6 +90,24 @@ go vet ./... && go test ./...
   `SasayakiSubtitleExportTest` covers readable shared URIs, snapshot persistence,
   picker cancellation, and save failure recovery using test-owned cache files.
 
+## Local Emulator
+
+`tools/emulator.sh` drives a headless KVM emulator for agent testing. AVDs:
+`hoshi-api36` (default) and `hoshi-api28` (Android 9 path). It expects the SDK
+at `$ANDROID_HOME` (default `~/Android/Sdk`) with the packages installed by CI,
+plus `emulator` and the matching `system-images;android-{36,28};google_apis;x86_64`.
+
+```bash
+tools/emulator.sh start            # boot, wait, disable animations
+tools/emulator.sh install          # assembleDebug + adb install -r
+tools/emulator.sh launch
+tools/emulator.sh screenshot out.png
+tools/emulator.sh stop
+```
+
+Drive UI with `adb shell input` and inspect it with
+`adb exec-out uiautomator dump /dev/tty`.
+
 ## Live Tab
 
 - Bridge on the PC: build and install with `make install-pc` in `bridge/`, add
