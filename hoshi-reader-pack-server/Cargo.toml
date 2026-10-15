@@ -1,0 +1,9 @@
+[package]
+name = "hoshi-reader-pack-server"
+version = "0.1.0"
+edition = "2024"
+description = "Static file server for the Hoshi setup catalog, with Range resume"
+publish = false
+
+[dependencies]
+libc = "0.2"
