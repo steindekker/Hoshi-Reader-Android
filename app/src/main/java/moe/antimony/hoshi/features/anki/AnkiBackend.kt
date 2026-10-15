@@ -24,6 +24,36 @@ interface AnkiBackend {
         duplicateScope: AnkiDuplicateScope,
         checkDuplicatesAcrossAllModels: Boolean,
     ): Boolean
+
+    /**
+     * Adds the note and returns its id. `0` means the note was added but the backend did not
+     * report an id. `null` means it was not added. The default keeps fakes that only implement
+     * [addNote] working.
+     */
+    fun addNoteReturning(
+        deck: AnkiDeck,
+        noteType: AnkiNoteType,
+        fieldsByName: Map<String, String>,
+        tags: Set<String>,
+        allowDupes: Boolean,
+        duplicateScope: AnkiDuplicateScope,
+        checkDuplicatesAcrossAllModels: Boolean,
+    ): Long? = if (
+        addNote(
+            deck = deck,
+            noteType = noteType,
+            fieldsByName = fieldsByName,
+            tags = tags,
+            allowDupes = allowDupes,
+            duplicateScope = duplicateScope,
+            checkDuplicatesAcrossAllModels = checkDuplicatesAcrossAllModels,
+        )
+    ) {
+        0L
+    } else {
+        null
+    }
+
     fun addMediaFromUri(uriString: String, preferredName: String, mimeType: String): String?
     fun addMediaFromBytes(bytes: ByteArray, preferredName: String, mimeType: String): String? = null
     fun openNotes(
@@ -33,6 +63,19 @@ interface AnkiBackend {
         duplicateScope: AnkiDuplicateScope,
         checkDuplicatesAcrossAllModels: Boolean,
     ): Boolean = false
+
+    /** Opens the card browser on one note. `false` when this backend cannot address a note by id. */
+    fun openNote(noteId: Long): Boolean = false
+
+    /** First note id matching the duplicate key, or null when this backend cannot resolve one. */
+    fun findNoteId(
+        deck: AnkiDeck,
+        noteType: AnkiNoteType,
+        key: String,
+        duplicateScope: AnkiDuplicateScope,
+        checkDuplicatesAcrossAllModels: Boolean,
+    ): Long? = null
+
     fun sync(): Boolean = false
 }
 
@@ -83,6 +126,16 @@ interface AnkiContentApi {
         duplicateScope: AnkiDuplicateScope,
         checkAllModels: Boolean,
     ): Boolean
+
+    /** First matching note id, or null. Default keeps test fakes that only report a boolean. */
+    fun findNoteId(
+        deck: AnkiDeck,
+        modelId: Long,
+        key: String,
+        duplicateScope: AnkiDuplicateScope,
+        checkAllModels: Boolean,
+    ): Long? = null
+
     fun addNote(modelId: Long, deckId: Long, fields: Array<String>, tags: Set<String>): Long?
     fun addMediaFromUri(uriString: String, preferredName: String, mimeType: String): String? = null
     fun openNotes(query: String): Boolean = false
@@ -152,7 +205,25 @@ class AnkiDroidBackendAdapter @Inject constructor(
         allowDupes: Boolean,
         duplicateScope: AnkiDuplicateScope,
         checkDuplicatesAcrossAllModels: Boolean,
-    ): Boolean {
+    ): Boolean = addNoteReturning(
+        deck = deck,
+        noteType = noteType,
+        fieldsByName = fieldsByName,
+        tags = tags,
+        allowDupes = allowDupes,
+        duplicateScope = duplicateScope,
+        checkDuplicatesAcrossAllModels = checkDuplicatesAcrossAllModels,
+    ) != null
+
+    override fun addNoteReturning(
+        deck: AnkiDeck,
+        noteType: AnkiNoteType,
+        fieldsByName: Map<String, String>,
+        tags: Set<String>,
+        allowDupes: Boolean,
+        duplicateScope: AnkiDuplicateScope,
+        checkDuplicatesAcrossAllModels: Boolean,
+    ): Long? {
         val duplicateKey = noteType.fields.firstOrNull()?.let(fieldsByName::get).orEmpty()
         if (
             !allowDupes &&
@@ -163,14 +234,14 @@ class AnkiDroidBackendAdapter @Inject constructor(
                 duplicateScope = duplicateScope,
                 checkDuplicatesAcrossAllModels = checkDuplicatesAcrossAllModels,
             )
-        ) return false
+        ) return null
         val fields = noteType.fields.map { fieldsByName[it].orEmpty() }.toTypedArray()
         return api.addNote(
             modelId = noteType.id,
             deckId = deck.id,
             fields = fields,
             tags = tags,
-        ) != null
+        )
     }
 
     override fun addMediaFromUri(uriString: String, preferredName: String, mimeType: String): String? =
@@ -191,6 +262,28 @@ class AnkiDroidBackendAdapter @Inject constructor(
             checkAllModels = checkDuplicatesAcrossAllModels,
         ),
     )
+
+    override fun openNote(noteId: Long): Boolean {
+        if (noteId <= 0L) return false
+        return api.openNotes("nid:$noteId")
+    }
+
+    override fun findNoteId(
+        deck: AnkiDeck,
+        noteType: AnkiNoteType,
+        key: String,
+        duplicateScope: AnkiDuplicateScope,
+        checkDuplicatesAcrossAllModels: Boolean,
+    ): Long? {
+        if (key.isBlank()) return null
+        return api.findNoteId(
+            deck = deck,
+            modelId = noteType.id,
+            key = key,
+            duplicateScope = duplicateScope,
+            checkAllModels = checkDuplicatesAcrossAllModels,
+        )
+    }
 
     override fun sync(): Boolean = api.sync()
 }

@@ -37,8 +37,9 @@ interface AnkiLiveMediaSource {
     suspend fun fetchSentenceAudio(cue: AnkiLiveCueRef): AnkiLiveMediaResult
 }
 
-/** The outcome of a mine: whether the note was added plus non-blocking media warnings. */
+/** The outcome of a mine: whether the note was added, its id when the backend returned one, plus non-blocking media warnings. */
 data class AnkiMineResult(
     val added: Boolean,
+    val noteId: Long? = null,
     val warnings: List<UiText> = emptyList(),
 )

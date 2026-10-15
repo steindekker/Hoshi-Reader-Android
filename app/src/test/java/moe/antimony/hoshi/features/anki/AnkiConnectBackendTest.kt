@@ -256,6 +256,62 @@ class AnkiConnectBackendTest {
     }
 
     @Test
+    fun addNoteReturningReadsTheCreatedNoteId() {
+        val transport = FakeAnkiConnectTransport("""{"result":123,"error":null}""")
+        val backend = AnkiConnectBackend("https://anki.example.com", transport)
+
+        assertEquals(
+            123L,
+            backend.addNoteReturning(
+                deck = AnkiDeck(id = 1L, name = "Mining"),
+                noteType = AnkiNoteType(id = 2L, name = "Basic", fields = listOf("Front")),
+                fieldsByName = mapOf("Front" to "食べる"),
+                tags = emptySet(),
+                allowDupes = false,
+                duplicateScope = AnkiDuplicateScope.Collection,
+                checkDuplicatesAcrossAllModels = false,
+            ),
+        )
+    }
+
+    @Test
+    fun openNoteBrowsesByNoteId() {
+        val transport = FakeAnkiConnectTransport("""{"result":[],"error":null}""")
+        val backend = AnkiConnectBackend("https://anki.example.com", transport)
+
+        assertTrue(backend.openNote(123L))
+        assertFalse(backend.openNote(0L))
+
+        assertEquals("guiBrowse", transport.actions.single())
+        assertEquals(
+            "nid:123",
+            transport.lastBody().getValue("params").jsonObject.getValue("query").jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun findNoteIdUsesTheFirstFieldBrowserQuery() {
+        val transport = FakeAnkiConnectTransport("""{"result":[88],"error":null}""")
+        val backend = AnkiConnectBackend("https://anki.example.com", transport)
+
+        assertEquals(
+            88L,
+            backend.findNoteId(
+                deck = AnkiDeck(1L, "Mining::Light Novel"),
+                noteType = AnkiNoteType(2L, "Lapis", listOf("Expression")),
+                key = "食べる",
+                duplicateScope = AnkiDuplicateScope.DeckRoot,
+                checkDuplicatesAcrossAllModels = false,
+            ),
+        )
+        assertEquals("findNotes", transport.actions.single())
+        assertEquals(
+            "\"Expression:食べる\" \"note:Lapis\" \"deck:Mining\"",
+            transport.lastBody().getValue("params").jsonObject.getValue("query").jsonPrimitive.content,
+        )
+    }
+
+    @Test
     fun ankiConnectErrorBecomesFetchExceptionMessage() {
         val transport = FakeAnkiConnectTransport("""{"result":null,"error":"permission denied"}""")
         val backend = AnkiConnectBackend("https://anki.example.com", transport)

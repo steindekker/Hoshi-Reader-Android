@@ -9,6 +9,11 @@ Historical release notes before v1.3.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 ### Added
 
 - On first launch, approve one download to install 三省堂, 実用, JMdict, NHK pitch, JPDB frequency, KANJIDIC, and the sentence-markup model from the tailnet host `box`. The Mining card is then mapped for `{ae-definition}`, `{ae-definition-source}`, `{ae-pitch}`, `{ae-frequency}`, `{ae-examples}`, `{ae-tags}`, and `{ae-sentence}` without a separate enrichment-pack setup. When the catalog includes term audio, an optional checkbox adds that larger download.
+- After a card is added, the notes button on that entry opens the new card in AnkiDroid.
+
+### Fixed
+
+- The add-card button in the dictionary popup stays tappable. A tap that does not add a card, or a duplicate check that does not finish, no longer leaves the button dead, and a tap still adds a card when the click does not arrive.
 
 ## [v1.5.0] - 2026-10-15
 

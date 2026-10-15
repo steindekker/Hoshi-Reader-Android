@@ -819,8 +819,8 @@ fun ReaderWebView(
                         sasayakiAudioPath = sasayakiPlayer?.exportCueAudio(cue, popup.state.selection.sentence)?.absolutePath,
                     )
                 } ?: popup.state.ankiContext
-                ankiViewModel.mineEntryAsync(message.formatId, message.payloadJson, ankiContext) { mined ->
-                    replyReaderPopupMessage(message.popupId, messageId, mined.toString())
+                ankiViewModel.mineEntryWithResultAsync(message.formatId, message.payloadJson, ankiContext) { result ->
+                    replyReaderPopupMessage(message.popupId, messageId, readerPopupMineReplyJson(result))
                 }
             }
             is ReaderLookupPopupBridgeMessage.MineWithOptions -> {
@@ -845,6 +845,7 @@ fun ReaderWebView(
                         payloadJson = message.payloadJson,
                         baseContext = baseContext,
                         term = term,
+                        formatId = message.formatId,
                     ),
                 )
             }
@@ -854,7 +855,7 @@ fun ReaderWebView(
                 }
             }
             is ReaderLookupPopupBridgeMessage.ShowNotes -> {
-                ankiViewModel.showNotesAsync(message.formatId, message.valuesByHandlebar) { shown ->
+                ankiViewModel.showNotesAsync(message.formatId, message.valuesByHandlebar, message.noteId) { shown ->
                     replyReaderPopupMessage(message.popupId, message.messageId ?: return@showNotesAsync, shown.toString())
                 }
             }
@@ -2124,7 +2125,9 @@ fun ReaderWebView(
         }
         MineWithOptionsSheetHost(
             request = stateHolder.mineWithOptionsRequest,
-            mine = ankiViewModel::mineEntryAsync,
+            mine = { formatId, payloadJson, miningContext, onResult ->
+                ankiViewModel.mineEntryWithResultAsync(formatId, payloadJson, miningContext, onResult)
+            },
             reply = ::replyReaderPopupMessage,
             onClose = stateHolder::dismissMineWithOptions,
             sentenceMode = MineSentenceMode.InBookSentence,

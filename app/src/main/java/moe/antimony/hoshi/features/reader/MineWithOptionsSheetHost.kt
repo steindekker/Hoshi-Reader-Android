@@ -1,6 +1,7 @@
 package moe.antimony.hoshi.features.reader
 
 import androidx.compose.runtime.Composable
+import moe.antimony.hoshi.features.anki.AnkiMineResult
 import moe.antimony.hoshi.features.anki.AnkiMiningContext
 import moe.antimony.hoshi.features.anki.AnkiMiningPayload
 import moe.antimony.hoshi.features.anki.ExampleSentence
@@ -11,6 +12,7 @@ internal data class MineWithOptionsRequest(
     val payloadJson: String,
     val baseContext: AnkiMiningContext,
     val term: String,
+    val formatId: String? = null,
 )
 
 /** Which leading options the sheet shows (the term is always present). */
@@ -75,13 +77,18 @@ internal fun augmentedMiningContext(
  * Mounts [MineWithOptionsSheet] for [request] and routes its result. Reused by the
  * reader, dictionary tab, and process-text surfaces — each supplies how to mine
  * ([mine]) and how to reply to the popup bridge ([reply]); [onClose] clears the
- * request state. The iframe promise is always answered (mined boolean on Add,
+ * request state. The iframe promise is always answered (mine result on Add,
  * false on Cancel).
  */
 @Composable
 internal fun MineWithOptionsSheetHost(
     request: MineWithOptionsRequest?,
-    mine: (payloadJson: String, context: AnkiMiningContext, onResult: (Boolean) -> Unit) -> Unit,
+    mine: (
+        formatId: String?,
+        payloadJson: String,
+        context: AnkiMiningContext,
+        onResult: (AnkiMineResult) -> Unit,
+    ) -> Unit,
     reply: (popupId: String, messageId: String, body: String) -> Unit,
     onClose: () -> Unit,
     sentenceMode: MineSentenceMode,
@@ -99,8 +106,8 @@ internal fun MineWithOptionsSheetHost(
         bookCoverPath = req.baseContext.coverPath,
         screenshot = screenshotPreview?.takeIf { req.baseContext.screenshot != null },
         onConfirm = { picked, image ->
-            mine(req.payloadJson, augmentedMiningContext(req.baseContext, picked, image)) { mined ->
-                reply(req.popupId, req.messageId, mined.toString())
+            mine(req.formatId, req.payloadJson, augmentedMiningContext(req.baseContext, picked, image)) { result ->
+                reply(req.popupId, req.messageId, readerPopupMineReplyJson(result))
             }
             onClose()
         },

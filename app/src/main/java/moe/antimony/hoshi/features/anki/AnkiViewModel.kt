@@ -392,19 +392,37 @@ internal class AnkiViewModel @Inject constructor(
         viewModelScope.launch { repository.updateSettings { it.copy(showAllHandlebars = value) } }
     }
 
-    fun mineEntryAsync(formatId: String?, rawPayload: String, context: AnkiMiningContext, onResult: (Boolean) -> Unit) {
+    fun mineEntryWithResultAsync(
+        formatId: String?,
+        rawPayload: String,
+        context: AnkiMiningContext,
+        onResult: (AnkiMineResult) -> Unit,
+    ) = mineEntryWithResultAsync(formatId, rawPayload, context, onWarning = {}, onResult = onResult)
+
+    fun mineEntryWithResultAsync(
+        formatId: String?,
+        rawPayload: String,
+        context: AnkiMiningContext,
+        onWarning: (UiText) -> Unit,
+        onResult: (AnkiMineResult) -> Unit,
+    ) {
         viewModelScope.launch {
-            val mined = runCatching {
-                repository.mineEntry(
+            val result = runCatching {
+                repository.mineEntryWithResult(
                     rawPayload = rawPayload,
                     context = context,
                     decks = _uiState.value.availableDecks,
                     noteTypes = _uiState.value.availableNoteTypes,
                     formatId = formatId,
                 )
-            }.getOrDefault(false)
-            onResult(mined)
+            }.getOrDefault(AnkiMineResult(added = false))
+            onResult(result)
+            result.warnings.forEach(onWarning)
         }
+    }
+
+    fun mineEntryAsync(formatId: String?, rawPayload: String, context: AnkiMiningContext, onResult: (Boolean) -> Unit) {
+        mineEntryWithResultAsync(formatId, rawPayload, context) { onResult(it.added) }
     }
 
     fun mineEntryAsync(rawPayload: String, context: AnkiMiningContext, onResult: (Boolean) -> Unit) =
@@ -418,19 +436,7 @@ internal class AnkiViewModel @Inject constructor(
         onWarning: (UiText) -> Unit,
         onResult: (Boolean) -> Unit,
     ) {
-        viewModelScope.launch {
-            val result = runCatching {
-                repository.mineEntryWithResult(
-                    rawPayload = rawPayload,
-                    context = context,
-                    decks = _uiState.value.availableDecks,
-                    noteTypes = _uiState.value.availableNoteTypes,
-                    formatId = formatId,
-                )
-            }.getOrDefault(AnkiMineResult(added = false))
-            onResult(result.added)
-            result.warnings.forEach(onWarning)
-        }
+        mineEntryWithResultAsync(formatId, rawPayload, context, onWarning) { onResult(it.added) }
     }
 
     fun duplicateStatesAsync(valuesByHandlebar: Map<String, String>, onResult: (Map<String, Boolean>) -> Unit) {
@@ -441,10 +447,21 @@ internal class AnkiViewModel @Inject constructor(
         }
     }
 
-    fun showNotesAsync(formatId: String, valuesByHandlebar: Map<String, String>, onResult: (Boolean) -> Unit) {
+    fun showNotesAsync(
+        formatId: String,
+        valuesByHandlebar: Map<String, String>,
+        noteId: Long? = null,
+        onResult: (Boolean) -> Unit,
+    ) {
         viewModelScope.launch {
             onResult(runCatching {
-                repository.showNotes(formatId, valuesByHandlebar, _uiState.value.availableDecks, _uiState.value.availableNoteTypes)
+                repository.showNotes(
+                    formatId,
+                    valuesByHandlebar,
+                    _uiState.value.availableDecks,
+                    _uiState.value.availableNoteTypes,
+                    noteId,
+                )
             }.getOrDefault(false))
         }
     }

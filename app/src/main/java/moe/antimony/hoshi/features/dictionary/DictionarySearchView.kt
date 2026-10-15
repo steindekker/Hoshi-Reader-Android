@@ -93,6 +93,7 @@ import moe.antimony.hoshi.features.reader.ReaderLookupPopupBridgeCallbackHolder
 import moe.antimony.hoshi.features.reader.ReaderLookupPopupBridgeCallbacks
 import moe.antimony.hoshi.features.reader.ReaderLookupPopupBridgeMessage
 import moe.antimony.hoshi.features.reader.readerPopupBooleanMapJson
+import moe.antimony.hoshi.features.reader.readerPopupMineReplyJson
 import moe.antimony.hoshi.features.reader.ReaderLookupPopupFramePayload
 import moe.antimony.hoshi.features.reader.ReaderLookupPopupIframeSync
 import moe.antimony.hoshi.features.reader.ReaderLookupPopupResourceHandler
@@ -496,8 +497,8 @@ internal fun DictionarySearchView(
                 } else {
                     popupById(message.popupId)?.state?.ankiContext ?: return
                 }
-                ankiViewModel.mineEntryAsync(message.formatId, message.payloadJson, miningContext) { mined ->
-                    replyIframeMessage(message.popupId, messageId, mined.toString())
+                ankiViewModel.mineEntryWithResultAsync(message.formatId, message.payloadJson, miningContext) { result ->
+                    replyIframeMessage(message.popupId, messageId, readerPopupMineReplyJson(result))
                 }
             }
             is ReaderLookupPopupBridgeMessage.MineWithOptions -> {
@@ -519,6 +520,7 @@ internal fun DictionarySearchView(
                     payloadJson = message.payloadJson,
                     baseContext = baseContext,
                     term = term,
+                    formatId = message.formatId,
                 )
             }
             is ReaderLookupPopupBridgeMessage.DuplicateCheck -> {
@@ -529,7 +531,7 @@ internal fun DictionarySearchView(
             }
             is ReaderLookupPopupBridgeMessage.ShowNotes -> {
                 val messageId = message.messageId ?: return
-                ankiViewModel.showNotesAsync(message.formatId, message.valuesByHandlebar) { shown ->
+                ankiViewModel.showNotesAsync(message.formatId, message.valuesByHandlebar, message.noteId) { shown ->
                     replyIframeMessage(message.popupId, messageId, shown.toString())
                 }
             }
@@ -764,7 +766,9 @@ internal fun DictionarySearchView(
         )
         MineWithOptionsSheetHost(
             request = mineWithOptionsRequest,
-            mine = ankiViewModel::mineEntryAsync,
+            mine = { formatId, payloadJson, miningContext, onResult ->
+                ankiViewModel.mineEntryWithResultAsync(formatId, payloadJson, miningContext, onResult)
+            },
             reply = ::replyIframeMessage,
             onClose = { mineWithOptionsRequest = null },
             sentenceMode = MineSentenceMode.Term,

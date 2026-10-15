@@ -297,7 +297,7 @@ internal class AnkiRepository(
                 .let(::normalizeAnkiDictionaryHtml)
         }.filterValues { it.isNotBlank() }
 
-        val added = activeBackend.addNote(
+        val noteId = activeBackend.addNoteReturning(
             deck = deck,
             noteType = noteType,
             fieldsByName = fields,
@@ -312,6 +312,7 @@ internal class AnkiRepository(
             duplicateScope = settings.duplicateScope,
             checkDuplicatesAcrossAllModels = settings.checkDuplicatesAcrossAllModels,
         )
+        val added = noteId != null
         if (added) {
             cardAddedEvents.publish(AnkiCardAdded(payload.expression))
             when (settings.backendKind) {
@@ -321,6 +322,7 @@ internal class AnkiRepository(
         }
         AnkiMineResult(
             added = added,
+            noteId = noteId?.takeIf { it > 0L },
             warnings = listOfNotNull(screenshot?.warning, sentenceAudio?.warning).takeIf { added }.orEmpty(),
         )
     }
@@ -440,11 +442,13 @@ internal class AnkiRepository(
         valuesByHandlebar: Map<String, String>,
         decks: List<AnkiDeck>,
         noteTypes: List<AnkiNoteType>,
+        noteId: Long? = null,
     ): Boolean = withContext(Dispatchers.IO) {
         val settings = settings.first()
         val format = settings.resolveAnkiCardFormat(formatId) ?: return@withContext false
         val activeBackend = activeBackendOrError(settings).getOrElse { return@withContext false }
         if (!activeBackend.isAvailable()) return@withContext false
+        if (noteId != null && noteId > 0L && activeBackend.openNote(noteId)) return@withContext true
         val availableDecks = decks.ifEmpty { activeBackend.fetchDecks() }
         val availableNoteTypes = noteTypes.ifEmpty { activeBackend.fetchNoteTypes() }
         val deck = availableDecks.firstOrNull { it.id == format.selectedDeckId }
@@ -457,6 +461,16 @@ internal class AnkiRepository(
         val handlebar = format.fieldMappings[firstField] ?: return@withContext false
         val key = valuesByHandlebar[handlebar].orEmpty()
         if (key.isBlank()) return@withContext false
+        val resolvedNoteId = activeBackend.findNoteId(
+            deck = deck,
+            noteType = noteType,
+            key = key,
+            duplicateScope = settings.duplicateScope,
+            checkDuplicatesAcrossAllModels = settings.checkDuplicatesAcrossAllModels,
+        )
+        if (resolvedNoteId != null && resolvedNoteId > 0L && activeBackend.openNote(resolvedNoteId)) {
+            return@withContext true
+        }
         activeBackend.openNotes(
             deck = deck,
             noteType = noteType,

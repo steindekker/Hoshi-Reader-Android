@@ -45,10 +45,24 @@ class AndroidAnkiContentApi @Inject constructor(
         key: String,
         duplicateScope: AnkiDuplicateScope,
         checkAllModels: Boolean,
-    ): Boolean {
-        if (key.isBlank()) return false
+    ): Boolean = findNoteId(
+        deck = deck,
+        modelId = modelId,
+        key = key,
+        duplicateScope = duplicateScope,
+        checkAllModels = checkAllModels,
+    ) != null
+
+    override fun findNoteId(
+        deck: AnkiDeck,
+        modelId: Long,
+        key: String,
+        duplicateScope: AnkiDuplicateScope,
+        checkAllModels: Boolean,
+    ): Long? {
+        if (key.isBlank()) return null
         val checksum = ankiFirstFieldChecksum(key)
-        if (checksum == 0L) return false
+        if (checksum == 0L) return null
         val scopeDeckIds = ankiDuplicateScopeDeckIds(
             decksById = deckList(),
             selectedDeck = deck,
@@ -64,16 +78,17 @@ class AndroidAnkiContentApi @Inject constructor(
             ),
             null,
             null,
-        ) ?: return false
+        ) ?: return null
 
         cursor.use {
             while (it.moveToNext()) {
-                if (duplicateScope == AnkiDuplicateScope.Collection) return true
                 val noteId = it.getLong(it.getColumnIndexOrThrow(FlashCardsContract.Note._ID))
-                if (noteHasCardInDeck(noteId, scopeDeckIds)) return true
+                if (duplicateScope == AnkiDuplicateScope.Collection || noteHasCardInDeck(noteId, scopeDeckIds)) {
+                    return noteId
+                }
             }
         }
-        return false
+        return null
     }
 
     override fun addNote(

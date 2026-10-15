@@ -162,6 +162,18 @@ class ReaderLookupPopupBridgeMessageTest {
             ),
         )
         assertEquals(
+            ReaderLookupPopupBridgeMessage.ShowNotes(
+                popupId = "child",
+                messageId = "47",
+                formatId = "format-a",
+                valuesByHandlebar = mapOf("{expression}" to "猫"),
+                noteId = 42L,
+            ),
+            ReaderLookupPopupBridgeMessage.fromJson(
+                """{"name":"showNotes","id":"47","popupId":"child","body":{"formatId":"format-a","values":{"{expression}":"猫"},"noteId":42}}""",
+            ),
+        )
+        assertEquals(
             ReaderLookupPopupBridgeMessage.ScrollState(
                 popupId = "root",
                 messageId = null,

@@ -17,6 +17,8 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.longOrNull
+import moe.antimony.hoshi.features.anki.AnkiMineResult
 import moe.antimony.hoshi.features.audio.AudioPlaybackMode
 import moe.antimony.hoshi.features.audio.AudioRequestHandler
 import moe.antimony.hoshi.features.dictionary.DictionaryImageRequestHandler
@@ -244,6 +246,7 @@ internal sealed class ReaderLookupPopupBridgeMessage {
         override val popupId: String,
         override val messageId: String?,
         val payloadJson: String,
+        val formatId: String? = null,
     ) : ReaderLookupPopupBridgeMessage()
 
     data class DuplicateCheck(
@@ -257,6 +260,7 @@ internal sealed class ReaderLookupPopupBridgeMessage {
         override val messageId: String?,
         val formatId: String,
         val valuesByHandlebar: Map<String, String>,
+        val noteId: Long? = null,
     ) : ReaderLookupPopupBridgeMessage()
 
     data class LookupRedirect(
@@ -367,11 +371,15 @@ internal sealed class ReaderLookupPopupBridgeMessage {
                         payloadJson = body["payload"]?.takeIf { it !is JsonNull }?.toString() ?: return null,
                     )
                 }
-                "mineWithOptions" -> MineWithOptions(
-                    popupId = popupId,
-                    messageId = messageId ?: return null,
-                    payloadJson = payload["body"]?.takeIf { it !is JsonNull }?.toString() ?: return null,
-                )
+                "mineWithOptions" -> {
+                    val body = payload["body"]?.takeIf { it !is JsonNull } ?: return null
+                    MineWithOptions(
+                        popupId = popupId,
+                        messageId = messageId ?: return null,
+                        payloadJson = body.toString(),
+                        formatId = (body as? JsonObject)?.string("formatId"),
+                    )
+                }
                 "duplicateCheck" -> DuplicateCheck(
                     popupId = popupId,
                     messageId = messageId ?: return null,
@@ -384,6 +392,7 @@ internal sealed class ReaderLookupPopupBridgeMessage {
                         messageId = messageId ?: return null,
                         formatId = body.string("formatId") ?: return null,
                         valuesByHandlebar = body.obj("values")?.stringMap() ?: return null,
+                        noteId = body.long("noteId")?.takeIf { it > 0L },
                     )
                 }
                 "lookupRedirect" -> LookupRedirect(
@@ -464,6 +473,11 @@ private fun JsonObject.int(name: String): Int? =
     (this[name] as? JsonPrimitive)
         ?.intOrNull
 
+private fun JsonObject.long(name: String): Long? {
+    val primitive = this[name] as? JsonPrimitive ?: return null
+    return primitive.longOrNull ?: primitive.contentOrNull?.toLongOrNull()
+}
+
 private fun JsonObject.double(name: String): Double? =
     (this[name] as? JsonPrimitive)
         ?.doubleOrNull
@@ -481,6 +495,13 @@ private val readerPopupJson = Json { encodeDefaults = true }
 
 internal fun readerPopupBooleanMapJson(values: Map<String, Boolean>): String =
     readerPopupJson.encodeToString(values)
+
+/** Popup mine replies stay booleans on failure and objects on success so older `true` mocks still work. */
+internal fun readerPopupMineReplyJson(result: AnkiMineResult): String {
+    if (!result.added) return "false"
+    val noteId = result.noteId?.takeIf { it > 0L } ?: return """{"added":true}"""
+    return """{"added":true,"noteId":$noteId}"""
+}
 
 private const val PopupIframeUrl = "https://appassets.androidplatform.net/popup/iframe.html"
 

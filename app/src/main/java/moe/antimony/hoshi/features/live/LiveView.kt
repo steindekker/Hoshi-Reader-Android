@@ -115,6 +115,7 @@ import moe.antimony.hoshi.features.reader.ReaderPopupHistoryCounts
 import moe.antimony.hoshi.features.reader.ReaderSettings
 import moe.antimony.hoshi.features.reader.readerLookupPopupIframeUrl
 import moe.antimony.hoshi.features.reader.readerPopupBooleanMapJson
+import moe.antimony.hoshi.features.reader.readerPopupMineReplyJson
 import moe.antimony.hoshi.ui.HoshiDropdownMenu as DropdownMenu
 import moe.antimony.hoshi.ui.UiText
 import moe.antimony.hoshi.ui.asString
@@ -364,20 +365,20 @@ internal fun LiveView(
                 val messageId = message.messageId ?: return
                 if (isRoot) {
                     val miningContext = viewModel.rootMiningContext() ?: return
-                    ankiViewModel.mineEntryAsync(
+                    ankiViewModel.mineEntryWithResultAsync(
                         formatId = message.formatId,
                         rawPayload = message.payloadJson,
                         context = miningContext,
                         onWarning = viewModel::showMessage,
-                    ) { mined ->
-                        replyIframeMessage(message.popupId, messageId, mined.toString())
-                        viewModel.onCardMined(mined)
+                    ) { result ->
+                        replyIframeMessage(message.popupId, messageId, readerPopupMineReplyJson(result))
+                        viewModel.onCardMined(result.added)
                     }
                 } else {
                     val miningContext = popupById(message.popupId)?.state?.ankiContext ?: return
-                    ankiViewModel.mineEntryAsync(message.formatId, message.payloadJson, miningContext) { mined ->
-                        replyIframeMessage(message.popupId, messageId, mined.toString())
-                        viewModel.onCardMined(mined)
+                    ankiViewModel.mineEntryWithResultAsync(message.formatId, message.payloadJson, miningContext) { result ->
+                        replyIframeMessage(message.popupId, messageId, readerPopupMineReplyJson(result))
+                        viewModel.onCardMined(result.added)
                     }
                 }
             }
@@ -396,6 +397,7 @@ internal fun LiveView(
                     payloadJson = message.payloadJson,
                     baseContext = baseContext,
                     term = term,
+                    formatId = message.formatId,
                 )
             }
             is ReaderLookupPopupBridgeMessage.DuplicateCheck -> {
@@ -406,7 +408,7 @@ internal fun LiveView(
             }
             is ReaderLookupPopupBridgeMessage.ShowNotes -> {
                 val messageId = message.messageId ?: return
-                ankiViewModel.showNotesAsync(message.formatId, message.valuesByHandlebar) { shown ->
+                ankiViewModel.showNotesAsync(message.formatId, message.valuesByHandlebar, message.noteId) { shown ->
                     replyIframeMessage(message.popupId, messageId, shown.toString())
                 }
             }
@@ -570,15 +572,15 @@ internal fun LiveView(
         }
         MineWithOptionsSheetHost(
             request = mineWithOptionsRequest,
-            mine = { payloadJson, miningContext, onResult ->
-                ankiViewModel.mineEntryAsync(
-                    formatId = null,
+            mine = { formatId, payloadJson, miningContext, onResult ->
+                ankiViewModel.mineEntryWithResultAsync(
+                    formatId = formatId,
                     rawPayload = payloadJson,
                     context = miningContext,
                     onWarning = viewModel::showMessage,
-                ) { mined ->
-                    onResult(mined)
-                    viewModel.onCardMined(mined)
+                ) { result ->
+                    onResult(result)
+                    viewModel.onCardMined(result.added)
                 }
             },
             reply = ::replyIframeMessage,
