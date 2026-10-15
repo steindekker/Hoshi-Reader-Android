@@ -6,6 +6,8 @@ Historical release notes before v1.3.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 
 ## [Unreleased]
 
+## [v1.5.0] - 2026-10-15
+
 ### Added
 
 - Add a Live tab for Japanese text streamed by hoshi-bridge from your own machines,
@@ -21,6 +23,8 @@ Historical release notes before v1.3.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
   web images take precedence). Adding a card from any tab pops up a small badge with the
   word and a count of cards added this session. `{sentence-audio}` also resolves to the Sasayaki cue audio
   in Reader and is the new default for SentenceAudio fields.
+- Fill Anki cards offline with the anki-enrich enrichment pack, so they are final the moment they are mined. Under Settings → Anki → Enrichment pack, set the pack URL (the server's `pack.json`) and tap Update; the pack downloads once, resumes if interrupted, and only downloads again when its content changes. Map `{ae-definition}`, `{ae-definition-source}`, `{ae-pitch}`, `{ae-examples}` and `{ae-frequency}` to fields and add `{ae-tags}` to the card tags (all listed under show all handlebars). A word missing from the pack keeps `{glossary-first}` as its definition.
+- Write JRP sentence markup (furigana and pitch-accent colouring) into the mining sentence offline with the new `{ae-sentence}` handlebar, so cards no longer wait for the nightly server pass. Update the enrichment pack once to download the sentence model (the Sudachi full dictionary, about 360 MB, plus accent data); it is only downloaded again when it changes. Without it, or if markup fails, `{ae-sentence}` holds the plain sentence.
 
 ## [v1.4.0] - 2026-09-24
 
@@ -269,10 +273,3 @@ Historical release notes before v1.3.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 - Add a "Mine with options" button to each dictionary entry — next to the existing one-tap "Add to Anki" — that opens a sheet to adjust a card before adding it. Available wherever lookups appear: the Dictionary tab, the in-book reader, and process-text lookup. One-tap "Add to Anki" is unchanged.
 - In that sheet, choose the card's Sentence from a list of Massif example sentences for the word, instead of the default in-book context line.
 - In that sheet, choose the card's Picture: none, the book cover (the default in the reader), or an image from a Bing search of the word shown as a thumbnail grid. The choice fills the Picture field through a single `{image}` marker (replacing the separate book-cover and web-image markers). Map Picture to `{image}` under Settings → Anki.
-
-## [Unreleased-fork]
-
-### Added
-
-- Fill Anki cards offline with the anki-enrich enrichment pack, so they are final the moment they are mined. Under Settings → Anki → Enrichment pack, set the pack URL (the server's `pack.json`) and tap Update; the pack downloads once, resumes if interrupted, and only downloads again when its content changes. Map `{ae-definition}`, `{ae-definition-source}`, `{ae-pitch}`, `{ae-examples}` and `{ae-frequency}` to fields and add `{ae-tags}` to the card tags (all listed under show all handlebars). A word missing from the pack keeps `{glossary-first}` as its definition.
-- Write JRP sentence markup (furigana and pitch-accent colouring) into the mining sentence offline with the new `{ae-sentence}` handlebar, so cards no longer wait for the nightly server pass. Update the enrichment pack once to download the sentence model (the Sudachi full dictionary, about 360 MB, plus accent data); it is only downloaded again when it changes. Without it, or if markup fails, `{ae-sentence}` holds the plain sentence.
