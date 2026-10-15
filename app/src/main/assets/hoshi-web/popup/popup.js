@@ -1260,7 +1260,11 @@ async function mineEntryWithOptions(entryIndex, buttonsContainer = null, formatI
     const phoneticTranscriptions = constructPhoneticTranscriptionsHtml(pitches);
 
     if (!audioUrls[idx] && window.audioSources?.length && window.needsAudio) {
-        audioUrls[idx] = await fetchAudioUrl(expression, reading || expression);
+        const selection = audioUrls;
+        const defaultUrl = (await fetchAudioList(idx, true))[0]?.url || null;
+        if (selection !== audioUrls) return false;
+        // A menu choice made during resolution takes priority over the default.
+        selection[idx] ||= defaultUrl;
     }
     const audio = audioUrls[idx] || '';
 

@@ -1313,6 +1313,22 @@ test('mine button pointerup opens options once when the click is dropped', async
     assert.equal(mineWithOptionsMessages[0].formatId, 'word');
 });
 
+test('mine with options resolves card audio before the first audio playback', async () => {
+    const { context, mineWithOptionsMessages } = popupContext({
+        fetchImpl: async () => ({
+            json: async () => ({ type: 'audioSourceList', audioSources: [{ name: 'Voice', url: 'voice.mp3' }] }),
+        }),
+    });
+    context.window.needsAudio = true;
+    context.window.audioSources = [{ name: 'Remote', url: 'remote://?term={term}&reading={reading}' }];
+    context.window.lookupEntries = [{ expression: '猫', reading: 'ねこ', glossaries: [] }];
+
+    await context.mineEntryWithOptions(0, null, 'word');
+
+    assert.equal(mineWithOptionsMessages.length, 1);
+    assert.equal(mineWithOptionsMessages[0].audio, 'voice.mp3');
+});
+
 test('failed direct add re-enables every format button', async () => {
     const { context } = popupContext();
     context.webkit.messageHandlers.mineEntry.postMessage = () => false;
