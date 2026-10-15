@@ -41,6 +41,14 @@ source index is newer. To push a changed source over every existing card, rebuil
 its index and run `anki-enrich --apply --overwrite-fields`. The sentence passes
 (JRP markup, cloze resync) and audio levelling still run here nightly.
 
+The same build publishes a separately versioned **sentence model** next to the
+pack — the accent index as SQLite (`jrp-accent.sqlite`, ~33 MB) and the Sudachi
+full dictionary (`sudachi-system.dic`, ~360 MB) — listed under `"sentence"` in
+`pack.json`. With it the app fills `{ae-sentence}` with the JRP-marked-up mining
+sentence offline, so new cards arrive with sentence markup; the nightly sentence
+pass remains for older cards and `--overwrite-sentences` reruns. Format:
+`ankienrich/sentence_model.py`.
+
 ## Setup
 
 Requires Python ≥ 3.11 and [`uv`](https://docs.astral.sh/uv/).

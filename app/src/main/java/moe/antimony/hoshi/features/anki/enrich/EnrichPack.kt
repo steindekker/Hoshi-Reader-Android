@@ -14,6 +14,7 @@ import kotlinx.serialization.json.Json
 internal object EnrichPackFormat {
     const val VERSION = 1
     const val FILE_NAME = "hoshi-pack.sqlite"
+    const val DIRECTORY = "enrich"
 
     val json = Json { ignoreUnknownKeys = true }
 
@@ -79,4 +80,30 @@ internal data class EnrichPackManifest(
     val size: Long,
     val sha256: String,
     val entries: Int = 0,
+    /** The separately versioned sentence model for `{ae-sentence}`; absent on older servers. */
+    val sentence: SentenceModelManifest? = null,
+)
+
+@Serializable
+internal data class SentenceModelManifest(
+    val format: Int,
+    val accent: EnrichFileManifest? = null,
+    val dictionary: EnrichFileManifest? = null,
+) {
+    fun parts(): List<Pair<SentenceModelPart, EnrichFileManifest>>? {
+        if (format != VERSION) return null
+        return listOf(SentenceModelPart.Accent to (accent ?: return null), SentenceModelPart.Dictionary to (dictionary ?: return null))
+    }
+
+    companion object {
+        const val VERSION = 1
+    }
+}
+
+@Serializable
+internal data class EnrichFileManifest(
+    val file: String,
+    val version: String,
+    val size: Long,
+    val sha256: String,
 )

@@ -44,7 +44,7 @@ class AnkiEnrichMiningTest {
     @Test
     fun minedKinomotoCardCarriesPackValuesVerbatim() = runBlocking {
         val backend = RecordingBackend()
-        val repository = repository(backend) { expression, reading, _ -> pack.lookup(expression, reading) }
+        val repository = repository(backend) { expression, reading, _, _ -> pack.lookup(expression, reading) }
 
         assertTrue(repository.mineEntry(
             rawPayload = """{"expression":"逃れる","reading":"のがれる","glossaryFirst":"mined"}""",
@@ -63,7 +63,7 @@ class AnkiEnrichMiningTest {
     @Test
     fun termMissingFromPackFallsBackToRenderedDefault() = runBlocking {
         val backend = RecordingBackend()
-        val repository = repository(backend) { expression, reading, _ -> pack.lookup(expression, reading) }
+        val repository = repository(backend) { expression, reading, _, _ -> pack.lookup(expression, reading) }
 
         assertTrue(repository.mineEntry(
             rawPayload = """{"expression":"ぴえん","reading":"ぴえん","glossaryFirst":"crying face"}""",
@@ -75,6 +75,24 @@ class AnkiEnrichMiningTest {
         assertEquals("crying face", backend.lastFields["Meaning"])
         assertEquals(null, backend.lastFields["Pitch Accent"])
         assertEquals(setOf("hoshi"), backend.lastTags)
+    }
+
+    @Test
+    fun sentenceHandlebarGetsTheEnrichersMarkupOfTheMiningSentence() = runBlocking {
+        val backend = RecordingBackend()
+        val repository = repository(backend) { expression, reading, sentence, _ ->
+            pack.lookup(expression, reading).with("ae-sentence", "{[難|なん];1}を{[逃|のが]れる;3}。|$sentence")
+        }
+
+        assertTrue(repository.mineEntry(
+            rawPayload = """{"expression":"逃れる","reading":"のがれる","matched":"逃れる"}""",
+            context = AnkiMiningContext(sentence = "難を逃れる。"),
+            decks = emptyList(),
+            noteTypes = emptyList(),
+        ))
+
+        // The value is filled after rendering, so its JRP braces are never parsed as handlebars.
+        assertEquals("{[難|なん];1}を{[逃|のが]れる;3}。|難を逃れる。", backend.lastFields["Sentence"])
     }
 
     @Test
@@ -106,6 +124,7 @@ class AnkiEnrichMiningTest {
                 "Definition Source" to "{ae-definition-source}",
                 "Pitch Accent" to "{ae-pitch}",
                 "Frequency" to "{ae-frequency}",
+                "Sentence" to "{ae-sentence}",
             ),
             tags = "hoshi {ae-tags}",
         )
@@ -175,6 +194,6 @@ class AnkiEnrichMiningTest {
     }
 
     private companion object {
-        val KinomotoFields = listOf("Term", "Meaning", "Definition Source", "Pitch Accent", "Frequency")
+        val KinomotoFields = listOf("Term", "Meaning", "Definition Source", "Pitch Accent", "Frequency", "Sentence")
     }
 }

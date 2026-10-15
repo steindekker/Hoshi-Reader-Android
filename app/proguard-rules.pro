@@ -46,3 +46,10 @@
 
 # Official sherpa bindings call this bridge after runtime verification.
 -keep class moe.antimony.hoshi.features.sasayaki.transcription.SasayakiNativeLibraries { *; }
+
+# Sudachi instantiates its plugins reflectively by class name from the JSON config, and the JRP
+# tokenizer reaches package-private Sudachi internals from com.worksap.nlp.sudachi.
+-keep class com.worksap.nlp.sudachi.** { *; }
+# Sudachi parses its config with javax.json, whose provider is found via ServiceLoader/Class.forName.
+-keep class org.glassfish.json.** { *; }
+-keep class javax.json.** { *; }

@@ -80,9 +80,9 @@ say "Building image and (re)starting the bot"
 ssh "$REMOTE" "cd '$DEST' && docker compose up -d --build"
 
 # --- Rebuild the Hoshi enrichment pack from the freshly pushed indexes -------
-# Writes data/pack/{hoshi-pack.sqlite,pack.json}; the phone downloads it over
-# Tailscale (see deploy/README.md). Unchanged content keeps the same version, so
-# the app only re-downloads when a value actually changed.
+# Writes data/pack/{hoshi-pack.sqlite,jrp-accent.sqlite,sudachi-system.dic,pack.json};
+# the phone downloads them over Tailscale (see deploy/README.md). Unchanged content
+# keeps the same version, so the app only re-downloads a file that actually changed.
 say "Building the Hoshi enrichment pack"
 ssh "$REMOTE" "cd '$DEST' && docker compose run --rm bot anki-enrich pack"
 

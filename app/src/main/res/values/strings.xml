@@ -1004,6 +1004,10 @@
     <string name="enrich_pack_url">Pack URL</string>
     <string name="enrich_pack_checking">Checking for a new pack…</string>
     <string name="enrich_pack_downloading">Downloading… %1$d%%</string>
+    <string name="enrich_pack_downloading_accent">Downloading accent data… %1$d%%</string>
+    <string name="enrich_pack_downloading_dictionary">Downloading Sudachi dictionary… %1$d%%</string>
+    <string name="enrich_sentence_model_installed">Sentence markup: installed ({ae-sentence})</string>
+    <string name="enrich_sentence_model_not_installed">Sentence markup: not installed</string>
     <string name="enrich_pack_up_to_date">Up to date</string>
     <string name="enrich_pack_updated">Pack updated</string>
     <string name="enrich_pack_error_url_missing">Set the pack URL first.</string>

@@ -217,6 +217,7 @@ dependencies {
     implementation(files(prepareSherpa.map { it.outputDirectory.file("bindings.jar").get() }))
     sherpaOnnxArchive(sherpaOnnxArtifact)
     implementation(libs.jsoup)
+    implementation(libs.sudachi)
     implementation(libs.okhttp)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(platform(libs.androidx.compose.bom))
@@ -382,6 +383,19 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
     dependsOn(buildRustHost)
     systemProperty("jna.library.path", rustProjectDir.resolve("target/debug").absolutePath)
+}
+
+// Opt-in JRP parity run against a private golden corpus (JrpParityTest skips without these).
+val jrpParityDir = providers.environmentVariable("HOSHI_JRP_PARITY_DIR")
+val jrpSudachiDic = providers.environmentVariable("HOSHI_SUDACHI_DIC")
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    if (jrpParityDir.isPresent && jrpSudachiDic.isPresent) {
+        systemProperty("HOSHI_JRP_PARITY_DIR", jrpParityDir.get())
+        systemProperty("HOSHI_SUDACHI_DIC", jrpSudachiDic.get())
+        maxHeapSize = "3g"
+        outputs.upToDateWhen { false }
+        outputs.cacheIf { false }
+    }
 }
 
 afterEvaluate {

@@ -42,8 +42,10 @@ file, so the box always ships with audio; the runtime self-skips a missing store
 rather than failing.
 
 ## Serve the Hoshi enrichment pack
-Every deploy rebuilds `data/pack/` (`anki-enrich pack`): `hoshi-pack.sqlite` plus
-the small `pack.json` manifest the app checks. Publish the folder on the tailnet
+Every deploy rebuilds `data/pack/` (`anki-enrich pack`): `hoshi-pack.sqlite`, the
+sentence model (`jrp-accent.sqlite` + the ~360 MB `sudachi-system.dic`, copied from
+the image's sudachidict_full) and the small `pack.json` manifest the app checks.
+Each file carries its own version, so the phone only downloads what changed. Publish the folder on the tailnet
 once, on its own ports (443 already fronts CouchDB for Obsidian LiveSync).
 Plain HTTP lets the app use the short MagicDNS name — tailnet traffic is already
 WireGuard-encrypted and the app verifies the pack's SHA-256; the HTTPS port is

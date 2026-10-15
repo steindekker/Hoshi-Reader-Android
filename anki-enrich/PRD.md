@@ -38,7 +38,9 @@ Precompute every field that depends only on the word (definition, pitch graph,
 examples, frequency, done-tags) into one file the Hoshi app downloads over
 Tailscale, so cards mined on the phone are final offline. This is the tool's
 primary purpose going forward. The fields pass above reads the same pack, so the
-app and the collection never disagree.
+app and the collection never disagree. Beside it, publish the sentence model
+(accent index + Sudachi dictionary) so the app writes the Sentence field's JRP
+markup itself at mining time.
 
 ### Dedupe
 

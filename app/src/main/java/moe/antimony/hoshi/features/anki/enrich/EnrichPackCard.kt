@@ -46,6 +46,7 @@ internal data class EnrichPackUiState(
     val manifestUrl: String = "",
     val status: EnrichPackStatus = EnrichPackStatus.Idle,
     val info: EnrichPackInfo? = null,
+    val sentenceModelInstalled: Boolean = false,
 ) {
     val isBusy: Boolean
         get() = status is EnrichPackStatus.Checking || status is EnrichPackStatus.Downloading
@@ -57,7 +58,13 @@ internal class EnrichPackViewModel @Inject constructor(
     private val settings: EnrichPackSettingsRepository,
 ) : ViewModel() {
     val uiState: StateFlow<EnrichPackUiState> =
-        combine(settings.manifestUrl, repository.status, repository.info, ::EnrichPackUiState)
+        combine(
+            settings.manifestUrl,
+            repository.status,
+            repository.info,
+            repository.sentenceModelInstalled,
+            ::EnrichPackUiState,
+        )
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), EnrichPackUiState())
 
     fun setManifestUrl(url: String) {
@@ -67,12 +74,17 @@ internal class EnrichPackViewModel @Inject constructor(
     fun update() = repository.startUpdate()
 }
 
-/** `{ae-*}` field-picker entries for the installed pack; empty when no pack is installed. */
+/**
+ * `{ae-*}` field-picker entries for the installed pack, plus `{ae-sentence}` with an installed
+ * sentence model; empty when neither is installed.
+ */
 @Composable
 internal fun rememberEnrichPackHandlebars(): List<String> {
     val viewModel: EnrichPackViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    return remember(state.info?.keys) { state.info?.keys?.let(AnkiEnrichHandlebars::fieldOptions).orEmpty() }
+    return remember(state.info?.keys, state.sentenceModelInstalled) {
+        AnkiEnrichHandlebars.fieldOptions(state.info?.keys.orEmpty(), state.sentenceModelInstalled)
+    }
 }
 
 /** Anki settings card for the anki-enrich pack: installed version, server URL, and Update. */
@@ -104,6 +116,15 @@ internal fun EnrichPackCard() {
                                     info.entries,
                                 )
                             } ?: stringResource(R.string.enrich_pack_not_installed),
+                        )
+                        Text(
+                            stringResource(
+                                if (state.sentenceModelInstalled) {
+                                    R.string.enrich_sentence_model_installed
+                                } else {
+                                    R.string.enrich_sentence_model_not_installed
+                                },
+                            ),
                         )
                         statusText(state.status)?.let { Text(it) }
                     }
@@ -156,7 +177,14 @@ internal fun EnrichPackCard() {
 private fun statusText(status: EnrichPackStatus): String? = when (status) {
     EnrichPackStatus.Idle -> null
     EnrichPackStatus.Checking -> stringResource(R.string.enrich_pack_checking)
-    is EnrichPackStatus.Downloading -> stringResource(R.string.enrich_pack_downloading, status.percent)
+    is EnrichPackStatus.Downloading -> stringResource(
+        when (status.item) {
+            EnrichDownload.Pack -> R.string.enrich_pack_downloading
+            EnrichDownload.Accent -> R.string.enrich_pack_downloading_accent
+            EnrichDownload.Dictionary -> R.string.enrich_pack_downloading_dictionary
+        },
+        status.percent,
+    )
     EnrichPackStatus.UpToDate -> stringResource(R.string.enrich_pack_up_to_date)
     EnrichPackStatus.Updated -> stringResource(R.string.enrich_pack_updated)
     is EnrichPackStatus.Failed -> status.message.asString()

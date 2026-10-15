@@ -28,7 +28,12 @@ Keys are the app's handlebar names without braces: `ae-definition` fills
 Lookup contract (implemented by `lookup` below and by the app): the
 (term, reading) row gives all its values; else the term's first row gives its
 fallback_keys; else defaults. A reading-less dictionary entry is keyed under its
-headword, matching what Hoshi reports as the reading."""
+headword, matching what Hoshi reports as the reading.
+
+Manifest (MANIFEST_FILE, JSON): format, version, file, size, sha256, built_at,
+entries describe the pack; an optional "sentence" object lists the separately
+versioned sentence model for `{ae-sentence}` (see `sentence_model.py`). Clients
+ignore keys they do not know, so adding one never breaks an older app."""
 from __future__ import annotations
 
 import hashlib
@@ -41,7 +46,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import config, paths, pitch, pitch_svg
+from . import config, paths, pitch, pitch_svg, sentence_model
 from .defs import enrich as defs_enrich, index as defs_index
 from .jrp_fill.accent import AccentIndex
 
@@ -164,9 +169,11 @@ def train_zdict(samples: list[bytes], size: int = _ZDICT_SIZE) -> bytes:
     return b"".join(reversed(picked))
 
 
-def build(out_dir=None, src: Sources | None = None, progress=None) -> dict:
-    """Write PACK_FILE + MANIFEST_FILE into out_dir (default var/pack). Returns the
-    manifest. The pack is written beside the old one and swapped in atomically."""
+def build(out_dir=None, src: Sources | None = None, progress=None, dictionary=None) -> dict:
+    """Write PACK_FILE + MANIFEST_FILE into out_dir (default var/pack), plus the
+    sentence model (`sentence_model.py`; `dictionary` overrides the installed
+    sudachidict_full). Returns the manifest. Files are written beside the old ones
+    and swapped in atomically."""
     out = Path(out_dir or Path(paths.VAR_DIR, "pack"))
     out.mkdir(parents=True, exist_ok=True)
     own = src is None
@@ -229,25 +236,26 @@ def build(out_dir=None, src: Sources | None = None, progress=None) -> dict:
             "version": version,
             "file": PACK_FILE,
             "size": (out / PACK_FILE).stat().st_size,
-            "sha256": _file_sha256(out / PACK_FILE),
+            "sha256": sentence_model.file_sha256(out / PACK_FILE),
             "built_at": built_at,
             "entries": n,
         }
-        man_tmp = out / (MANIFEST_FILE + ".tmp")
-        man_tmp.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-        os.replace(man_tmp, out / MANIFEST_FILE)
-        return manifest
+        return _write_manifest(out, manifest, sentence_model.build(out, src.accent, dictionary))
     finally:
         if own:
             src.close()
 
 
-def _file_sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
+def _write_manifest(out: Path, manifest: dict, sentence: dict | None) -> dict:
+    """The pack's own keys stay format 1 as old apps read them; the sentence model
+    rides under "sentence", which they ignore."""
+    manifest = {k: v for k, v in manifest.items() if k != "sentence"}
+    if sentence is not None:
+        manifest["sentence"] = sentence
+    man_tmp = out / (MANIFEST_FILE + ".tmp")
+    man_tmp.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(man_tmp, out / MANIFEST_FILE)
+    return manifest
 
 
 def find(conn: sqlite3.Connection, term: str, reading: str) -> dict[str, str] | None:
@@ -281,13 +289,28 @@ def pack_path(out_dir=None) -> Path:
 def ensure(out_dir=None) -> str:
     """'present' when the pack is newer than every source index, 'built' after
     (re)building it, 'no-source' without a definition index. A rebuilt index (a
-    new dictionary, say) therefore reaches the next run and the app by itself."""
+    new dictionary, say) therefore reaches the next run and the app by itself.
+    A present pack still gets its sentence model refreshed (a no-op unless the
+    accent index or sudachidict changed, or the model is missing)."""
     if not Path(paths.DEFS_DB).exists():
         return "no-source"
     target = pack_path(out_dir)
     sources = [paths.DEFS_DB, paths.EXAMPLES_DB, paths.FREQ_DB, paths.ACCENT_INDEX]
     newest = max(os.path.getmtime(s) for s in sources if os.path.exists(s))
-    if target.exists() and target.stat().st_mtime >= newest:
+    manifest_path = target.parent / MANIFEST_FILE
+    if target.exists() and target.stat().st_mtime >= newest and manifest_path.exists():
+        refresh_sentence_model(target.parent)
         return "present"
     build(out_dir)
     return "built"
+
+
+def refresh_sentence_model(out_dir, accent: AccentIndex | None = None, dictionary=None) -> dict:
+    """Rebuild only the sentence model and re-list it in the existing manifest,
+    leaving the pack and its version untouched."""
+    out = Path(out_dir)
+    manifest = json.loads((out / MANIFEST_FILE).read_text(encoding="utf-8"))
+    sentence = sentence_model.build(out, accent, dictionary)
+    if manifest.get("sentence") == sentence:
+        return manifest
+    return _write_manifest(out, manifest, sentence)

@@ -59,6 +59,16 @@ index is newer (`pack.ensure`); `--overwrite-fields` re-asserts definitions and
 examples over every card. `deploy/push.sh` rebuilds the pack on the box;
 `tailscale serve` publishes it.
 
+The pack build also publishes the **sentence model** (`ankienrich/sentence_model.py`):
+the accent index as an indexed SQLite (`jrp-accent.sqlite`, every `AccentIndex`
+query precomputed by `AccentIndex` itself) and sudachidict_full's `system.dic`
+(`sudachi-system.dic`), listed under `"sentence"` in `pack.json`, each versioned on
+its own content. The app uses them to write JRP markup into `{ae-sentence}` at
+mining time (its Kotlin port of `jrp_fill`), so new cards arrive with sentence
+markup; the nightly sentence pass stays for older cards and whole-collection
+reruns. A change to `jrp_fill` must be mirrored in the app's port (and its parity
+goldens).
+
 ## The Telegram bot
 
 `uv run anki-enrich-bot` (needs `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`). A thin,

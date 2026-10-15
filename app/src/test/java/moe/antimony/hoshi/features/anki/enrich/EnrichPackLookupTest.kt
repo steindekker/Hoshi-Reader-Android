@@ -34,6 +34,16 @@ class EnrichPackLookupTest {
     }
 
     @Test
+    fun fieldPickerOffersTheSentenceHandlebarOnlyWithASentenceModel() {
+        assertEquals(listOf("{ae-definition}"), AnkiEnrichHandlebars.fieldOptions(listOf("ae-definition")))
+        assertEquals(
+            listOf("{ae-definition}", "{ae-sentence}"),
+            AnkiEnrichHandlebars.fieldOptions(listOf("ae-definition"), sentenceModel = true),
+        )
+        assertEquals(listOf("{ae-sentence}"), AnkiEnrichHandlebars.fieldOptions(emptyList(), sentenceModel = true))
+    }
+
+    @Test
     fun exactReadingGivesEveryValue() {
         val pack = FakeEnrichPackSource(listOf(Triple("生", "なま", mapOf("ae-definition" to "raw", "ae-pitch" to "<svg/>"))))
 

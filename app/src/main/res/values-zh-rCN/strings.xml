@@ -990,6 +990,10 @@
     <string name="enrich_pack_url">数据包 URL</string>
     <string name="enrich_pack_checking">正在检查新数据包…</string>
     <string name="enrich_pack_downloading">正在下载… %1$d%%</string>
+    <string name="enrich_pack_downloading_accent">正在下载声调数据… %1$d%%</string>
+    <string name="enrich_pack_downloading_dictionary">正在下载 Sudachi 辞典… %1$d%%</string>
+    <string name="enrich_sentence_model_installed">句子标注：已安装（{ae-sentence}）</string>
+    <string name="enrich_sentence_model_not_installed">句子标注：未安装</string>
     <string name="enrich_pack_up_to_date">已是最新</string>
     <string name="enrich_pack_updated">数据包已更新</string>
     <string name="enrich_pack_error_url_missing">请先设置数据包 URL。</string>

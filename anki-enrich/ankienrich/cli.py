@@ -206,6 +206,13 @@ def _pack(argv) -> int:
     manifest = pack.build(args.out, progress=progress if _TTY else None)
     print("\r" + _row("pack", _green(manifest["version"]),
                       f"{manifest['entries']} entries · {manifest['size'] / 1e6:.0f} MB") + " " * 10)
+    sentence = manifest.get("sentence")
+    if sentence:
+        acc, dic = sentence["accent"], sentence["dictionary"]
+        print(_row("sentence", _green(acc["version"]),
+                   f"accent {acc['size'] / 1e6:.0f} MB · {dic['source']} {dic['size'] / 1e6:.0f} MB"))
+    else:
+        print(_row("sentence", _dim("skipped"), "sudachidict_full not installed"))
     return 0
 
 

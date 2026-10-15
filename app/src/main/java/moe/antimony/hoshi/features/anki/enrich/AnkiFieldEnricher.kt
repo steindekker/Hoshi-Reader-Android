@@ -22,18 +22,23 @@ internal object AnkiEnrichHandlebars {
     /** The pack's tag value belongs in the format's Tags, not in a field. */
     private const val TAGS_KEY = "ae-tags"
 
-    /** Field-picker entries for an installed pack's keys. */
-    fun fieldOptions(keys: List<String>): List<String> =
-        keys.filterNot { it == TAGS_KEY }.map { "{$it}" }
+    /** The mining sentence with JRP markup, written by the installed sentence model. */
+    const val SENTENCE_KEY = "ae-sentence"
+
+    /** Field-picker entries for an installed pack's keys, plus `{ae-sentence}` with a sentence model. */
+    fun fieldOptions(keys: List<String>, sentenceModel: Boolean = false): List<String> =
+        (keys.filterNot { it == TAGS_KEY } + listOfNotNull(SENTENCE_KEY.takeIf { sentenceModel }))
+            .distinct()
+            .map { "{$it}" }
 
     val token = Regex("""\{(ae-[^{}]*)\}""")
 }
 
 internal fun interface AnkiFieldEnricher {
-    fun enrich(expression: String, reading: String, templates: Collection<String>): AnkiEnrichment
+    fun enrich(expression: String, reading: String, sentence: String, templates: Collection<String>): AnkiEnrichment
 
     companion object {
-        val None = AnkiFieldEnricher { _, _, _ -> AnkiEnrichment.Empty }
+        val None = AnkiFieldEnricher { _, _, _, _ -> AnkiEnrichment.Empty }
     }
 }
 
@@ -53,6 +58,8 @@ internal class AnkiEnrichment(
         } else {
             values.entries.fold(rendered) { acc, (key, value) -> acc.replace(placeholder(key), value) }
         }
+
+    fun with(key: String, value: String): AnkiEnrichment = AnkiEnrichment(values + (key to value), defaults)
 
     private fun placeholder(key: String): String = "$key"
 

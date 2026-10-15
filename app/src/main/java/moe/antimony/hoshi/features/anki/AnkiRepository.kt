@@ -240,7 +240,7 @@ internal class AnkiRepository(
         val fieldMappings = format.fieldMappings.activeAnkiFieldMappings(noteType)
         val payload = runCatching { AnkiMiningPayload.fromJson(rawPayload) }.getOrNull()
             ?: return@withContext notAdded
-        val enrichment = ankiFieldEnricher.enrich(payload.expression, payload.reading, fieldMappings.values + format.tags)
+        val enrichment = ankiFieldEnricher.enrich(payload.expression, payload.reading, context.sentence, fieldMappings.values + format.tags)
         // The merged {image} marker (plus the deprecated {book-cover}/{web-image} aliases) gates
         // the picked web image, the game screenshot, and the cover (in that precedence).
         val needsImage = fieldMappings.referencesAnkiHandlebar("{image}") ||

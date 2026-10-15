@@ -36,11 +36,14 @@ import moe.antimony.hoshi.ui.UiText
 internal sealed interface EnrichPackStatus {
     data object Idle : EnrichPackStatus
     data object Checking : EnrichPackStatus
-    data class Downloading(val percent: Int) : EnrichPackStatus
+    data class Downloading(val percent: Int, val item: EnrichDownload = EnrichDownload.Pack) : EnrichPackStatus
     data object UpToDate : EnrichPackStatus
     data object Updated : EnrichPackStatus
     data class Failed(val message: UiText) : EnrichPackStatus
 }
+
+/** What an update is downloading: the pack, or a part of the sentence model. */
+internal enum class EnrichDownload { Pack, Accent, Dictionary }
 
 internal data class EnrichPackInfo(
     val version: String,
@@ -70,8 +73,10 @@ internal class DataStoreEnrichPackSettingsRepository @Inject constructor(
 
 /**
  * Owns the downloaded pack: answers `{ae-*}` lookups while mining and replaces the file when
- * the server's `pack.json` names a new version. Downloads resume after an interruption and
- * are checked against the manifest's size and SHA-256 before they replace the installed pack.
+ * the server's `pack.json` names a new version. The manifest's sentence model (for
+ * `{ae-sentence}`) is downloaded the same way, each file on its own version. Downloads resume
+ * after an interruption and are checked against the manifest's size and SHA-256 before they
+ * replace the installed file.
  */
 @Singleton
 internal class EnrichPackRepository(
@@ -80,6 +85,7 @@ internal class EnrichPackRepository(
     private val scope: CoroutineScope,
     private val ioDispatcher: CoroutineDispatcher,
     private val openPack: (File) -> EnrichPackSource,
+    private val sentenceModel: JrpSentenceModel = JrpSentenceModel.inDirectory(directory),
     private val openConnection: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
 ) : AnkiFieldEnricher {
     @Inject
@@ -88,7 +94,8 @@ internal class EnrichPackRepository(
         settings: EnrichPackSettingsRepository,
         @ApplicationScope scope: CoroutineScope,
         @IoDispatcher ioDispatcher: CoroutineDispatcher,
-    ) : this(File(filesDir, "enrich"), settings, scope, ioDispatcher, ::SqliteEnrichPackSource)
+        sentenceModel: JrpSentenceModel,
+    ) : this(File(filesDir, EnrichPackFormat.DIRECTORY), settings, scope, ioDispatcher, ::SqliteEnrichPackSource, sentenceModel)
 
     private val packFile = File(directory, EnrichPackFormat.FILE_NAME)
     private val partFile = File(directory, EnrichPackFormat.FILE_NAME + ".part")
@@ -103,19 +110,32 @@ internal class EnrichPackRepository(
     private val _info = MutableStateFlow<EnrichPackInfo?>(null)
     val info: StateFlow<EnrichPackInfo?> = _info.asStateFlow()
 
+    /** Whether the sentence model is installed, so `{ae-sentence}` gets JRP markup. */
+    val sentenceModelInstalled: StateFlow<Boolean> = sentenceModel.installed
+
     init {
         scope.launch(ioDispatcher) { refreshInfo() }
     }
 
-    override fun enrich(expression: String, reading: String, templates: Collection<String>): AnkiEnrichment {
-        if (expression.isBlank() || templates.none { AnkiEnrichHandlebars.token.containsMatchIn(it) }) {
-            return AnkiEnrichment.Empty
+    override fun enrich(
+        expression: String,
+        reading: String,
+        sentence: String,
+        templates: Collection<String>,
+    ): AnkiEnrichment {
+        if (templates.none { AnkiEnrichHandlebars.token.containsMatchIn(it) }) return AnkiEnrichment.Empty
+        val enrichment = if (expression.isBlank()) {
+            AnkiEnrichment.Empty
+        } else {
+            synchronized(sourceLock) {
+                runCatching { currentSource()?.lookup(expression, reading) }
+                    .onFailure { logWarning("Enrichment pack lookup failed", it) }
+                    .getOrNull()
+            } ?: AnkiEnrichment.Empty
         }
-        return synchronized(sourceLock) {
-            runCatching { currentSource()?.lookup(expression, reading) }
-                .onFailure { logWarning("Enrichment pack lookup failed", it) }
-                .getOrNull()
-        } ?: AnkiEnrichment.Empty
+        val sentenceToken = "{${AnkiEnrichHandlebars.SENTENCE_KEY}}"
+        if (templates.none { sentenceToken in it }) return enrichment
+        return enrichment.with(AnkiEnrichHandlebars.SENTENCE_KEY, sentenceModel.markup(sentence))
     }
 
     /** Starts an update in the application scope so leaving the screen does not cancel it. */
@@ -141,9 +161,22 @@ internal class EnrichPackRepository(
         val manifest = Json { ignoreUnknownKeys = true }
             .decodeFromString<EnrichPackManifest>(readText(manifestBase))
         if (manifest.format != EnrichPackFormat.VERSION) return failed(R.string.enrich_pack_error_format)
-        if (_info.value?.version == manifest.version) return EnrichPackStatus.UpToDate
+        var updated = false
+        if (_info.value?.version != manifest.version) {
+            installPack(manifestBase, manifest)?.let { return it }
+            updated = true
+        }
+        for ((part, entry) in manifest.sentence?.parts().orEmpty()) {
+            if (sentenceModel.installedVersion(part) == entry.version) continue
+            installSentenceModelPart(manifestBase, part, entry)?.let { return it }
+            updated = true
+        }
+        return if (updated) EnrichPackStatus.Updated else EnrichPackStatus.UpToDate
+    }
 
-        download(URL(manifestBase, manifest.file), manifest)
+    /** Downloads and installs the pack; a failure status, or null once installed. */
+    private fun installPack(manifestBase: URL, manifest: EnrichPackManifest): EnrichPackStatus? {
+        download(URL(manifestBase, manifest.file), manifest.version, manifest.size, partFile, partVersionFile, EnrichDownload.Pack)
         if (partFile.length() != manifest.size || sha256(partFile) != manifest.sha256) {
             partFile.delete()
             return failed(R.string.enrich_pack_error_invalid)
@@ -162,17 +195,46 @@ internal class EnrichPackRepository(
         }
         partVersionFile.delete()
         refreshInfo()
-        return EnrichPackStatus.Updated
+        return null
     }
 
-    private fun download(url: URL, manifest: EnrichPackManifest) {
-        directory.mkdirs()
-        if (partVersionFile.takeIf { it.exists() }?.readText() != manifest.version) {
+    /** Downloads and installs one sentence-model file; a failure status, or null once installed. */
+    private fun installSentenceModelPart(
+        manifestBase: URL,
+        part: SentenceModelPart,
+        entry: EnrichFileManifest,
+    ): EnrichPackStatus? {
+        val partFile = File(directory, part.fileName + ".part")
+        val partVersionFile = File(directory, part.fileName + ".part-version")
+        val item = when (part) {
+            SentenceModelPart.Accent -> EnrichDownload.Accent
+            SentenceModelPart.Dictionary -> EnrichDownload.Dictionary
+        }
+        download(URL(manifestBase, entry.file), entry.version, entry.size, partFile, partVersionFile, item)
+        if (partFile.length() != entry.size || sha256(partFile) != entry.sha256) {
             partFile.delete()
-            partVersionFile.writeText(manifest.version)
+            return failed(R.string.enrich_pack_error_invalid)
+        }
+        sentenceModel.install(part, partFile, entry.version)
+        partVersionFile.delete()
+        return null
+    }
+
+    private fun download(
+        url: URL,
+        version: String,
+        size: Long,
+        partFile: File,
+        partVersionFile: File,
+        item: EnrichDownload,
+    ) {
+        directory.mkdirs()
+        if (partVersionFile.takeIf { it.exists() }?.readText() != version) {
+            partFile.delete()
+            partVersionFile.writeText(version)
         }
         val existing = partFile.length()
-        if (existing >= manifest.size) return
+        if (existing >= size) return
         val connection = openConnection(url).apply {
             connectTimeout = 15_000
             readTimeout = 30_000
@@ -193,10 +255,8 @@ internal class EnrichPackRepository(
                         if (read < 0) break
                         output.write(buffer, 0, read)
                         written += read
-                        val percent = (written * 100 / manifest.size.coerceAtLeast(1)).toInt()
-                        if (_status.value != EnrichPackStatus.Downloading(percent)) {
-                            _status.value = EnrichPackStatus.Downloading(percent)
-                        }
+                        val progress = EnrichPackStatus.Downloading((written * 100 / size.coerceAtLeast(1)).toInt(), item)
+                        if (_status.value != progress) _status.value = progress
                     }
                     output.fd.sync()
                 }

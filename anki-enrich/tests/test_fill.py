@@ -230,13 +230,18 @@ def test_pack_ensure_rebuilds_only_when_a_source_is_newer(tmp_path, monkeypatch)
     monkeypatch.setenv("ANKI_ENRICH_VAR", str(tmp_path))
     built = []
     monkeypatch.setattr(pack, "build", lambda out_dir=None: built.append(out_dir))
+    refreshed = []
+    monkeypatch.setattr(pack, "refresh_sentence_model", lambda out_dir: refreshed.append(out_dir))
     assert pack.ensure() == "built"
     target = pack.pack_path()
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(b"")
     newest = max(os.path.getmtime(p) for p in (paths.DEFS_DB, paths.ACCENT_INDEX))
     os.utime(target, (newest + 10, newest + 10))
+    assert pack.ensure() == "built"  # no manifest yet
+    (target.parent / pack.MANIFEST_FILE).write_text("{}")
     assert pack.ensure() == "present"
+    assert refreshed == [target.parent]  # a present pack still refreshes its sentence model
     os.utime(paths.DEFS_DB, (newest + 20, newest + 20))
     assert pack.ensure() == "built"
-    assert len(built) == 2
+    assert len(built) == 3
