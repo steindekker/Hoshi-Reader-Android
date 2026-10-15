@@ -75,15 +75,18 @@ internal class EnrichPackViewModel @Inject constructor(
 }
 
 /**
- * `{ae-*}` field-picker entries for the installed pack, plus `{ae-sentence}` with an installed
- * sentence model; empty when neither is installed.
+ * `{ae-*}` field-picker entries. The dictionary-backed keys are always offered; `{ae-sentence}`
+ * joins them once the sentence model is installed, and an installed pack can add further keys.
  */
 @Composable
 internal fun rememberEnrichPackHandlebars(): List<String> {
     val viewModel: EnrichPackViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     return remember(state.info?.keys, state.sentenceModelInstalled) {
-        AnkiEnrichHandlebars.fieldOptions(state.info?.keys.orEmpty(), state.sentenceModelInstalled)
+        AnkiEnrichHandlebars.fieldOptions(
+            (AnkiEnrichHandlebars.defaultKeys + state.info?.keys.orEmpty()).distinct(),
+            state.sentenceModelInstalled,
+        )
     }
 }
 

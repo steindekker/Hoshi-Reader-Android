@@ -66,6 +66,19 @@ class LocalAudioRepository @Inject constructor(
             }
         } == true
 
+    /** Moves a verified download into place and rebuilds the source list. */
+    fun installDownloadedDatabase(source: File): Long {
+        val size = source.length()
+        privateDbFile.parentFile?.mkdirs()
+        if (privateDbFile.exists()) privateDbFile.delete()
+        if (!source.renameTo(privateDbFile)) {
+            source.inputStream().use { replacePrivateDatabase(it, size) }
+            source.delete()
+        }
+        ensureSourceConfig(reset = true)
+        return privateDbFile.length()
+    }
+
     fun importDatabase(contentResolver: ContentResolver, uri: Uri, onProgress: (LocalAudioImportProgress) -> Unit = {}): Long {
         contentResolver.validateImportFile(uri, ImportFileType.LocalAudioDatabase)
         val expectedSize = contentResolver.sizeBytes(uri)

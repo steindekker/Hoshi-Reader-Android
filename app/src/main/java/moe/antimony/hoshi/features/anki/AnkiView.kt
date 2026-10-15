@@ -892,6 +892,7 @@ internal object AnkiHandlebarOptions {
         "{glossary-brief}",
         "{glossary-no-dictionary}",
         "{glossary-first-brief}",
+        "{glossary-first-dictionary}",
         "{glossary-first-no-dictionary}",
         "{monolingual-definition}",
         "{monolingual-definition-brief}",

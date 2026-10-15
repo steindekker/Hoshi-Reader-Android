@@ -61,9 +61,26 @@ internal class AnkiEnrichment(
 
     fun with(key: String, value: String): AnkiEnrichment = AnkiEnrichment(values + (key to value), defaults)
 
+    /** Handlebars used when a key was not in the pack. Keys already set are left alone. */
+    fun withDefaults(extra: Map<String, String>): AnkiEnrichment =
+        AnkiEnrichment(values, defaults + extra.filterKeys { it !in values && it !in defaults })
+
     private fun placeholder(key: String): String = "$key"
 
     companion object {
         val Empty = AnkiEnrichment(emptyMap())
+
+        /**
+         * What `{ae-*}` renders from the dictionaries already installed, when no pack row
+         * supplies the key. Substituted before the upstream renderer runs.
+         */
+        val DictionaryDefaults: Map<String, String> = mapOf(
+            "ae-definition" to "{glossary-first}",
+            "ae-definition-source" to "{glossary-first-dictionary}",
+            "ae-pitch" to "{pitch-accent-graphs}",
+            "ae-frequency" to "{frequency-harmonic-rank}",
+            "ae-examples" to "",
+            "ae-tags" to "",
+        )
     }
 }

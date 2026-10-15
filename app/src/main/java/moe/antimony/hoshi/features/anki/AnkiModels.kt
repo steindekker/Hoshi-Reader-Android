@@ -386,6 +386,7 @@ internal object AnkiHandlebarRenderer {
             "{glossary-brief}" -> stripGlossaryHeaders(payload.glossary)
             "{glossary-no-dictionary}" -> stripDictionaryName(payload.glossary)
             "{glossary-first}" -> payload.firstGlossary(termDictionaries)
+            "{glossary-first-dictionary}" -> payload.firstGlossaryDictionary(termDictionaries)
             "{glossary-first-brief}" -> stripGlossaryHeaders(payload.firstGlossary(termDictionaries))
             "{glossary-first-no-dictionary}" -> stripDictionaryName(payload.firstGlossary(termDictionaries))
             "{monolingual-definition}" -> payload.firstGlossary(
@@ -530,6 +531,18 @@ internal object AnkiHandlebarRenderer {
             selectedGlossaryFallback = "",
             termDictionaries = termDictionaries,
         )
+    }
+
+    private fun AnkiMiningPayload.firstGlossaryDictionary(
+        termDictionaries: List<AnkiTermDictionary>,
+    ): String {
+        if (termDictionaries.isEmpty()) {
+            return singleGlossaries.entries.firstOrNull { it.value.isNotBlank() }?.key.orEmpty()
+        }
+        return termDictionaries.firstOrNull { dictionary ->
+            dictionary.category != DictionaryCategory.Exclude &&
+                !singleGlossaryForDictionaryOrNull(dictionary.name).isNullOrBlank()
+        }?.name.orEmpty()
     }
 
     private fun AnkiMiningPayload.firstGlossary(

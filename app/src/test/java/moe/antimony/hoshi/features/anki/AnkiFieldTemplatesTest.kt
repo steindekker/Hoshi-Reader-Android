@@ -176,6 +176,45 @@ class AnkiFieldTemplatesTest {
     }
 
     @Test
+    fun buildsKinomotoMappingsFromTheInstalledDictionariesAndSentenceModel() {
+        val noteType = AnkiNoteType(
+            id = 20L,
+            name = AnkiFieldTemplates.KinomotoNoteType,
+            fields = listOf(
+                "Term",
+                "Reading",
+                "Meaning",
+                "Definition Source",
+                "Pitch Accent",
+                "Frequency",
+                "Examples",
+                "Sentence",
+                "Term Audio",
+            ),
+        )
+
+        assertTrue(AnkiFieldTemplates.matches(noteType))
+        assertEquals(
+            mapOf(
+                "Term" to "{expression}",
+                "Reading" to "{reading}",
+                "Meaning" to "{ae-definition}",
+                "Definition Source" to "{ae-definition-source}",
+                "Pitch Accent" to "{ae-pitch}",
+                "Frequency" to "{ae-frequency}",
+                "Examples" to "{ae-examples}",
+                "Sentence" to "{ae-sentence}",
+                "Term Audio" to "{audio}",
+            ),
+            AnkiFieldTemplates.defaultMappings(noteType),
+        )
+        val format = AnkiFieldTemplates.seamlessCardFormat("mining")
+        assertEquals(AnkiFieldTemplates.KinomotoNoteType, format.selectedNoteTypeName)
+        assertEquals(AnkiFieldTemplates.KinomotoDeckName, format.selectedDeckName)
+        assertEquals("hoshi {ae-tags}", format.tags)
+    }
+
+    @Test
     fun doesNotMatchCustomLapisLikeOrUnrelatedNoteTypes() {
         assertFalse(
             AnkiFieldTemplates.matches(

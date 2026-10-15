@@ -164,7 +164,7 @@ class AnkiHandlebarRendererTest {
         val rendered = AnkiHandlebarRenderer.render(
             template = "{expression}|{reading}|{furigana-plain}|{audio}|{glossary}|{glossary-first}|" +
                 "{selected-glossary}|{popup-selection-text}|{sentence}|{frequencies}|{frequency-harmonic-rank}|" +
-                "{pitch-accent-positions}|{pitch-accent-categories}|{phonetic-transcriptions}|" +
+                "{pitch-accent-positions}|{pitch-accent-categories}|{glossary-first-dictionary}|{phonetic-transcriptions}|" +
                 "{document-title}|{image}|{sasayaki-audio}",
             payload = payload,
             context = context,
@@ -173,7 +173,7 @@ class AnkiHandlebarRendererTest {
         assertEquals(
             "食べる|たべる|食[た]べる|https://audio.example/taberu.mp3|<ol><li>eat</li></ol>|<li>eat</li>|" +
                 "<li>eat</li>|食べる|パンを<b>食べる</b>。|<span>1139</span>|1139|" +
-                """<span>2</span>|heiban|<ul><li class="pronunciation" data-pronunciation-type="phonetic-transcription">/riːd/</li></ul>|""" +
+                """<span>2</span>|heiban|JMdict|<ul><li class="pronunciation" data-pronunciation-type="phonetic-transcription">/riːd/</li></ul>|""" +
                 "テスト本|cover.jpg|cue.m4a",
             rendered,
         )

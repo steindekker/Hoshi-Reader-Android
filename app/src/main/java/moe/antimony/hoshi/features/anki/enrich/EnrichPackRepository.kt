@@ -134,8 +134,12 @@ internal class EnrichPackRepository(
             } ?: AnkiEnrichment.Empty
         }
         val sentenceToken = "{${AnkiEnrichHandlebars.SENTENCE_KEY}}"
-        if (templates.none { sentenceToken in it }) return enrichment
-        return enrichment.with(AnkiEnrichHandlebars.SENTENCE_KEY, sentenceModel.markup(sentence))
+        val withSentence = if (templates.none { sentenceToken in it }) {
+            enrichment
+        } else {
+            enrichment.with(AnkiEnrichHandlebars.SENTENCE_KEY, sentenceModel.markup(sentence))
+        }
+        return withSentence.withDefaults(AnkiEnrichment.DictionaryDefaults)
     }
 
     /** Starts an update in the application scope so leaving the screen does not cancel it. */

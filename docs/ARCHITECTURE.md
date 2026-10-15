@@ -496,6 +496,14 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   glossary-first and monolingual/bilingual definition handlebars resolve from
   the current profile's persisted term-dictionary order and categories without
   extending the popup mining payload.
+- First-run setup (`features.setup`) downloads Yomitan dictionaries and the
+  sentence model from `http://<host>:8094/setup.json` after the user approves it.
+  `{ae-definition}`, `{ae-definition-source}`, `{ae-pitch}`, and `{ae-frequency}`
+  fall back to the installed dictionaries when the enrichment pack has no value
+  for them. `{ae-sentence}` stays the on-device JRP model. Setup writes the
+  Kinomoto mining format only when every saved card format still has empty
+  field mappings. Term audio is downloaded only when the catalog lists it and
+  the user checks that option.
 - Google Drive sync uses Android/Google OAuth and Drive APIs through the
   repository/sync boundary. The Drive data source owns paginated folder listing,
   grouped sync-file discovery, bookdata upload/download, trash, cache clearing,

@@ -75,6 +75,21 @@ class EnrichPackRepositoryTest {
     }
 
     @Test
+    fun missingPackFillsAeFieldsFromTheInstalledDictionaries() {
+        val enrichment = repository().enrich(
+            expression = "食べる",
+            reading = "たべる",
+            sentence = "パンを食べる。",
+            templates = listOf("{ae-definition}", "{ae-definition-source}", "{ae-pitch}", "{ae-frequency}"),
+        )
+
+        assertEquals(
+            "{glossary-first}|{glossary-first-dictionary}|{pitch-accent-graphs}|{frequency-harmonic-rank}",
+            enrichment.protect("{ae-definition}|{ae-definition-source}|{ae-pitch}|{ae-frequency}"),
+        )
+    }
+
+    @Test
     fun updateInstallsANewPackAndServesLookupsFromIt() = runBlocking {
         packBytes = "v2".toByteArray()
         val repository = repository()

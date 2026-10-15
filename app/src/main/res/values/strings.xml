@@ -1014,4 +1014,15 @@
     <string name="enrich_pack_error_unreachable">Couldn\'t download the pack. Check the URL and that Tailscale is connected.</string>
     <string name="enrich_pack_error_invalid">The downloaded pack was damaged. Try again.</string>
     <string name="enrich_pack_error_format">This pack needs a newer version of the app.</string>
+    <string name="setup_welcome_title">Welcome to Hoshi</string>
+    <string name="setup_welcome_body">Download the dictionaries and the sentence-markup files. This is a large download on your tailnet.</string>
+    <string name="setup_welcome_audio">Also download term audio (several GB)</string>
+    <string name="setup_welcome_not_now">Not now</string>
+    <string name="setup_welcome_downloading">%1$s… %2$d%%</string>
+    <string name="setup_welcome_importing">Importing %1$s…</string>
+    <string name="setup_welcome_failed">Couldn\'t finish setup. Check that Tailscale is connected, then try again.</string>
+    <string name="setup_welcome_retry">Try again</string>
+    <string name="setup_item_accent">Accent data</string>
+    <string name="setup_item_sentence_dictionary">Sudachi dictionary</string>
+    <string name="setup_item_audio">Term audio</string>
 </resources>
