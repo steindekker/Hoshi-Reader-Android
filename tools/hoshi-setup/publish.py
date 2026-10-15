@@ -3,8 +3,10 @@
 
 Copies the local Yomitan zips, downloads JMdict and KANJIDIC, and calls
 ankienrich.sentence_model.build for jrp-accent.sqlite and sudachi-system.dic.
-Does not build the enrichment pack. Audio is omitted. Refuses to read any
-path containing /opt/anki-enrich or /data/apps/anki-enrich.
+Does not build the enrichment pack. The only read under /data/apps/anki-enrich
+is the prebuilt term-audio store audio.sqlite, copied out as android.db.
+Refuses every other path containing /opt/anki-enrich or /data/apps/anki-enrich,
+and never writes into those trees.
 """
 from __future__ import annotations
 
@@ -24,6 +26,9 @@ REPO = Path(__file__).resolve().parents[2]
 VENV_PYTHON = REPO / "anki-enrich" / ".venv" / "bin" / "python"
 DICT_DIR = Path("~/dicts/yomitan")
 FORBIDDEN = ("/opt/anki-enrich", "/data/apps/anki-enrich")
+# Prebuilt android.db term-audio store. Read-only; publish copies it out.
+AUDIO_SOURCE = Path("/data/apps/anki-enrich/audio.sqlite")
+AUDIO_FILE = "android.db"
 
 JMDICT_URL = (
     "https://github.com/yomidevs/jmdict-yomitan/releases/latest/download/"
@@ -159,6 +164,24 @@ def check_index(spec: dict, index: dict, path: Path) -> None:
     print(f"verified {spec['file']}: title={title!r} revision={index.get('revision')!r}", flush=True)
 
 
+def copy_audio(dest: Path) -> dict | None:
+    """Copy the prebuilt term-audio store. Returns None when the source is absent."""
+    src = AUDIO_SOURCE
+    if src.resolve() != AUDIO_SOURCE:
+        raise SystemExit(f"refusing audio source {src}")
+    if not src.is_file():
+        print("audio source missing; catalog will hide the audio checkbox", flush=True)
+        return None
+    refuse(dest)
+    print(f"copying {src.name} -> {dest.name}", flush=True)
+    partial = dest.with_name(dest.name + ".partial")
+    refuse(partial)
+    shutil.copyfile(src, partial)
+    os.chmod(partial, 0o644)
+    os.replace(partial, dest)
+    return file_record(dest)
+
+
 def place_file(src: Path, dest: Path) -> None:
     refuse(src)
     refuse(dest)
@@ -272,8 +295,9 @@ def publish(out: Path) -> None:
                 raise SystemExit(f"copied {filename} does not match the staged sentence file")
 
     manifest = {"format": 1, "dictionaries": dictionaries, "sentence": sentence}
-    if "audio" in manifest:
-        raise SystemExit("audio must not be published")
+    audio = copy_audio(out / AUDIO_FILE)
+    if audio is not None:
+        manifest["audio"] = {"id": "android-db", **audio}
     payload = json.dumps(manifest, indent=2) + "\n"
     setup = out / "setup.json"
     refuse(setup)
