@@ -628,6 +628,7 @@ class AnkiRepositoryBackendSelectionTest {
             ),
         )
         assertEquals("たべる", backend.lastOpenNotesKey)
+        assertEquals(null, backend.lastOpenedNoteId)
         assertFalse(
             repository.showNotes(
                 formatId = "deleted",
@@ -636,6 +637,120 @@ class AnkiRepositoryBackendSelectionTest {
                 noteTypes = emptyList(),
             ),
         )
+    }
+
+    @Test
+    fun showNotesOpensTheCreatedNoteBeforeTheFirstFieldQuery() = runBlocking {
+        val deck = AnkiDeck(10L, "Mining")
+        val noteType = AnkiNoteType(20L, "Basic", listOf("Front"))
+        val backend = RecordingBackend(decks = listOf(deck), noteTypes = listOf(noteType))
+        val repository = repository(
+            backend = backend,
+            settingsRepository = InMemoryAnkiSettingsRepository(
+                AnkiSettings(
+                    availableDecks = listOf(deck),
+                    availableNoteTypes = listOf(noteType),
+                    cardFormats = listOf(
+                        AnkiCardFormat(
+                            id = "word",
+                            name = "Word",
+                            selectedDeckId = deck.id,
+                            selectedNoteTypeId = noteType.id,
+                            fieldMappings = mapOf("Front" to "{expression}"),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        assertTrue(
+            repository.showNotes(
+                formatId = "word",
+                valuesByHandlebar = mapOf("{expression}" to "食べる"),
+                decks = emptyList(),
+                noteTypes = emptyList(),
+                noteId = 99L,
+            ),
+        )
+        assertEquals(99L, backend.lastOpenedNoteId)
+        assertEquals("", backend.lastOpenNotesKey)
+    }
+
+    @Test
+    fun showNotesResolvesANoteIdWhenTheAddDidNotReturnOne() = runBlocking {
+        val deck = AnkiDeck(10L, "Mining")
+        val noteType = AnkiNoteType(20L, "Basic", listOf("Front"))
+        val backend = RecordingBackend(decks = listOf(deck), noteTypes = listOf(noteType)).also {
+            it.resolvedNoteId = 77L
+        }
+        val repository = repository(
+            backend = backend,
+            settingsRepository = InMemoryAnkiSettingsRepository(
+                AnkiSettings(
+                    availableDecks = listOf(deck),
+                    availableNoteTypes = listOf(noteType),
+                    cardFormats = listOf(
+                        AnkiCardFormat(
+                            id = "word",
+                            name = "Word",
+                            selectedDeckId = deck.id,
+                            selectedNoteTypeId = noteType.id,
+                            fieldMappings = mapOf("Front" to "{expression}"),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        assertTrue(
+            repository.showNotes(
+                formatId = "word",
+                valuesByHandlebar = mapOf("{expression}" to "食べる"),
+                decks = emptyList(),
+                noteTypes = emptyList(),
+            ),
+        )
+        assertEquals(77L, backend.lastOpenedNoteId)
+        assertEquals("", backend.lastOpenNotesKey)
+    }
+
+    @Test
+    fun mineEntryKeepsTheCreatedNoteId() = runBlocking {
+        val deck = AnkiDeck(10L, "Mining")
+        val noteType = AnkiNoteType(20L, "Basic", listOf("Front"))
+        val backend = RecordingBackend(decks = listOf(deck), noteTypes = listOf(noteType)).also {
+            it.createdNoteId = 55L
+        }
+        val repository = repository(
+            backend = backend,
+            settingsRepository = InMemoryAnkiSettingsRepository(
+                AnkiSettings(
+                    availableDecks = listOf(deck),
+                    availableNoteTypes = listOf(noteType),
+                    cardFormats = listOf(
+                        AnkiCardFormat(
+                            id = "word",
+                            name = "Word",
+                            selectedDeckId = deck.id,
+                            selectedNoteTypeId = noteType.id,
+                            fieldMappings = mapOf("Front" to "{expression}"),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val result = repository.mineEntryWithResult(
+            rawPayload = """{"expression":"食べる"}""",
+            context = AnkiMiningContext(sentence = "食べる"),
+            decks = emptyList(),
+            noteTypes = emptyList(),
+            formatId = "word",
+        )
+
+        assertTrue(result.added)
+        assertEquals(55L, result.noteId)
+        assertTrue(backend.addNoteCalled)
     }
 
     @Test
@@ -1031,6 +1146,10 @@ class AnkiRepositoryBackendSelectionTest {
             private set
         var lastOpenNotesKey: String = ""
             private set
+        var createdNoteId: Long = 0L
+        var resolvedNoteId: Long? = null
+        var lastOpenedNoteId: Long? = null
+            private set
 
         override fun isAvailable(): Boolean = available
 
@@ -1069,6 +1188,30 @@ class AnkiRepositoryBackendSelectionTest {
             return addNoteResult
         }
 
+        override fun addNoteReturning(
+            deck: AnkiDeck,
+            noteType: AnkiNoteType,
+            fieldsByName: Map<String, String>,
+            tags: Set<String>,
+            allowDupes: Boolean,
+            duplicateScope: AnkiDuplicateScope,
+            checkDuplicatesAcrossAllModels: Boolean,
+        ): Long? = if (
+            addNote(
+                deck = deck,
+                noteType = noteType,
+                fieldsByName = fieldsByName,
+                tags = tags,
+                allowDupes = allowDupes,
+                duplicateScope = duplicateScope,
+                checkDuplicatesAcrossAllModels = checkDuplicatesAcrossAllModels,
+            )
+        ) {
+            createdNoteId
+        } else {
+            null
+        }
+
         override fun addMediaFromUri(uriString: String, preferredName: String, mimeType: String): String? = null
 
         override fun addMediaFromBytes(bytes: ByteArray, preferredName: String, mimeType: String): String? {
@@ -1098,5 +1241,18 @@ class AnkiRepositoryBackendSelectionTest {
             lastOpenNotesKey = key
             return true
         }
+
+        override fun openNote(noteId: Long): Boolean {
+            lastOpenedNoteId = noteId
+            return noteId > 0L
+        }
+
+        override fun findNoteId(
+            deck: AnkiDeck,
+            noteType: AnkiNoteType,
+            key: String,
+            duplicateScope: AnkiDuplicateScope,
+            checkDuplicatesAcrossAllModels: Boolean,
+        ): Long? = resolvedNoteId
     }
 }

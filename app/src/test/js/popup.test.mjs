@@ -1274,6 +1274,7 @@ test('mine button tap opens mine with options and long press adds directly', asy
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(mineWithOptionsMessages.length, 1);
     assert.equal(mineWithOptionsMessages[0].expression, '猫');
+    assert.equal(mineWithOptionsMessages[0].formatId, 'word');
     assert.equal(mineEntryMessages.length, 0);
 
     mineSlot.dispatch('contextmenu', event);
@@ -1282,6 +1283,103 @@ test('mine button tap opens mine with options and long press adds directly', asy
     assert.equal(mineEntryMessages.length, 1);
     assert.equal(mineEntryMessages[0].formatId, 'word');
     assert.equal(mineWithOptionsMessages.length, 1);
+});
+
+test('mine button pointerup opens options once when the click is dropped', async () => {
+    const { context, mineWithOptionsMessages } = popupContext({
+        duplicateStates: { word: false },
+    });
+    context.window.ankiBackendAvailable = true;
+    context.window.ankiFormats = [{ id: 'word', icon: 'square', isValid: true }];
+    context.window.lookupEntries = [{ expression: '猫', reading: 'ねこ', glossaries: [] }];
+    const header = context.createEntryHeader({ expression: '猫', reading: 'ねこ' }, 0);
+    const buttons = header.children.find((child) => child.className === 'header-buttons');
+    const mineSlot = descendants(buttons).find((child) => child.dataset.kind === 'mine');
+    const event = {
+        clientX: 4,
+        clientY: 6,
+        preventDefault() {},
+        stopPropagation() {},
+    };
+    await new Promise((resolve) => setImmediate(resolve));
+
+    mineSlot.dispatch('pointerdown', event);
+    mineSlot.dispatch('pointerup', event);
+    await flushAsyncWork();
+    mineSlot.dispatch('click', event);
+    await flushAsyncWork();
+
+    assert.equal(mineWithOptionsMessages.length, 1);
+    assert.equal(mineWithOptionsMessages[0].formatId, 'word');
+});
+
+test('failed direct add re-enables every format button', async () => {
+    const { context } = popupContext();
+    context.webkit.messageHandlers.mineEntry.postMessage = () => false;
+    context.window.ankiBackendAvailable = true;
+    context.window.ankiFormats = [
+        { id: 'word', icon: 'square', isValid: true },
+        { id: 'sentence', icon: 'circle', isValid: true },
+    ];
+    context.window.lookupEntries = [{ expression: '猫', reading: 'ねこ', glossaries: [] }];
+    const container = new FakeElement();
+    context.appendAnkiFormatButtons(container, 0);
+
+    await context.mineEntryAtIndex(0, 'word', container);
+
+    const mineButtons = descendants(container).filter((button) => button.dataset.kind === 'mine');
+    assert.deepEqual(mineButtons.map((button) => button.disabled), [false, false]);
+    assert.equal(mineButtons[0].dataset.state, 'error');
+    assert.equal(mineButtons[1].dataset.state, undefined);
+});
+
+test('duplicate check failure leaves the add button enabled', async () => {
+    const { context } = popupContext({ duplicateStates: null });
+    context.window.ankiBackendAvailable = true;
+    context.window.ankiFormats = [
+        { id: 'word', icon: 'square', isValid: true },
+        { id: 'sentence', icon: 'circle', isValid: true },
+    ];
+    context.window.lookupEntries = [{ expression: '猫', reading: 'ねこ', matched: '猫' }];
+    const container = new FakeElement();
+    context.appendAnkiFormatButtons(container, 0);
+
+    await context.refreshAnkiDuplicateStates(0, container);
+
+    const mineButtons = descendants(container).filter((button) => button.dataset.kind === 'mine');
+    assert.deepEqual(mineButtons.map((button) => button.disabled), [false, false]);
+    assert.deepEqual(mineButtons.map((button) => button.dataset.state), [undefined, undefined]);
+});
+
+test('created card shows the notes button and opens that note', async () => {
+    const { context, showNotesMessages } = popupContext({ duplicateStates: { word: false } });
+    context.webkit.messageHandlers.mineEntry.postMessage = () => ({ added: true, noteId: 42 });
+    context.window.ankiBackendAvailable = true;
+    context.window.useAnkiConnect = true;
+    context.window.disableShowNotes = false;
+    context.window.ankiFormats = [{ id: 'word', icon: 'square', isValid: true }];
+    context.window.lookupEntries = [{ expression: '猫', reading: 'ねこ', matched: '猫', glossaries: [] }];
+    const container = new FakeElement();
+    context.appendAnkiFormatButtons(container, 0);
+
+    await context.mineEntryAtIndex(0, 'word', container);
+
+    const notes = descendants(container).find((button) => button.dataset.kind === 'notes');
+    assert.equal(notes.hidden, false);
+    assert.equal(notes.dataset.noteId, '42');
+    const event = {
+        clientX: 3,
+        clientY: 4,
+        preventDefault() {},
+        stopPropagation() {},
+    };
+    notes.dispatch('pointerdown', event);
+    notes.dispatch('pointerup', event);
+    await flushAsyncWork();
+
+    assert.equal(showNotesMessages.length, 1);
+    assert.equal(showNotesMessages[0].formatId, 'word');
+    assert.equal(showNotesMessages[0].noteId, 42);
 });
 
 test('mineEntry posts phonetic transcriptions for Anki handlebar rendering', async () => {

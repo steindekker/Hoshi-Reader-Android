@@ -1217,7 +1217,31 @@ async function mineEntry(expression, reading, frequencies, pitches, rules, match
     return await webkit.messageHandlers.mineEntry.postMessage({ formatId, payload });
 }
 
-async function mineEntryWithOptions(entryIndex, buttonsContainer = null) {
+function positiveNoteId(value) {
+    const id = typeof value === 'number' ? value : Number(value);
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+function mineResultFromReply(reply) {
+    if (reply === true) return { added: true, noteId: null };
+    if (reply && typeof reply === 'object') {
+        return { added: reply.added === true, noteId: positiveNoteId(reply.noteId) };
+    }
+    return { added: false, noteId: null };
+}
+
+function rememberCreatedNote(buttonsContainer, entryIndex, formatId, noteId) {
+    const id = positiveNoteId(noteId);
+    if (!id) return;
+    const resolvedId = formatId || (Array.isArray(window.ankiFormats) ? window.ankiFormats[0]?.id : null);
+    if (!resolvedId) return;
+    const notes = buttonSlotInContainer(buttonsContainer, 'notes', entryIndex, resolvedId);
+    if (!notes) return;
+    notes.dataset.noteId = String(id);
+    setButtonSlotHidden(notes, Boolean(window.disableShowNotes));
+}
+
+async function mineEntryWithOptions(entryIndex, buttonsContainer = null, formatId = null) {
     const idx = entryIndex || 0;
     const entry = window.lookupEntries?.[idx];
     if (!entry) { return false; }
@@ -1240,7 +1264,7 @@ async function mineEntryWithOptions(entryIndex, buttonsContainer = null) {
     }
     const audio = audioUrls[idx] || '';
 
-    const mined = await webkit.messageHandlers.mineWithOptions.postMessage({
+    const request = {
         expression,
         reading,
         matched,
@@ -1257,8 +1281,11 @@ async function mineEntryWithOptions(entryIndex, buttonsContainer = null) {
         audio,
         selectedDictionary: selectedDictionaries[idx]?.name || '',
         dictionaryMedia: JSON.stringify([...dictionaryMedia.values()])
-    });
-    if (mined) {
+    };
+    if (formatId) request.formatId = formatId;
+    const result = mineResultFromReply(await webkit.messageHandlers.mineWithOptions.postMessage(request));
+    if (result.added) {
+        rememberCreatedNote(buttonsContainer, idx, formatId, result.noteId);
         const refreshDuplicate = () => refreshAnkiDuplicateStates(idx, buttonsContainer);
         if (window.useAnkiConnect) {
             await refreshDuplicate();
@@ -1266,7 +1293,7 @@ async function mineEntryWithOptions(entryIndex, buttonsContainer = null) {
             setTimeout(refreshDuplicate, 1000);
         }
     }
-    return mined;
+    return result.added;
 }
 
 function renderStructuredContent(parent, node, language = null, dictName = null, exporting = false) {
@@ -1922,10 +1949,21 @@ function createButtonSlot(kind, entryIndex, enabled = true, formatId = null, for
     slot.type = 'button';
     slot.setAttribute('aria-label', kind === 'audio' ? 'Play audio' : kind === 'notes' ? 'Show Anki notes' : 'Add to Anki');
     // Audio: tap plays, long press picks a source. Mine: tap opens mine with options,
-    // long press adds the card directly.
+    // long press adds the card directly. The tap runs on pointerup because WebView
+    // sometimes drops the click that follows a touch.
     const mineButtonsContainer = () => {
         const parent = slot.parentElement;
         return parent?.className === 'anki-format-actions' ? parent.parentElement : parent;
+    };
+    const runTapAction = () => {
+        if (slot.dataset.enabled === 'false') return;
+        if (kind === 'audio') {
+            playEntryAudio(entryIndex);
+        } else if (kind === 'mine') {
+            mineEntryWithOptions(entryIndex, mineButtonsContainer(), formatId);
+        } else if (kind === 'notes') {
+            showNotesAtIndex(entryIndex, formatId, slot.dataset.noteId || null);
+        }
     };
     const longPressAction = kind === 'audio'
         ? () => showAudioCandidateMenu(entryIndex, slot)
@@ -1935,36 +1973,57 @@ function createButtonSlot(kind, entryIndex, enabled = true, formatId = null, for
     let longPressTimer = null;
     let longPressed = false;
     let pointerStart = null;
+    let suppressClick = false;
     const cancelLongPress = () => {
         clearTimeout(longPressTimer);
         longPressTimer = null;
-        pointerStart = null;
     };
-    if (longPressAction) {
-        slot.addEventListener('pointerdown', event => {
-            if (slot.dataset.enabled === 'false') return;
-            longPressed = false;
-            pointerStart = { x: event.clientX, y: event.clientY };
-            longPressTimer = setTimeout(() => {
-                longPressTimer = null;
-                longPressed = true;
-                longPressAction();
-            }, 400);
-        });
-        slot.addEventListener('pointermove', event => {
+    slot.addEventListener('pointerdown', event => {
+        if (slot.dataset.enabled === 'false') return;
+        if (event.button != null && event.button !== 0) return;
+        longPressed = false;
+        suppressClick = false;
+        pointerStart = { x: event.clientX, y: event.clientY };
+        if (!longPressAction) return;
+        longPressTimer = setTimeout(() => {
+            longPressTimer = null;
             if (!pointerStart) return;
-            if (Math.abs(event.clientX - pointerStart.x) > 10 || Math.abs(event.clientY - pointerStart.y) > 10) {
-                cancelLongPress();
-            }
-        });
-        slot.addEventListener('pointerup', cancelLongPress);
-        slot.addEventListener('pointercancel', cancelLongPress);
+            longPressed = true;
+            suppressClick = true;
+            pointerStart = null;
+            longPressAction();
+        }, 400);
+    });
+    slot.addEventListener('pointermove', event => {
+        if (!pointerStart) return;
+        if (Math.abs(event.clientX - pointerStart.x) > 10 || Math.abs(event.clientY - pointerStart.y) > 10) {
+            cancelLongPress();
+            pointerStart = null;
+        }
+    });
+    slot.addEventListener('pointerup', event => {
+        const start = pointerStart;
+        const wasLong = longPressed;
+        cancelLongPress();
+        pointerStart = null;
+        if (wasLong || !start || slot.dataset.enabled === 'false') return;
+        if (Math.abs(event.clientX - start.x) > 10 || Math.abs(event.clientY - start.y) > 10) return;
+        suppressClick = true;
+        runTapAction();
+    });
+    slot.addEventListener('pointercancel', () => {
+        cancelLongPress();
+        pointerStart = null;
+    });
+    if (longPressAction) {
         slot.addEventListener('contextmenu', event => {
             event.preventDefault();
             event.stopPropagation();
             if (!longPressed && slot.dataset.enabled !== 'false') {
                 cancelLongPress();
+                pointerStart = null;
                 longPressed = true;
+                suppressClick = true;
                 longPressAction();
             }
         });
@@ -1972,18 +2031,12 @@ function createButtonSlot(kind, entryIndex, enabled = true, formatId = null, for
     slot.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (longPressed) {
+        if (longPressed || suppressClick) {
             longPressed = false;
+            suppressClick = false;
             return;
         }
-        if (slot.dataset.enabled === 'false') { return; }
-        if (kind === 'audio') {
-            playEntryAudio(entryIndex);
-        } else if (kind === 'mine') {
-            mineEntryWithOptions(entryIndex, mineButtonsContainer());
-        } else if (kind === 'notes') {
-            showNotesAtIndex(entryIndex, formatId);
-        }
+        runTapAction();
     });
     slot.appendChild(el('span', { className: 'button-slot-icon' }));
     applyButtonSlotVisualState(slot);
@@ -2062,6 +2115,11 @@ function duplicateStateForFormat(states, formatId) {
         : null;
 }
 
+function mineButtonEnabled(format, slot) {
+    if (!window.ankiBackendAvailable || !format.isValid) return false;
+    return !(slot?.dataset.state === 'duplicate' && !window.allowDupes);
+}
+
 async function mineEntryAtIndex(entryIndex, formatId, buttonsContainer = null) {
     const entry = window.lookupEntries?.[entryIndex];
     if (!entry) { return; }
@@ -2075,11 +2133,24 @@ async function mineEntryAtIndex(entryIndex, formatId, buttonsContainer = null) {
         { enabled: false },
     ));
 
-    const mined = await mineEntry(expression, reading, frequencies, pitches, rules, matched, entryIndex, lastSelection, formatId);
-    if (!mined) {
-        updateButtonSlot(mineSlot, { state: 'error', enabled: false });
+    const result = mineResultFromReply(await mineEntry(
+        expression, reading, frequencies, pitches, rules, matched, entryIndex, lastSelection, formatId,
+    ));
+    if (!result.added) {
+        formats.forEach((format) => {
+            const slot = buttonSlotInContainer(buttonsContainer, 'mine', entryIndex, format.id);
+            const failed = format.id === formatId && slot?.dataset.state !== 'duplicate';
+            updateButtonSlot(slot, {
+                ...(failed ? { state: 'error' } : {}),
+                enabled: mineButtonEnabled(format, slot),
+            });
+        });
+        setTimeout(() => {
+            if (mineSlot?.dataset.state === 'error') updateButtonSlot(mineSlot, { state: 'default' });
+        }, 1500);
         return;
     }
+    rememberCreatedNote(buttonsContainer, entryIndex, formatId, result.noteId);
     const checkDuplicate = () => refreshAnkiDuplicateStates(entryIndex, buttonsContainer);
 
     if (window.useAnkiConnect) {
@@ -2089,13 +2160,16 @@ async function mineEntryAtIndex(entryIndex, formatId, buttonsContainer = null) {
     }
 }
 
-async function showNotesAtIndex(entryIndex, formatId) {
+async function showNotesAtIndex(entryIndex, formatId, noteId = null) {
     const entry = window.lookupEntries?.[entryIndex];
     if (!entry || !formatId) return false;
-    return await webkit.messageHandlers.showNotes.postMessage({
+    const body = {
         formatId,
         values: duplicateValuesForEntry(entry)
-    });
+    };
+    const id = positiveNoteId(noteId);
+    if (id != null) body.noteId = id;
+    return await webkit.messageHandlers.showNotes.postMessage(body);
 }
 
 function appendAnkiFormatButtons(container, entryIndex) {
@@ -2164,10 +2238,14 @@ async function refreshAnkiDuplicateStates(entryIndex, buttonsContainer) {
     }
     formats.forEach((format) => {
         const mineSlot = buttonSlotInContainer(buttonsContainer, 'mine', entryIndex, format.id);
+        const notesSlot = buttonSlotInContainer(buttonsContainer, 'notes', entryIndex, format.id);
         const isDuplicate = duplicateStateForFormat(states, format.id);
         if (isDuplicate === null) {
-            updateButtonSlot(mineSlot, { state: 'error', enabled: false });
-            syncShowNotesButton(buttonsContainer, entryIndex, format, false);
+            // A missing result is not proof the word is a duplicate. Leave the button tappable.
+            updateButtonSlot(mineSlot, { enabled: mineButtonEnabled(format, mineSlot) });
+            if (!notesSlot?.dataset.noteId) {
+                syncShowNotesButton(buttonsContainer, entryIndex, format, false);
+            }
             return;
         }
         updateButtonSlot(mineSlot, {
@@ -2182,7 +2260,7 @@ async function refreshAnkiDuplicateStates(entryIndex, buttonsContainer) {
             buttonsContainer,
             entryIndex,
             format,
-            Boolean(isDuplicate && !window.disableShowNotes),
+            Boolean(!window.disableShowNotes && (isDuplicate || notesSlot?.dataset.noteId)),
         );
     });
     return states !== null;

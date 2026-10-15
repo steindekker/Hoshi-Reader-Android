@@ -70,6 +70,7 @@ class AnkiBackendAdapterTest {
         )
 
         assertTrue(added)
+        assertEquals(123L, api.addedNoteId)
         assertArrayEquals(arrayOf("食べる", "パンを<b>食べる</b>。", "1139"), api.addedFields)
         assertEquals(setOf("hoshi", "reader"), api.addedTags)
         assertNull(api.lastDuplicateModelId)
@@ -258,6 +259,30 @@ class AnkiBackendAdapterTest {
     }
 
     @Test
+    fun adapterOpensTheCreatedNoteInTheCardBrowser() {
+        val api = FakeAnkiContentApi()
+        val backend = AnkiDroidBackendAdapter(api)
+        val noteType = AnkiNoteType(id = 7L, name = "Lapis", fields = listOf("Expression"))
+
+        assertEquals(
+            123L,
+            backend.addNoteReturning(
+                deck = AnkiDeck(id = 3L, name = "Mining"),
+                noteType = noteType,
+                fieldsByName = mapOf("Expression" to "猫"),
+                tags = emptySet(),
+                allowDupes = true,
+                duplicateScope = AnkiDuplicateScope.Collection,
+                checkDuplicatesAcrossAllModels = false,
+            ),
+        )
+        assertTrue(backend.openNote(123L))
+        assertEquals("nid:123", api.lastBrowserQuery)
+        assertFalse(backend.openNote(0L))
+        assertEquals("nid:123", api.lastBrowserQuery)
+    }
+
+    @Test
     fun adapterDelegatesSyncToAnkiContentApi() {
         val api = FakeAnkiContentApi(syncResult = true)
         val backend = AnkiDroidBackendAdapter(api)
@@ -294,6 +319,10 @@ class AnkiBackendAdapterTest {
         var addedFields: Array<String>? = null
             private set
         var addedTags: Set<String>? = null
+            private set
+        var addedNoteId: Long? = null
+            private set
+        var lastBrowserQuery: String? = null
             private set
         var lastDuplicateModelId: Long? = null
             private set
@@ -343,7 +372,13 @@ class AnkiBackendAdapterTest {
         ): Long? {
             addedFields = fields
             addedTags = tags
-            return 123L
+            addedNoteId = 123L
+            return addedNoteId
+        }
+
+        override fun openNotes(query: String): Boolean {
+            lastBrowserQuery = query
+            return true
         }
 
         override fun sync(): Boolean {

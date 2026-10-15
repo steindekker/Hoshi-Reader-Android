@@ -64,6 +64,7 @@ import moe.antimony.hoshi.features.reader.ReaderLookupPopupBridgeCallbacks
 import moe.antimony.hoshi.features.reader.ReaderLookupPopupBridgeMessage
 import moe.antimony.hoshi.features.reader.ReaderLookupPopupFramePayload
 import moe.antimony.hoshi.features.reader.readerPopupBooleanMapJson
+import moe.antimony.hoshi.features.reader.readerPopupMineReplyJson
 import moe.antimony.hoshi.features.reader.ReaderLookupPopupIframeSync
 import moe.antimony.hoshi.features.reader.ReaderLookupPopupResourceHandler
 import moe.antimony.hoshi.features.reader.ReaderLookupPopupViewport
@@ -395,8 +396,8 @@ private fun ProcessTextLookupOverlay(
                 is ReaderLookupPopupBridgeMessage.MineEntry -> {
                     val popup = popupById(message.popupId) ?: return
                     val messageId = message.messageId ?: return
-                    ankiViewModel.mineEntryAsync(message.formatId, message.payloadJson, popup.state.ankiContext) { mined ->
-                        replyIframeMessage(message.popupId, messageId, mined.toString())
+                    ankiViewModel.mineEntryWithResultAsync(message.formatId, message.payloadJson, popup.state.ankiContext) { result ->
+                        replyIframeMessage(message.popupId, messageId, readerPopupMineReplyJson(result))
                     }
                 }
                 is ReaderLookupPopupBridgeMessage.MineWithOptions -> {
@@ -414,6 +415,7 @@ private fun ProcessTextLookupOverlay(
                         payloadJson = message.payloadJson,
                         baseContext = popup.state.ankiContext,
                         term = term,
+                        formatId = message.formatId,
                     )
                 }
                 is ReaderLookupPopupBridgeMessage.DuplicateCheck -> {
@@ -424,7 +426,7 @@ private fun ProcessTextLookupOverlay(
                 }
                 is ReaderLookupPopupBridgeMessage.ShowNotes -> {
                     val messageId = message.messageId ?: return
-                    ankiViewModel.showNotesAsync(message.formatId, message.valuesByHandlebar) { shown ->
+                    ankiViewModel.showNotesAsync(message.formatId, message.valuesByHandlebar, message.noteId) { shown ->
                         replyIframeMessage(message.popupId, messageId, shown.toString())
                     }
                 }
@@ -548,7 +550,9 @@ private fun ProcessTextLookupOverlay(
         }
         MineWithOptionsSheetHost(
             request = mineWithOptionsRequest,
-            mine = ankiViewModel::mineEntryAsync,
+            mine = { formatId, payloadJson, miningContext, onResult ->
+                ankiViewModel.mineEntryWithResultAsync(formatId, payloadJson, miningContext, onResult)
+            },
             reply = ::replyIframeMessage,
             onClose = { mineWithOptionsRequest = null },
             sentenceMode = MineSentenceMode.InBookSentence,

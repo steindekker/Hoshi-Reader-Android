@@ -18,6 +18,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 
 fun interface AnkiConnectTransport {
@@ -122,40 +123,59 @@ class AnkiConnectBackend(
         allowDupes: Boolean,
         duplicateScope: AnkiDuplicateScope,
         checkDuplicatesAcrossAllModels: Boolean,
-    ): Boolean =
-        runCatching {
-            val note = ankiConnectNote(
+    ): Boolean = addNoteReturning(
+        deck = deck,
+        noteType = noteType,
+        fieldsByName = fieldsByName,
+        tags = tags,
+        allowDupes = allowDupes,
+        duplicateScope = duplicateScope,
+        checkDuplicatesAcrossAllModels = checkDuplicatesAcrossAllModels,
+    ) != null
+
+    override fun addNoteReturning(
+        deck: AnkiDeck,
+        noteType: AnkiNoteType,
+        fieldsByName: Map<String, String>,
+        tags: Set<String>,
+        allowDupes: Boolean,
+        duplicateScope: AnkiDuplicateScope,
+        checkDuplicatesAcrossAllModels: Boolean,
+    ): Long? = runCatching {
+        val note = ankiConnectNote(
+            deck = deck,
+            noteType = noteType,
+            fieldsByName = fieldsByName,
+            options = ankiConnectDuplicateOptions(
                 deck = deck,
-                noteType = noteType,
-                fieldsByName = fieldsByName,
-                options = ankiConnectDuplicateOptions(
-                    deck = deck,
-                    allowDupes = allowDupes,
-                    duplicateScope = duplicateScope,
-                    checkDuplicatesAcrossAllModels = checkDuplicatesAcrossAllModels,
-                ),
-            )
-            val noteWithTags = if (tags.isEmpty()) {
-                note
-            } else {
-                buildJsonObject {
-                    note.forEach { (key, value) -> put(key, value) }
-                    put(
-                        "tags",
-                        buildJsonArray {
-                            tags.forEach { tag -> add(JsonPrimitive(tag)) }
-                        },
-                    )
-                }
+                allowDupes = allowDupes,
+                duplicateScope = duplicateScope,
+                checkDuplicatesAcrossAllModels = checkDuplicatesAcrossAllModels,
+            ),
+        )
+        val noteWithTags = if (tags.isEmpty()) {
+            note
+        } else {
+            buildJsonObject {
+                note.forEach { (key, value) -> put(key, value) }
+                put(
+                    "tags",
+                    buildJsonArray {
+                        tags.forEach { tag -> add(JsonPrimitive(tag)) }
+                    },
+                )
             }
-            request(
-                "addNote",
-                buildJsonObject {
-                    put("note", noteWithTags)
-                },
-            )
-            true
-        }.getOrDefault(false)
+        }
+        val created = request(
+            "addNote",
+            buildJsonObject {
+                put("note", noteWithTags)
+            },
+        )?.jsonPrimitive?.longOrNull
+        // AnkiConnect reports a successful add with the new note id. A null result and a null
+        // error still means the call was accepted, but there is no id to open.
+        created?.takeIf { it > 0L } ?: 0L
+    }.getOrNull()
 
     override fun addMediaFromUri(uriString: String, preferredName: String, mimeType: String): String? = null
 
@@ -200,6 +220,34 @@ class AnkiConnectBackend(
         request("guiBrowse", buildJsonObject { put("query", query) })
         true
     }.getOrDefault(false)
+
+    override fun openNote(noteId: Long): Boolean = runCatching {
+        if (noteId <= 0L) return false
+        request("guiBrowse", buildJsonObject { put("query", "nid:$noteId") })
+        true
+    }.getOrDefault(false)
+
+    override fun findNoteId(
+        deck: AnkiDeck,
+        noteType: AnkiNoteType,
+        key: String,
+        duplicateScope: AnkiDuplicateScope,
+        checkDuplicatesAcrossAllModels: Boolean,
+    ): Long? = runCatching {
+        val query = ankiNoteBrowserQuery(
+            deck = deck,
+            noteType = noteType,
+            key = key,
+            duplicateScope = duplicateScope,
+            checkAllModels = checkDuplicatesAcrossAllModels,
+        )
+        if (query.isBlank()) return null
+        requestArray("findNotes", buildJsonObject { put("query", query) })
+            .firstOrNull()
+            ?.jsonPrimitive
+            ?.longOrNull
+            ?.takeIf { it > 0L }
+    }.getOrNull()
 
     private fun ankiConnectNote(
         deck: AnkiDeck,
