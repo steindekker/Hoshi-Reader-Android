@@ -1,14 +1,18 @@
 package moe.antimony.hoshi.features.anki
 
+import android.app.Activity
+import android.app.Application
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import com.ichi2.anki.FlashCardsContract
 import com.ichi2.anki.api.AddContentApi
 import java.lang.SecurityException
+import java.lang.ref.WeakReference
 import java.math.BigInteger
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
@@ -22,6 +26,7 @@ class AndroidAnkiContentApi @Inject constructor(
 ) : AnkiContentApi {
     private val appContext = context.applicationContext
     private val api = AddContentApi(appContext)
+    private val resumedActivity = ResumedActivityTracker(appContext)
 
     override fun deckList(): Map<Long, String> =
         readAnkiApi(AnkiFetchFailure.DeckListUnavailable) {
@@ -123,14 +128,15 @@ class AndroidAnkiContentApi @Inject constructor(
                 query = query,
                 packageName = AddContentApi.getAnkiDroidPackageName(appContext) ?: "com.ichi2.anki",
             )
-            appContext.startActivity(
-                Intent().apply {
-                    setClassName(spec.packageName, spec.activityClassName)
-                    spec.stringExtras.forEach { (key, value) -> putExtra(key, value) }
-                    spec.booleanExtras.forEach { (key, value) -> putExtra(key, value) }
-                    if (spec.newTask) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                },
-            )
+            val intent = Intent(spec.action, Uri.parse(spec.uri)).setPackage(spec.packageName)
+            // From the visible Hoshi activity, the browser opens on top of Hoshi and Back
+            // returns here; only without one does it need a task of its own.
+            val activity = resumedActivity.current()
+            if (activity != null) {
+                activity.startActivity(intent)
+            } else {
+                appContext.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
             true
         }.recoverCatching { error ->
             logAnkiApiFailure("Unable to open the AnkiDroid card browser.", error)
@@ -228,26 +234,28 @@ internal fun ankiDroidSyncIntentSpec(): AnkiDroidSyncIntentSpec =
     )
 
 internal data class AnkiDroidBrowserIntentSpec(
-    val activityClassName: String,
-    val stringExtras: Map<String, String>,
-    val booleanExtras: Map<String, Boolean>,
+    val action: String,
+    val uri: String,
     val packageName: String,
-    val newTask: Boolean,
 )
 
+/**
+ * AnkiDroid's public browser deep link. `CardBrowser` itself is not exported (2.25 refuses an
+ * explicit start with a SecurityException), so the search goes through `IntentHandler`'s
+ * `anki://x-callback-url/browser` filter. The query keeps the requested duplicate scope.
+ */
 internal fun ankiDroidBrowserIntentSpec(
     query: String,
     packageName: String = "com.ichi2.anki",
 ): AnkiDroidBrowserIntentSpec =
     AnkiDroidBrowserIntentSpec(
-        activityClassName = "com.ichi2.anki.CardBrowser",
-        // A URI search takes precedence over these extras and retains the last deck filter.
-        // Keep the requested duplicate scope in the query, not in the browser selection.
-        stringExtras = mapOf("search_query" to query),
-        booleanExtras = mapOf("all_decks" to true),
+        action = Intent.ACTION_VIEW,
+        uri = "anki://x-callback-url/browser?search=" + percentEncode(query),
         packageName = packageName,
-        newTask = true,
     )
+
+private fun percentEncode(value: String): String =
+    java.net.URLEncoder.encode(value, Charsets.UTF_8.name()).replace("+", "%20")
 
 internal fun ankiDuplicateNoteSelection(
     modelId: Long,
@@ -337,4 +345,29 @@ private fun String.decodeNumericHtmlEntity(): String? {
         else -> null
     } ?: return null
     return runCatching { String(Character.toChars(codePoint)) }.getOrNull()
+}
+
+/** The app's currently resumed activity, so external screens open on top of it. */
+private class ResumedActivityTracker(context: Context) : Application.ActivityLifecycleCallbacks {
+    private var resumed: WeakReference<Activity>? = null
+
+    init {
+        (context as? Application)?.registerActivityLifecycleCallbacks(this)
+    }
+
+    fun current(): Activity? = resumed?.get()?.takeUnless { it.isFinishing || it.isDestroyed }
+
+    override fun onActivityResumed(activity: Activity) {
+        resumed = WeakReference(activity)
+    }
+
+    override fun onActivityPaused(activity: Activity) {
+        if (resumed?.get() === activity) resumed = null
+    }
+
+    override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+    override fun onActivityStarted(activity: Activity) = Unit
+    override fun onActivityStopped(activity: Activity) = Unit
+    override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+    override fun onActivityDestroyed(activity: Activity) = Unit
 }

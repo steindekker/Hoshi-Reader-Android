@@ -111,6 +111,14 @@ internal class SetupDownload(
 ) {
     fun peek(): SetupManifest = parseSetupManifest(readText(URL(catalogUrl)))
 
+    /** The enrichment pack's size from its own manifest; 0 when the catalog has none or it can't be read. */
+    fun packSize(manifest: SetupManifest): Long {
+        val pack = manifest.pack ?: return 0L
+        return runCatching {
+            setupJson.decodeFromString<SetupPackSize>(readText(URL(URL(catalogUrl), pack))).size
+        }.getOrDefault(0L)
+    }
+
     fun run(onProgress: (SetupProgress) -> Unit) {
         val manifest = peek()
         val base = URL(catalogUrl)
@@ -200,7 +208,7 @@ internal class SetupDownload(
         }
         try {
             if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                throw SetupFailure(SetupFailure.Reason.Unreachable)
+                throw SetupFailure(SetupFailure.Reason.Unreachable, "HTTP ${connection.responseCode} for $url")
             }
             connection.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
         } finally {
@@ -284,7 +292,7 @@ internal fun downloadVerified(
 
 private fun Exception.asSetupFailure(): Nothing {
     if (this is CancellationException || this is SetupFailure) throw this
-    throw SetupFailure(SetupFailure.Reason.Unreachable)
+    throw SetupFailure(SetupFailure.Reason.Unreachable, cause = this)
 }
 
 private fun sha256(file: File): String {

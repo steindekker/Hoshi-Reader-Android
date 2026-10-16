@@ -14,6 +14,7 @@ Historical release notes before v1.3.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 ### Fixed
 
 - The add-card button in the dictionary popup stays tappable. A tap that does not add a card, or a duplicate check that does not finish, no longer leaves the button dead, and a tap still adds a card when the click does not arrive. Tapping it also works when the card needs word audio that has not been played yet.
+- A sentence picked in "Mine with options" now splits into the cloze fields around the word even when it spells the word differently from what you looked up (猫 for ねこ), instead of putting the whole sentence in Cloze Before.
 
 ## [v1.5.0] - 2026-10-15
 

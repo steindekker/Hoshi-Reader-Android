@@ -621,8 +621,17 @@ internal object AnkiHandlebarRenderer {
         ) {
             offset
         } else {
-            context.sentence.indexOf(matched).takeIf { it >= 0 }
+            // A sentence picked in the options sheet may write the word differently from the
+            // looked-up text (ねこ vs 猫), so fall back to the term, then its reading.
+            val found = listOf(matched, payload.expression, payload.reading)
+                .filter { it.isNotBlank() }
+                .firstNotNullOfOrNull { text -> context.sentence.indexOf(text).takeIf { it >= 0 }?.let { it to text } }
                 ?: return ClozeParts(context.sentence, "", "")
+            return ClozeParts(
+                prefix = context.sentence.substring(0, found.first),
+                body = found.second,
+                suffix = context.sentence.substring(found.first + found.second.length),
+            )
         }
         return ClozeParts(
             prefix = context.sentence.substring(0, start),

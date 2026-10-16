@@ -128,22 +128,30 @@ class AnkiDuplicateQueryTest {
     }
 
     @Test
-    fun ankiDroidBrowserSearchIgnoresLastDeckAndPreservesRequestedScope() {
+    fun ankiDroidBrowserSearchUsesThePublicDeepLinkAndPreservesRequestedScope() {
         val query = "\"Expression:食べる + &\" \"note:Lapis\" \"deck:Mining::日本語\""
         val spec = ankiDroidBrowserIntentSpec(query)
 
-        assertEquals("com.ichi2.anki.CardBrowser", spec.activityClassName)
+        assertEquals("android.intent.action.VIEW", spec.action)
         assertEquals("com.ichi2.anki", spec.packageName)
-        assertEquals(mapOf("search_query" to query), spec.stringExtras)
-        assertEquals(mapOf("all_decks" to true), spec.booleanExtras)
-        assertTrue(spec.newTask)
+        assertTrue(spec.uri.startsWith("anki://x-callback-url/browser?search="))
+        val encoded = spec.uri.substringAfter("search=")
+        assertEquals(query, java.net.URLDecoder.decode(encoded.replace("+", "%2B"), "UTF-8"))
+        assertTrue(" " !in encoded && "&" !in encoded)
     }
 
     @Test
-    fun ankiDroidBrowserSearchUsesDetectedPackageWithOriginalActivityClass() {
+    fun ankiDroidBrowserOpensTheCreatedNoteById() {
+        assertEquals(
+            "anki://x-callback-url/browser?search=nid%3A42",
+            ankiDroidBrowserIntentSpec("nid:42").uri,
+        )
+    }
+
+    @Test
+    fun ankiDroidBrowserSearchUsesDetectedPackage() {
         val spec = ankiDroidBrowserIntentSpec("食べる", packageName = "com.ichi2.anki.debug")
 
         assertEquals("com.ichi2.anki.debug", spec.packageName)
-        assertEquals("com.ichi2.anki.CardBrowser", spec.activityClassName)
     }
 }

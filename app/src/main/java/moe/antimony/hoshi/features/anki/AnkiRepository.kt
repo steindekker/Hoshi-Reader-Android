@@ -530,13 +530,19 @@ internal class AnkiRepository(
             val contentType: String?
             val data: ByteArray
             try {
-                if (conn.responseCode !in 200..299) return null
+                if (conn.responseCode !in 200..299) {
+                    Log.w(TAG, "Remote image returned HTTP ${conn.responseCode}")
+                    return null
+                }
                 contentType = conn.contentType
                 data = conn.inputStream.use { it.readBytes() }
             } finally {
                 conn.disconnect()
             }
-            val media = validateAnkiImageBytes(url, contentType, data) ?: return null
+            val media = validateAnkiImageBytes(url, contentType, data) ?: run {
+                Log.w(TAG, "Remote image rejected: type=$contentType bytes=${data.size}")
+                return null
+            }
             val file = mediaCacheFile(media.preferredName)
             file.writeBytes(data)
             addMediaFile(file.absolutePath, file.name, media.mimeType, activeBackend, backendKind)

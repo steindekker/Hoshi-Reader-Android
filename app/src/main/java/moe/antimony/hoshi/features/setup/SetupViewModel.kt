@@ -1,6 +1,7 @@
 package moe.antimony.hoshi.features.setup
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -65,12 +66,14 @@ internal class SetupViewModel @Inject constructor(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            runCatching { Log.w("Setup", "Unable to read the setup catalog", error) }
             null
         }
+        val downloadBytes = manifest?.let { it.downloadSize + repository.packSize(it) } ?: 0L
         _uiState.update {
             it.copy(
                 ready = true,
-                downloadBytes = manifest?.downloadSize ?: 0L,
+                downloadBytes = downloadBytes,
                 audioAvailable = manifest?.audio != null,
                 audioBytes = manifest?.audio?.size ?: 0L,
                 hasAudioServer = manifest?.audioServer != null,

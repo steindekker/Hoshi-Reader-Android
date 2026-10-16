@@ -27,6 +27,9 @@ internal data class SetupManifest(
 }
 
 @Serializable
+internal data class SetupPackSize(val size: Long = 0L)
+
+@Serializable
 internal data class SetupAudioServer(
     val name: String,
     val url: String,
@@ -56,6 +59,7 @@ internal data class SetupProgress(
     val importing: Boolean = false,
 )
 
-internal class SetupFailure(val reason: Reason) : Exception() {
+internal class SetupFailure(val reason: Reason, message: String? = null, cause: Throwable? = null) :
+    Exception(message ?: reason.name, cause) {
     enum class Reason { Unreachable, Damaged, Format }
 }

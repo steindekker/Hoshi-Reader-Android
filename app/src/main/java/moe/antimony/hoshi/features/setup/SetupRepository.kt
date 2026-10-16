@@ -85,6 +85,8 @@ internal class SetupRepository @Inject constructor(
 
     suspend fun peek(): SetupManifest = withContext(ioDispatcher) { download.peek() }
 
+    suspend fun packSize(manifest: SetupManifest): Long = withContext(ioDispatcher) { download.packSize(manifest) }
+
     suspend fun run(onProgress: (SetupProgress) -> Unit) =
         withContext(ioDispatcher) { download.run(onProgress) }
 

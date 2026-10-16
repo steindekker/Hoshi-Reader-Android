@@ -413,6 +413,28 @@ class AnkiHandlebarRendererTest {
     }
 
     @Test
+    fun clozePartsFallBackToTheTermWhenThePickedSentenceSpellsItDifferently() {
+        val payload = AnkiMiningPayload(expression = "猫", reading = "ねこ", matched = "ねこ")
+
+        assertEquals(
+            "まるで、|猫|のようだ。",
+            AnkiHandlebarRenderer.render(
+                "{cloze-prefix}|{cloze-body}|{cloze-suffix}",
+                payload,
+                AnkiMiningContext(sentence = "まるで、猫のようだ。"),
+            ),
+        )
+        assertEquals(
+            "犬だ|||",
+            AnkiHandlebarRenderer.render(
+                "{cloze-prefix}|{cloze-body}|{cloze-suffix}|",
+                payload,
+                AnkiMiningContext(sentence = "犬だ"),
+            ),
+        )
+    }
+
+    @Test
     fun selectedGlossaryUsesConfiguredFallbackWithoutRecursing() {
         val payload = AnkiMiningPayload(
             expression = "読む",
