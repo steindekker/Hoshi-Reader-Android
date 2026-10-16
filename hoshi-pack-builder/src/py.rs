@@ -3,7 +3,7 @@
 //! `json.dumps(..., ensure_ascii=False, separators=(",", ":"))`, jaconv's kana
 //! tables and `random.Random(seed).randrange(n)`.
 
-use serde_json::Value;
+use crate::json::J;
 
 /// `html.escape(s)` (quote=True), appended to `out`.
 pub fn escape_into(out: &mut String, s: &str) {
@@ -118,29 +118,23 @@ fn str_repr(out: &mut String, s: &str) {
     out.push(q);
 }
 
-fn repr_into(out: &mut String, v: &Value) {
+fn repr_into(out: &mut String, v: &J) {
     match v {
-        Value::String(s) => str_repr(out, s),
+        J::Str(s) => str_repr(out, s),
         _ => str_into(out, v),
     }
 }
 
 /// `str(v)` for a value `json.loads` produced.
-pub fn str_into(out: &mut String, v: &Value) {
+pub fn str_into(out: &mut String, v: &J) {
     match v {
-        Value::Null => out.push_str("None"),
-        Value::Bool(b) => out.push_str(if *b { "True" } else { "False" }),
-        Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                out.push_str(&i.to_string())
-            } else if let Some(u) = n.as_u64() {
-                out.push_str(&u.to_string())
-            } else {
-                out.push_str(&float_repr(n.as_f64().unwrap()))
-            }
-        }
-        Value::String(s) => out.push_str(s),
-        Value::Array(a) => {
+        J::Null => out.push_str("None"),
+        J::Bool(b) => out.push_str(if *b { "True" } else { "False" }),
+        J::Int(i) => out.push_str(&i.to_string()),
+        J::UInt(u) => out.push_str(&u.to_string()),
+        J::Float(f) => out.push_str(&float_repr(*f)),
+        J::Str(s) => out.push_str(s),
+        J::Arr(a) => {
             out.push('[');
             for (i, x) in a.iter().enumerate() {
                 if i > 0 {
@@ -150,7 +144,7 @@ pub fn str_into(out: &mut String, v: &Value) {
             }
             out.push(']');
         }
-        Value::Object(m) => {
+        J::Obj(m) => {
             out.push('{');
             for (i, (k, x)) in m.iter().enumerate() {
                 if i > 0 {
@@ -165,7 +159,7 @@ pub fn str_into(out: &mut String, v: &Value) {
     }
 }
 
-pub fn py_str(v: &Value) -> String {
+pub fn py_str(v: &J) -> String {
     let mut s = String::new();
     str_into(&mut s, v);
     s

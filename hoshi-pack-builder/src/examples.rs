@@ -7,7 +7,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use regex::Regex;
-use serde_json::{Map, Value};
+use crate::json::{J, NULL};
 
 use crate::py;
 
@@ -51,109 +51,105 @@ pub fn highlight(text: &str, keyword: &str) -> String {
 }
 
 /// `_walk`: every dict node, preorder, descending through "content".
-fn walk<'a>(node: &'a Value, out: &mut Vec<&'a Map<String, Value>>) {
+fn walk<'a, 'b>(node: &'a J<'b>, out: &mut Vec<&'a J<'b>>) {
     match node {
-        Value::Object(m) => {
-            out.push(m);
-            if let Some(c) = m.get("content") {
+        J::Obj(_) => {
+            out.push(node);
+            if let Some(c) = node.get("content") {
                 walk(c, out);
             }
         }
-        Value::Array(a) => a.iter().for_each(|x| walk(x, out)),
+        J::Arr(a) => a.iter().for_each(|x| walk(x, out)),
         _ => {}
     }
 }
 
-fn walked(node: &Value) -> Vec<&Map<String, Value>> {
+fn walked<'a, 'b>(node: &'a J<'b>) -> Vec<&'a J<'b>> {
     let mut v = Vec::new();
     walk(node, &mut v);
     v
 }
 
-fn data_content<'a>(node: &'a Map<String, Value>) -> Option<&'a Value> {
+fn data_is(node: &J, want: &str) -> bool {
     match node.get("data") {
-        Some(Value::Object(d)) => d.get("content"),
-        _ => None,
+        Some(d @ J::Obj(_)) => d.get("content").and_then(J::as_str) == Some(want),
+        _ => false,
     }
 }
 
-fn data_is(node: &Map<String, Value>, want: &str) -> bool {
-    data_content(node).and_then(Value::as_str) == Some(want)
+fn content<'a, 'b>(node: &'a J<'b>) -> &'a J<'b> {
+    node.get("content").unwrap_or(&NULL)
 }
 
-fn content(node: &Map<String, Value>) -> &Value {
-    node.get("content").unwrap_or(&Value::Null)
-}
-
-fn children(node: &Map<String, Value>) -> &[Value] {
+fn children<'a, 'b>(node: &'a J<'b>) -> &'a [J<'b>] {
     match node.get("content") {
-        None | Some(Value::Null) => &[],
-        Some(Value::Array(a)) => a,
+        None | Some(J::Null) => &[],
+        Some(J::Arr(a)) => a,
         Some(other) => std::slice::from_ref(other),
     }
 }
 
-fn tag_is(node: &Map<String, Value>, want: &str) -> bool {
-    node.get("tag").and_then(Value::as_str) == Some(want)
+fn tag_is(node: &J, want: &str) -> bool {
+    node.get("tag").and_then(J::as_str) == Some(want)
 }
 
-fn style_is(node: &Map<String, Value>, key: &str, want: &str) -> bool {
+fn style_is(node: &J, key: &str, want: &str) -> bool {
     match node.get("style") {
-        Some(Value::Object(s)) => s.get(key).and_then(Value::as_str) == Some(want),
+        Some(s @ J::Obj(_)) => s.get(key).and_then(J::as_str) == Some(want),
         _ => false,
     }
 }
 
 /// `_plain`: base text without <rt>.
-fn plain_into(out: &mut String, node: &Value) {
+fn plain_into(out: &mut String, node: &J) {
     match node {
-        Value::String(s) => out.push_str(s),
-        Value::Array(a) => a.iter().for_each(|c| plain_into(out, c)),
-        Value::Object(m) => {
-            if !tag_is(m, "rt") {
-                plain_into(out, content(m));
+        J::Str(s) => out.push_str(s),
+        J::Arr(a) => a.iter().for_each(|c| plain_into(out, c)),
+        J::Obj(_) => {
+            if !tag_is(node, "rt") {
+                plain_into(out, content(node));
             }
         }
         _ => {}
     }
 }
 
-fn plain(node: &Value) -> String {
+fn plain(node: &J) -> String {
     let mut s = String::new();
     plain_into(&mut s, node);
     s
 }
 
 /// `_render_ruby`.
-fn render_ruby(out: &mut String, node: &Value) {
+fn render_ruby(out: &mut String, node: &J) {
     match node {
-        Value::String(s) => py::escape_into(out, s),
-        Value::Array(a) => a.iter().for_each(|c| render_ruby(out, c)),
-        Value::Object(m) => {
-            if data_is(m, "example-keyword") {
+        J::Str(s) => py::escape_into(out, s),
+        J::Arr(a) => a.iter().for_each(|c| render_ruby(out, c)),
+        J::Obj(_) => {
+            if data_is(node, "example-keyword") {
                 out.push_str("<b class=\"aa-ex-kw\">");
-                render_ruby(out, content(m));
+                render_ruby(out, content(node));
                 out.push_str("</b>");
                 return;
             }
-            match m.get("tag").and_then(Value::as_str) {
+            match node.get("tag").and_then(J::as_str) {
                 Some(t @ ("ruby" | "rt")) => {
                     out.push('<');
                     out.push_str(t);
                     out.push('>');
-                    render_ruby(out, content(m));
+                    render_ruby(out, content(node));
                     out.push_str("</");
                     out.push_str(t);
                     out.push('>');
                 }
-                _ => render_ruby(out, content(m)),
+                _ => render_ruby(out, content(node)),
             }
         }
         _ => {}
     }
 }
 
-pub fn jitendex(sc: &Value) -> Vec<Example> {
+pub fn jitendex(sc: &J) -> Vec<Example> {
     let mut out = Vec::new();
     for bx in walked(sc) {
         if !data_is(bx, "example-sentence") {
@@ -177,11 +173,11 @@ pub fn jitendex(sc: &Value) -> Vec<Example> {
     out
 }
 
-fn li_text(li: &Map<String, Value>) -> String {
+fn li_text(li: &J) -> String {
     py::strip(&plain(content(li))).to_string()
 }
 
-pub fn saito(sc: &Value, keyword: &str) -> Vec<Example> {
+pub fn saito(sc: &J, keyword: &str) -> Vec<Example> {
     let mut out = Vec::new();
     let push = |out: &mut Vec<Example>, p: String, en: String| {
         out.push(Example { jp: highlight(&p, keyword), en, plain: p });
@@ -192,8 +188,7 @@ pub fn saito(sc: &Value, keyword: &str) -> Vec<Example> {
         }
         let mut pending: Option<String> = None;
         for li in children(ul) {
-            let Value::Object(li) = li else { continue };
-            if !tag_is(li, "li") {
+            if !matches!(li, J::Obj(_)) || !tag_is(li, "li") {
                 continue;
             }
             if style_is(li, "listStyleType", "'◆'") {
@@ -229,15 +224,14 @@ fn sentence_at(text: &str, offset: usize) -> &str {
     py::strip(&text[start_b..])
 }
 
-fn yourei_li(li: &Map<String, Value>) -> Option<Example> {
+fn yourei_li(li: &J) -> Option<Example> {
     let mut segs: Vec<(String, bool)> = Vec::new();
     for span in children(li) {
         match span {
-            Value::String(s) => segs.push((s.clone(), false)),
-            Value::Object(span) => {
+            J::Str(s) => segs.push((s.to_string(), false)),
+            J::Obj(_) => {
                 for s in children(span) {
-                    let Value::Object(s) = s else { continue };
-                    if tag_is(s, "a") {
+                    if !matches!(s, J::Obj(_)) || tag_is(s, "a") {
                         continue;
                     }
                     let txt = plain(content(s));
@@ -268,14 +262,14 @@ fn yourei_li(li: &Map<String, Value>) -> Option<Example> {
     Some(Example { jp: highlight(sent, keyword), en: String::new(), plain: sent.to_string() })
 }
 
-pub fn yourei(sc: &Value) -> Vec<Example> {
+pub fn yourei(sc: &J) -> Vec<Example> {
     let mut out = Vec::new();
     for ul in walked(sc) {
         if !tag_is(ul, "ul") {
             continue;
         }
         for li in children(ul) {
-            if let Value::Object(li) = li {
+            if matches!(li, J::Obj(_)) {
                 if tag_is(li, "li") {
                     out.extend(yourei_li(li));
                 }
@@ -301,26 +295,45 @@ fn lines(text: &str) -> impl Iterator<Item = &str> {
     })
 }
 
-/// `_load_tsv`, streamed: only the `keep` ids are ever held.
+/// `_load_tsv`: id -> text for the `keep` ids. The file is parsed in chunks cut
+/// at line ends, in parallel; merging them in order keeps a repeated id's last
+/// text, as the dict does.
 fn load_tsv(path: &Path, keep: &HashSet<&str>) -> Result<HashMap<String, String>> {
-    use std::io::BufRead;
-    let mut r = std::io::BufReader::with_capacity(1 << 20, std::fs::File::open(path)?);
-    let mut out = HashMap::new();
-    let mut raw = Vec::new();
-    loop {
-        raw.clear();
-        if r.read_until(b'\n', &mut raw)? == 0 {
+    use rayon::prelude::*;
+    let file = std::fs::File::open(path)?;
+    // SAFETY: a read-only map of an input file nothing here writes.
+    let map = unsafe { memmap2::Mmap::map(&file)? };
+    let text = std::str::from_utf8(&map)?;
+    let mut cuts = vec![0];
+    let step = (1 << 20).max(text.len() / 64);
+    while let Some(&last) = cuts.last() {
+        let at = last + step;
+        if at >= text.len() {
             break;
         }
-        let chunk = std::str::from_utf8(&raw)?;
-        // Universal newlines: a lone \r also ends a line.
-        for line in lines(chunk) {
-            let mut parts = line.split('\t');
-            let (Some(id), Some(_), Some(t)) = (parts.next(), parts.next(), parts.next()) else { continue };
-            if keep.contains(id) {
-                out.insert(id.to_string(), t.to_string());
-            }
+        match text.as_bytes()[at..].iter().position(|&b| b == b'\n') {
+            Some(i) => cuts.push(at + i + 1),
+            None => break,
         }
+    }
+    cuts.push(text.len());
+    let parts: Vec<Vec<(&str, &str)>> = cuts
+        .par_windows(2)
+        .map(|w| {
+            let mut out = Vec::new();
+            for line in lines(&text[w[0]..w[1]]) {
+                let mut parts = line.split('\t');
+                let (Some(id), Some(_), Some(t)) = (parts.next(), parts.next(), parts.next()) else { continue };
+                if keep.contains(id) {
+                    out.push((id, t));
+                }
+            }
+            out
+        })
+        .collect();
+    let mut out = HashMap::new();
+    for (id, t) in parts.into_iter().flatten() {
+        out.insert(id.to_string(), t.to_string());
     }
     Ok(out)
 }
@@ -351,41 +364,64 @@ pub fn tatoeba(dir: &Path) -> Result<Vec<((String, String), Vec<Example>)>> {
     );
     let (jp_text, en_text) = (jp_text?, en_text?);
 
+    use rayon::prelude::*;
     let tok = Regex::new(r"^([^\s(\[{~]+)(?:\(([^)]*)\))?(?:\[[^\]]*\])?(?:\{([^}]*)\})?~?$").unwrap();
     let kana = Regex::new(r"^[\u{3040}-\u{30FF}ー]+$").unwrap();
-    let mut order: Vec<(String, String)> = Vec::new();
-    let mut buckets: HashMap<(String, String), Vec<Example>> = HashMap::new();
-    for (jp_id, eng_id, tokens) in rows {
-        let Some(jp) = jp_text.get(jp_id).filter(|s| !s.is_empty()) else { continue };
-        let en = en_text.get(eng_id).map(String::as_str).unwrap_or("");
-        let mut seen_here: HashSet<(&str, &str)> = HashSet::new();
-        for t in tokens.split(' ') {
-            let Some(m) = tok.captures(t) else { continue };
-            let hw = m.get(1).unwrap().as_str();
-            let mut reading = m.get(2).map_or("", |x| x.as_str());
-            let surface = m.get(3).map_or("", |x| x.as_str());
-            if reading.is_empty() && kana.is_match(hw) {
-                reading = hw;
-            }
-            if !seen_here.insert((hw, reading)) {
-                continue;
-            }
-            let key = (hw.to_string(), reading.to_string());
-            let buf = match buckets.get_mut(&key) {
-                Some(b) => b,
-                None => {
-                    order.push(key.clone());
-                    buckets.entry(key).or_default()
+    // Per line, in parallel: its sentence and its distinct (headword, reading,
+    // keyword) tokens. A headword may repeat in a sentence; it is indexed once.
+    type Line<'a> = (&'a str, &'a str, Vec<(&'a str, &'a str, &'a str)>);
+    let parsed: Vec<Option<Line>> = rows
+        .par_iter()
+        .map(|&(jp_id, eng_id, tokens)| {
+            let jp = jp_text.get(jp_id).filter(|s| !s.is_empty())?;
+            let en = en_text.get(eng_id).map(String::as_str).unwrap_or("");
+            let mut seen_here: HashSet<(&str, &str)> = HashSet::new();
+            let mut toks = Vec::new();
+            for t in tokens.split(' ') {
+                let Some(m) = tok.captures(t) else { continue };
+                let hw = m.get(1).unwrap().as_str();
+                let mut reading = m.get(2).map_or("", |x| x.as_str());
+                let surface = m.get(3).map_or("", |x| x.as_str());
+                if reading.is_empty() && kana.is_match(hw) {
+                    reading = hw;
                 }
-            };
-            if buf.len() >= BUILD_CAP {
-                continue;
+                if seen_here.insert((hw, reading)) {
+                    toks.push((hw, reading, if surface.is_empty() { hw } else { surface }));
+                }
             }
-            let kw = if surface.is_empty() { hw } else { surface };
-            buf.push(Example { jp: highlight(jp, kw), en: en.to_string(), plain: jp.clone() });
+            Some((jp.as_str(), en, toks))
+        })
+        .collect();
+    // In line order (bucket order and the cap depend on it): which (line, token)
+    // each bucket keeps.
+    let mut index: HashMap<(&str, &str), usize> = HashMap::new();
+    let mut buckets: Vec<((&str, &str), Vec<(usize, &str)>)> = Vec::new();
+    for (li, line) in parsed.iter().enumerate() {
+        let Some((_, _, toks)) = line else { continue };
+        for &(hw, reading, kw) in toks {
+            let k = *index.entry((hw, reading)).or_insert_with(|| {
+                buckets.push(((hw, reading), Vec::new()));
+                buckets.len() - 1
+            });
+            let buf = &mut buckets[k].1;
+            if buf.len() < BUILD_CAP {
+                buf.push((li, kw));
+            }
         }
     }
-    Ok(order.into_iter().map(|k| { let v = buckets.remove(&k).unwrap(); (k, v) }).collect())
+    Ok(buckets
+        .into_par_iter()
+        .map(|((hw, reading), picks)| {
+            let exs = picks
+                .into_iter()
+                .map(|(li, kw)| {
+                    let (jp, en, _) = parsed[li].as_ref().unwrap();
+                    Example { jp: highlight(jp, kw), en: en.to_string(), plain: jp.to_string() }
+                })
+                .collect();
+            ((hw.to_string(), reading.to_string()), exs)
+        })
+        .collect())
 }
 
 /// One `examples.sqlite` row of a term, kept in rowid order; its text (jp, en,
@@ -461,18 +497,18 @@ pub fn examples_for<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn yourei_keeps_the_headword_sentence() {
-        let li = json!({"tag": "ul", "content": [{"tag": "li", "content": [
+        let bump = bumpalo::Bump::new();
+        let li = crate::json::parse(r#"{"tag": "ul", "content": [{"tag": "li", "content": [
             {"tag": "span", "content": [
                 {"tag": "span", "content": "前の文。ここで"},
                 {"tag": "span", "style": {"color": "red"}, "content": "猫"},
                 {"tag": "span", "content": "が鳴いた。後の文"},
                 {"tag": "a", "content": "本"}
             ]}
-        ]}]});
+        ]}]}"#, &bump);
         let ex = yourei(&li);
         assert_eq!(ex.len(), 1);
         assert_eq!(ex[0].plain, "ここで猫が鳴いた。");

@@ -2,26 +2,37 @@
 
 use std::collections::HashMap;
 
-use serde_json::Value;
+use crate::json::J;
 
 use crate::py;
 use crate::strtab::StrTable;
 
 /// `build._parse`: (reading, rank) from one `term_meta` value.
-fn parse(meta: &Value) -> Option<(String, i64)> {
+fn parse(meta: &J) -> Option<(String, i64)> {
     match meta {
-        Value::Object(m) => {
-            if let Some(f) = m.get("frequency") {
-                let v = f.as_object()?.get("value")?.as_i64()?;
-                let reading = m.get("reading").map(py::py_str).unwrap_or_default();
+        J::Obj(_) => {
+            if let Some(f) = meta.get("frequency") {
+                f.as_obj()?;
+                let v = f.get("value")?.as_i64()?;
+                let reading = meta.get("reading").map(py::py_str).unwrap_or_default();
                 return Some((reading, v));
             }
-            Some((String::new(), m.get("value")?.as_i64()?))
+            Some((String::new(), meta.get("value")?.as_i64()?))
         }
-        Value::Number(n) => Some((String::new(), n.as_i64()?)),
-        Value::String(s) if py::is_digits(s) => Some((String::new(), s.parse().ok()?)),
+        J::Int(_) | J::UInt(_) => Some((String::new(), meta.as_i64()?)),
+        J::Str(s) if py::is_digits(s) => Some((String::new(), s.parse().ok()?)),
         _ => None,
     }
+}
+
+/// (key, reading, rank) from one `term_meta` bank entry.
+pub fn parse_entry(e: &[J]) -> Option<(String, String, i64)> {
+    if e.len() < 3 || e[1].as_str() != Some("freq") {
+        return None;
+    }
+    let key = e[0].as_str()?;
+    let (reading, value) = parse(&e[2])?;
+    Some((key.to_string(), reading, value))
 }
 
 /// key -> [(reading, smallest rank)] (`freq.sqlite`; only ranks are ever read).
@@ -36,14 +47,9 @@ pub struct Freq {
 }
 
 impl Freq {
-    /// One `term_meta` bank entry.
-    pub fn add(&mut self, e: &[Value]) {
-        if e.len() < 3 || e[1].as_str() != Some("freq") {
-            return;
-        }
-        let Some(key) = e[0].as_str() else { return };
-        let Some((reading, value)) = parse(&e[2]) else { return };
-        let k = (self.keys.intern(key), self.readings.intern(&reading));
+    /// One (key, reading, rank) from `parse_entry`; the smallest rank wins.
+    pub fn add(&mut self, key: &str, reading: &str, value: i64) {
+        let k = (self.keys.intern(key), self.readings.intern(reading));
         let v = self.best.entry(k).or_insert(value);
         *v = (*v).min(value);
     }

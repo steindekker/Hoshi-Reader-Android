@@ -13,14 +13,13 @@ use std::sync::Mutex;
 use anyhow::{Context, Result};
 use memmap2::Mmap;
 use rayon::prelude::*;
-use serde_json::Value;
 
 use crate::accent::AccentIndex;
 use crate::defs::{self, DefRow, JE, JJ_CHAIN};
 use crate::examples::{self, ExRow};
 use crate::freq::Freq;
 use crate::strtab::StrTable;
-use crate::yomitan::{DictZip, TermEntry};
+use crate::yomitan::{DictZip, Metas, Terms};
 
 const NO_HTML: u32 = u32::MAX;
 
@@ -99,61 +98,84 @@ pub struct Inputs<'a> {
 }
 
 /// A chain dictionary. With `earlier`, rows of a term an earlier chain
-/// dictionary has can never be chosen, so their HTML is not stored.
-fn parse_jj(z: &DictZip, dict: u8, store: &Store, strings: &Shared, earlier: Option<&[bool]>) -> Result<Vec<Vec<Def>>> {
+/// dictionary has can never be chosen, so their HTML is neither rendered nor
+/// stored; only whether it would be non-empty is decided (that keeps the row).
+fn parse_jj(z: &DictZip, dict: u8, store: &Store, strings: &Shared, earlier: Option<&StrTable>) -> Result<Vec<Vec<Def>>> {
     z.banks("term_bank_")?
         .par_iter()
         .map(|bank| {
-            let mut raw: Vec<(String, String, u32, u32)> = Vec::new();
-            let mut buf = String::new();
-            let mut html = String::new();
-            z.for_each(bank, |e: TermEntry| {
-                html.clear();
-                defs::render_sc(&mut html, &e.definitions);
-                if !html.is_empty() {
-                    raw.push((e.term, e.reading, buf.len() as u32, html.len() as u32));
-                    buf.push_str(&html);
+            type Piece = (Vec<(String, String, u32, u32)>, String);
+            let pieces = z.map_pieces::<Terms, Piece, _, _>(bank, Default::default, |(raw, buf), _, e| {
+                if earlier.is_some_and(|t| t.get(e.term).is_some()) {
+                    if defs::renders_nonempty(&e.definitions) {
+                        raw.push((e.term.to_owned(), e.reading.to_owned(), 0, NO_HTML));
+                    }
+                    return;
+                }
+                let off = buf.len();
+                defs::render_sc(buf, &e.definitions);
+                if buf.len() > off {
+                    raw.push((e.term.to_owned(), e.reading.to_owned(), off as u32, (buf.len() - off) as u32));
                 }
             })?;
-            let mut rows = Vec::with_capacity(raw.len());
-            {
+            let mut rows = Vec::new();
+            for (raw, buf) in pieces {
+                let base = store.append(buf.as_bytes())?;
                 let mut s = strings.lock().unwrap();
-                for (t, r, off, len) in &raw {
-                    rows.push(Def { term: s.intern(t), reading: s.intern(r), dict, sense_ord: 0, off: *off as u64, len: *len });
-                }
-            }
-            drop(raw);
-            if let Some(earlier) = earlier {
-                let mut kept = String::new();
-                for d in &mut rows {
-                    if earlier.get(d.term as usize).copied().unwrap_or(false) {
-                        d.len = NO_HTML;
-                    } else {
-                        let o = kept.len() as u64;
-                        kept.push_str(&buf[d.off as usize..d.off as usize + d.len as usize]);
-                        d.off = o;
-                    }
-                }
-                buf = kept;
-            }
-            let base = store.append(buf.as_bytes())?;
-            for d in &mut rows {
-                d.off += base;
+                rows.extend(raw.iter().map(|(t, r, off, len)| Def {
+                    term: s.intern(t),
+                    reading: s.intern(r),
+                    dict,
+                    sense_ord: 0,
+                    off: if *len == NO_HTML { 0 } else { base + *off as u64 },
+                    len: *len,
+                }));
             }
             Ok(rows)
         })
         .collect()
 }
 
+/// The chain dictionaries: all but the last in parallel, then the last one
+/// pruned against the terms the others have.
+fn parse_chain(
+    zs: [Option<&DictZip>; JJ_CHAIN.len()],
+    store: &Store,
+    strings: &Shared,
+) -> Result<Vec<Option<Vec<Vec<Def>>>>> {
+    let last = JJ_CHAIN.len() - 1;
+    let mut out: Vec<Option<Vec<Vec<Def>>>> = zs[..last]
+        .par_iter()
+        .enumerate()
+        .map(|(d, z)| z.map(|z| parse_jj(z, d as u8, store, strings, None)).transpose())
+        .collect::<Result<_>>()?;
+    let t = std::time::Instant::now();
+    let rows = match zs[last] {
+        Some(z) => {
+            let mut earlier = StrTable::default();
+            {
+                let s = strings.lock().unwrap();
+                for d in out.iter().flatten().flatten().flatten() {
+                    earlier.intern(s.str(d.term));
+                }
+            }
+            Some(parse_jj(z, last as u8, store, strings, Some(&earlier))?)
+        }
+        None => None,
+    };
+    crate::prof::log("last chain dictionary", t);
+    out.push(rows);
+    Ok(out)
+}
+
 fn parse_je(z: &DictZip, store: &Store, strings: &Shared) -> Result<Vec<Vec<Def>>> {
     z.banks("term_bank_")?
         .par_iter()
         .map(|bank| {
-            let mut raw: Vec<(String, String, i32, u32, u32)> = Vec::new();
-            let mut buf = String::new();
-            let mut i = 0i64;
-            z.for_each(bank, |e: TermEntry| {
-                i += 1;
+            type Piece = (Vec<(String, String, i32, u32, u32)>, String);
+            let pieces = z.map_pieces::<Terms, Piece, _, _>(bank, Default::default, |(raw, buf), i, e| {
+                // `enumerate(bank)` + 1 is the fallback sense order.
+                let i = i as i64 + 1;
                 let gl = defs::glosses(&e.definitions);
                 if gl.is_empty() {
                     return;
@@ -165,22 +187,23 @@ fn parse_je(z: &DictZip, store: &Store, strings: &Shared) -> Result<Vec<Vec<Def>
                     }
                     buf.push_str(g);
                 }
-                let sense_ord = defs::sense_ord(e.def_tags.as_deref(), i) as i32;
-                raw.push((e.term, e.reading, sense_ord, off as u32, (buf.len() - off) as u32));
+                let sense_ord = defs::sense_ord(e.def_tags, i) as i32;
+                raw.push((e.term.to_owned(), e.reading.to_owned(), sense_ord, off as u32, (buf.len() - off) as u32));
             })?;
-            let base = store.append(buf.as_bytes())?;
-            let mut s = strings.lock().unwrap();
-            Ok(raw
-                .iter()
-                .map(|(t, r, so, off, len)| Def {
+            let mut rows = Vec::new();
+            for (raw, buf) in pieces {
+                let base = store.append(buf.as_bytes())?;
+                let mut s = strings.lock().unwrap();
+                rows.extend(raw.iter().map(|(t, r, so, off, len)| Def {
                     term: s.intern(t),
                     reading: s.intern(r),
                     dict: JE,
                     sense_ord: *so,
                     off: base + *off as u64,
                     len: *len,
-                })
-                .collect())
+                }));
+            }
+            Ok(rows)
         })
         .collect()
 }
@@ -221,19 +244,23 @@ fn parse_examples(z: &DictZip, src: u8, store: &Store, strings: &Shared) -> Resu
     z.banks("term_bank_")?
         .par_iter()
         .map(|bank| {
-            let mut batch = Vec::new();
-            z.for_each(bank, |e: TermEntry| {
+            type Piece = Vec<(String, String, Vec<examples::Example>)>;
+            let pieces = z.map_pieces::<Terms, Piece, _, _>(bank, Default::default, |batch, _, e| {
                 let mut ex = match src {
                     examples::JITENDEX => examples::jitendex(&e.definitions),
-                    examples::SAITO => examples::saito(&e.definitions, &e.term),
+                    examples::SAITO => examples::saito(&e.definitions, e.term),
                     _ => examples::yourei(&e.definitions),
                 };
                 ex.truncate(examples::BUILD_CAP);
                 if !ex.is_empty() {
-                    batch.push((e.term, e.reading, ex));
+                    batch.push((e.term.to_owned(), e.reading.to_owned(), ex));
                 }
             })?;
-            store_examples(batch, src, store, strings)
+            let mut rows = Vec::new();
+            for batch in pieces {
+                rows.extend(store_examples(batch, src, store, strings)?);
+            }
+            Ok(rows)
         })
         .collect()
 }
@@ -241,7 +268,12 @@ fn parse_examples(z: &DictZip, src: u8, store: &Store, strings: &Shared) -> Resu
 fn parse_freq(z: &DictZip) -> Result<Freq> {
     let mut freq = Freq::default();
     for bank in z.banks("term_meta_bank_")? {
-        z.for_each(&bank, |e: Vec<Value>| freq.add(&e))?;
+        let pieces = z.map_pieces::<Metas, Vec<(String, String, i64)>, _, _>(&bank, Vec::new, |rows, _, e| {
+            rows.extend(crate::freq::parse_entry(e));
+        })?;
+        for (key, reading, value) in pieces.into_iter().flatten() {
+            freq.add(&key, &reading, value);
+        }
     }
     freq.finish();
     Ok(freq)
@@ -266,7 +298,7 @@ fn group(keys: &[u32], nkeys: usize) -> (Vec<u32>, Vec<u32>) {
 }
 
 /// Hands memory freed by the parse phase back to the OS.
-fn trim() {
+pub fn trim() {
     #[cfg(target_env = "gnu")]
     unsafe {
         libc::malloc_trim(0);
@@ -279,10 +311,9 @@ impl Sources {
         let strings: Shared = Mutex::new(StrTable::default());
         strings.lock().unwrap().intern("");
         let get = |id: &str| inp.dicts.get(id);
-        let last = JJ_CHAIN.len() - 1;
 
-        // Wave 1: everything except the last chain dictionary.
-        let mut jj: Vec<Option<Vec<Vec<Def>>>> = (0..JJ_CHAIN.len()).map(|_| None).collect();
+        let t0 = std::time::Instant::now();
+        let mut jj: Vec<Option<Vec<Vec<Def>>>> = Vec::new();
         let mut je = None;
         let ex_srcs = [examples::JITENDEX, examples::SAITO, examples::YOUREI];
         let mut ex_parts: Vec<Option<Vec<Vec<Ex>>>> = vec![None, None, None];
@@ -296,11 +327,9 @@ impl Sources {
                 }
             };
             rayon::scope(|s| {
-                for (d, slot) in jj[..last].iter_mut().enumerate() {
-                    if let Some(z) = get(JJ_CHAIN[d]) {
-                        s.spawn(move |_| fail(parse_jj(z, d as u8, store, strings, None).map(|v| *slot = Some(v))));
-                    }
-                }
+                let jj = &mut jj;
+                let zs: [Option<&DictZip>; JJ_CHAIN.len()] = std::array::from_fn(|d| get(JJ_CHAIN[d]));
+                s.spawn(move |_| fail(parse_chain(zs, store, strings).map(|v| *jj = v)));
                 if let Some(z) = get(defs::JE_DICT) {
                     let je = &mut je;
                     s.spawn(move |_| fail(parse_je(z, store, strings).map(|v| *je = Some(v))));
@@ -317,6 +346,8 @@ impl Sources {
                 if let Some(dir) = inp.tatoeba {
                     let tatoeba = &mut tatoeba;
                     s.spawn(move |_| {
+                        let t = std::time::Instant::now();
+                        let _l = Tlog("tatoeba", t);
                         fail(examples::tatoeba(dir).and_then(|rows| {
                             let batch = rows.into_iter().map(|((h, r), e)| (h, r, e)).collect();
                             *tatoeba = Some(store_examples(batch, examples::TATOEBA, store, strings)?);
@@ -325,22 +356,19 @@ impl Sources {
                     });
                 }
                 let accent = &mut accent;
-                s.spawn(move |_| fail(AccentIndex::load(inp.accent).map(|v| *accent = Some(v))));
+                s.spawn(move |_| {
+                    let t = std::time::Instant::now();
+                    fail(AccentIndex::load(inp.accent).map(|v| *accent = Some(v)));
+                    crate::prof::log("accent", t);
+                });
             });
         }
         if let Some(e) = errs.into_inner().unwrap().pop() {
             return Err(e);
         }
         trim();
-
-        // Wave 2: the last chain dictionary, pruned against the earlier ones.
-        if let Some(z) = get(JJ_CHAIN[last]) {
-            let mut earlier = vec![false; strings.lock().unwrap().len()];
-            for d in jj[..last].iter().flatten().flatten().flatten() {
-                earlier[d.term as usize] = true;
-            }
-            jj[last] = Some(parse_jj(z, last as u8, &store, &strings, Some(&earlier))?);
-        }
+        crate::prof::log("parse", t0);
+        let t2 = std::time::Instant::now();
         let (store, store_len) = store.finish()?;
         let strings = strings.into_inner().unwrap();
 
@@ -399,6 +427,7 @@ impl Sources {
         }
         let accent = accent.unwrap();
         counts.insert("accent".into(), accent.len());
+        crate::prof::log("merge", t2);
         let src = Sources {
             strings, defs, by_term, term_start, examples, ex_start, has_examples, store, freq, accent, pairs, counts,
         };
@@ -467,5 +496,12 @@ impl Sources {
         out.push((TAGS, tags));
         out.retain(|(_, v)| !v.is_empty());
         out
+    }
+}
+
+struct Tlog(&'static str, std::time::Instant);
+impl Drop for Tlog {
+    fn drop(&mut self) {
+        crate::prof::log(self.0, self.1)
     }
 }

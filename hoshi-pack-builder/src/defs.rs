@@ -2,7 +2,7 @@
 //! JMdict gloss extraction (`build._glosses`), and the definition chosen for a
 //! (term, reading) (`render.choose_jj`, `numbered_glosses`, `assemble_meaning`).
 
-use serde_json::Value;
+use crate::json::{J, NULL};
 
 use crate::py;
 
@@ -34,16 +34,16 @@ fn kebab_into(out: &mut String, k: &str) {
 }
 
 /// `render_sc(node)`, appended to `out`.
-pub fn render_sc(out: &mut String, node: &Value) {
+pub fn render_sc(out: &mut String, node: &J) {
     match node {
-        Value::String(s) => py::escape_br_into(out, s),
-        Value::Array(a) => a.iter().for_each(|c| render_sc(out, c)),
-        Value::Object(m) => {
-            let content = m.get("content").unwrap_or(&Value::Null);
-            match m.get("type").and_then(Value::as_str) {
+        J::Str(s) => py::escape_br_into(out, s),
+        J::Arr(a) => a.iter().for_each(|c| render_sc(out, c)),
+        J::Obj(_) => {
+            let content = node.get("content").unwrap_or(&NULL);
+            match node.get("type").and_then(J::as_str) {
                 Some("structured-content") => return render_sc(out, content),
                 Some("text") => {
-                    if let Some(Value::String(t)) = m.get("text") {
+                    if let Some(J::Str(t)) = node.get("text") {
                         py::escape_br_into(out, t);
                     }
                     return;
@@ -51,16 +51,16 @@ pub fn render_sc(out: &mut String, node: &Value) {
                 Some("image") => return,
                 _ => {}
             }
-            let tag = match m.get("tag") {
-                None | Some(Value::Null) => return render_sc(out, content),
-                Some(Value::String(t)) => t.as_str(),
+            let tag = match node.get("tag") {
+                None | Some(J::Null) => return render_sc(out, content),
+                Some(J::Str(t)) => *t,
                 Some(_) => return,
             };
             if tag == "img" {
                 return;
             }
             let mut attrs = String::new();
-            if let Some(Value::Object(style)) = m.get("style") {
+            if let Some(J::Obj(style)) = node.get("style") {
                 if !style.is_empty() {
                     let mut decls = String::new();
                     for (i, (k, v)) in style.iter().enumerate() {
@@ -76,17 +76,20 @@ pub fn render_sc(out: &mut String, node: &Value) {
                     attrs.push('"');
                 }
             }
-            if let Some(Value::Object(data)) = m.get("data") {
-                for (k, v) in data {
+            if let Some(J::Obj(data)) = node.get("data") {
+                for (k, v) in data.iter() {
                     attrs.push_str(" data-");
                     kebab_into(&mut attrs, k);
                     attrs.push_str("=\"");
-                    py::escape_into(&mut attrs, &py::py_str(v));
+                    match v {
+                        J::Str(s) => py::escape_into(&mut attrs, s),
+                        v => py::escape_into(&mut attrs, &py::py_str(v)),
+                    }
                     attrs.push('"');
                 }
             }
             if tag == "a" {
-                let href = m.get("href").and_then(Value::as_str).unwrap_or("");
+                let href = node.get("href").and_then(J::as_str).unwrap_or("");
                 if !href.contains("://") {
                     return render_sc(out, content);
                 }
@@ -110,33 +113,58 @@ pub fn render_sc(out: &mut String, node: &Value) {
     }
 }
 
+/// `!render_sc(node).is_empty()`, without rendering.
+pub fn renders_nonempty(node: &J) -> bool {
+    match node {
+        J::Str(s) => !s.is_empty(),
+        J::Arr(a) => a.iter().any(renders_nonempty),
+        J::Obj(_) => {
+            let content = node.get("content").unwrap_or(&NULL);
+            match node.get("type").and_then(J::as_str) {
+                Some("structured-content") => return renders_nonempty(content),
+                Some("text") => return matches!(node.get("text"), Some(J::Str(t)) if !t.is_empty()),
+                Some("image") => return false,
+                _ => {}
+            }
+            match node.get("tag") {
+                None | Some(J::Null) => renders_nonempty(content),
+                Some(J::Str(t)) if *t == "img" => false,
+                Some(J::Str(t)) if *t == "a" && !node.get("href").and_then(J::as_str).unwrap_or("").contains("://") => {
+                    renders_nonempty(content)
+                }
+                Some(J::Str(_)) => true,
+                Some(_) => false,
+            }
+        }
+        _ => false,
+    }
+}
+
 /// `build._glosses(definitions)`.
-pub fn glosses(definitions: &Value) -> Vec<&str> {
-    fn walk<'a>(n: &'a Value, out: &mut Vec<&'a str>) {
+pub fn glosses<'a>(definitions: &'a J<'a>) -> Vec<&'a str> {
+    fn walk<'a>(n: &'a J<'a>, out: &mut Vec<&'a str>) {
         match n {
-            Value::Object(m) => {
-                let is_glossary = matches!(m.get("data"), Some(Value::Object(d))
-                    if d.get("content").and_then(Value::as_str) == Some("glossary"));
+            J::Obj(_) => {
+                let is_glossary = matches!(n.get("data"), Some(d @ J::Obj(_))
+                    if d.get("content").and_then(J::as_str) == Some("glossary"));
                 if is_glossary {
-                    let c = m.get("content").unwrap_or(&Value::Null);
-                    let items: &[Value] = match c {
-                        Value::Array(a) => a,
+                    let c = n.get("content").unwrap_or(&NULL);
+                    let items: &[J] = match c {
+                        J::Arr(a) => a,
                         other => std::slice::from_ref(other),
                     };
                     for li in items {
-                        if let Value::Object(li) = li {
-                            if li.get("tag").and_then(Value::as_str) == Some("li") {
-                                if let Some(Value::String(s)) = li.get("content") {
-                                    out.push(s);
-                                }
+                        if matches!(li, J::Obj(_)) && li.get("tag").and_then(J::as_str) == Some("li") {
+                            if let Some(J::Str(s)) = li.get("content") {
+                                out.push(s);
                             }
                         }
                     }
-                } else if let Some(c) = m.get("content") {
+                } else if let Some(c) = n.get("content") {
                     walk(c, out);
                 }
             }
-            Value::Array(a) => a.iter().for_each(|x| walk(x, out)),
+            J::Arr(a) => a.iter().for_each(|x| walk(x, out)),
             _ => {}
         }
     }
@@ -249,18 +277,17 @@ pub fn store_norm(s: String) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-
-    fn render(v: Value) -> String {
+    fn render(v: &str) -> String {
+        let bump = bumpalo::Bump::new();
         let mut s = String::new();
-        render_sc(&mut s, &v);
+        render_sc(&mut s, &crate::json::parse(v, &bump));
         s
     }
 
     #[test]
     fn renders_structured_content() {
-        let v = json!([{"type": "structured-content", "content": [
-            {"tag": "span", "style": {"fontWeight": "bold", "marginLeft": 0.5}, "data": {"sense": 1}, "content": "a<b\nc"},
+        let v = r#"[{"type": "structured-content", "content": [
+            {"tag": "span", "style": {"fontWeight": "bold", "marginLeft": 0.5, "fontWeight": "normal"}, "data": {"sense": 1}, "content": "a<b\nc"},
             {"tag": "a", "href": "?query=x", "content": "link"},
             {"tag": "a", "href": "https://x.y/?a=1&b", "content": "ext"},
             {"tag": "img", "path": "x.png"},
@@ -268,12 +295,33 @@ mod tests {
             {"type": "image", "path": "y"},
             {"content": ["plain"]},
             7
-        ]}]);
+        ]}]"#;
         assert_eq!(
             render(v),
-            "<span style=\"font-weight:bold;margin-left:0.5\" data-sense=\"1\">a&lt;b<br>c</span>link\
+            "<span style=\"font-weight:normal;margin-left:0.5\" data-sense=\"1\">a&lt;b<br>c</span>link\
              <a href=\"https://x.y/?a=1&amp;b\">ext</a><br>plain"
         );
+    }
+
+    #[test]
+    fn nonempty_matches_render() {
+        for v in [
+            r#"[]"#,
+            r#"[""]"#,
+            r#"["x"]"#,
+            r#"[{"type": "image", "path": "a"}]"#,
+            r#"[{"type": "text", "text": ""}]"#,
+            r#"[{"type": "structured-content", "content": [{"tag": "img"}, {"tag": "a", "href": "?q", "content": ""}]}]"#,
+            r#"[{"type": "structured-content", "content": {"tag": "a", "href": "?q", "content": "x"}}]"#,
+            r#"[{"tag": "span"}]"#,
+            r#"[{"tag": "br"}]"#,
+            r#"[{"content": [7, null, true]}]"#,
+            r#"[{"tag": 3, "content": "x"}]"#,
+        ] {
+            let bump = bumpalo::Bump::new();
+            let j = crate::json::parse(v, &bump);
+            assert_eq!(renders_nonempty(&j), !render(v).is_empty(), "{v}");
+        }
     }
 
     #[test]

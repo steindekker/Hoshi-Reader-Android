@@ -2,19 +2,23 @@
 //! `pack.json`) straight from Yomitan zips, as `anki-enrich pack` does.
 
 mod accent;
+mod prof;
 mod compare;
 mod defs;
 mod examples;
 mod freq;
+mod json;
 mod pack;
 mod py;
 mod sentence;
+mod sha;
 mod sources;
 mod strtab;
 mod yomitan;
 mod z;
 
 use std::path::{Path, PathBuf};
+
 use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
@@ -77,9 +81,10 @@ struct BuildArgs {
     #[arg(long)]
     threads: Option<usize>,
     /// Banks larger than this many MB are parsed while inflating instead of from
-    /// an inflated buffer (lower memory, somewhat slower).
-    #[arg(long, default_value_t = 64)]
-    stream_over_mb: u64,
+    /// an inflated buffer, which bounds memory but parses them on one thread
+    /// (default: 64 with up to 4 threads, else 512).
+    #[arg(long)]
+    stream_over_mb: Option<u64>,
     /// After building, compare against this pack (a .sqlite or its directory).
     #[arg(long)]
     compare: Option<PathBuf>,
@@ -109,7 +114,8 @@ fn build(a: BuildArgs) -> Result<()> {
     if let Some(n) = a.threads {
         rayon::ThreadPoolBuilder::new().num_threads(n).build_global()?;
     }
-    yomitan::STREAM_OVER.store(a.stream_over_mb << 20, std::sync::atomic::Ordering::Relaxed);
+    let stream_over = a.stream_over_mb.unwrap_or(if rayon::current_num_threads() <= 4 { 64 } else { 512 });
+    yomitan::STREAM_OVER.store(stream_over << 20, std::sync::atomic::Ordering::Relaxed);
     std::fs::create_dir_all(&a.out)?;
 
     let mut overrides = a.dict.clone();
@@ -126,7 +132,9 @@ fn build(a: BuildArgs) -> Result<()> {
         };
         overrides.push(("jmdict".into(), path));
     }
+    let td = Instant::now();
     let dicts = yomitan::discover(a.dicts.as_deref(), &overrides)?;
+    prof::log("discover", td);
     for (id, z) in &dicts {
         eprintln!("  {id:9} {} [{}]  {}", z.title, z.revision, z.path.display());
     }
@@ -155,24 +163,38 @@ fn build(a: BuildArgs) -> Result<()> {
         let _ = std::fs::remove_file(d);
     }
 
-    let t = Instant::now();
-    let built = pack::build(&src, &a.out, true)?;
-    eprintln!("pack {} · {} entries in {:.1}s", built.version, built.entries, t.elapsed().as_secs_f64());
-
-    let sentence = match &a.sudachi_dic {
-        Some(dic) => {
-            let t = Instant::now();
-            let s = sentence::build(&a.out, &src.accent, dic, a.sudachi_source.clone())?;
-            eprintln!("sentence model {} in {:.1}s", s["accent"]["version"], t.elapsed().as_secs_f64());
-            Some(s)
-        }
-        None => {
-            eprintln!("sentence model skipped (no --sudachi-dic): pack.json has no \"sentence\" block");
-            None
-        }
-    };
+    // The sentence model only needs the accent index, so it is written while
+    // the pack is being compressed.
+    let (built, sentence) = std::thread::scope(|scope| -> Result<_> {
+        let sentence = a.sudachi_dic.as_ref().map(|dic| {
+            let (out, accent, label) = (&a.out, &src.accent, a.sudachi_source.clone());
+            scope.spawn(move || {
+                let t = Instant::now();
+                let s = sentence::build(out, accent, dic, label);
+                prof::log("sentence", t);
+                s
+            })
+        });
+        let t = Instant::now();
+        let built = pack::build(&src, &a.out, true)?;
+        eprintln!("pack {} · {} entries in {:.1}s", built.version, built.entries, t.elapsed().as_secs_f64());
+        let sentence = match sentence {
+            Some(h) => {
+                let s = h.join().unwrap()?;
+                eprintln!("sentence model {}", s["accent"]["version"]);
+                Some(s)
+            }
+            None => {
+                eprintln!("sentence model skipped (no --sudachi-dic): pack.json has no \"sentence\" block");
+                None
+            }
+        };
+        Ok((built, sentence))
+    })?;
     drop(src);
+    let tm = Instant::now();
     let manifest = pack::write_manifest(&a.out, &built, sentence)?;
+    prof::log("manifest", tm);
     eprintln!("wrote {} ({} bytes) in {:.1}s total", a.out.join(pack::MANIFEST_FILE).display(), manifest["size"],
         start.elapsed().as_secs_f64());
 

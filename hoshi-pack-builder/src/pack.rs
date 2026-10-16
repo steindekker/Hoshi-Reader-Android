@@ -2,17 +2,18 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 use std::time::Instant;
 
 use anyhow::Result;
 use rayon::prelude::*;
 use rusqlite::{Connection, params};
 use serde_json::{Map, Value, json};
-use sha2::{Digest, Sha256};
+use crate::sha::Sha256;
 
 use crate::py::{self, PyRandom};
 use crate::sources::Sources;
-use crate::z::Deflater;
+use crate::z::PrimedDeflater;
 
 pub const FORMAT: u32 = 1;
 pub const PACK_FILE: &str = "hoshi-pack.sqlite";
@@ -30,10 +31,14 @@ pub const KEY_ORDER: [&str; 6] = [DEFINITION, DEFINITION_SOURCE, PITCH, EXAMPLES
 pub const DEFAULTS_JSON: &str = r#"{"ae-definition": "{glossary-first}"}"#;
 pub const FALLBACK_KEYS_JSON: &str = r#"["ae-definition", "ae-definition-source", "ae-examples", "ae-tags"]"#;
 
+static FIELDS_NS: AtomicU64 = AtomicU64::new(0);
+static DEFLATE_NS: AtomicU64 = AtomicU64::new(0);
+static WRITE_NS: AtomicU64 = AtomicU64::new(0);
+
 const ZDICT_SIZE: usize = 32 * 1024;
 const ZDICT_SAMPLE_EVERY: u32 = 50;
 const ZDICT_CHUNK: usize = 64;
-const CHUNK_PAIRS: usize = 32 * 1024;
+const CHUNK_PAIRS: usize = 2048;
 
 /// `_encode`: compact JSON, insertion order, raw UTF-8.
 pub fn encode(values: &[(&str, String)], out: &mut Vec<u8>) {
@@ -52,31 +57,41 @@ pub fn encode(values: &[(&str, String)], out: &mut Vec<u8>) {
 
 /// `train_zdict`: the most repeated 64-byte chunks, most common last.
 pub fn train_zdict(samples: &[Vec<u8>]) -> Vec<u8> {
-    // chunk -> (count, first seen); Counter.most_common() is a stable sort on count.
-    let mut counts: HashMap<&[u8], (u32, u32)> = HashMap::new();
-    let mut order = 0u32;
-    for raw in samples {
+    // Every chunk position as (sample, offset), in Counter insertion order; sorting
+    // them by content groups equal chunks without a hash map of slices.
+    let mut at: Vec<(u32, u32)> = Vec::new();
+    for (si, raw) in samples.iter().enumerate() {
         let end = raw.len().saturating_sub(ZDICT_CHUNK);
-        let mut i = 0;
-        while i < end {
-            let e = counts.entry(&raw[i..i + ZDICT_CHUNK]).or_insert_with(|| {
-                order += 1;
-                (0, order)
-            });
-            e.0 += 1;
-            i += ZDICT_CHUNK / 4;
-        }
+        at.extend((0..end).step_by(ZDICT_CHUNK / 4).map(|i| (si as u32, i as u32)));
     }
-    let mut common: Vec<(&[u8], (u32, u32))> = counts.into_iter().filter(|(_, (n, _))| *n > 3).collect();
-    common.sort_by(|a, b| b.1.0.cmp(&a.1.0).then(a.1.1.cmp(&b.1.1)));
+    let chunk = |&(si, i): &(u32, u32)| &samples[si as usize][i as usize..i as usize + ZDICT_CHUNK];
+    // (count, first seen) per distinct chunk; most_common() is a stable sort on count.
+    let mut order: Vec<u32> = (0..at.len() as u32).collect();
+    order.par_sort_by(|&x, &y| chunk(&at[x as usize]).cmp(chunk(&at[y as usize])).then(x.cmp(&y)));
+    let mut common: Vec<(u32, u32)> = Vec::new();
+    let mut i = 0;
+    while i < order.len() {
+        let first = order[i];
+        let mut j = i + 1;
+        while j < order.len() && chunk(&at[order[j] as usize]) == chunk(&at[first as usize]) {
+            j += 1;
+        }
+        let n = (j - i) as u32;
+        if n > 3 {
+            common.push((n, first));
+        }
+        i = j;
+    }
+    drop(order);
+    common.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
     let mut picked = Vec::new();
     let mut total = 0;
-    for (chunk, _) in common {
-        if total + chunk.len() > ZDICT_SIZE {
+    for &(_, first) in &common {
+        if total + ZDICT_CHUNK > ZDICT_SIZE {
             break;
         }
-        picked.push(chunk);
-        total += chunk.len();
+        picked.push(chunk(&at[first as usize]));
+        total += ZDICT_CHUNK;
     }
     picked.iter().rev().flat_map(|c| c.iter().copied()).collect()
 }
@@ -104,6 +119,97 @@ fn now_iso() -> String {
     format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}+00:00", rem / 3600, rem / 60 % 60, rem % 60)
 }
 
+thread_local! {
+    /// This thread's deflater, primed with the zdict it was made for.
+    static DEFLATER: std::cell::RefCell<Option<(Vec<u8>, PrimedDeflater)>> = const { std::cell::RefCell::new(None) };
+}
+
+/// One row's encoded values and the mask of keys it carries, or None.
+fn row_raw(src: &Sources, t: u32, r: u32) -> Option<(Vec<u8>, u8)> {
+    let t0 = Instant::now();
+    let values = src.fields_for(t, r);
+    FIELDS_NS.fetch_add(t0.elapsed().as_nanos() as u64, Relaxed);
+    if values.is_empty() {
+        return None;
+    }
+    let mut mask = 0u8;
+    for (k, _) in &values {
+        mask |= 1 << KEY_ORDER.iter().position(|x| x == k).unwrap();
+    }
+    let mut raw = Vec::new();
+    encode(&values, &mut raw);
+    Some((raw, mask))
+}
+
+fn deflate(raw: &[u8], zdict: &[u8]) -> Vec<u8> {
+    let t1 = Instant::now();
+    let mut blob = Vec::new();
+    DEFLATER.with_borrow_mut(|d| {
+        if d.as_ref().is_none_or(|(z, _)| z.as_slice() != zdict) {
+            *d = Some((zdict.to_vec(), PrimedDeflater::new(zdict)));
+        }
+        d.as_mut().unwrap().1.compress(raw, &mut blob);
+    });
+    DEFLATE_NS.fetch_add(t1.elapsed().as_nanos() as u64, Relaxed);
+    blob
+}
+
+/// The blobs of a chunk of headwords, computed on one thread. Neighbouring
+/// headwords often carry the same values (a term's readings without a pitch
+/// graph), and the same input always deflates to the same bytes, so each
+/// distinct row is compressed once.
+fn chunk_blobs(src: &Sources, chunk: &[(u32, u32)], zdict: &[u8]) -> Vec<Option<(Vec<u8>, u8)>> {
+    let raws: Vec<Option<(Vec<u8>, u8)>> = chunk.iter().map(|&(t, r)| row_raw(src, t, r)).collect();
+    let mut first: HashMap<&[u8], usize> = HashMap::new();
+    let mut blobs: Vec<Vec<u8>> = Vec::new();
+    let mut out = Vec::with_capacity(raws.len());
+    for row in &raws {
+        out.push(row.as_ref().map(|(raw, mask)| {
+            let k = *first.entry(raw.as_slice()).or_insert_with(|| {
+                blobs.push(deflate(raw, zdict));
+                blobs.len() - 1
+            });
+            (blobs[k].clone(), *mask)
+        }));
+    }
+    out
+}
+
+/// Hands out chunk indices in order to the workers and lets a worker run at
+/// most `ahead` chunks past the writer, bounding the reorder buffer.
+struct Queue {
+    next: std::sync::Mutex<(usize, usize)>, // (next to hand out, next to be written)
+    moved: std::sync::Condvar,
+    ahead: usize,
+    stop: std::sync::atomic::AtomicBool,
+}
+
+impl Queue {
+    fn take(&self, n: usize) -> Option<usize> {
+        let mut g = self.next.lock().unwrap();
+        loop {
+            if self.stop.load(Relaxed) || g.0 >= n {
+                return None;
+            }
+            if g.0 < g.1 + self.ahead {
+                g.0 += 1;
+                return Some(g.0 - 1);
+            }
+            g = self.moved.wait(g).unwrap();
+        }
+    }
+
+    fn written(&self, upto: usize) {
+        self.next.lock().unwrap().1 = upto;
+        self.moved.notify_all();
+    }
+
+    fn halt(&self) {
+        self.stop.store(true, Relaxed);
+        self.moved.notify_all();
+    }
+}
+
 /// Writes `out/PACK_FILE` (via a .tmp swapped in atomically).
 pub fn build(src: &Sources, out: &Path, verbose: bool) -> Result<Built> {
     let t = Instant::now();
@@ -123,7 +229,9 @@ pub fn build(src: &Sources, out: &Path, verbose: bool) -> Result<Built> {
         })
         .collect();
     let zdict = train_zdict(&encoded);
+    crate::prof::log("zdict", t);
     drop(encoded);
+    crate::sources::trim();
     if verbose {
         eprintln!("  zdict {} bytes from {} samples ({:.1}s)", zdict.len(), sample.len(), t.elapsed().as_secs_f64());
     }
@@ -135,7 +243,7 @@ pub fn build(src: &Sources, out: &Path, verbose: bool) -> Result<Built> {
         "PRAGMA journal_mode = OFF;
          PRAGMA synchronous = OFF;
          PRAGMA page_size = 4096;
-         PRAGMA cache_size = -32768;
+         PRAGMA cache_size = -8192;
          CREATE TABLE meta (key TEXT PRIMARY KEY, value BLOB NOT NULL);
          CREATE TABLE entries (term TEXT NOT NULL, reading TEXT NOT NULL, data BLOB NOT NULL);",
     )?;
@@ -149,54 +257,91 @@ pub fn build(src: &Sources, out: &Path, verbose: bool) -> Result<Built> {
     let tx = conn.transaction()?;
     let mut n = 0usize;
     let mut seen_keys = [false; KEY_ORDER.len()];
-    {
-        let mut ins = tx.prepare("INSERT INTO entries VALUES (?,?,?)")?;
-        let mut done = 0;
-        for chunk in pairs.chunks(CHUNK_PAIRS) {
-            let blobs: Vec<Option<(Vec<u8>, u8)>> = chunk
-                .par_iter()
-                .map_init(
-                    || (Deflater::new(), Vec::new()),
-                    |(d, raw), &(t, r)| {
-                        let values = src.fields_for(t, r);
-                        if values.is_empty() {
-                            return None;
+    // Workers each take the next chunk and compress it alone (no barrier per
+    // chunk); this thread puts chunks back in order, inserts and hashes them.
+    let chunks: Vec<&[(u32, u32)]> = pairs.chunks(CHUNK_PAIRS).collect();
+    let workers = rayon::current_num_threads();
+    let queue = Queue {
+        next: std::sync::Mutex::new((0, 0)),
+        moved: std::sync::Condvar::new(),
+        ahead: 2 * workers + 2,
+        stop: std::sync::atomic::AtomicBool::new(false),
+    };
+    type Done = (usize, Vec<Option<(Vec<u8>, u8)>>);
+    let (send, recv) = std::sync::mpsc::channel::<Done>();
+    let result = std::thread::scope(|scope| -> Result<()> {
+        let (zdict, queue, chunks) = (&zdict, &queue, &chunks);
+        scope.spawn(move || {
+            rayon::scope(|s| {
+                for _ in 0..workers {
+                    let send = send.clone();
+                    s.spawn(move |_| {
+                        while let Some(i) = queue.take(chunks.len()) {
+                            if send.send((i, chunk_blobs(src, chunks[i], zdict))).is_err() {
+                                break;
+                            }
                         }
-                        let mut mask = 0u8;
-                        for (k, _) in &values {
-                            mask |= 1 << KEY_ORDER.iter().position(|x| x == k).unwrap();
-                        }
-                        encode(&values, raw);
-                        let mut blob = Vec::new();
-                        d.compress(raw, &zdict, &mut blob);
-                        Some((blob, mask))
-                    },
-                )
-                .collect();
-            for (&(t, r), b) in chunk.iter().zip(blobs) {
-                let Some((blob, mask)) = b else { continue };
-                for (i, s) in seen_keys.iter_mut().enumerate() {
-                    *s |= mask & (1 << i) != 0;
+                    });
                 }
-                let (term, reading) = (src.str(t), src.str(r));
-                digest.update(term.as_bytes());
-                digest.update(b"\0");
-                digest.update(reading.as_bytes());
-                digest.update(b"\0");
-                digest.update(&blob);
-                ins.execute(params![term, reading, blob])?;
-                n += 1;
-            }
-            done += chunk.len();
-            if verbose {
-                eprint!("\r  rows {done}/{} ({:.1}s)", pairs.len(), t.elapsed().as_secs_f64());
+            });
+        });
+        let mut write = || -> Result<()> {
+        let mut ins = tx.prepare("INSERT INTO entries VALUES (?,?,?)")?;
+        let mut pending: std::collections::BTreeMap<usize, Vec<Option<(Vec<u8>, u8)>>> = Default::default();
+        let (mut next, mut done) = (0, 0);
+        while next < chunks.len() {
+            let Ok((i, blobs)) = recv.recv() else { break };
+            pending.insert(i, blobs);
+            while let Some(blobs) = pending.remove(&next) {
+                let tw = Instant::now();
+                for (&(t, r), b) in chunks[next].iter().zip(blobs) {
+                    let Some((blob, mask)) = b else { continue };
+                    for (i, s) in seen_keys.iter_mut().enumerate() {
+                        *s |= mask & (1 << i) != 0;
+                    }
+                    let (term, reading) = (src.str(t), src.str(r));
+                    digest.update(term.as_bytes());
+                    digest.update(b"\0");
+                    digest.update(reading.as_bytes());
+                    digest.update(b"\0");
+                    digest.update(&blob);
+                    ins.execute(params![term, reading, blob])?;
+                    n += 1;
+                }
+                WRITE_NS.fetch_add(tw.elapsed().as_nanos() as u64, Relaxed);
+                done += chunks[next].len();
+                next += 1;
+                queue.written(next);
+                if verbose {
+                    eprint!("\r  rows {done}/{} ({:.1}s)", pairs.len(), t.elapsed().as_secs_f64());
+                }
             }
         }
-    }
+        Ok(())
+        };
+        let r = write();
+        // A failed writer must release workers waiting for it before the scope joins them.
+        if r.is_err() {
+            queue.halt();
+        }
+        r
+    });
+    result?;
     if verbose {
         eprintln!();
     }
+    let ti = Instant::now();
     tx.execute_batch("CREATE INDEX entries_term ON entries (term)")?;
+    crate::prof::log("create index", ti);
+    if crate::prof::on() {
+        let f = |a: &AtomicU64| a.load(Relaxed) as f64 / 1e9;
+        eprintln!(
+            "  [prof] thread-summed fields_for {:.2}s, deflate {:.2}s; writer insert+digest {:.2}s",
+            f(&FIELDS_NS),
+            f(&DEFLATE_NS),
+            f(&WRITE_NS)
+        );
+    }
     let version: String = digest.finalize().iter().take(8).map(|b| format!("{b:02x}")).collect();
     let built_at = now_iso();
     let keys: Vec<&str> = KEY_ORDER.iter().zip(seen_keys).filter(|(_, s)| *s).map(|(k, _)| *k).collect();
@@ -212,8 +357,10 @@ pub fn build(src: &Sources, out: &Path, verbose: bool) -> Result<Built> {
         ins.execute(params!["entries", n.to_string()])?;
         ins.execute(params!["keys", keys_json])?;
     }
+    let tc = Instant::now();
     tx.commit()?;
     conn.close().map_err(|(_, e)| e)?;
+    crate::prof::log("commit+close", tc);
     std::fs::rename(&tmp, out.join(PACK_FILE))?;
     Ok(Built { version, built_at, entries: n })
 }
@@ -222,7 +369,7 @@ pub fn file_sha256(path: &Path) -> Result<String> {
     use std::io::Read;
     let mut f = std::fs::File::open(path)?;
     let mut h = Sha256::new();
-    let mut buf = vec![0u8; 1 << 20];
+    let mut buf = vec![0u8; 4 << 20];
     loop {
         let n = f.read(&mut buf)?;
         if n == 0 {

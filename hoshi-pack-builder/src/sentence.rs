@@ -2,13 +2,13 @@
 //! index plus a verbatim copy of Sudachi's `system.dic`, listed in the manifest's
 //! "sentence" block. Files whose content is unchanged are left alone.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, OpenFlags, params};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
+use crate::sha::Sha256;
 
 use crate::accent::AccentIndex;
 use crate::pack::file_sha256;
@@ -21,33 +21,45 @@ fn positions(v: &[i64]) -> String {
     v.iter().map(i64::to_string).collect::<Vec<_>>().join(",")
 }
 
-/// `_accent_rows`: (lemma, reading, positions) in index order, and
-/// `AccentIndex.by_reading` for every reading where it is not None.
-fn accent_rows(acc: &AccentIndex) -> Result<(Vec<(&str, &str, String)>, Vec<(&str, String)>)> {
-    let mut rows = Vec::with_capacity(acc.len());
-    for (key, pos) in acc.iter() {
-        let Some((lemma, reading)) = key.split_once('\t') else { bail!("accent key {key:?} is not 'lemma<TAB>reading'") };
-        if reading.contains('\t') {
-            bail!("accent key {key:?} is not 'lemma<TAB>reading'");
-        }
-        rows.push((lemma, reading, positions(pos)));
-    }
-    // Agreement is a set question: [0,3] and [3,0] carry the same accents.
-    let mut sets: HashMap<&str, HashSet<Vec<i64>>> = HashMap::new();
-    let mut first: HashMap<&str, &[i64]> = HashMap::new();
+/// A position list as a set (`frozenset(positions)`).
+fn as_set(v: &[i64]) -> Vec<i64> {
+    let mut s = v.to_vec();
+    s.sort_unstable();
+    s.dedup();
+    s
+}
+
+/// `_accent_rows`, streamed: the (lemma, reading, positions) rows come from
+/// `rows(acc)` in index order; this returns, for every reading where
+/// `AccentIndex.by_reading` is not None, the reading and its first entry's
+/// positions, in first-seen order.
+fn by_reading(acc: &AccentIndex) -> Result<Vec<(&str, &[i64])>> {
+    // reading -> (first entry's positions, whether every entry agrees as a set);
+    // [0,3] and [3,0] carry the same accents.
+    let mut seen: HashMap<&str, (&[i64], bool)> = HashMap::new();
     let mut readings: Vec<&str> = Vec::new();
-    for ((_, pos), (_, reading, _)) in acc.iter().zip(&rows) {
-        let mut set = pos.to_vec();
-        set.sort_unstable();
-        set.dedup();
-        sets.entry(reading).or_default().insert(set);
-        if !first.contains_key(reading) {
-            first.insert(reading, pos);
-            readings.push(reading);
+    for row in rows(acc) {
+        let (_, reading, pos) = row?;
+        match seen.get_mut(reading) {
+            Some((first, agree)) => {
+                if *agree && as_set(first) != as_set(pos) {
+                    *agree = false;
+                }
+            }
+            None => {
+                seen.insert(reading, (pos, true));
+                readings.push(reading);
+            }
         }
     }
-    let by_reading = readings.into_iter().filter(|r| sets[r].len() == 1).map(|r| (r, positions(first[r]))).collect();
-    Ok((rows, by_reading))
+    Ok(readings.into_iter().filter_map(|r| seen[r].1.then_some((r, seen[r].0))).collect())
+}
+
+fn rows(acc: &AccentIndex) -> impl Iterator<Item = Result<(&str, &str, &[i64])>> {
+    acc.iter().map(|(key, pos)| match key.split_once('\t') {
+        Some((lemma, reading)) if !reading.contains('\t') => Ok((lemma, reading, pos)),
+        _ => bail!("accent key {key:?} is not 'lemma<TAB>reading'"),
+    })
 }
 
 fn accent_version(path: &Path) -> Option<String> {
@@ -56,15 +68,16 @@ fn accent_version(path: &Path) -> Option<String> {
 }
 
 fn build_accent(out: &Path, acc: &AccentIndex) -> Result<Value> {
-    let (rows, by_reading) = accent_rows(acc)?;
+    let by_reading = by_reading(acc)?;
     let mut h = Sha256::new();
     h.update(FORMAT.to_string().as_bytes());
-    for (l, r, p) in &rows {
-        h.update(format!("{l}\t{r}\t{p}\n").as_bytes());
+    for row in rows(acc) {
+        let (l, r, p) = row?;
+        h.update(format!("{l}\t{r}\t{}\n", positions(p)).as_bytes());
     }
     h.update(b"\0");
     for (r, p) in &by_reading {
-        h.update(format!("{r}\t{p}\n").as_bytes());
+        h.update(format!("{r}\t{}\n", positions(p)).as_bytes());
     }
     let version: String = h.finalize().iter().take(8).map(|b| format!("{b:02x}")).collect();
     let target = out.join(ACCENT_FILE);
@@ -82,18 +95,19 @@ fn build_accent(out: &Path, acc: &AccentIndex) -> Result<Value> {
         let tx = conn.transaction()?;
         {
             let mut ins = tx.prepare("INSERT INTO accent VALUES (?,?,?)")?;
-            for (l, r, p) in &rows {
-                ins.execute(params![l, r, p])?;
+            for row in rows(acc) {
+                let (l, r, p) = row?;
+                ins.execute(params![l, r, positions(p)])?;
             }
             tx.execute_batch("CREATE UNIQUE INDEX accent_key ON accent (lemma, reading)")?;
             let mut ins = tx.prepare("INSERT INTO by_reading VALUES (?,?)")?;
             for (r, p) in &by_reading {
-                ins.execute(params![r, p])?;
+                ins.execute(params![r, positions(p)])?;
             }
             let mut ins = tx.prepare("INSERT INTO meta VALUES (?,?)")?;
             ins.execute(params!["format", FORMAT.to_string()])?;
             ins.execute(params!["version", version])?;
-            ins.execute(params!["entries", rows.len().to_string()])?;
+            ins.execute(params!["entries", acc.len().to_string()])?;
         }
         tx.commit()?;
         conn.execute_batch("VACUUM")?;
@@ -102,7 +116,7 @@ fn build_accent(out: &Path, acc: &AccentIndex) -> Result<Value> {
     }
     Ok(json!({
         "file": ACCENT_FILE, "version": version, "size": std::fs::metadata(&target)?.len(),
-        "sha256": file_sha256(&target)?, "entries": rows.len(),
+        "sha256": file_sha256(&target)?, "entries": acc.len(),
     }))
 }
 

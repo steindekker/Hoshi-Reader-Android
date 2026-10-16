@@ -16,7 +16,8 @@ cargo build --release
 - `--dicts DIR` scans every zip in DIR and identifies each one by its `index.json` title (三省堂国語辞典　第八版, 広辞苑 第七版, 実用日本語表現辞典, 大辞泉 第二版, JMdict…, Jitendex…, NEW斎藤和英大辞典, 用例.jp, JPDB…). `--dict ID=PATH` names a zip explicitly and wins over `--dicts`. A missing dictionary drops its fields, as it does in anki-enrich.
 - `--jmdict` takes a path or a URL. `--token-file` sends `X-Hoshi-Token` with the URL.
 - `--sudachi-dic` also builds the sentence model (`jrp-accent.sqlite` plus a copy of `sudachi-system.dic`) and writes the manifest's `sentence` block (`sentence_model.py`). The label (`sudachidict_full 20260428`) comes from the `dist-info` next to an installed `sudachidict_full`, or from `--sudachi-source`. Without `--sudachi-dic`, `pack.json` has no `sentence` block. That is the same manifest Python writes when sudachidict is not installed, and `publish.py` builds the sentence model itself in that case anyway.
-- `--threads N` sets the number of worker threads. `--stream-over-mb N` (default 64): banks bigger than this are parsed while they inflate, instead of being inflated into a buffer first.
+- `--threads N` sets the number of worker threads. `--stream-over-mb N`: banks bigger than this are parsed while they inflate instead of from an inflated buffer, which bounds memory but parses them on one thread. The default is 64 with up to 4 threads and 512 above that.
+- `HOSHI_PACK_PROFILE=1` prints phase and per-bank timings to stderr.
 - `--compare PACK` diffs the result against another pack after the build and exits non-zero on any difference.
 
 ## Parity check
@@ -74,19 +75,37 @@ The field values follow anki-enrich exactly. Each module notes the Python functi
 
 The setup server has 2 cores and about 1 GB of RAM free.
 
-- Bank JSON is deserialized one entry at a time.
+Loading:
+- Bank JSON is deserialized one entry at a time into a bump arena whose strings borrow from the inflated bank. Each zip's central directory is parsed once.
+- Banks over 48 MB (広辞苑, 用例.jp) are cut at top-level element boundaries and their pieces parsed in parallel.
 - Strings are interned in one arena.
 - Rendered definition HTML and example text go to a temp file in `--out` (about 740 MB, deleted when the build finishes) and are read back through mmap.
-- 大辞泉 rows for a term that an earlier chain dictionary already has can never be chosen, so their HTML is not kept.
-- Rows are compressed and written in chunks of 32k headwords.
+- 大辞泉 rows for a term that an earlier chain dictionary already has can never be chosen, so they are neither rendered nor stored; the builder only checks whether their HTML would be non-empty. 大辞泉 starts as soon as the three earlier chain dictionaries are done.
 
-Measured on 2026-10-16 with the same inputs as the reference pack. Every run produced byte-identical rows and version `40a2f699e2afdd56`.
+Compressing:
+- The row deflater is primed with the zdict once, and each row starts from a `deflateCopy` of that state into pooled buffers. That is the state `deflateReset` + `deflateSetDictionary` produce, so the bytes are the same, without re-hashing 32 KB of dictionary per row.
+- Rows whose JSON repeats within a chunk (about 133k, mostly a term's readings without a pitch graph) are compressed once.
+- Workers take 2,048-headword chunks off an ordered queue, with no barrier between chunks. The writer thread puts the chunks back in order, inserts and hashes them, and lets workers run at most a few chunks ahead.
+- The sentence model is written while the pack is being compressed.
+- SHA-256 runs through ring: about 570 MB/s here, versus 300 MB/s for the portable code on a CPU without SHA extensions.
+
+Measured on 2026-10-16 (i9-10900K, 10 cores / 20 threads) with the same inputs as the reference pack, sentence model included, median of three runs. Every run produced byte-identical rows and version `40a2f699e2afdd56`.
 
 | | wall | peak anonymous RSS |
 |---|---|---|
 | Python: defs + examples + freq index, then `pack.build` | 281 s (99 + 21 + 1 + 160) | – |
-| `hoshi-pack-builder`, 20 threads (incl. sentence model) | 22 s | – |
-| `hoshi-pack-builder --threads 2` (server-like) | 72 s | 393 MB |
+| `hoshi-pack-builder`, default threads (20) | 7.4 s | 1.4 GB |
+| `hoshi-pack-builder --threads 2` (server-like) | 35.6 s | 390 MB (at most 415 MB) |
+
+At 2 threads, deflate is the floor. Compressing the 718k distinct rows at level 9 with the same zlib takes 43 thread-seconds, about 22 s on 2 cores, because output must stay byte-identical. Loading takes 8.5 s. The 2-thread build is about 36 s:
+
+| phase | 2 threads | 20 threads |
+|---|---|---|
+| discover | 0.2 s | 0.2 s |
+| load | 8.5 s | 1.9 s |
+| zdict | 0.5 s | 0.1 s |
+| pack (+ index) | 26 s | 4.5 s |
+| manifest | 0.7 s | 0.7 s |
 
 On the server, plan for about 2 GB of free disk during a build:
 
