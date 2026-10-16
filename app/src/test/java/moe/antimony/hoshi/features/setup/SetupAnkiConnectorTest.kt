@@ -64,20 +64,6 @@ class SetupAnkiConnectorTest {
     }
 
     @Test
-    fun unsyncedCollectionWithTheOldNameIsReusedNotDuplicated() = runBlocking {
-        val legacy = AnkiNoteType(7L, AnkiFieldTemplates.LegacyHoshiNoteType, HoshiNoteType.Fields)
-        val backend = FakeBackend(decks, noteTypes = listOf(legacy), created = kinomoto)
-        val settings = FakeSettings(AnkiSettings())
-
-        connector(backend, settings).connect()
-
-        assertNull(backend.createdSpec)
-        val format = settings.state.value.cardFormats.single()
-        assertEquals(7L, format.selectedNoteTypeId)
-        assertEquals("{ae-sentence}", format.fieldMappings["Sentence"])
-    }
-
-    @Test
     fun missingAnkiDroidReportsUnavailable() = runBlocking {
         val backend = FakeBackend(decks, noteTypes = emptyList(), available = false)
         val settings = FakeSettings(AnkiSettings())

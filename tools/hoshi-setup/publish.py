@@ -27,7 +27,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 VENV_PYTHON = REPO / "anki-enrich" / ".venv" / "bin" / "python"
-DICT_DIR = Path("~/dicts/yomitan")
+DICT_DIR = Path(os.environ.get("HOSHI_DICT_DIR", Path.home() / "dicts" / "yomitan"))
 FORBIDDEN = ("/opt/anki-enrich", "/data/apps/anki-enrich")
 # Prebuilt android.db term-audio store. Read-only; publish copies it out.
 AUDIO_SOURCE = Path("/data/apps/anki-enrich/audio.sqlite")

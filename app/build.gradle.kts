@@ -46,16 +46,19 @@ val releaseKeystorePath = releaseSigningValue("ANDROID_KEYSTORE_FILE")
 val releaseKeystorePassword = releaseSigningValue("ANDROID_KEYSTORE_PASSWORD")
 val releaseKeyAlias = releaseSigningValue("ANDROID_KEY_ALIAS")
 val releaseKeyPassword = releaseSigningValue("ANDROID_KEY_PASSWORD")
-// First-run setup server. The token is sent as X-Hoshi-Token; CI and other machines set
-// HOSHI_SETUP_TOKEN, local builds read ~/.config/hoshi-reader/setup-token.
+// First-run setup server, kept out of the repository. CI and other machines set HOSHI_SETUP_URL
+// and HOSHI_SETUP_TOKEN; local builds read ~/.config/hoshi-reader/setup-url and setup-token.
+// Without a URL the first-run setup screen is not shown.
+fun hoshiLocalConfig(name: String): String? = providers.fileContents(
+    objects.fileProperty().apply {
+        set(File(System.getProperty("user.home"), ".config/hoshi-reader/$name"))
+    },
+).asText.orNull?.trim()?.takeIf { it.isNotBlank() }
 val hoshiSetupUrl = providers.environmentVariable("HOSHI_SETUP_URL").orNull?.takeIf { it.isNotBlank() }
-    ?: "https://setup.example.com/setup.json"
+    ?: hoshiLocalConfig("setup-url").orEmpty()
+require(hoshiSetupUrl.isEmpty() || hoshiSetupUrl.startsWith("https://")) { "HOSHI_SETUP_URL must be https." }
 val hoshiSetupToken = providers.environmentVariable("HOSHI_SETUP_TOKEN").orNull?.takeIf { it.isNotBlank() }
-    ?: providers.fileContents(
-        objects.fileProperty().apply {
-            set(File(System.getProperty("user.home"), ".config/hoshi-reader/setup-token"))
-        },
-    ).asText.orNull?.trim().orEmpty()
+    ?: hoshiLocalConfig("setup-token").orEmpty()
 require(hoshiSetupToken.all { it.isLetterOrDigit() || it == '-' || it == '_' }) {
     "HOSHI_SETUP_TOKEN may only contain letters, digits, '-' and '_'."
 }

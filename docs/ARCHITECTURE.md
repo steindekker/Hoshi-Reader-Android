@@ -498,8 +498,8 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   extending the popup mining payload.
 - First-run setup (`features.setup`) is a full-screen welcome that downloads the
   Yomitan dictionaries, the sentence model and the enrichment pack from the
-  catalog at `BuildConfig.HOSHI_SETUP_URL` (default
-  `https://setup.example.com/setup.json`). Every request to the catalog host
+  catalog at `BuildConfig.HOSHI_SETUP_URL` (`HOSHI_SETUP_URL`, or
+  `~/.config/hoshi-reader/setup-url`; no welcome screen without one). Every request to the catalog host
   sends `X-Hoshi-Token` (`SetupServerConnections`; other hosts never get it),
   and the token comes from `HOSHI_SETUP_TOKEN` or
   `~/.config/hoshi-reader/setup-token` at build time. Dictionaries whose title
@@ -513,8 +513,7 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   database permission. Afterwards `SetupAnkiConnector` stores the real deck and
   note-type ids, and creates the shipped `Hoshi` note type
   (`assets/anki/hoshi/`, via `AnkiBackend.createNoteType`) when the
-  collection lacks it. A collection that still has the old name
-  `jidoujisho Kinomoto` (rename not synced yet) is reused, not duplicated. Mappings that already exist are kept. The upstream
+  collection lacks it. Mappings that already exist are kept. The upstream
   `AnkiRepository.fetchConfiguration` is left unchanged.
 - Offline audio is off by default. When chosen, `SetupAudioWorker` downloads the
   catalog's `android.db` as a WorkManager `dataSync` foreground job. Without

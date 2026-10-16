@@ -112,7 +112,7 @@ class AnkiEnrichMiningTest {
     }
 
     private fun repository(backend: AnkiBackend, enricher: AnkiFieldEnricher): AnkiRepository {
-        val noteType = AnkiNoteType(20L, "jidoujisho Kinomoto", KinomotoFields)
+        val noteType = AnkiNoteType(20L, "Hoshi", KinomotoFields)
         val format = AnkiCardFormat(
             id = "kinomoto",
             name = "Kinomoto",

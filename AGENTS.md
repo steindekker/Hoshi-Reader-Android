@@ -91,6 +91,7 @@ Hoshi Reader Android 是 Hoshi Reader 的 Android/Kotlin/Jetpack Compose 原生�
 - 单元测试 fixture 不要依赖被 `.gitignore` 忽略的 `testdata/` 本地文件；CI 需要的样本必须 tracked，或由测试自行构造。
 - 优先写行为、API、state-flow 测试，不写生产源码字符串实现细节测试。只有 manifest、resources、Gradle、权限或 provider 声明等结构化配置，才允许在解析结构后断言。
 - Commit message 使用 Conventional Commits。
+- 本仓库公开：不得在受版本控制的文件、测试、文档或 commit message 中写入主机名（SSH 别名、MagicDNS/`*.ts.net` 名称、私有域名）、tailnet/内网 IP、个人路径（`/home/<user>/...`、会话 scratchpad）、token、密钥或账号凭据。部署相关的值用环境变量、CLI 参数或 `~/.config/hoshi-reader/` 下的本地文件提供（例如 `HOSHI_SETUP_URL`/`setup-url`、`HOSHI_SETUP_TOKEN`/`setup-token`），文档中用占位符。
 - 完成开发并通过必要验证后，自行提交本次任务相关改动；用户明确要求不提交或保留未提交改动时才不要提交。
 - Changelog 只记录普通用户可感知的 App 变化；不要记录 CI、agent workflow、构建脚本、依赖管理或内部重构。
 - `[Unreleased]` 中未发布功能的后续调整应合并到原 Added/Changed 条目，只有已发布版本中用户可遇到的问题才写 Fixed。

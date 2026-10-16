@@ -61,9 +61,7 @@ internal class SetupAnkiConnector(
             if (decks.isEmpty()) return@withContext SetupAnkiResult.Failed
             var noteTypes = backend.fetchNoteTypes()
             val deck = selectDeckAfterFetch(decks, settings.settings.first().withSeamlessFormatIfUnmapped())
-            // A collection that has not synced the rename yet still has the old name; reuse it.
             val noteType = noteTypes.firstOrNull { it.name == AnkiFieldTemplates.HoshiNoteType }
-                ?: noteTypes.firstOrNull { it.name == AnkiFieldTemplates.LegacyHoshiNoteType }
                 ?: backend.createNoteType(spec(), deck)?.also { noteTypes = noteTypes + it }
                 ?: return@withContext SetupAnkiResult.Failed
             settings.update { it.withConnectedNoteType(decks, noteTypes, deck, noteType) }
@@ -88,9 +86,7 @@ internal fun AnkiSettings.withConnectedNoteType(
     noteType: AnkiNoteType,
 ): AnkiSettings {
     val formats = withSeamlessFormatIfUnmapped().cardFormats.map { format ->
-        val targets = format.selectedNoteTypeName == null ||
-            format.selectedNoteTypeName == noteType.name ||
-            (AnkiFieldTemplates.isHoshiNoteType(format.selectedNoteTypeName) && AnkiFieldTemplates.isHoshiNoteType(noteType.name))
+        val targets = format.selectedNoteTypeName == null || format.selectedNoteTypeName == noteType.name
         if (!targets) return@map format
         val formatDeck = decks.firstOrNull { it.id == format.selectedDeckId }
             ?: format.selectedDeckName?.let { name -> decks.firstOrNull { it.name == name } }

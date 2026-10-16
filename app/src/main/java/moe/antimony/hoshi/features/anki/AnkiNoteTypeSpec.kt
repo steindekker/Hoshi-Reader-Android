@@ -11,8 +11,7 @@ data class AnkiNoteTypeSpec(
 )
 
 /**
- * The Hoshi note type first-run setup maps `{ae-*}` into (formerly "jidoujisho Kinomoto"). The
- * card design ships under `assets/anki/hoshi/`, taken from the collection this install mines into.
+ * The Hoshi note type first-run setup maps `{ae-*}` into. The card design ships under `assets/anki/hoshi/`, taken from the collection this install mines into.
  */
 internal object HoshiNoteType {
     const val AssetDirectory = "anki/hoshi"

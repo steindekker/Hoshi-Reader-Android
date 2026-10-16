@@ -4,13 +4,9 @@ object AnkiFieldTemplates {
     /** The note type this install mines into (shipped under `assets/anki/hoshi/`). */
     const val HoshiNoteType = "Hoshi"
 
-    /** The same note type before it was renamed; collections that have not synced the rename yet. */
-    const val LegacyHoshiNoteType = "jidoujisho Kinomoto"
-
     /** Deck name used until Anki has been fetched. Matches the mining deck. */
     const val HoshiDeckName = "Default"
 
-    fun isHoshiNoteType(name: String?): Boolean = name == HoshiNoteType || name == LegacyHoshiNoteType
 
     private val templates = mapOf(
         "Lapis" to mapOf(
@@ -65,9 +61,8 @@ object AnkiFieldTemplates {
         ),
         // Filled after the first-run download. `{ae-*}` resolves from the installed
         // dictionaries when no enrichment pack is present, and `{ae-sentence}` from
-        // the on-device sentence model. The legacy name keeps unsynced collections mapped.
+        // the on-device sentence model.
         HoshiNoteType to HoshiMappings,
-        LegacyHoshiNoteType to HoshiMappings,
     )
 
     /** Card format written by first-run setup, before Anki has been fetched. */
