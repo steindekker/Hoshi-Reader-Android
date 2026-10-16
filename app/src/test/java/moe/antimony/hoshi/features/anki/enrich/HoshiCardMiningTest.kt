@@ -1,6 +1,9 @@
 package moe.antimony.hoshi.features.anki.enrich
 
 import android.content.ContextWrapper
+import hoshi.card.CardEnricher
+import hoshi.card.CardEnrichment
+import hoshi.card.HoshiCardEnricher
 import java.nio.file.Files
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,27 +27,30 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class AnkiEnrichMiningTest {
-    private val pack = FakeEnrichPackSource(
-        listOf(
-            Triple(
-                "逃れる",
-                "のがれる",
+/** Mining through [AnkiRepository] with hoshi-card values: they survive the app's renderer verbatim. */
+class HoshiCardMiningTest {
+    /** A pack with one row for 逃れる, and the format-2 default for every other term. */
+    private val pack = CardEnricher { expression, reading, _, _ ->
+        val defaults = mapOf("definition" to "{glossary-first}")
+        if (expression == "逃れる" && reading == "のがれる") {
+            CardEnrichment(
                 mapOf(
-                    "ae-definition" to """<div class="aa-jj" data-dict="sankoku8">にげ出す。{x}</div>""",
-                    "ae-definition-source" to "三省堂",
-                    "ae-pitch" to "<svg>のがれる</svg>",
-                    "ae-frequency" to "2361",
-                    "ae-tags" to "ankienrich::enriched ankienrich::examples",
+                    "definition" to """<div class="aa-jj" data-dict="sankoku8">にげ出す。{x}</div>""",
+                    "definition-source" to "三省堂",
+                    "pitch-graph" to "<svg>のがれる</svg>",
+                    "frequency-rank" to "2361",
                 ),
-            ),
-        ),
-    )
+                defaults,
+            )
+        } else {
+            CardEnrichment(emptyMap(), defaults)
+        }
+    }
 
     @Test
-    fun minedKinomotoCardCarriesPackValuesVerbatim() = runBlocking {
+    fun minedHoshiCardCarriesPackValuesVerbatim() = runBlocking {
         val backend = RecordingBackend()
-        val repository = repository(backend) { expression, reading, _, _ -> pack.lookup(expression, reading) }
+        val repository = repository(backend, pack)
 
         assertTrue(repository.mineEntry(
             rawPayload = """{"expression":"逃れる","reading":"のがれる","glossaryFirst":"mined"}""",
@@ -57,13 +63,13 @@ class AnkiEnrichMiningTest {
         assertEquals("三省堂", backend.lastFields["Definition Source"])
         assertEquals("<svg>のがれる</svg>", backend.lastFields["Pitch Accent"])
         assertEquals("2361", backend.lastFields["Frequency"])
-        assertEquals(setOf("hoshi", "ankienrich::enriched", "ankienrich::examples"), backend.lastTags)
+        assertEquals(setOf("hoshi"), backend.lastTags)
     }
 
     @Test
     fun termMissingFromPackFallsBackToRenderedDefault() = runBlocking {
         val backend = RecordingBackend()
-        val repository = repository(backend) { expression, reading, _, _ -> pack.lookup(expression, reading) }
+        val repository = repository(backend, pack)
 
         assertTrue(repository.mineEntry(
             rawPayload = """{"expression":"ぴえん","reading":"ぴえん","glossaryFirst":"crying face"}""",
@@ -80,8 +86,9 @@ class AnkiEnrichMiningTest {
     @Test
     fun sentenceHandlebarGetsTheEnrichersMarkupOfTheMiningSentence() = runBlocking {
         val backend = RecordingBackend()
-        val repository = repository(backend) { expression, reading, sentence, _ ->
-            pack.lookup(expression, reading).with("ae-sentence", "{[難|なん];1}を{[逃|のが]れる;3}。|$sentence")
+        val repository = repository(backend) { expression, reading, sentence, templates ->
+            pack.enrich(expression, reading, sentence, templates)
+                .with("sentence-pitch", "{[難|なん];1}を{[逃|のが]れる;3}。|$sentence")
         }
 
         assertTrue(repository.mineEntry(
@@ -96,9 +103,26 @@ class AnkiEnrichMiningTest {
     }
 
     @Test
-    fun withoutAPackEnrichHandlebarsAreLeftEmpty() = runBlocking {
+    fun withoutAPackTheDictionariesFillTheFields() = runBlocking {
         val backend = RecordingBackend()
-        val repository = repository(backend, AnkiFieldEnricher.None)
+        val repository = repository(backend, HoshiCardEnricher(pack = null, sentenceModel = null))
+
+        assertTrue(repository.mineEntry(
+            rawPayload = """{"expression":"逃れる","reading":"のがれる","glossaryFirst":"to escape"}""",
+            context = AnkiMiningContext(sentence = "難を逃れる。"),
+            decks = emptyList(),
+            noteTypes = emptyList(),
+        ))
+
+        assertEquals("to escape", backend.lastFields["Meaning"])
+        assertEquals("難を逃れる。", backend.lastFields["Sentence"])
+        assertEquals(setOf("hoshi"), backend.lastTags)
+    }
+
+    @Test
+    fun withoutAnEnricherHoshiCardFieldsAreLeftEmpty() = runBlocking {
+        val backend = RecordingBackend()
+        val repository = repository(backend, CardEnricher.None)
 
         assertTrue(repository.mineEntry(
             rawPayload = """{"expression":"逃れる","reading":"のがれる"}""",
@@ -111,7 +135,7 @@ class AnkiEnrichMiningTest {
         assertEquals(setOf("hoshi"), backend.lastTags)
     }
 
-    private fun repository(backend: AnkiBackend, enricher: AnkiFieldEnricher): AnkiRepository {
+    private fun repository(backend: AnkiBackend, enricher: CardEnricher): AnkiRepository {
         val noteType = AnkiNoteType(20L, "Hoshi", KinomotoFields)
         val format = AnkiCardFormat(
             id = "kinomoto",
@@ -120,13 +144,13 @@ class AnkiEnrichMiningTest {
             selectedNoteTypeId = noteType.id,
             fieldMappings = mapOf(
                 "Term" to "{expression}",
-                "Meaning" to "{ae-definition}",
-                "Definition Source" to "{ae-definition-source}",
-                "Pitch Accent" to "{ae-pitch}",
-                "Frequency" to "{ae-frequency}",
-                "Sentence" to "{ae-sentence}",
+                "Meaning" to "{definition}",
+                "Definition Source" to "{definition-source}",
+                "Pitch Accent" to "{pitch-graph}",
+                "Frequency" to "{frequency-rank}",
+                "Sentence" to "{sentence-pitch}",
             ),
-            tags = "hoshi {ae-tags}",
+            tags = "hoshi",
         )
         (backend as RecordingBackend).noteTypes = listOf(noteType)
         return AnkiRepository(

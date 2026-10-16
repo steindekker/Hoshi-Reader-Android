@@ -55,7 +55,7 @@ internal class SetupViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             // A build without a setup catalog has nothing to offer.
-            if (SetupCatalog.DefaultUrl.isBlank() || repository.completed.first()) return@launch
+            if (SetupCatalogConfig.DefaultUrl.isBlank() || repository.completed.first()) return@launch
             _uiState.update { it.copy(visible = true, ankiDroidInstalled = anki.isAnkiDroidAvailable()) }
             loadCatalog()
         }
@@ -105,6 +105,7 @@ internal class SetupViewModel @Inject constructor(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
+                runCatching { Log.w("Setup", "First-run setup failed", error) }
                 _uiState.update { it.copy(phase = SetupPhase.Welcome, failed = true) }
                 return@launch
             }

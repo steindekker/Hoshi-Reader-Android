@@ -9,7 +9,7 @@ import javax.inject.Singleton
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.dictionary.DictionaryRepository
 import moe.antimony.hoshi.dictionary.DictionaryType
-import moe.antimony.hoshi.features.anki.enrich.AnkiFieldEnricher
+import hoshi.card.CardEnricher
 import moe.antimony.hoshi.features.audio.LocalAudioFile
 import moe.antimony.hoshi.features.audio.LocalAudioRepository
 import moe.antimony.hoshi.features.audio.LocalAudioResolver
@@ -34,7 +34,7 @@ internal class AnkiRepository(
     private val loadTermDictionaries: () -> List<AnkiTermDictionary>,
     private val liveMediaSource: AnkiLiveMediaSource,
     private val cardAddedEvents: AnkiCardAddedEvents,
-    private val ankiFieldEnricher: AnkiFieldEnricher = AnkiFieldEnricher.None,
+    private val ankiFieldEnricher: CardEnricher = CardEnricher.None,
 ) {
     @Inject
     constructor(
@@ -45,7 +45,7 @@ internal class AnkiRepository(
         dictionaryRepository: DictionaryRepository,
         liveMediaSource: AnkiLiveMediaSource,
         cardAddedEvents: AnkiCardAddedEvents,
-        ankiFieldEnricher: AnkiFieldEnricher,
+        ankiFieldEnricher: CardEnricher,
     ) : this(
         context = context,
         backend = backend,

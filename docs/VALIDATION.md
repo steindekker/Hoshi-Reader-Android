@@ -12,6 +12,13 @@ Before claiming implementation complete, run:
 ./gradlew assembleDebug
 ```
 
+`./gradlew test` includes the hoshi-card library's JVM tests
+(`./gradlew :hoshi-card:testDebugUnitTest` runs only those). After changing
+hoshi-card's R8 rules or the JRP tokenizer, build `./gradlew assembleRelease`
+and check that `unzip -l` lists `hoshi/card/jrp/sudachi/char.def` in the APK.
+The opt-in JRP parity run (`HOSHI_JRP_PARITY_DIR` and `HOSHI_SUDACHI_DIC`) is
+wired in hoshi-card's build script.
+
 Run lint when changing resources, manifest, UI, packaging, or release-facing
 build behavior:
 

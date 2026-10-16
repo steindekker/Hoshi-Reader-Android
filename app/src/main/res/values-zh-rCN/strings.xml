@@ -983,7 +983,7 @@
         <item quantity="other">%1$d 句</item>
     </plurals>
     <string name="enrich_pack_title">增强数据包</string>
-    <string name="enrich_pack_not_installed">未安装。下载后即可离线填充 {ae-*} 占位符。</string>
+    <string name="enrich_pack_not_installed">未安装。下载后即可离线填充释义、声调、词频和例句。</string>
     <plurals name="enrich_pack_installed">
         <item quantity="one">构建于 %1$s · %2$d 个词</item>
         <item quantity="other">构建于 %1$s · %2$d 个词</item>
@@ -993,14 +993,14 @@
     <string name="enrich_pack_downloading">正在下载… %1$d%%</string>
     <string name="enrich_pack_downloading_accent">正在下载声调数据… %1$d%%</string>
     <string name="enrich_pack_downloading_dictionary">正在下载 Sudachi 辞典… %1$d%%</string>
-    <string name="enrich_sentence_model_installed">句子标注：已安装（{ae-sentence}）</string>
+    <string name="enrich_sentence_model_installed">句子标注：已安装（{sentence-pitch}）</string>
     <string name="enrich_sentence_model_not_installed">句子标注：未安装</string>
     <string name="enrich_pack_up_to_date">已是最新</string>
     <string name="enrich_pack_updated">数据包已更新</string>
     <string name="enrich_pack_error_url_missing">请先设置数据包 URL。</string>
     <string name="enrich_pack_error_unreachable">无法下载数据包。请检查 URL 和网络连接。</string>
     <string name="enrich_pack_error_invalid">下载的数据包已损坏，请重试。</string>
-    <string name="enrich_pack_error_format">此数据包需要更新版本的应用。</string>
+    <string name="enrich_pack_error_format">当前版本的应用无法读取此数据包的格式。</string>
     <string name="setup_welcome_title">欢迎使用 Hoshi</string>
     <string name="setup_welcome_subtitle">阅读日语，点按任意单词，即可制作 Anki 卡片。一次下载即可完成全部设置。</string>
     <string name="setup_feature_dictionaries_title">六部辞典</string>

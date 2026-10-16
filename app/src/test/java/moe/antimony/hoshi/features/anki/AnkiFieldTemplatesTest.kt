@@ -198,12 +198,12 @@ class AnkiFieldTemplatesTest {
             mapOf(
                 "Term" to "{expression}",
                 "Reading" to "{reading}",
-                "Meaning" to "{ae-definition}",
-                "Definition Source" to "{ae-definition-source}",
-                "Pitch Accent" to "{ae-pitch}",
-                "Frequency" to "{ae-frequency}",
-                "Examples" to "{ae-examples}",
-                "Sentence" to "{ae-sentence}",
+                "Meaning" to "{definition}",
+                "Definition Source" to "{definition-source}",
+                "Pitch Accent" to "{pitch-graph}",
+                "Frequency" to "{frequency-rank}",
+                "Examples" to "{example-sentences}",
+                "Sentence" to "{sentence-pitch}",
                 "Term Audio" to "{audio}",
             ),
             AnkiFieldTemplates.defaultMappings(noteType),
@@ -211,7 +211,7 @@ class AnkiFieldTemplatesTest {
         val format = AnkiFieldTemplates.seamlessCardFormat("mining")
         assertEquals(AnkiFieldTemplates.HoshiNoteType, format.selectedNoteTypeName)
         assertEquals(AnkiFieldTemplates.HoshiDeckName, format.selectedDeckName)
-        assertEquals("hoshi {ae-tags}", format.tags)
+        assertEquals("hoshi", format.tags)
     }
 
     @Test

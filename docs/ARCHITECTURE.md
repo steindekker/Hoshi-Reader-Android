@@ -505,25 +505,52 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   sends `X-Hoshi-Token` (`SetupServerConnections`; other hosts never get it),
   and the token comes from `HOSHI_SETUP_TOKEN` or
   `~/.config/hoshi-reader/setup-token` at build time. Dictionaries whose title
-  is already installed are skipped. The pack installs through
-  `EnrichPackRepository.installFrom`, which also points later pack updates at
-  the same server. `{ae-definition}`, `{ae-definition-source}`, `{ae-pitch}`,
-  and `{ae-frequency}` fall back to the installed dictionaries when the pack
-  has no value for them. `{ae-sentence}` stays the on-device JRP model.
+  is already installed are skipped.
+- Card enrichment lives in the `hoshi-card` library (package `hoshi.card`),
+  shared with chimahon so both apps make the same cards. Gradle includes it as
+  `:hoshi-card` from a sibling checkout at `../hoshi-card` when one exists,
+  else from the `third_party/hoshi-card` submodule. The library owns the
+  setup catalog model and verified downloads (`hoshi.card.setup`), the
+  enrichment pack (`hoshi.card.pack`), the on-device JRP sentence model with
+  Sudachi (`hoshi.card.jrp`, R8 rules in its `consumer-rules.pro`) and the
+  Hoshi note type with its card design and default mapping
+  (`hoshi.card.notetype`). The app keeps only adapters: Hilt providers
+  (`HoshiCardModule`), the DataStore pack URL, the `X-Hoshi-Token` opener, the
+  setup UI and worker, and `UiText` messages for the library's failure enums.
+- The hoshi-card handlebars are `{definition}`, `{definition-source}`,
+  `{pitch-graph}`, `{frequency-rank}`, `{example-sentences}` (from the pack)
+  and `{sentence-pitch}` (the mining sentence with JRP markup, computed on the
+  device). They are matched by that exact list. `CardEnrichment.protect`
+  swaps each for a placeholder (or its fallback handlebar) before the upstream
+  renderer runs and `fill` restores the value afterwards, so field HTML is
+  never re-parsed. Without a pack row, `{definition}`,
+  `{definition-source}`, `{pitch-graph}` and `{frequency-rank}` fall back to
+  the installed dictionaries.
+- The enrichment pack is format 2 (built by `hoshi-pack-builder`): a SQLite
+  file of zlib rows keyed by (term, reading) with exactly the five pack keys,
+  `fallback_keys` for reading-independent values and
+  `defaults = {"definition": "{glossary-first}"}`. Other formats are refused,
+  including an installed format-1 file, which counts as not installed. Setup
+  installs the sentence model and the pack through `HoshiCardInstaller`, which
+  also points later pack updates (Settings → Anki → Enrichment pack) at the
+  same server. Pack and model live under `files/enrich`. The Add to Anki sheet
+  lists the pack's `{example-sentences}` before the Massif results.
 - Setup writes the Hoshi mining format only when every saved card format
-  still has empty field mappings. Before downloading it asks for the AnkiDroid
-  database permission. Afterwards `SetupAnkiConnector` stores the real deck and
-  note-type ids, and creates the shipped `Hoshi` note type
-  (`assets/anki/hoshi/`, via `AnkiBackend.createNoteType`) when the
-  collection lacks it. Mappings that already exist are kept. The upstream
-  `AnkiRepository.fetchConfiguration` is left unchanged.
+  still has empty field mappings. Its tags are just `hoshi`. Before
+  downloading, setup asks for the AnkiDroid database permission. Afterwards
+  `SetupAnkiConnector` stores the real deck and note-type ids, and creates the
+  `Hoshi` note type from hoshi-card (`HoshiNoteType.spec`, via
+  `AnkiBackend.createNoteType`) when the collection lacks it. Mappings that
+  already exist are kept. The upstream `AnkiRepository.fetchConfiguration` is
+  left unchanged.
 - Offline audio is off by default. When chosen, `SetupAudioWorker` downloads the
   catalog's `android.db` as a WorkManager `dataSync` foreground job. Without
   notification permission it still runs, but its progress notification is
   hidden. The catalog's `audioServer` (a Yomitan local-audio server) is
   inserted right after the offline database, so words stream from it when
   offline audio is off or missing a clip. Setup state is versioned
-  (`SetupVersion`), so installs from an older setup see the welcome once more.
+  (`SetupVersion`, now 3 for the format-2 pack), so installs from an older
+  setup see the welcome once more.
 - Google Drive sync uses Android/Google OAuth and Drive APIs through the
   repository/sync boundary. The Drive data source owns paginated folder listing,
   grouped sync-file discovery, bookdata upload/download, trash, cache clearing,

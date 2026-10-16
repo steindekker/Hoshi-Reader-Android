@@ -3,6 +3,7 @@ package moe.antimony.hoshi.features.setup
 import android.content.Context
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import hoshi.card.notetype.HoshiNoteType
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
@@ -18,7 +19,6 @@ import moe.antimony.hoshi.features.anki.AnkiNoteType
 import moe.antimony.hoshi.features.anki.AnkiNoteTypeSpec
 import moe.antimony.hoshi.features.anki.AnkiSettings
 import moe.antimony.hoshi.features.anki.AnkiSettingsRepository
-import moe.antimony.hoshi.features.anki.HoshiNoteType
 import moe.antimony.hoshi.features.anki.selectDeckAfterFetch
 
 internal enum class SetupAnkiResult { Connected, Unavailable, Failed }
@@ -45,9 +45,7 @@ internal class SetupAnkiConnector(
     ) : this(
         backend = backend,
         settings = settings,
-        spec = {
-            HoshiNoteType.spec { path -> context.assets.open(path).use { it.readBytes().toString(Charsets.UTF_8) } }
-        },
+        spec = { HoshiNoteType.spec(context) },
         ioDispatcher = ioDispatcher,
     )
 

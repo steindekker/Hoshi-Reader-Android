@@ -1,6 +1,9 @@
 package moe.antimony.hoshi.features.setup
 
 import com.sun.net.httpserver.HttpServer
+import hoshi.card.setup.HoshiCardInstallStep
+import hoshi.card.setup.SetupAudioServer
+import hoshi.card.setup.SetupFailure
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.InetSocketAddress
@@ -15,64 +18,11 @@ import moe.antimony.hoshi.features.audio.AudioSource
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SetupDownloadTest {
-    @Test
-    fun extraJsonKeyAndMissingAudioParse() {
-        val accent = "accent".toByteArray()
-        val dictionary = "dictionary".toByteArray()
-        val raw = """
-            {"format":1,"ignored":true,"dictionaries":[${asset("sankoku8.zip", "sankoku".toByteArray(), "sankoku8")}],
-            "sentence":{"format":1,"accent":${asset("jrp-accent.sqlite", accent, version = "acc")},
-            "dictionary":${asset("sudachi-system.dic", dictionary, version = "dic")}}}
-        """.trimIndent()
-
-        val manifest = parseSetupManifest(raw)
-
-        assertNull(manifest.audio)
-        assertEquals("sankoku8", manifest.dictionaries.single().id)
-        assertEquals("acc", manifest.sentence?.accent?.version)
-    }
-
-    @Test
-    fun rangeResumeRequestsTheRemainderAndChecksTheHash() {
-        val full = ByteArray(32) { (it + 1).toByte() }
-        val dir = Files.createTempDirectory("setup-range").toFile()
-        val dest = File(dir, "blob.bin")
-        dest.writeBytes(full.copyOf(10))
-        File(dir, "blob.bin.version").writeText("v1")
-        val ranges = mutableListOf<String?>()
-        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        server.createContext("/blob.bin") { exchange ->
-            val range = exchange.requestHeaders.getFirst("Range")
-            ranges += range
-            val body = full.copyOfRange(10, full.size)
-            exchange.responseHeaders.add("Content-Range", "bytes 10-${full.size - 1}/${full.size}")
-            exchange.sendResponseHeaders(206, body.size.toLong())
-            exchange.responseBody.use { it.write(body) }
-        }
-        server.start()
-        try {
-            downloadVerified(
-                url = URL("http://127.0.0.1:${server.address.port}/blob.bin"),
-                dest = dest,
-                version = "v1",
-                size = full.size.toLong(),
-                expectedSha = sha256(full),
-                openConnection = { it.openConnection() as HttpURLConnection },
-            ) {}
-            assertEquals(listOf("bytes=10-"), ranges)
-            assertArrayEquals(full, dest.readBytes())
-        } finally {
-            server.stop(0)
-            dir.deleteRecursively()
-        }
-    }
-
     @Test
     fun damagedDownloadDoesNotMarkSetupComplete() {
         val harness = harness(corrupt = "sankoku8.zip")
@@ -97,7 +47,7 @@ class SetupDownloadTest {
             assertTrue(harness.completed)
             assertTrue(harness.ankiApplied)
             assertEquals(listOf("sankoku8.zip"), harness.imported)
-            assertEquals(listOf("${harness.baseUrl}/pack.json"), harness.packManifests)
+            assertEquals(listOf("${harness.baseUrl}/setup.json"), harness.cardDataCatalogs)
             assertEquals(SetupAudioServer("Box", "https://audio.example/?term={term}&reading={reading}"), harness.audioServer)
         } finally {
             harness.close()
@@ -143,15 +93,6 @@ class SetupDownloadTest {
     }
 
     @Test
-    fun datedReleaseCountsAsInstalled() {
-        val jmdict = SetupAsset(file = "jmdict.zip", size = 1, sha256 = "x", title = "JMdict")
-        assertTrue(jmdict.isInstalled(setOf("JMdict [2026-10-15]")))
-        assertTrue(jmdict.isInstalled(setOf("JMdict")))
-        assertFalse(jmdict.isInstalled(setOf("JMdict Extra")))
-        assertFalse(jmdict.copy(title = "").isInstalled(setOf("")))
-    }
-
-    @Test
     fun reorderPutsJitsuyoThenSankokuThenJmdictFirst() {
         val moves = mutableListOf<Pair<Int, Int>>()
         reorderTermDictionaries(listOf("JMdict", "三省堂", "実用", "Other")) { from, to ->
@@ -174,15 +115,6 @@ class SetupDownloadTest {
     }
 
     @Test
-    fun setupTokenOnlyGoesToTheCatalogHost() {
-        val connections = SetupServerConnections(catalogUrl = "https://setup.example/setup.json", token = "secret")
-        val setup = connections.open(URL("https://setup.example/pack.json"))
-        val other = connections.open(URL("https://audio.example/?term=x"))
-        assertEquals("secret", setup.getRequestProperty(SetupTokenHeader))
-        assertNull(other.getRequestProperty(SetupTokenHeader))
-    }
-
-    @Test
     fun seamlessFormatIsWrittenOnlyWhenEveryFormatIsUnmapped() {
         val empty = AnkiSettings(
             cardFormats = listOf(defaultAnkiCardFormat("first"), defaultAnkiCardFormat("second")),
@@ -192,9 +124,9 @@ class SetupDownloadTest {
         assertEquals(listOf("first"), written.cardFormats.map { it.id })
         assertEquals(AnkiFieldTemplates.HoshiNoteType, written.selectedNoteTypeName)
         assertEquals(AnkiFieldTemplates.HoshiDeckName, written.selectedDeckName)
-        assertEquals("{ae-definition}", written.fieldMappings["Meaning"])
-        assertEquals("{ae-sentence}", written.fieldMappings["Sentence"])
-        assertEquals("hoshi {ae-tags}", written.tags)
+        assertEquals("{definition}", written.fieldMappings["Meaning"])
+        assertEquals("{sentence-pitch}", written.fieldMappings["Sentence"])
+        assertEquals("hoshi", written.tags)
 
         val mapped = defaultAnkiCardFormat("kept").copy(fieldMappings = mapOf("Term" to "{expression}"))
         val custom = AnkiSettings(cardFormats = listOf(defaultAnkiCardFormat("empty"), mapped), tags = "keep")
@@ -242,13 +174,12 @@ class SetupDownloadTest {
         }
         server.start()
         val workDir = Files.createTempDirectory("setup-work").toFile()
-        val sentenceDir = Files.createTempDirectory("setup-sentence").toFile()
         val installedAudio = mutableListOf<ByteArray>()
         var audioEnabled = false
         var ankiApplied = false
         var completed = false
         val imported = mutableListOf<String>()
-        val packManifests = mutableListOf<String>()
+        val cardDataCatalogs = mutableListOf<String>()
         var audioServer: SetupAudioServer? = null
         val download = SetupDownload(
             workDir = workDir,
@@ -261,14 +192,11 @@ class SetupDownloadTest {
             termTitles = { emptyList() },
             installedTitles = { installedTitles },
             moveTerm = { _, _ -> },
-            installSentence = { part, from, _ ->
-                check(from.renameTo(File(sentenceDir, part.fileName)))
-            },
-            sentenceInstalledVersion = { null },
-            sentencePartFile = { part -> File(sentenceDir, part.fileName + ".part") },
-            installPack = { url, _ ->
-                packManifests += url
-                check(!packFails) { "pack failed" }
+            installCardData = { catalogUrl, manifest, onProgress ->
+                cardDataCatalogs += catalogUrl
+                check(manifest.pack == "pack.json")
+                onProgress(HoshiCardInstallStep.Pack, 100)
+                if (packFails) throw SetupFailure(SetupFailure.Reason.Damaged)
             },
             addAudioServer = { audioServer = it },
             audioInstalled = { false },
@@ -281,7 +209,7 @@ class SetupDownloadTest {
         return Harness(
             server = server,
             baseUrl = "http://127.0.0.1:${server.address.port}",
-            packManifests = packManifests,
+            cardDataCatalogs = cardDataCatalogs,
             audioServerBox = { audioServer },
             download = download,
             requests = requests,
@@ -290,14 +218,14 @@ class SetupDownloadTest {
             audioEnabledBox = { audioEnabled },
             ankiAppliedBox = { ankiApplied },
             completedBox = { completed },
-            directories = listOf(workDir, sentenceDir),
+            directories = listOf(workDir),
         )
     }
 
     private class Harness(
         private val server: HttpServer,
         val baseUrl: String,
-        val packManifests: List<String>,
+        val cardDataCatalogs: List<String>,
         private val audioServerBox: () -> SetupAudioServer?,
         val download: SetupDownload,
         val requests: List<String>,

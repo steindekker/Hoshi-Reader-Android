@@ -36,33 +36,39 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import hoshi.card.HoshiCardFields
+import hoshi.card.pack.EnrichmentPack
+import hoshi.card.pack.PackDownload
+import hoshi.card.pack.PackFailure
+import hoshi.card.pack.PackInfo
+import hoshi.card.pack.PackSettings
+import hoshi.card.pack.PackStatus
 import kotlinx.coroutines.launch
 import moe.antimony.hoshi.R
-import moe.antimony.hoshi.ui.asString
 import moe.antimony.hoshi.ui.theme.hoshiContainerBorder
 import moe.antimony.hoshi.ui.theme.hoshiSurfaces
 
 internal data class EnrichPackUiState(
     val manifestUrl: String = "",
-    val status: EnrichPackStatus = EnrichPackStatus.Idle,
-    val info: EnrichPackInfo? = null,
+    val status: PackStatus = PackStatus.Idle,
+    val info: PackInfo? = null,
     val sentenceModelInstalled: Boolean = false,
 ) {
     val isBusy: Boolean
-        get() = status is EnrichPackStatus.Checking || status is EnrichPackStatus.Downloading
+        get() = status is PackStatus.Checking || status is PackStatus.Downloading
 }
 
 @HiltViewModel
 internal class EnrichPackViewModel @Inject constructor(
-    private val repository: EnrichPackRepository,
-    private val settings: EnrichPackSettingsRepository,
+    private val pack: EnrichmentPack,
+    private val settings: PackSettings,
 ) : ViewModel() {
     val uiState: StateFlow<EnrichPackUiState> =
         combine(
             settings.manifestUrl,
-            repository.status,
-            repository.info,
-            repository.sentenceModelInstalled,
+            pack.status,
+            pack.info,
+            pack.sentenceModelInstalled,
             ::EnrichPackUiState,
         )
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), EnrichPackUiState())
@@ -71,26 +77,18 @@ internal class EnrichPackViewModel @Inject constructor(
         viewModelScope.launch { settings.setManifestUrl(url.trim()) }
     }
 
-    fun update() = repository.startUpdate()
+    fun update() = pack.startUpdate()
 }
 
-/**
- * `{ae-*}` field-picker entries. The dictionary-backed keys are always offered; `{ae-sentence}`
- * joins them once the sentence model is installed, and an installed pack can add further keys.
- */
+/** hoshi-card field-picker entries; `{sentence-pitch}` joins them once the sentence model is installed. */
 @Composable
-internal fun rememberEnrichPackHandlebars(): List<String> {
+internal fun rememberHoshiCardHandlebars(): List<String> {
     val viewModel: EnrichPackViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    return remember(state.info?.keys, state.sentenceModelInstalled) {
-        AnkiEnrichHandlebars.fieldOptions(
-            (AnkiEnrichHandlebars.defaultKeys + state.info?.keys.orEmpty()).distinct(),
-            state.sentenceModelInstalled,
-        )
-    }
+    return remember(state.sentenceModelInstalled) { HoshiCardFields.fieldOptions(state.sentenceModelInstalled) }
 }
 
-/** Anki settings card for the anki-enrich pack: installed version, server URL, and Update. */
+/** Anki settings card for the enrichment pack: installed version, server URL, and Update. */
 @Composable
 internal fun EnrichPackCard() {
     val viewModel: EnrichPackViewModel = hiltViewModel()
@@ -177,18 +175,25 @@ internal fun EnrichPackCard() {
 }
 
 @Composable
-private fun statusText(status: EnrichPackStatus): String? = when (status) {
-    EnrichPackStatus.Idle -> null
-    EnrichPackStatus.Checking -> stringResource(R.string.enrich_pack_checking)
-    is EnrichPackStatus.Downloading -> stringResource(
+private fun statusText(status: PackStatus): String? = when (status) {
+    PackStatus.Idle -> null
+    PackStatus.Checking -> stringResource(R.string.enrich_pack_checking)
+    is PackStatus.Downloading -> stringResource(
         when (status.item) {
-            EnrichDownload.Pack -> R.string.enrich_pack_downloading
-            EnrichDownload.Accent -> R.string.enrich_pack_downloading_accent
-            EnrichDownload.Dictionary -> R.string.enrich_pack_downloading_dictionary
+            PackDownload.Pack -> R.string.enrich_pack_downloading
+            PackDownload.Accent -> R.string.enrich_pack_downloading_accent
+            PackDownload.Dictionary -> R.string.enrich_pack_downloading_dictionary
         },
         status.percent,
     )
-    EnrichPackStatus.UpToDate -> stringResource(R.string.enrich_pack_up_to_date)
-    EnrichPackStatus.Updated -> stringResource(R.string.enrich_pack_updated)
-    is EnrichPackStatus.Failed -> status.message.asString()
+    PackStatus.UpToDate -> stringResource(R.string.enrich_pack_up_to_date)
+    PackStatus.Updated -> stringResource(R.string.enrich_pack_updated)
+    is PackStatus.Failed -> stringResource(
+        when (status.reason) {
+            PackFailure.UrlMissing -> R.string.enrich_pack_error_url_missing
+            PackFailure.Unreachable -> R.string.enrich_pack_error_unreachable
+            PackFailure.Format -> R.string.enrich_pack_error_format
+            PackFailure.Invalid -> R.string.enrich_pack_error_invalid
+        },
+    )
 }

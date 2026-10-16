@@ -24,11 +24,9 @@ androidxHilt = "1.3.0"
 ksp = "2.3.9"
 sherpaOnnx = "1.13.8"
 okhttp = "5.4.0"
-sudachi = "0.7.5"
 
 [libraries]
 jsoup = { module = "org.jsoup:jsoup", version = "1.23.2" }
-sudachi = { group = "com.worksap.nlp", name = "sudachi", version.ref = "sudachi" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-mockwebserver3 = { group = "com.squareup.okhttp3", name = "mockwebserver3", version.ref = "okhttp" }
 material-color-utilities = { module = "com.materialkolor:material-color-utilities", version = "4.1.1" }

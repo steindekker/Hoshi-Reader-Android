@@ -997,7 +997,7 @@
         <item quantity="other">%1$d lines</item>
     </plurals>
     <string name="enrich_pack_title">Enrichment pack</string>
-    <string name="enrich_pack_not_installed">Not installed. Download it to fill {ae-*} handlebars offline.</string>
+    <string name="enrich_pack_not_installed">Not installed. Download it to fill definitions, pitch, frequency and example sentences offline.</string>
     <plurals name="enrich_pack_installed">
         <item quantity="one">Built %1$s · %2$d word</item>
         <item quantity="other">Built %1$s · %2$d words</item>
@@ -1007,14 +1007,14 @@
     <string name="enrich_pack_downloading">Downloading… %1$d%%</string>
     <string name="enrich_pack_downloading_accent">Downloading accent data… %1$d%%</string>
     <string name="enrich_pack_downloading_dictionary">Downloading Sudachi dictionary… %1$d%%</string>
-    <string name="enrich_sentence_model_installed">Sentence markup: installed ({ae-sentence})</string>
+    <string name="enrich_sentence_model_installed">Sentence markup: installed ({sentence-pitch})</string>
     <string name="enrich_sentence_model_not_installed">Sentence markup: not installed</string>
     <string name="enrich_pack_up_to_date">Up to date</string>
     <string name="enrich_pack_updated">Pack updated</string>
     <string name="enrich_pack_error_url_missing">Set the pack URL first.</string>
     <string name="enrich_pack_error_unreachable">Couldn\'t download the pack. Check the URL and your internet connection.</string>
     <string name="enrich_pack_error_invalid">The downloaded pack was damaged. Try again.</string>
-    <string name="enrich_pack_error_format">This pack needs a newer version of the app.</string>
+    <string name="enrich_pack_error_format">This pack is in a format this version of the app can\'t read.</string>
     <string name="setup_welcome_title">Welcome to Hoshi</string>
     <string name="setup_welcome_subtitle">Read Japanese, tap any word, and turn it into an Anki card. One download sets everything up.</string>
     <string name="setup_feature_dictionaries_title">Six dictionaries</string>

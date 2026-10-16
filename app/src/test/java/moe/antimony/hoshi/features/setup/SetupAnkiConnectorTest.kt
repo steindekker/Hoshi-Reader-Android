@@ -1,5 +1,6 @@
 package moe.antimony.hoshi.features.setup
 
+import hoshi.card.notetype.HoshiNoteType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,7 +13,6 @@ import moe.antimony.hoshi.features.anki.AnkiNoteType
 import moe.antimony.hoshi.features.anki.AnkiNoteTypeSpec
 import moe.antimony.hoshi.features.anki.AnkiSettings
 import moe.antimony.hoshi.features.anki.AnkiSettingsRepository
-import moe.antimony.hoshi.features.anki.HoshiNoteType
 import moe.antimony.hoshi.features.anki.defaultAnkiCardFormat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -36,7 +36,7 @@ class SetupAnkiConnectorTest {
         val format = settings.state.value.cardFormats.single()
         assertEquals(9L, format.selectedNoteTypeId)
         assertEquals(1L, format.selectedDeckId)
-        assertEquals("{ae-sentence}", format.fieldMappings["Sentence"])
+        assertEquals("{sentence-pitch}", format.fieldMappings["Sentence"])
         assertEquals(listOf(kinomoto), settings.state.value.availableNoteTypes)
     }
 

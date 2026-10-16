@@ -31,7 +31,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git submodule update --init --recursive third_party/hoshidicts-kotlin-bridge
+          git submodule update --init --recursive third_party/hoshidicts-kotlin-bridge third_party/hoshi-card
           git submodule status --recursive
 
       - name: Set up JDK

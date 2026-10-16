@@ -1,5 +1,6 @@
 package moe.antimony.hoshi.features.setup
 
+import hoshi.card.setup.SetupFailure
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context

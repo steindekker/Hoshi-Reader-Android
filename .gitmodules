@@ -6,3 +6,7 @@
 	path = third_party/hoshidicts-kotlin-bridge
 	url = https://github.com/HuangAntimony/hoshidicts-kotlin-bridge.git
 	branch = codex/hoshidicts-multilingual-bridge
+[submodule "third_party/hoshi-card"]
+	path = third_party/hoshi-card
+	url = https://github.com/steindekker/hoshi-card.git
+	branch = main

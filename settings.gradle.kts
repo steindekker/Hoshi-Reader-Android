@@ -32,3 +32,9 @@ dependencyResolutionManagement {
 
 rootProject.name = "Hoshi Reader"
 include(":app")
+
+// hoshi-card, the card-enrichment library shared with chimahon. A sibling checkout at
+// ../hoshi-card (the hoshi-suite layout) is used when present; otherwise the pinned submodule.
+include(":hoshi-card")
+project(":hoshi-card").projectDir = file("../hoshi-card").takeIf { it.resolve("build.gradle.kts").isFile }
+    ?: file("third_party/hoshi-card")
