@@ -3,6 +3,7 @@ package moe.antimony.hoshi
 import android.app.Application
 import android.content.Context
 import androidx.hilt.work.HiltWorkerFactory
+import moe.antimony.hoshi.features.anki.ResumedActivityTracker
 import androidx.work.Configuration
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
@@ -42,6 +43,7 @@ class HoshiApplication : Application(), Configuration.Provider, SingletonImageLo
 
     override fun onCreate() {
         super.onCreate()
+        ResumedActivityTracker.install(this)
         installCrashDiagnostics(this)
         prepareUpdateStartupState()
         updateScheduler.get().sync()

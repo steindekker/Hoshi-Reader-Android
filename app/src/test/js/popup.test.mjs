@@ -804,7 +804,7 @@ test('popup renders ordered format buttons with independent icon and disabled st
     assert.match(mineButtons[2].style.properties.get('--button-icon-url'), /diamond\.svg/);
 });
 
-test('popup places Anki formats before audio and keeps each notes action with its format', async () => {
+test('popup places Anki formats before audio and folds open-card into the add button', async () => {
     const { context } = popupContext({
         duplicateStates: { word: true, sentence: true },
     });
@@ -829,11 +829,12 @@ test('popup places Anki formats before audio and keeps each notes action with it
     const [wordActions, sentenceActions, audioButton] = buttons.children;
     assert.equal(wordActions.className, 'anki-format-actions');
     assert.deepEqual(wordActions.children.map((child) => child.dataset.kind), ['notes', 'mine']);
-    assert.equal(wordActions.children[0].hidden, false);
+    assert.equal(wordActions.children[0].hidden, true);
+    assert.equal(wordActions.children[1].dataset.state, 'duplicate');
+    assert.equal(wordActions.children[1].disabled, false);
     assert.equal(sentenceActions.className, 'anki-format-actions');
     assert.deepEqual(sentenceActions.children.map((child) => child.dataset.kind), ['mine', 'notes']);
-    assert.equal(sentenceActions.children[1].dataset.placement, 'above');
-    assert.equal(sentenceActions.children[1].hidden, false);
+    assert.equal(sentenceActions.children[1].hidden, true);
     assert.equal(audioButton.dataset.kind, 'audio');
 });
 
@@ -1008,7 +1009,7 @@ test('audio candidate menu renders localized disabled empty state', async () => 
     assert.equal(menu.children[0].disabled, true);
 });
 
-test('duplicate refresh updates every format and creates or removes show-notes buttons', async () => {
+test('duplicate refresh marks existing cards on the add button and never shows a notes button', async () => {
     const setup = popupContext({
         duplicateStates: { word: true, sentence: false, listening: true },
     });
@@ -1032,14 +1033,19 @@ test('duplicate refresh updates every format and creates or removes show-notes b
 
     const mineButtons = descendants(container).filter((button) => button.dataset.kind === 'mine');
     assert.deepEqual(mineButtons.map((button) => button.dataset.state), ['duplicate', 'default', 'duplicate']);
-    assert.deepEqual(mineButtons.map((button) => button.disabled), [true, false, true]);
-    assert.equal(descendants(container).filter((button) => button.dataset.kind === 'notes' && !button.hidden).length, 2);
-    assert.deepEqual(notesButtons.map((button) => button.style.display), ['', 'none', '']);
+    // An existing card's button stays tappable: it opens the card.
+    assert.deepEqual(mineButtons.map((button) => button.disabled), [false, false, false]);
+    assert.deepEqual(notesButtons.map((button) => button.style.display), ['none', 'none', 'none']);
     assert.match(mineButtons[2].style.properties.get('--button-icon-url'), /diamond_fill\.svg/);
+
+    context.window.disableShowNotes = true;
+    await context.refreshAnkiDuplicateStates(0, container);
+    assert.deepEqual(mineButtons.map((button) => button.disabled), [true, false, true]);
+    context.window.disableShowNotes = false;
 
     setup.setDuplicateStates({ word: false, sentence: false, listening: false });
     await context.refreshAnkiDuplicateStates(0, container);
-    assert.equal(descendants(container).filter((button) => button.dataset.kind === 'notes' && !button.hidden).length, 0);
+    assert.deepEqual(mineButtons.map((button) => button.dataset.state), ['default', 'default', 'default']);
     assert.deepEqual(notesButtons.map((button) => button.style.display), ['none', 'none', 'none']);
     assert.deepEqual(mineButtons.map((button) => button.disabled), [false, false, false]);
 });
@@ -1367,7 +1373,7 @@ test('duplicate check failure leaves the add button enabled', async () => {
     assert.deepEqual(mineButtons.map((button) => button.dataset.state), [undefined, undefined]);
 });
 
-test('created card shows the notes button and opens that note', async () => {
+test('created card turns the add button into opening that note', async () => {
     const { context, showNotesMessages } = popupContext({ duplicateStates: { word: false } });
     context.webkit.messageHandlers.mineEntry.postMessage = () => ({ added: true, noteId: 42 });
     context.window.ankiBackendAvailable = true;
@@ -1381,16 +1387,19 @@ test('created card shows the notes button and opens that note', async () => {
     await context.mineEntryAtIndex(0, 'word', container);
 
     const notes = descendants(container).find((button) => button.dataset.kind === 'notes');
-    assert.equal(notes.hidden, false);
+    const mine = descendants(container).find((button) => button.dataset.kind === 'mine');
+    assert.equal(notes.hidden, true);
     assert.equal(notes.dataset.noteId, '42');
+    assert.equal(mine.dataset.state, 'duplicate');
+    assert.equal(mine.disabled, false);
     const event = {
         clientX: 3,
         clientY: 4,
         preventDefault() {},
         stopPropagation() {},
     };
-    notes.dispatch('pointerdown', event);
-    notes.dispatch('pointerup', event);
+    mine.dispatch('pointerdown', event);
+    mine.dispatch('pointerup', event);
     await flushAsyncWork();
 
     assert.equal(showNotesMessages.length, 1);

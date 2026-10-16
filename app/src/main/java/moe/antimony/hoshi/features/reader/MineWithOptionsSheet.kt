@@ -1,5 +1,7 @@
 package moe.antimony.hoshi.features.reader
 
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 import android.graphics.BitmapFactory
 import android.util.LruCache
 import androidx.compose.foundation.Image
@@ -92,6 +94,14 @@ internal fun MineWithOptionsSheet(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     LaunchedEffect(term) { viewModel.start(term) }
+    val showLongPressTip by viewModel.showLongPressTip.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    LaunchedEffect(showLongPressTip) {
+        if (showLongPressTip) {
+            Toast.makeText(context, R.string.mine_with_options_long_press_tip, Toast.LENGTH_LONG).show()
+            viewModel.longPressTipShown()
+        }
+    }
 
     // Prefetch thumbnails so the image step is instant.
     LaunchedEffect(state.imageCandidates) {

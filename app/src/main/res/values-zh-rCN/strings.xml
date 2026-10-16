@@ -729,6 +729,7 @@
     <string name="sasayaki_file">文件</string>
     <string name="sasayaki_no_file_selected">未选择文件</string>
     <string name="sasayaki_matching">正在匹配...</string>
+    <string name="mine_with_options_long_press_tip">提示：长按添加按钮可直接添加卡片，无需打开此面板。</string>
     <string name="mine_with_options_title">按选项制卡</string>
     <string name="mine_with_options_sentence_section">句子</string>
     <string name="mine_with_options_loading">正在加载例句...</string>

@@ -26,7 +26,6 @@ class AndroidAnkiContentApi @Inject constructor(
 ) : AnkiContentApi {
     private val appContext = context.applicationContext
     private val api = AddContentApi(appContext)
-    private val resumedActivity = ResumedActivityTracker(appContext)
 
     override fun deckList(): Map<Long, String> =
         readAnkiApi(AnkiFetchFailure.DeckListUnavailable) {
@@ -131,7 +130,7 @@ class AndroidAnkiContentApi @Inject constructor(
             val intent = Intent(spec.action, Uri.parse(spec.uri)).setPackage(spec.packageName)
             // From the visible Hoshi activity, the browser opens on top of Hoshi and Back
             // returns here; only without one does it need a task of its own.
-            val activity = resumedActivity.current()
+            val activity = ResumedActivityTracker.current()
             if (activity != null) {
                 activity.startActivity(intent)
             } else {
@@ -347,12 +346,20 @@ private fun String.decodeNumericHtmlEntity(): String? {
     return runCatching { String(Character.toChars(codePoint)) }.getOrNull()
 }
 
-/** The app's currently resumed activity, so external screens open on top of it. */
-private class ResumedActivityTracker(context: Context) : Application.ActivityLifecycleCallbacks {
+/**
+ * The app's currently resumed activity, so external screens (AnkiDroid's browser) open on top
+ * of it and Back returns to Hoshi. Installed from `Application.onCreate` so the first resume is
+ * never missed.
+ */
+internal object ResumedActivityTracker : Application.ActivityLifecycleCallbacks {
+    @Volatile
     private var resumed: WeakReference<Activity>? = null
+    private var installed = false
 
-    init {
-        (context as? Application)?.registerActivityLifecycleCallbacks(this)
+    fun install(application: Application) {
+        if (installed) return
+        installed = true
+        application.registerActivityLifecycleCallbacks(this)
     }
 
     fun current(): Activity? = resumed?.get()?.takeUnless { it.isFinishing || it.isDestroyed }

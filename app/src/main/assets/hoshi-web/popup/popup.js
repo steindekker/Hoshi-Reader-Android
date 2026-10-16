@@ -1236,9 +1236,19 @@ function rememberCreatedNote(buttonsContainer, entryIndex, formatId, noteId) {
     const resolvedId = formatId || (Array.isArray(window.ankiFormats) ? window.ankiFormats[0]?.id : null);
     if (!resolvedId) return;
     const notes = buttonSlotInContainer(buttonsContainer, 'notes', entryIndex, resolvedId);
-    if (!notes) return;
-    notes.dataset.noteId = String(id);
-    setButtonSlotHidden(notes, Boolean(window.disableShowNotes));
+    if (notes) notes.dataset.noteId = String(id);
+    // The add button itself turns into "open the card", like chimahon's single Anki button.
+    const mine = buttonSlotInContainer(buttonsContainer, 'mine', entryIndex, resolvedId);
+    const format = (Array.isArray(window.ankiFormats) ? window.ankiFormats : []).find((item) => item.id === resolvedId);
+    if (mine && format) {
+        updateButtonSlot(mine, { state: 'duplicate' });
+        updateButtonSlot(mine, { enabled: mineButtonEnabled(format, mine) });
+    }
+}
+
+/** An existing card's add button opens that card instead of adding another. */
+function mineSlotOpensNote(slot) {
+    return slot?.dataset.state === 'duplicate' && !window.disableShowNotes;
 }
 
 async function mineEntryWithOptions(entryIndex, buttonsContainer = null, formatId = null) {
@@ -1953,8 +1963,9 @@ function createButtonSlot(kind, entryIndex, enabled = true, formatId = null, for
     slot.type = 'button';
     slot.setAttribute('aria-label', kind === 'audio' ? 'Play audio' : kind === 'notes' ? 'Show Anki notes' : 'Add to Anki');
     // Audio: tap plays, long press picks a source. Mine: tap opens mine with options,
-    // long press adds the card directly. The tap runs on pointerup because WebView
-    // sometimes drops the click that follows a touch.
+    // long press adds the card directly; once the card exists the same button opens it in
+    // Anki (long press still adds a duplicate when duplicates are allowed). The tap runs on
+    // pointerup because WebView sometimes drops the click that follows a touch.
     const mineButtonsContainer = () => {
         const parent = slot.parentElement;
         return parent?.className === 'anki-format-actions' ? parent.parentElement : parent;
@@ -1964,7 +1975,11 @@ function createButtonSlot(kind, entryIndex, enabled = true, formatId = null, for
         if (kind === 'audio') {
             playEntryAudio(entryIndex);
         } else if (kind === 'mine') {
-            mineEntryWithOptions(entryIndex, mineButtonsContainer(), formatId);
+            if (mineSlotOpensNote(slot)) {
+                openExistingNote(entryIndex, formatId, mineButtonsContainer());
+            } else {
+                mineEntryWithOptions(entryIndex, mineButtonsContainer(), formatId);
+            }
         } else if (kind === 'notes') {
             showNotesAtIndex(entryIndex, formatId, slot.dataset.noteId || null);
         }
@@ -1972,7 +1987,13 @@ function createButtonSlot(kind, entryIndex, enabled = true, formatId = null, for
     const longPressAction = kind === 'audio'
         ? () => showAudioCandidateMenu(entryIndex, slot)
         : kind === 'mine'
-            ? () => mineEntryAtIndex(entryIndex, formatId, mineButtonsContainer())
+            ? () => {
+                if (mineSlotOpensNote(slot) && !window.allowDupes) {
+                    openExistingNote(entryIndex, formatId, mineButtonsContainer());
+                } else {
+                    mineEntryAtIndex(entryIndex, formatId, mineButtonsContainer());
+                }
+            }
             : null;
     let longPressTimer = null;
     let longPressed = false;
@@ -2121,6 +2142,7 @@ function duplicateStateForFormat(states, formatId) {
 
 function mineButtonEnabled(format, slot) {
     if (!window.ankiBackendAvailable || !format.isValid) return false;
+    if (mineSlotOpensNote(slot)) return true;
     return !(slot?.dataset.state === 'duplicate' && !window.allowDupes);
 }
 
@@ -2162,6 +2184,11 @@ async function mineEntryAtIndex(entryIndex, formatId, buttonsContainer = null) {
     } else {
         setTimeout(checkDuplicate, 1000);
     }
+}
+
+function openExistingNote(entryIndex, formatId, buttonsContainer) {
+    const notes = buttonSlotInContainer(buttonsContainer, 'notes', entryIndex, formatId);
+    return showNotesAtIndex(entryIndex, formatId, notes?.dataset.noteId || null);
 }
 
 async function showNotesAtIndex(entryIndex, formatId, noteId = null) {
@@ -2244,28 +2271,17 @@ async function refreshAnkiDuplicateStates(entryIndex, buttonsContainer) {
         const mineSlot = buttonSlotInContainer(buttonsContainer, 'mine', entryIndex, format.id);
         const notesSlot = buttonSlotInContainer(buttonsContainer, 'notes', entryIndex, format.id);
         const isDuplicate = duplicateStateForFormat(states, format.id);
+        // The separate notes button stays hidden: an existing card's add button opens it.
+        syncShowNotesButton(buttonsContainer, entryIndex, format, false);
         if (isDuplicate === null) {
             // A missing result is not proof the word is a duplicate. Leave the button tappable.
             updateButtonSlot(mineSlot, { enabled: mineButtonEnabled(format, mineSlot) });
-            if (!notesSlot?.dataset.noteId) {
-                syncShowNotesButton(buttonsContainer, entryIndex, format, false);
-            }
             return;
         }
-        updateButtonSlot(mineSlot, {
-            state: isDuplicate ? 'duplicate' : 'default',
-            enabled: Boolean(
-                window.ankiBackendAvailable &&
-                format.isValid &&
-                !(isDuplicate && !window.allowDupes)
-            ),
-        });
-        syncShowNotesButton(
-            buttonsContainer,
-            entryIndex,
-            format,
-            Boolean(!window.disableShowNotes && (isDuplicate || notesSlot?.dataset.noteId)),
-        );
+        // A card created here counts as existing even before the duplicate index catches up.
+        const exists = isDuplicate || Boolean(notesSlot?.dataset.noteId);
+        updateButtonSlot(mineSlot, { state: exists ? 'duplicate' : 'default' });
+        updateButtonSlot(mineSlot, { enabled: mineButtonEnabled(format, mineSlot) });
     });
     return states !== null;
 }

@@ -35,6 +35,7 @@ internal class MineWithOptionsViewModel : ViewModel {
     private val localSentenceSource: LocalExampleSentenceSource
     private val localDispatcher: CoroutineDispatcher
     private val imageSearchSource: ImageSearchSource
+    private val tips: MiningTipRepository
     private val injectedScope: CoroutineScope?
     private val workScope: CoroutineScope
         get() = injectedScope ?: viewModelScope
@@ -44,11 +45,13 @@ internal class MineWithOptionsViewModel : ViewModel {
         exampleSentenceSource: ExampleSentenceSource,
         localSentenceSource: LocalExampleSentenceSource,
         imageSearchSource: ImageSearchSource,
+        tips: MiningTipRepository,
     ) : super() {
         this.exampleSentenceSource = exampleSentenceSource
         this.localSentenceSource = localSentenceSource
         this.localDispatcher = Dispatchers.IO
         this.imageSearchSource = imageSearchSource
+        this.tips = tips
         this.injectedScope = null
     }
 
@@ -58,16 +61,27 @@ internal class MineWithOptionsViewModel : ViewModel {
         coroutineScope: CoroutineScope,
         localSentenceSource: LocalExampleSentenceSource = LocalExampleSentenceSource.None,
         localDispatcher: CoroutineDispatcher = Dispatchers.Unconfined,
+        tips: MiningTipRepository = MiningTipRepository.None,
     ) : super() {
         this.exampleSentenceSource = exampleSentenceSource
         this.localSentenceSource = localSentenceSource
         this.localDispatcher = localDispatcher
         this.imageSearchSource = imageSearchSource
+        this.tips = tips
         this.injectedScope = coroutineScope
     }
 
     private val _uiState = MutableStateFlow(MineWithOptionsUiState())
     val uiState: StateFlow<MineWithOptionsUiState> = _uiState.asStateFlow()
+
+    private val _showLongPressTip = MutableStateFlow(false)
+    /** Set once ever, the first time the sheet opens: long press adds a card without it. */
+    val showLongPressTip: StateFlow<Boolean> = _showLongPressTip.asStateFlow()
+    private var tipChecked = false
+
+    fun longPressTipShown() {
+        _showLongPressTip.value = false
+    }
 
     private var loadedTerm: String? = null
     private var loadJob: Job? = null
@@ -75,6 +89,10 @@ internal class MineWithOptionsViewModel : ViewModel {
     private var generation = 0
 
     fun start(term: String) {
+        if (!tipChecked) {
+            tipChecked = true
+            workScope.launch { if (runCatching { tips.consumeLongPressTip() }.getOrDefault(false)) _showLongPressTip.value = true }
+        }
         if (loadedTerm == term) return
         loadedTerm = term
         loadJob?.cancel()
