@@ -499,7 +499,9 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
 - First-run setup (`features.setup`) is a full-screen welcome that downloads the
   Yomitan dictionaries, the sentence model and the enrichment pack from the
   catalog at `BuildConfig.HOSHI_SETUP_URL` (`HOSHI_SETUP_URL`, or
-  `~/.config/hoshi-reader/setup-url`; no welcome screen without one). Every request to the catalog host
+  `~/.config/hoshi-reader/setup-url`; no welcome screen without one). The
+  release workflow passes the `HOSHI_SETUP_URL` and `HOSHI_SETUP_TOKEN` repository
+  secrets; neither value is stored in the repository. Every request to the catalog host
   sends `X-Hoshi-Token` (`SetupServerConnections`; other hosts never get it),
   and the token comes from `HOSHI_SETUP_TOKEN` or
   `~/.config/hoshi-reader/setup-token` at build time. Dictionaries whose title
