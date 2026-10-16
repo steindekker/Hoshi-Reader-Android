@@ -53,3 +53,6 @@
 # Sudachi parses its config with javax.json, whose provider is found via ServiceLoader/Class.forName.
 -keep class org.glassfish.json.** { *; }
 -keep class javax.json.** { *; }
+# The tokenizer loads char.def, unk.def and rewrite.def relative to its own package (and anchors
+# Sudachi's classpath lookups there), so R8 must not rename or move it.
+-keep,allowoptimization class moe.antimony.hoshi.features.anki.enrich.jrp.SudachiJrpTokenizer
