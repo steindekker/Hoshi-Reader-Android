@@ -7,6 +7,7 @@ import moe.antimony.hoshi.features.anki.ExampleSentence
 import moe.antimony.hoshi.features.anki.ExampleSentenceSource
 import moe.antimony.hoshi.features.anki.ImageCandidate
 import moe.antimony.hoshi.features.anki.ImageSearchSource
+import moe.antimony.hoshi.features.anki.LocalExampleSentenceSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -50,6 +51,26 @@ internal class MineWithOptionsViewModelTest {
         )
         assertFalse(vm.uiState.value.loading)
         assertEquals("勉強", vm.uiState.value.term)
+    }
+
+    @Test
+    fun packSentencesShowBeforeMassifAnswersAndMassifIsAppendedWithoutDuplicates() {
+        val massif = CompletableDeferred<List<ExampleSentence>>()
+        val remote = object : ExampleSentenceSource {
+            override suspend fun candidates(term: String, limit: Int) = massif.await()
+        }
+        val local = LocalExampleSentenceSource { listOf(ExampleSentence("猫が好き。"), ExampleSentence("猫だ。")) }
+        val vm = MineWithOptionsViewModel(remote, FakeImageSource(emptyList()), scope(), local)
+
+        vm.start("猫")
+
+        assertEquals(listOf("猫が好き。", "猫だ。"), vm.uiState.value.candidates.map { it.text })
+        assertTrue(vm.uiState.value.loading)
+
+        massif.complete(listOf(ExampleSentence("猫だ。"), ExampleSentence("黒い猫。")))
+
+        assertEquals(listOf("猫が好き。", "猫だ。", "黒い猫。"), vm.uiState.value.candidates.map { it.text })
+        assertFalse(vm.uiState.value.loading)
     }
 
     @Test

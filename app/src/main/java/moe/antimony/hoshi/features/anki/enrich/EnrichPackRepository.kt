@@ -152,6 +152,16 @@ internal class EnrichPackRepository(
         return withSentence.withDefaults(AnkiEnrichment.DictionaryDefaults)
     }
 
+    /** One pack value for [term] (reading-independent keys also match an empty [reading]); null without a pack. */
+    fun value(term: String, reading: String, key: String): String? {
+        if (term.isBlank()) return null
+        return synchronized(sourceLock) {
+            runCatching { currentSource()?.lookup(term, reading)?.value(key) }
+                .onFailure { logWarning("Enrichment pack lookup failed", it) }
+                .getOrNull()
+        }
+    }
+
     /** Starts an update in the application scope so leaving the screen does not cancel it. */
     fun startUpdate() {
         if (updateMutex.isLocked) return

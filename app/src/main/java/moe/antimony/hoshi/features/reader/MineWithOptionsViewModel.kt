@@ -5,17 +5,21 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import moe.antimony.hoshi.features.anki.ExampleSentence
 import moe.antimony.hoshi.features.anki.ExampleSentenceSource
 import moe.antimony.hoshi.features.anki.ImageCandidate
 import moe.antimony.hoshi.features.anki.ImageSearchSource
+import moe.antimony.hoshi.features.anki.LocalExampleSentenceSource
 
 internal data class MineWithOptionsUiState(
     val term: String = "",
@@ -28,6 +32,8 @@ internal data class MineWithOptionsUiState(
 @HiltViewModel
 internal class MineWithOptionsViewModel : ViewModel {
     private val exampleSentenceSource: ExampleSentenceSource
+    private val localSentenceSource: LocalExampleSentenceSource
+    private val localDispatcher: CoroutineDispatcher
     private val imageSearchSource: ImageSearchSource
     private val injectedScope: CoroutineScope?
     private val workScope: CoroutineScope
@@ -36,9 +42,12 @@ internal class MineWithOptionsViewModel : ViewModel {
     @Inject
     constructor(
         exampleSentenceSource: ExampleSentenceSource,
+        localSentenceSource: LocalExampleSentenceSource,
         imageSearchSource: ImageSearchSource,
     ) : super() {
         this.exampleSentenceSource = exampleSentenceSource
+        this.localSentenceSource = localSentenceSource
+        this.localDispatcher = Dispatchers.IO
         this.imageSearchSource = imageSearchSource
         this.injectedScope = null
     }
@@ -47,8 +56,12 @@ internal class MineWithOptionsViewModel : ViewModel {
         exampleSentenceSource: ExampleSentenceSource,
         imageSearchSource: ImageSearchSource,
         coroutineScope: CoroutineScope,
+        localSentenceSource: LocalExampleSentenceSource = LocalExampleSentenceSource.None,
+        localDispatcher: CoroutineDispatcher = Dispatchers.Unconfined,
     ) : super() {
         this.exampleSentenceSource = exampleSentenceSource
+        this.localSentenceSource = localSentenceSource
+        this.localDispatcher = localDispatcher
         this.imageSearchSource = imageSearchSource
         this.injectedScope = coroutineScope
     }
@@ -69,8 +82,13 @@ internal class MineWithOptionsViewModel : ViewModel {
         _uiState.value = MineWithOptionsUiState(term = term, loading = true, imageLoading = true)
         loadJob = workScope.launch {
             launch {
-                val candidates = loadOrEmpty { exampleSentenceSource.candidates(term) }
-                if (gen == generation) _uiState.update { it.copy(loading = false, candidates = candidates) }
+                // The pack's sentences are on the device: show them at once, then append Massif's
+                // (still marked loading) once the search answers.
+                val local = loadOrEmpty { withContext(localDispatcher) { localSentenceSource.candidates(term) } }
+                if (gen == generation && local.isNotEmpty()) _uiState.update { it.copy(candidates = local) }
+                val remote = loadOrEmpty { exampleSentenceSource.candidates(term) }
+                val merged = local + remote.filter { sentence -> local.none { it.text == sentence.text } }
+                if (gen == generation) _uiState.update { it.copy(loading = false, candidates = merged) }
             }
             launch {
                 val images = loadOrEmpty { imageSearchSource.candidates(term) }

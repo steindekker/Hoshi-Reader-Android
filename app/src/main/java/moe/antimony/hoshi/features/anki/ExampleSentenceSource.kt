@@ -16,6 +16,15 @@ internal interface ExampleSentenceSource {
     suspend fun candidates(term: String, limit: Int = MASSIF_DEFAULT_LIMIT): List<ExampleSentence>
 }
 
+/** Sentences already on the device (the enrichment pack), shown before the Massif search answers. */
+internal fun interface LocalExampleSentenceSource {
+    fun candidates(term: String): List<ExampleSentence>
+
+    companion object {
+        val None = LocalExampleSentenceSource { emptyList() }
+    }
+}
+
 internal class MassifExampleSentenceSource : ExampleSentenceSource {
     override suspend fun candidates(term: String, limit: Int): List<ExampleSentence> =
         withContext(Dispatchers.IO) {

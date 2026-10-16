@@ -25,6 +25,9 @@ internal object AnkiEnrichHandlebars {
     /** The mining sentence with JRP markup, written by the installed sentence model. */
     const val SENTENCE_KEY = "ae-sentence"
 
+    /** The rendered 例文 block; the options sheet also reads its sentences. */
+    const val EXAMPLES_KEY = "ae-examples"
+
     /** Field-picker entries for an installed pack's keys, plus `{ae-sentence}` with a sentence model. */
     fun fieldOptions(keys: List<String>, sentenceModel: Boolean = false): List<String> =
         (keys.filterNot { it == TAGS_KEY } + listOfNotNull(SENTENCE_KEY.takeIf { sentenceModel }))
@@ -46,6 +49,9 @@ internal class AnkiEnrichment(
     private val values: Map<String, String>,
     private val defaults: Map<String, String> = emptyMap(),
 ) {
+    /** The pack's value for [key], without defaults. */
+    fun value(key: String): String? = values[key]
+
     fun protect(template: String): String =
         AnkiEnrichHandlebars.token.replace(template) { match ->
             val key = match.groupValues[1]
