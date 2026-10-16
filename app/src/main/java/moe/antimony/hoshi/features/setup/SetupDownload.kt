@@ -12,6 +12,9 @@ import moe.antimony.hoshi.features.anki.AnkiFieldTemplates
 import moe.antimony.hoshi.features.anki.AnkiSettings
 import moe.antimony.hoshi.features.anki.defaultAnkiCardFormat
 import moe.antimony.hoshi.features.anki.enrich.SentenceModelPart
+import moe.antimony.hoshi.features.audio.AudioSettings
+import moe.antimony.hoshi.features.audio.AudioSource
+import moe.antimony.hoshi.features.audio.isBuiltInLocalAudioSource
 import moe.antimony.hoshi.ui.UiText
 import java.util.UUID
 
@@ -31,7 +34,11 @@ internal fun parseSetupManifest(raw: String): SetupManifest {
     return manifest
 }
 
-/** Puts 三省堂, then 実用, then JMdict ahead of any other term dictionaries. */
+/** An exact title match, or a dated release of it such as `JMdict [2026-10-16]` for `JMdict`. */
+internal fun SetupAsset.isInstalled(installedTitles: Set<String>): Boolean =
+    title.isNotBlank() && installedTitles.any { it == title || it.startsWith("$title [") }
+
+/** Puts 実用, then 三省堂, then JMdict ahead of any other term dictionaries. */
 internal fun reorderTermDictionaries(titles: List<String>, move: (from: Int, to: Int) -> Unit) {
     val current = titles.toMutableList()
     val desired = current.withIndex()
@@ -46,10 +53,21 @@ internal fun reorderTermDictionaries(titles: List<String>, move: (from: Int, to:
 }
 
 private fun termRank(title: String): Int = when {
-    "三省堂" in title -> 0
-    "実用" in title -> 1
+    "実用" in title -> 0
+    "三省堂" in title -> 1
     title.contains("JMdict", ignoreCase = true) -> 2
     else -> 3
+}
+
+/**
+ * Adds the catalog's audio server right after the offline database, so a word the database
+ * lacks (or every word, while offline audio is off) still gets audio.
+ */
+internal fun AudioSettings.withFallbackAudioServer(server: SetupAudioServer): AudioSettings {
+    if (server.name.isBlank() || server.url.isBlank()) return this
+    val source = AudioSource(name = server.name, url = server.url)
+    val (local, rest) = audioSources.filterNot { it.url == source.url }.partition { it.isBuiltInLocalAudioSource }
+    return copy(audioSources = local + source + rest)
 }
 
 internal fun AnkiSettings.withSeamlessFormatIfUnmapped(): AnkiSettings {
@@ -67,7 +85,9 @@ internal fun AnkiSettings.withSeamlessFormatIfUnmapped(): AnkiSettings {
 
 /**
  * Downloads the setup catalog and installs it. Dictionaries go through the existing
- * Yomitan importer. The sentence model is the on-device `{ae-sentence}` pair.
+ * Yomitan importer. The sentence model is the on-device `{ae-sentence}` pair, and the
+ * enrichment pack (examples, definitions, pitch) installs through its own updater.
+ * Offline audio is separate: [downloadAudio] runs in the background after setup.
  */
 internal class SetupDownload(
     private val workDir: File,
@@ -75,10 +95,13 @@ internal class SetupDownload(
     private val importZip: (File, Boolean) -> Int,
     private val lowRam: () -> Boolean,
     private val termTitles: () -> List<String>,
+    private val installedTitles: () -> Set<String>,
     private val moveTerm: (Int, Int) -> Unit,
     private val installSentence: (SentenceModelPart, File, String) -> Unit,
     private val sentenceInstalledVersion: (SentenceModelPart) -> String?,
     private val sentencePartFile: (SentenceModelPart) -> File,
+    private val installPack: (manifestUrl: String, onPercent: (Int) -> Unit) -> Unit,
+    private val addAudioServer: (SetupAudioServer) -> Unit,
     private val audioInstalled: () -> Boolean,
     private val installAudio: (File) -> Unit,
     private val enableAudio: () -> Unit,
@@ -88,11 +111,13 @@ internal class SetupDownload(
 ) {
     fun peek(): SetupManifest = parseSetupManifest(readText(URL(catalogUrl)))
 
-    fun run(includeAudio: Boolean, onProgress: (SetupProgress) -> Unit) {
+    fun run(onProgress: (SetupProgress) -> Unit) {
         val manifest = peek()
         val base = URL(catalogUrl)
         val lowRamImport = lowRam()
+        val installed = installedTitles()
         manifest.dictionaries.forEach { asset ->
+            if (asset.isInstalled(installed)) return@forEach
             val file = download(base, asset, workDir, onProgress, dictionaryLabel(asset.id))
             onProgress(SetupProgress(dictionaryLabel(asset.id), importing = true))
             importZip(file, lowRamImport)
@@ -107,17 +132,30 @@ internal class SetupDownload(
             onProgress,
             UiText.Resource(R.string.setup_item_sentence_dictionary),
         )
-        val audio = manifest.audio
-        if (includeAudio && audio != null) {
-            if (!audioInstalled()) {
-                val file = download(base, audio, workDir, onProgress, UiText.Resource(R.string.setup_item_audio))
-                installAudio(file)
-                file.delete()
+        manifest.pack?.let { pack ->
+            val label = UiText.Resource(R.string.setup_item_pack)
+            try {
+                installPack(URL(base, pack).toString()) { percent -> onProgress(SetupProgress(label, percent)) }
+            } catch (error: Exception) {
+                error.asSetupFailure()
             }
-            enableAudio()
         }
+        manifest.audioServer?.let(addAudioServer)
         applyAnki()
         markComplete()
+    }
+
+    /** Downloads and enables the offline word-audio database; a no-op when the catalog has none. */
+    fun downloadAudio(onProgress: (SetupProgress) -> Unit) {
+        val manifest = peek()
+        val audio = manifest.audio ?: return
+        if (!audioInstalled()) {
+            val file = download(URL(catalogUrl), audio, workDir, onProgress, UiText.Resource(R.string.setup_offline_audio_title))
+            onProgress(SetupProgress(UiText.Resource(R.string.setup_offline_audio_title), importing = true))
+            installAudio(file)
+            file.delete()
+        }
+        enableAudio()
     }
 
     private fun installSentenceAsset(

@@ -140,6 +140,20 @@ class AndroidAnkiContentApi @Inject constructor(
     override fun isAvailable(): Boolean =
         AddContentApi.getAnkiDroidPackageName(appContext) != null
 
+    override fun addModel(spec: AnkiNoteTypeSpec, deckId: Long?): Long? =
+        readAnkiApi(AnkiFetchFailure.ProviderFailure) {
+            api.addNewCustomModel(
+                spec.name,
+                spec.fields.toTypedArray(),
+                arrayOf(spec.cardName),
+                arrayOf(spec.front),
+                arrayOf(spec.back),
+                spec.css,
+                deckId,
+                0,
+            )
+        }
+
     private inline fun <T> readAnkiApi(fallbackFailure: AnkiFetchFailure, block: () -> T): T {
         if (!isAvailable()) throw AnkiFetchException(AnkiFetchFailure.ApiUnavailable)
         return try {

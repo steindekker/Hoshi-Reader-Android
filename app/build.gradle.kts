@@ -46,6 +46,19 @@ val releaseKeystorePath = releaseSigningValue("ANDROID_KEYSTORE_FILE")
 val releaseKeystorePassword = releaseSigningValue("ANDROID_KEYSTORE_PASSWORD")
 val releaseKeyAlias = releaseSigningValue("ANDROID_KEY_ALIAS")
 val releaseKeyPassword = releaseSigningValue("ANDROID_KEY_PASSWORD")
+// First-run setup server. The token is sent as X-Hoshi-Token; CI and other machines set
+// HOSHI_SETUP_TOKEN, local builds read ~/.config/hoshi-reader/setup-token.
+val hoshiSetupUrl = providers.environmentVariable("HOSHI_SETUP_URL").orNull?.takeIf { it.isNotBlank() }
+    ?: "https://setup.example.com/setup.json"
+val hoshiSetupToken = providers.environmentVariable("HOSHI_SETUP_TOKEN").orNull?.takeIf { it.isNotBlank() }
+    ?: providers.fileContents(
+        objects.fileProperty().apply {
+            set(File(System.getProperty("user.home"), ".config/hoshi-reader/setup-token"))
+        },
+    ).asText.orNull?.trim().orEmpty()
+require(hoshiSetupToken.all { it.isLetterOrDigit() || it == '-' || it == '_' }) {
+    "HOSHI_SETUP_TOKEN may only contain letters, digits, '-' and '_'."
+}
 val releaseAbi = providers.gradleProperty("releaseAbi").getOrElse("arm64-v8a")
 require(releaseAbi in listOf("arm64-v8a", "armeabi-v7a", "x86_64"))
 val releaseVersionName = providers.gradleProperty("releaseVersionName").orNull
@@ -135,6 +148,8 @@ android {
         releaseVersionName?.let { versionName = it }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "HOSHI_SETUP_URL", "\"$hoshiSetupUrl\"")
+        buildConfigField("String", "HOSHI_SETUP_TOKEN", "\"$hoshiSetupToken\"")
         externalNativeBuild {
             cmake {
                 targets += listOf("hoshidicts_jni")

@@ -16,6 +16,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +32,7 @@ import moe.antimony.hoshi.R
 import moe.antimony.hoshi.di.ApplicationScope
 import moe.antimony.hoshi.di.FilesDir
 import moe.antimony.hoshi.di.IoDispatcher
+import moe.antimony.hoshi.features.setup.SetupServerConnections
 import moe.antimony.hoshi.ui.UiText
 
 internal sealed interface EnrichPackStatus {
@@ -95,7 +97,15 @@ internal class EnrichPackRepository(
         @ApplicationScope scope: CoroutineScope,
         @IoDispatcher ioDispatcher: CoroutineDispatcher,
         sentenceModel: JrpSentenceModel,
-    ) : this(File(filesDir, EnrichPackFormat.DIRECTORY), settings, scope, ioDispatcher, ::SqliteEnrichPackSource, sentenceModel)
+    ) : this(
+        File(filesDir, EnrichPackFormat.DIRECTORY),
+        settings,
+        scope,
+        ioDispatcher,
+        ::SqliteEnrichPackSource,
+        sentenceModel,
+        SetupServerConnections()::open,
+    )
 
     private val packFile = File(directory, EnrichPackFormat.FILE_NAME)
     private val partFile = File(directory, EnrichPackFormat.FILE_NAME + ".part")
@@ -146,6 +156,22 @@ internal class EnrichPackRepository(
     fun startUpdate() {
         if (updateMutex.isLocked) return
         scope.launch(ioDispatcher) { update() }
+    }
+
+    /**
+     * First-run install: points the updater at [manifestUrl] and installs it, reporting the
+     * download percent. Throws when the install fails so setup can offer a retry.
+     */
+    suspend fun installFrom(manifestUrl: String, onPercent: (Int) -> Unit) {
+        settings.setManifestUrl(manifestUrl)
+        coroutineScope {
+            val progress = launch {
+                status.collect { state -> if (state is EnrichPackStatus.Downloading) onPercent(state.percent) }
+            }
+            update()
+            progress.cancel()
+        }
+        check(status.value !is EnrichPackStatus.Failed) { "Enrichment pack install failed." }
     }
 
     internal suspend fun update() = updateMutex.withLock {

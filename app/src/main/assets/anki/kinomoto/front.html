@@ -1,0 +1,34 @@
+<div lang="ja" class="container">
+  <div id="word" style="margin-top: 8px">{{Term}}</div>
+  <div id="sentence">{{#Cloze Inside}}{{Cloze Before}}<span class="cloze">{{Cloze Inside}}</span>{{Cloze After}}{{/Cloze Inside}}{{^Cloze Inside}}{{Sentence}}{{/Cloze Inside}}</div>
+</div>
+
+<!-- No JRP renderer on the question side: the front shows the sentence as plain
+     text (furigana/pitch belong on the answer), so the renderer lives only in
+     back.html. The script below strips the JRP/Migaku markup to bare text. -->
+<script id="front-plain-sentence">
+(() => {
+  if (`{{Cloze Inside}}`.trim()) return; // cloze present -> leave as-is
+  const el = document.getElementById("sentence");
+  if (!el) return;
+  el.textContent = el.textContent
+    .replace(/\{([^{}]*)\}/g, (_, u) => u.replace(/;[^;]*$/, "")) // {unit;accent} -> unit
+    .replace(/\[([^\[\]|=]*)=([^\[\]]*)\]/g, "$1")                // [surface=base] -> surface
+    .replace(/\[([^\[\]|]+)\|([^\[\]]+)\]/g, "$1");               // [漢字|かな]    -> 漢字
+})();
+</script>
+
+<script id="hide-redundant-sentence">
+(() => {
+  // Drop the sentence when its surface text just repeats the term (furigana aside).
+  const sentence = document.getElementById("sentence");
+  const word = document.getElementById("word");
+  if (!sentence || !word) return;
+  const surface = (el) => {
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll("rt, #audio-inner").forEach((n) => n.remove());
+    return clone.textContent.replace(/\s+/g, "");
+  };
+  if (surface(sentence) && surface(sentence) === surface(word)) sentence.style.display = "none";
+})();
+</script>

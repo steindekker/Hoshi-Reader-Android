@@ -8,7 +8,7 @@ Historical release notes before v1.3.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 
 ### Added
 
-- On first launch, approve one download to install 三省堂, 実用, JMdict, NHK pitch, JPDB frequency, KANJIDIC, and the sentence-markup model from the tailnet host `box`. The Mining card is then mapped for `{ae-definition}`, `{ae-definition-source}`, `{ae-pitch}`, `{ae-frequency}`, `{ae-examples}`, `{ae-tags}`, and `{ae-sentence}` without a separate enrichment-pack setup. When the catalog includes term audio, an optional checkbox adds that larger download.
+- A welcome screen on first launch sets everything up in one download, over any internet connection: 実用, 三省堂, JMdict, NHK pitch, JPDB frequency, KANJIDIC, the sentence-markup model, and the enrichment pack, so cards get example sentences right away. 実用 is placed above 三省堂. Hoshi asks for AnkiDroid access up front, creates the Kinomoto note type when your collection does not have it, and maps the Mining card for `{ae-definition}`, `{ae-definition-source}`, `{ae-pitch}`, `{ae-frequency}`, `{ae-examples}`, `{ae-tags}`, and `{ae-sentence}`, so you can make cards without fetching Anki or remapping fields. You can still switch to your own note type in Settings. Offline audio is optional and off by default; when on, the large audio file downloads in the background. Until then, word audio streams from the audio server.
 - After a card is added, the notes button on that entry opens the new card in AnkiDroid.
 
 ### Fixed

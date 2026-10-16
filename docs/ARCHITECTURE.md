@@ -496,14 +496,32 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   glossary-first and monolingual/bilingual definition handlebars resolve from
   the current profile's persisted term-dictionary order and categories without
   extending the popup mining payload.
-- First-run setup (`features.setup`) downloads Yomitan dictionaries and the
-  sentence model from `http://<host>:8094/setup.json` after the user approves it.
-  `{ae-definition}`, `{ae-definition-source}`, `{ae-pitch}`, and `{ae-frequency}`
-  fall back to the installed dictionaries when the enrichment pack has no value
-  for them. `{ae-sentence}` stays the on-device JRP model. Setup writes the
-  Kinomoto mining format only when every saved card format still has empty
-  field mappings. Term audio is downloaded only when the catalog lists it and
-  the user checks that option.
+- First-run setup (`features.setup`) is a full-screen welcome that downloads the
+  Yomitan dictionaries, the sentence model and the enrichment pack from the
+  catalog at `BuildConfig.HOSHI_SETUP_URL` (default
+  `https://setup.example.com/setup.json`). Every request to the catalog host
+  sends `X-Hoshi-Token` (`SetupServerConnections`; other hosts never get it),
+  and the token comes from `HOSHI_SETUP_TOKEN` or
+  `~/.config/hoshi-reader/setup-token` at build time. Dictionaries whose title
+  is already installed are skipped. The pack installs through
+  `EnrichPackRepository.installFrom`, which also points later pack updates at
+  the same server. `{ae-definition}`, `{ae-definition-source}`, `{ae-pitch}`,
+  and `{ae-frequency}` fall back to the installed dictionaries when the pack
+  has no value for them. `{ae-sentence}` stays the on-device JRP model.
+- Setup writes the Kinomoto mining format only when every saved card format
+  still has empty field mappings. Before downloading it asks for the AnkiDroid
+  database permission. Afterwards `SetupAnkiConnector` stores the real deck and
+  note-type ids, and creates the shipped `jidoujisho Kinomoto` note type
+  (`assets/anki/kinomoto/`, via `AnkiBackend.createNoteType`) when the
+  collection lacks it. Mappings that already exist are kept. The upstream
+  `AnkiRepository.fetchConfiguration` is left unchanged.
+- Offline audio is off by default. When chosen, `SetupAudioWorker` downloads the
+  catalog's `android.db` as a WorkManager `dataSync` foreground job. Without
+  notification permission it still runs, but its progress notification is
+  hidden. The catalog's `audioServer` (a Yomitan local-audio server) is
+  inserted right after the offline database, so words stream from it when
+  offline audio is off or missing a clip. Setup state is versioned
+  (`SetupVersion`), so installs from an older setup see the welcome once more.
 - Google Drive sync uses Android/Google OAuth and Drive APIs through the
   repository/sync boundary. The Drive data source owns paginated folder listing,
   grouped sync-file discovery, bookdata upload/download, trash, cache clearing,

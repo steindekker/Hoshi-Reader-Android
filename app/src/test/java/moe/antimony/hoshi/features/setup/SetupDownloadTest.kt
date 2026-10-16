@@ -10,6 +10,8 @@ import java.security.MessageDigest
 import moe.antimony.hoshi.features.anki.AnkiFieldTemplates
 import moe.antimony.hoshi.features.anki.AnkiSettings
 import moe.antimony.hoshi.features.anki.defaultAnkiCardFormat
+import moe.antimony.hoshi.features.audio.AudioSettings
+import moe.antimony.hoshi.features.audio.AudioSource
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -75,7 +77,7 @@ class SetupDownloadTest {
     fun damagedDownloadDoesNotMarkSetupComplete() {
         val harness = harness(corrupt = "sankoku8.zip")
         try {
-            val error = runCatching { harness.download.run(includeAudio = false) {} }.exceptionOrNull()
+            val error = runCatching { harness.download.run {} }.exceptionOrNull()
             assertTrue(error is SetupFailure)
             assertEquals(SetupFailure.Reason.Damaged, (error as SetupFailure).reason)
             assertFalse(harness.completed)
@@ -86,28 +88,29 @@ class SetupDownloadTest {
     }
 
     @Test
-    fun audioToggleOffNeverRequestsTheAudioFile() {
+    fun setupInstallsPackAndAudioServerButNeverTheOfflineAudio() {
         val harness = harness()
         try {
-            harness.download.run(includeAudio = false) {}
+            harness.download.run {}
             assertFalse(harness.requests.contains("android.db"))
             assertFalse(harness.audioEnabled)
             assertTrue(harness.completed)
             assertTrue(harness.ankiApplied)
             assertEquals(listOf("sankoku8.zip"), harness.imported)
+            assertEquals(listOf("${harness.baseUrl}/pack.json"), harness.packManifests)
+            assertEquals(SetupAudioServer("Box", "https://audio.example/?term={term}&reading={reading}"), harness.audioServer)
         } finally {
             harness.close()
         }
     }
 
     @Test
-    fun audioToggleOnInstallsAndEnablesTheDatabase() {
-        val harness = harness()
+    fun alreadyInstalledDictionaryIsNotDownloadedAgain() {
+        val harness = harness(installedTitles = setOf("三省堂国語辞典　第八版"))
         try {
-            harness.download.run(includeAudio = true) {}
-            assertTrue(harness.requests.contains("android.db"))
-            assertArrayEquals("audio".toByteArray(), harness.installedAudio)
-            assertTrue(harness.audioEnabled)
+            harness.download.run {}
+            assertFalse(harness.requests.contains("sankoku8.zip"))
+            assertTrue(harness.imported.isEmpty())
             assertTrue(harness.completed)
         } finally {
             harness.close()
@@ -115,12 +118,68 @@ class SetupDownloadTest {
     }
 
     @Test
-    fun reorderPutsSankokuThenJitsuyoThenJmdictFirst() {
+    fun failedPackInstallDoesNotMarkSetupComplete() {
+        val harness = harness(packFails = true)
+        try {
+            val error = runCatching { harness.download.run {} }.exceptionOrNull()
+            assertTrue(error is SetupFailure)
+            assertFalse(harness.completed)
+        } finally {
+            harness.close()
+        }
+    }
+
+    @Test
+    fun backgroundAudioDownloadInstallsAndEnablesTheDatabase() {
+        val harness = harness()
+        try {
+            harness.download.downloadAudio {}
+            assertTrue(harness.requests.contains("android.db"))
+            assertArrayEquals("audio".toByteArray(), harness.installedAudio)
+            assertTrue(harness.audioEnabled)
+        } finally {
+            harness.close()
+        }
+    }
+
+    @Test
+    fun datedReleaseCountsAsInstalled() {
+        val jmdict = SetupAsset(file = "jmdict.zip", size = 1, sha256 = "x", title = "JMdict")
+        assertTrue(jmdict.isInstalled(setOf("JMdict [2026-10-15]")))
+        assertTrue(jmdict.isInstalled(setOf("JMdict")))
+        assertFalse(jmdict.isInstalled(setOf("JMdict Extra")))
+        assertFalse(jmdict.copy(title = "").isInstalled(setOf("")))
+    }
+
+    @Test
+    fun reorderPutsJitsuyoThenSankokuThenJmdictFirst() {
         val moves = mutableListOf<Pair<Int, Int>>()
-        reorderTermDictionaries(listOf("JMdict", "実用", "三省堂", "Other")) { from, to ->
+        reorderTermDictionaries(listOf("JMdict", "三省堂", "実用", "Other")) { from, to ->
             moves += from to to
         }
         assertEquals(listOf(2 to 0, 2 to 1), moves)
+    }
+
+    @Test
+    fun fallbackAudioServerGoesRightAfterTheOfflineDatabase() {
+        val server = SetupAudioServer("Box", "https://audio.example/?term={term}&reading={reading}")
+        val withLocal = AudioSettings().withLocalAudioEnabled(true).withFallbackAudioServer(server)
+        assertEquals(AudioSettings.LocalAudioSource, withLocal.audioSources[0])
+        assertEquals(AudioSource("Box", server.url), withLocal.audioSources[1])
+        assertEquals(AudioSettings.DefaultAudioSources, withLocal.audioSources.drop(2))
+
+        val withoutLocal = AudioSettings().withFallbackAudioServer(server)
+        assertEquals(AudioSource("Box", server.url), withoutLocal.audioSources.first())
+        assertEquals(withoutLocal, withoutLocal.withFallbackAudioServer(server))
+    }
+
+    @Test
+    fun setupTokenOnlyGoesToTheCatalogHost() {
+        val connections = SetupServerConnections(catalogUrl = "https://setup.example/setup.json", token = "secret")
+        val setup = connections.open(URL("https://setup.example/pack.json"))
+        val other = connections.open(URL("https://audio.example/?term=x"))
+        assertEquals("secret", setup.getRequestProperty(SetupTokenHeader))
+        assertNull(other.getRequestProperty(SetupTokenHeader))
     }
 
     @Test
@@ -142,7 +201,11 @@ class SetupDownloadTest {
         assertSame(custom, custom.withSeamlessFormatIfUnmapped())
     }
 
-    private fun harness(corrupt: String? = null): Harness {
+    private fun harness(
+        corrupt: String? = null,
+        installedTitles: Set<String> = emptySet(),
+        packFails: Boolean = false,
+    ): Harness {
         val dictionary = "sankoku".toByteArray()
         val accent = "accent".toByteArray()
         val sentenceDictionary = "sudachi".toByteArray()
@@ -154,10 +217,12 @@ class SetupDownloadTest {
             "android.db" to audio,
         )
         val manifest = """
-            {"format":1,"extra":1,"dictionaries":[${asset("sankoku8.zip", dictionary, "sankoku8")}],
+            {"format":1,"extra":1,"dictionaries":[${asset("sankoku8.zip", dictionary, "sankoku8", title = "三省堂国語辞典　第八版")}],
             "sentence":{"format":1,"accent":${asset("jrp-accent.sqlite", accent, version = "acc-1")},
             "dictionary":${asset("sudachi-system.dic", sentenceDictionary, version = "dic-1")}},
-            "audio":${asset("android.db", audio)}}
+            "audio":${asset("android.db", audio)},
+            "pack":"pack.json",
+            "audioServer":{"name":"Box","url":"https://audio.example/?term={term}&reading={reading}"}}
         """.trimIndent()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         val requests = mutableListOf<String>()
@@ -183,6 +248,8 @@ class SetupDownloadTest {
         var ankiApplied = false
         var completed = false
         val imported = mutableListOf<String>()
+        val packManifests = mutableListOf<String>()
+        var audioServer: SetupAudioServer? = null
         val download = SetupDownload(
             workDir = workDir,
             openConnection = { it.openConnection() as HttpURLConnection },
@@ -192,12 +259,18 @@ class SetupDownloadTest {
             },
             lowRam = { false },
             termTitles = { emptyList() },
+            installedTitles = { installedTitles },
             moveTerm = { _, _ -> },
             installSentence = { part, from, _ ->
                 check(from.renameTo(File(sentenceDir, part.fileName)))
             },
             sentenceInstalledVersion = { null },
             sentencePartFile = { part -> File(sentenceDir, part.fileName + ".part") },
+            installPack = { url, _ ->
+                packManifests += url
+                check(!packFails) { "pack failed" }
+            },
+            addAudioServer = { audioServer = it },
             audioInstalled = { false },
             installAudio = { file -> installedAudio += file.readBytes() },
             enableAudio = { audioEnabled = true },
@@ -207,6 +280,9 @@ class SetupDownloadTest {
         )
         return Harness(
             server = server,
+            baseUrl = "http://127.0.0.1:${server.address.port}",
+            packManifests = packManifests,
+            audioServerBox = { audioServer },
             download = download,
             requests = requests,
             imported = imported,
@@ -220,6 +296,9 @@ class SetupDownloadTest {
 
     private class Harness(
         private val server: HttpServer,
+        val baseUrl: String,
+        val packManifests: List<String>,
+        private val audioServerBox: () -> SetupAudioServer?,
         val download: SetupDownload,
         val requests: List<String>,
         val imported: List<String>,
@@ -230,6 +309,7 @@ class SetupDownloadTest {
         private val directories: List<File>,
     ) : AutoCloseable {
         val installedAudio: ByteArray? get() = installedAudioBox.singleOrNull()
+        val audioServer: SetupAudioServer? get() = audioServerBox()
         val audioEnabled: Boolean get() = audioEnabledBox()
         val ankiApplied: Boolean get() = ankiAppliedBox()
         val completed: Boolean get() = completedBox()
@@ -241,10 +321,11 @@ class SetupDownloadTest {
     }
 }
 
-private fun asset(file: String, bytes: ByteArray, id: String = "", version: String = ""): String {
+private fun asset(file: String, bytes: ByteArray, id: String = "", version: String = "", title: String = ""): String {
     val idPart = if (id.isEmpty()) "" else """"id":"$id","""
     val versionPart = if (version.isEmpty()) "" else """"version":"$version","""
-    return """{$idPart$versionPart"file":"$file","size":${bytes.size},"sha256":"${sha256(bytes)}"}"""
+    val titlePart = if (title.isEmpty()) "" else """"title":"$title","""
+    return """{$idPart$versionPart$titlePart"file":"$file","size":${bytes.size},"sha256":"${sha256(bytes)}"}"""
 }
 
 private fun sha256(bytes: ByteArray): String {

@@ -3,8 +3,11 @@
 
 Copies the local Yomitan zips, downloads JMdict and KANJIDIC, and calls
 ankienrich.sentence_model.build for jrp-accent.sqlite and sudachi-system.dic.
-Does not build the enrichment pack. The only read under /data/apps/anki-enrich
-is the prebuilt term-audio store audio.sqlite, copied out as android.db.
+Does not build the enrichment pack: --pack copies an already built one
+(`anki-enrich pack --out DIR`) next to the catalog. The only read under
+/data/apps/anki-enrich is the prebuilt term-audio store audio.sqlite, copied
+out as android.db; --reuse-audio keeps the audio entry of an existing catalog
+when the store is not on this machine.
 Refuses every other path containing /opt/anki-enrich or /data/apps/anki-enrich,
 and never writes into those trees.
 """
@@ -265,7 +268,33 @@ def build_sentence(stage: Path) -> dict:
     return sentence
 
 
-def publish(out: Path) -> None:
+def copy_pack(pack_dir: Path, out: Path) -> str:
+    """Copy pack.json and its pack file into out after checking the file's size and hash."""
+    refuse(pack_dir)
+    manifest = json.loads((pack_dir / "pack.json").read_text(encoding="utf-8"))
+    src = pack_dir / manifest["file"]
+    record = file_record(src)
+    if record["size"] != manifest["size"] or record["sha256"] != manifest["sha256"]:
+        raise SystemExit(f"{src} does not match {pack_dir / 'pack.json'}")
+    print(f"copying pack {manifest['version']} ({manifest['entries']} entries)", flush=True)
+    place_file(src, out / manifest["file"])
+    place_file(pack_dir / "pack.json", out / "pack.json")
+    return "pack.json"
+
+
+def reused_audio(catalog: Path) -> dict | None:
+    audio = json.loads(catalog.read_text(encoding="utf-8")).get("audio")
+    if audio:
+        print(f"keeping audio entry {audio['file']} from {catalog}", flush=True)
+    return audio
+
+
+def publish(
+    out: Path,
+    pack_dir: Path | None = None,
+    audio_server: tuple[str, str] | None = None,
+    reuse_audio: Path | None = None,
+) -> None:
     refuse(out)
     var_dir = (REPO / "anki-enrich" / "var").resolve()
     if out.resolve().is_relative_to(var_dir):
@@ -282,7 +311,10 @@ def publish(out: Path) -> None:
         index = read_index(dest)
         check_index(spec, index, dest)
         record = file_record(dest)
-        dictionaries.append({"id": spec["id"], **record})
+        # The app skips a dictionary that is already installed: an exact title, or for the dated
+        # releases (JMdict [2026-10-16]) the stable name before the date.
+        title = spec.get("title") or spec["title_contains"]
+        dictionaries.append({"id": spec["id"], "title": title, **record})
 
     with tempfile.TemporaryDirectory(prefix="hoshi-sentence-", dir=out) as stage_name:
         stage = Path(stage_name)
@@ -298,6 +330,13 @@ def publish(out: Path) -> None:
     audio = copy_audio(out / AUDIO_FILE)
     if audio is not None:
         manifest["audio"] = {"id": "android-db", **audio}
+    elif reuse_audio is not None and (kept := reused_audio(reuse_audio)):
+        manifest["audio"] = kept
+    if pack_dir is not None:
+        manifest["pack"] = copy_pack(pack_dir, out)
+    if audio_server is not None:
+        name, url = audio_server
+        manifest["audioServer"] = {"name": name, "url": url}
     payload = json.dumps(manifest, indent=2) + "\n"
     setup = out / "setup.json"
     refuse(setup)
@@ -309,9 +348,22 @@ def publish(out: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True, help="Directory to publish into")
+    parser.add_argument("--pack", type=Path, help="Built enrichment pack directory (pack.json + pack file)")
+    parser.add_argument(
+        "--audio-server",
+        nargs=2,
+        metavar=("NAME", "URL"),
+        help="Yomitan audio server the app falls back to, e.g. Box 'https://…/?term={term}&reading={reading}'",
+    )
+    parser.add_argument("--reuse-audio", type=Path, help="Existing setup.json whose audio entry to keep")
     args = parser.parse_args()
     try:
-        publish(args.out)
+        publish(
+            args.out,
+            pack_dir=args.pack,
+            audio_server=tuple(args.audio_server) if args.audio_server else None,
+            reuse_audio=args.reuse_audio,
+        )
     except subprocess.TimeoutExpired as exc:
         raise SystemExit(f"sentence_model.build timed out: {exc}") from None
 

@@ -77,6 +77,9 @@ interface AnkiBackend {
     ): Long? = null
 
     fun sync(): Boolean = false
+
+    /** Creates [spec] in the collection and returns it, or null when this backend cannot. */
+    fun createNoteType(spec: AnkiNoteTypeSpec, deck: AnkiDeck?): AnkiNoteType? = null
 }
 
 enum class AnkiFetchFailure(
@@ -141,6 +144,9 @@ interface AnkiContentApi {
     fun openNotes(query: String): Boolean = false
     fun sync(): Boolean = false
     fun isAvailable(): Boolean = true
+
+    /** The new model's id, or null when it was not created. */
+    fun addModel(spec: AnkiNoteTypeSpec, deckId: Long?): Long? = null
 }
 
 class AnkiDroidBackendAdapter @Inject constructor(
@@ -180,6 +186,11 @@ class AnkiDroidBackendAdapter @Inject constructor(
             throw AnkiFetchException(AnkiFetchFailure.ModelFieldsUnavailable, message)
         }
         return noteTypes
+    }
+
+    override fun createNoteType(spec: AnkiNoteTypeSpec, deck: AnkiDeck?): AnkiNoteType? {
+        val id = api.addModel(spec, deck?.id) ?: return null
+        return AnkiNoteType(id = id, name = spec.name, fields = api.fieldList(id))
     }
 
     override fun isDuplicate(
