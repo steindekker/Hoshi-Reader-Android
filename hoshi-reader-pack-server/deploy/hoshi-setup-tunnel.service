@@ -1,0 +1,12 @@
+[Unit]
+Description=Cloudflare tunnel publishing the Hoshi setup server at setup.example.com
+After=network-online.target hoshi-setup-server.service
+Wants=hoshi-setup-server.service
+
+[Service]
+ExecStart=/usr/local/bin/cloudflared --no-autoupdate tunnel --config %h/.cloudflared/hoshi-setup.yml run
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
@@ -12,6 +13,8 @@ use std::time::Duration;
 const SERVER: &str = "hoshi-reader-pack-server";
 const MAX_HEADER: usize = 8 * 1024;
 const MAX_CONNECTIONS: usize = 16;
+/// Request header that carries the shared download token.
+pub const TOKEN_HEADER: &str = "x-hoshi-token";
 const FORBIDDEN_ROOTS: &[&str] = &["/opt/anki-enrich", "/data/apps/anki-enrich"];
 
 static ACTIVE: AtomicUsize = AtomicUsize::new(0);
@@ -27,6 +30,7 @@ struct Request {
     method: String,
     path: String,
     range: Option<String>,
+    token: Option<String>,
 }
 
 pub fn prepare_root(path: &Path) -> Result<PathBuf, String> {
@@ -43,7 +47,9 @@ pub fn prepare_root(path: &Path) -> Result<PathBuf, String> {
     Ok(root)
 }
 
-pub fn serve(listener: TcpListener, root: PathBuf) -> io::Result<()> {
+/// Serves `root`. With a `token`, every request must send it in `X-Hoshi-Token`.
+pub fn serve(listener: TcpListener, root: PathBuf, token: Option<String>) -> io::Result<()> {
+    let token = token.map(Arc::new);
     for connection in listener.incoming() {
         let stream = match connection {
             Ok(stream) => stream,
@@ -59,8 +65,9 @@ pub fn serve(listener: TcpListener, root: PathBuf) -> io::Result<()> {
             continue;
         }
         let root = root.clone();
+        let token = token.clone();
         thread::spawn(move || {
-            if let Err(error) = handle(stream, &root) {
+            if let Err(error) = handle(stream, &root, token.as_deref().map(String::as_str)) {
                 eprintln!("request failed: {error}");
             }
             ACTIVE.fetch_sub(1, Ordering::Relaxed);
@@ -69,7 +76,7 @@ pub fn serve(listener: TcpListener, root: PathBuf) -> io::Result<()> {
     Ok(())
 }
 
-fn handle(mut stream: TcpStream, root: &Path) -> io::Result<()> {
+fn handle(mut stream: TcpStream, root: &Path, token: Option<&str>) -> io::Result<()> {
     stream.set_read_timeout(Some(Duration::from_secs(15)))?;
     let request = match read_request(&mut stream) {
         Ok(request) => request,
@@ -79,6 +86,12 @@ fn handle(mut stream: TcpStream, root: &Path) -> io::Result<()> {
         }
     };
     stream.set_read_timeout(None)?;
+    if let Some(expected) = token {
+        let sent = request.token.as_deref().unwrap_or("");
+        if !constant_time_eq(sent.as_bytes(), expected.as_bytes()) {
+            return write_status(&mut stream, 401, "Unauthorized", &[]);
+        }
+    }
     if request.method != "GET" && request.method != "HEAD" {
         return write_status(&mut stream, 405, "Method Not Allowed", &[("Allow", "GET, HEAD")]);
     }
@@ -112,6 +125,7 @@ fn handle(mut stream: TcpStream, root: &Path) -> io::Result<()> {
         ("Content-Type", content_type(&path)),
         ("Content-Length", length.to_string()),
         ("Accept-Ranges", "bytes".to_string()),
+        ("Cache-Control", NO_STORE.to_string()),
         ("Connection", "close".to_string()),
     ];
     if status == 206 {
@@ -123,6 +137,16 @@ fn handle(mut stream: TcpStream, root: &Path) -> io::Result<()> {
         return Ok(());
     }
     send_slice(&mut stream, &file, start, length)
+}
+
+/// A proxy in front (Cloudflare) must never cache a file and serve it without the token.
+const NO_STORE: &str = "private, no-store";
+
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
 enum Lookup {
@@ -267,13 +291,16 @@ fn read_request(stream: &mut TcpStream) -> io::Result<Request> {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "path must be absolute"));
     }
     let mut range = None;
+    let mut token = None;
     for line in lines {
         let Some((name, value)) = line.split_once(':') else { continue };
         if name.eq_ignore_ascii_case("range") {
             range = Some(value.trim().to_string());
+        } else if name.eq_ignore_ascii_case(TOKEN_HEADER) {
+            token = Some(value.trim().to_string());
         }
     }
-    Ok(Request { method: method.to_string(), path: path.to_string(), range })
+    Ok(Request { method: method.to_string(), path: path.to_string(), range, token })
 }
 
 fn write_status(mut stream: impl Write, status: u16, reason: &str, extra: &[(&str, &str)]) -> io::Result<()> {
@@ -282,6 +309,7 @@ fn write_status(mut stream: impl Write, status: u16, reason: &str, extra: &[(&st
         .map(|(name, value)| ((*name).to_string(), (*value).to_string()))
         .chain([
             ("Content-Length".to_string(), "0".to_string()),
+            ("Cache-Control".to_string(), NO_STORE.to_string()),
             ("Connection".to_string(), "close".to_string()),
         ])
         .collect();
@@ -330,9 +358,14 @@ mod tests {
     use std::os::unix::fs::symlink;
 
     fn serve_dir(root: PathBuf) -> u16 {
+        serve_dir_with_token(root, None)
+    }
+
+    fn serve_dir_with_token(root: PathBuf, token: Option<&str>) -> u16 {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
-        thread::spawn(move || serve(listener, root).unwrap());
+        let token = token.map(str::to_string);
+        thread::spawn(move || serve(listener, root, token).unwrap());
         port
     }
 
@@ -389,5 +422,32 @@ mod tests {
         assert!(link_body.is_empty());
         std::fs::remove_dir_all(root).unwrap();
         std::fs::remove_file(outside).unwrap();
+    }
+
+    #[test]
+    fn requires_the_token_when_one_is_set() {
+        let root = std::env::temp_dir().join(format!("hoshi-pack-token-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir(&root).unwrap();
+        std::fs::write(root.join("setup.json"), b"{}").unwrap();
+        let port = serve_dir_with_token(root.clone(), Some("s3cret"));
+        let (missing, missing_head, missing_body) =
+            exchange(port, "GET /setup.json HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+        let (wrong, _, _) = exchange(
+            port,
+            "GET /setup.json HTTP/1.1\r\nHost: localhost\r\nX-Hoshi-Token: nope\r\nConnection: close\r\n\r\n",
+        );
+        let (ok, ok_head, ok_body) = exchange(
+            port,
+            "GET /setup.json HTTP/1.1\r\nHost: localhost\r\nX-Hoshi-Token: s3cret\r\nConnection: close\r\n\r\n",
+        );
+        assert_eq!(missing, 401);
+        assert!(missing_body.is_empty());
+        assert!(missing_head.to_ascii_lowercase().contains("cache-control: private, no-store"));
+        assert_eq!(wrong, 401);
+        assert_eq!(ok, 200);
+        assert!(ok_head.to_ascii_lowercase().contains("cache-control: private, no-store"));
+        assert_eq!(ok_body, b"{}");
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

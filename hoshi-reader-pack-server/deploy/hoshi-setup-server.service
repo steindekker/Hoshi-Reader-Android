@@ -1,0 +1,12 @@
+[Unit]
+Description=Hoshi setup file server (token-gated, behind the hoshi-setup Cloudflare tunnel)
+After=network-online.target
+
+[Service]
+ExecStart=%h/.local/bin/hoshi-reader-pack-server --root %h/hoshi-setup --bind 127.0.0.1 --port 8095 --token-file %h/.config/hoshi-setup/token
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target

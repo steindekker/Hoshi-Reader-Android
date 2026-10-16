@@ -30,8 +30,20 @@ fn main() -> ExitCode {
             return ExitCode::from(1);
         }
     };
-    eprintln!("serving {} on http://{}/", root.display(), config.bind);
-    if serve(listener, root).is_err() {
+    let token = match config.token_file.as_deref().map(read_token).transpose() {
+        Ok(token) => token,
+        Err(message) => {
+            eprintln!("{message}");
+            return ExitCode::from(1);
+        }
+    };
+    eprintln!(
+        "serving {} on http://{}/{}",
+        root.display(),
+        config.bind,
+        if token.is_some() { " (token required)" } else { "" },
+    );
+    if serve(listener, root, token).is_err() {
         return ExitCode::from(1);
     }
     ExitCode::SUCCESS
@@ -45,16 +57,29 @@ enum Parsed {
 struct Args {
     root: std::path::PathBuf,
     bind: std::net::SocketAddr,
+    token_file: Option<std::path::PathBuf>,
+}
+
+fn read_token(path: &std::path::Path) -> Result<String, String> {
+    let token = std::fs::read_to_string(path)
+        .map_err(|error| format!("cannot read token file {}: {error}", path.display()))?;
+    let token = token.trim().to_string();
+    if token.len() < 16 {
+        return Err(format!("token in {} is shorter than 16 characters", path.display()));
+    }
+    Ok(token)
 }
 
 fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Parsed, String> {
     let mut root = None;
     let mut bind = "127.0.0.1".to_string();
     let mut port: u16 = 8094;
+    let mut token_file = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--root" => root = Some(args.next().ok_or("--root needs a directory")?),
+            "--token-file" => token_file = Some(args.next().ok_or("--token-file needs a path")?.into()),
             "--bind" => bind = args.next().ok_or("--bind needs an address")?,
             "--port" => {
                 port = args
@@ -71,19 +96,19 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Parsed, String> 
     let bind = format!("{bind}:{port}")
         .parse()
         .map_err(|_| format!("cannot use address {bind}:{port}"))?;
-    Ok(Parsed::Run(Args { root: root.into(), bind }))
+    Ok(Parsed::Run(Args { root: root.into(), bind, token_file }))
 }
 
 fn help() -> String {
     "\
-hoshi-reader-pack-server --root DIR [--bind 127.0.0.1] [--port 8094]
+hoshi-reader-pack-server --root DIR [--bind 127.0.0.1] [--port 8094] [--token-file PATH]
 
 Serves one directory. Downloads are sendfile'd and can resume with
 Range: bytes=N-. The process does not open the pack, the audio database,
 or an Anki collection.
 
-The box already publishes ~/hoshi-setup with tailscale serve on
-port 8094, which adds no extra process. Run this binary when that job
-should be its own process, then point tailscale serve at it."
+With --token-file, every request must send the file's token in the
+X-Hoshi-Token header; anything else gets 401. Responses carry
+Cache-Control: private, no-store so a proxy in front never caches them."
     .to_string()
 }
