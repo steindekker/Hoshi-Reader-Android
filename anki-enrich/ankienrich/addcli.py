@@ -17,7 +17,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="anki-enrich add",
         description=(
-            "Create a jidoujisho Kinomoto note, then fill-missing enrich that note. "
+            "Create a Hoshi note, then fill-missing enrich that note. "
             "Dry-run by default; --apply pulls, adds, enriches the new note only, "
             "and pushes once."
         ),

@@ -109,7 +109,7 @@ uv run pytest
 
 ## Add a note (`anki-enrich add`)
 
-Create a **jidoujisho Kinomoto** note, then fill-missing enrich **that note only**.
+Create a **Hoshi** note (formerly jidoujisho Kinomoto), then fill-missing enrich **that note only**.
 Shares the working collection with the normal enrich VAR
 (`ANKI_ENRICH_VAR`, default `<repo>/var`; on box use
 `/opt/anki-enrich/data`).

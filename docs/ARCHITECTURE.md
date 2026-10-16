@@ -508,12 +508,13 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   the same server. `{ae-definition}`, `{ae-definition-source}`, `{ae-pitch}`,
   and `{ae-frequency}` fall back to the installed dictionaries when the pack
   has no value for them. `{ae-sentence}` stays the on-device JRP model.
-- Setup writes the Kinomoto mining format only when every saved card format
+- Setup writes the Hoshi mining format only when every saved card format
   still has empty field mappings. Before downloading it asks for the AnkiDroid
   database permission. Afterwards `SetupAnkiConnector` stores the real deck and
-  note-type ids, and creates the shipped `jidoujisho Kinomoto` note type
-  (`assets/anki/kinomoto/`, via `AnkiBackend.createNoteType`) when the
-  collection lacks it. Mappings that already exist are kept. The upstream
+  note-type ids, and creates the shipped `Hoshi` note type
+  (`assets/anki/hoshi/`, via `AnkiBackend.createNoteType`) when the
+  collection lacks it. A collection that still has the old name
+  `jidoujisho Kinomoto` (rename not synced yet) is reused, not duplicated. Mappings that already exist are kept. The upstream
   `AnkiRepository.fetchConfiguration` is left unchanged.
 - Offline audio is off by default. When chosen, `SetupAudioWorker` downloads the
   catalog's `android.db` as a WorkManager `dataSync` foreground job. Without

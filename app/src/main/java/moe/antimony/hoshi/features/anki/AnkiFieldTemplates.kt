@@ -1,11 +1,16 @@
 package moe.antimony.hoshi.features.anki
 
 object AnkiFieldTemplates {
-    /** jidoujisho note type this install mines into. */
-    const val KinomotoNoteType = "jidoujisho Kinomoto"
+    /** The note type this install mines into (shipped under `assets/anki/hoshi/`). */
+    const val HoshiNoteType = "Hoshi"
+
+    /** The same note type before it was renamed; collections that have not synced the rename yet. */
+    const val LegacyHoshiNoteType = "jidoujisho Kinomoto"
 
     /** Deck name used until Anki has been fetched. Matches the mining deck. */
-    const val KinomotoDeckName = "Default"
+    const val HoshiDeckName = "Default"
+
+    fun isHoshiNoteType(name: String?): Boolean = name == HoshiNoteType || name == LegacyHoshiNoteType
 
     private val templates = mapOf(
         "Lapis" to mapOf(
@@ -60,35 +65,18 @@ object AnkiFieldTemplates {
         ),
         // Filled after the first-run download. `{ae-*}` resolves from the installed
         // dictionaries when no enrichment pack is present, and `{ae-sentence}` from
-        // the on-device sentence model.
-        KinomotoNoteType to mapOf(
-            "Term" to "{expression}",
-            "Reading" to "{reading}",
-            "Furigana" to "{furigana-plain}",
-            "Sentence" to "{ae-sentence}",
-            "SentenceFurigana" to "{sentence}",
-            "Cloze Before" to "{cloze-prefix}",
-            "Cloze Inside" to "{cloze-body}",
-            "Cloze After" to "{cloze-suffix}",
-            "Meaning" to "{ae-definition}",
-            "Context" to "{document-title}",
-            "Frequency" to "{ae-frequency}",
-            "Pitch Accent" to "{ae-pitch}",
-            "Image" to "{image}",
-            "Term Audio" to "{audio}",
-            "Sentence Audio" to "{sentence-audio}",
-            "Definition Source" to "{ae-definition-source}",
-            "Examples" to "{ae-examples}",
-        ),
+        // the on-device sentence model. The legacy name keeps unsynced collections mapped.
+        HoshiNoteType to HoshiMappings,
+        LegacyHoshiNoteType to HoshiMappings,
     )
 
     /** Card format written by first-run setup, before Anki has been fetched. */
     fun seamlessCardFormat(id: String): AnkiCardFormat = AnkiCardFormat(
         id = id,
         name = "Mining",
-        selectedDeckName = KinomotoDeckName,
-        selectedNoteTypeName = KinomotoNoteType,
-        fieldMappings = templates.getValue(KinomotoNoteType),
+        selectedDeckName = HoshiDeckName,
+        selectedNoteTypeName = HoshiNoteType,
+        fieldMappings = HoshiMappings,
         tags = "$DefaultAnkiTag {ae-tags}",
     )
 
@@ -111,3 +99,23 @@ object AnkiFieldTemplates {
         return defaultMappings(noteType)
     }
 }
+
+private val HoshiMappings = mapOf(
+    "Term" to "{expression}",
+    "Reading" to "{reading}",
+    "Furigana" to "{furigana-plain}",
+    "Sentence" to "{ae-sentence}",
+    "SentenceFurigana" to "{sentence}",
+    "Cloze Before" to "{cloze-prefix}",
+    "Cloze Inside" to "{cloze-body}",
+    "Cloze After" to "{cloze-suffix}",
+    "Meaning" to "{ae-definition}",
+    "Context" to "{document-title}",
+    "Frequency" to "{ae-frequency}",
+    "Pitch Accent" to "{ae-pitch}",
+    "Image" to "{image}",
+    "Term Audio" to "{audio}",
+    "Sentence Audio" to "{sentence-audio}",
+    "Definition Source" to "{ae-definition-source}",
+    "Examples" to "{ae-examples}",
+)

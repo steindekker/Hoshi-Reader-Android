@@ -1024,7 +1024,7 @@
     <string name="setup_feature_examples_title">Example sentences</string>
     <string name="setup_feature_examples_body">Cards come with up to three example sentences for the word.</string>
     <string name="setup_feature_card_title">A card that is ready to go</string>
-    <string name="setup_feature_card_body">Cards use the Kinomoto note type. You can switch to your own note type later in Settings.</string>
+    <string name="setup_feature_card_body">Cards use the Hoshi note type. You can switch to your own note type later in Settings.</string>
     <string name="setup_offline_audio_title">Offline audio</string>
     <string name="setup_offline_audio_body">Downloads %1$s of word audio in the background.</string>
     <string name="setup_offline_audio_streaming">When off, word audio streams from the server.</string>
@@ -1042,7 +1042,7 @@
     <string name="setup_welcome_retry">Try again</string>
     <string name="setup_finished_title">You\'re all set</string>
     <string name="setup_finished_body">Open a book and tap a word to look it up.</string>
-    <string name="setup_finished_anki_connected">AnkiDroid is connected. New cards use the Kinomoto note type.</string>
+    <string name="setup_finished_anki_connected">AnkiDroid is connected. New cards use the Hoshi note type.</string>
     <string name="setup_finished_anki_failed">AnkiDroid isn\'t connected yet. Connect it in Settings &gt; Anki.</string>
     <string name="setup_finished_audio">Offline audio is downloading in the background.</string>
     <string name="setup_finished_done">Start reading</string>

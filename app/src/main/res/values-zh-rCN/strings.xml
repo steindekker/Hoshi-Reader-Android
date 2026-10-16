@@ -1010,7 +1010,7 @@
     <string name="setup_feature_examples_title">例句</string>
     <string name="setup_feature_examples_body">每张卡片最多附带三个该单词的例句。</string>
     <string name="setup_feature_card_title">开箱即用的卡片</string>
-    <string name="setup_feature_card_body">卡片使用 Kinomoto 笔记类型。之后可以在设置中改用你自己的笔记类型。</string>
+    <string name="setup_feature_card_body">卡片使用 Hoshi 笔记类型。之后可以在设置中改用你自己的笔记类型。</string>
     <string name="setup_offline_audio_title">离线读音</string>
     <string name="setup_offline_audio_body">在后台下载 %1$s 的单词读音。</string>
     <string name="setup_offline_audio_streaming">关闭时，单词读音从服务器在线播放。</string>
@@ -1028,7 +1028,7 @@
     <string name="setup_welcome_retry">重试</string>
     <string name="setup_finished_title">一切就绪</string>
     <string name="setup_finished_body">打开一本书，点按单词即可查词。</string>
-    <string name="setup_finished_anki_connected">已连接 AnkiDroid。新卡片使用 Kinomoto 笔记类型。</string>
+    <string name="setup_finished_anki_connected">已连接 AnkiDroid。新卡片使用 Hoshi 笔记类型。</string>
     <string name="setup_finished_anki_failed">尚未连接 AnkiDroid。请在“设置 &gt; Anki”中连接。</string>
     <string name="setup_finished_audio">离线读音正在后台下载。</string>
     <string name="setup_finished_done">开始阅读</string>

@@ -11,11 +11,11 @@ data class AnkiNoteTypeSpec(
 )
 
 /**
- * The jidoujisho Kinomoto note type first-run setup maps `{ae-*}` into. The card design ships
- * under `assets/anki/kinomoto/`, taken from the collection this install mines into.
+ * The Hoshi note type first-run setup maps `{ae-*}` into (formerly "jidoujisho Kinomoto"). The
+ * card design ships under `assets/anki/hoshi/`, taken from the collection this install mines into.
  */
-internal object KinomotoNoteType {
-    const val AssetDirectory = "anki/kinomoto"
+internal object HoshiNoteType {
+    const val AssetDirectory = "anki/hoshi"
 
     val Fields = listOf(
         "Term",
@@ -42,9 +42,9 @@ internal object KinomotoNoteType {
     )
 
     fun spec(readAsset: (String) -> String) = AnkiNoteTypeSpec(
-        name = AnkiFieldTemplates.KinomotoNoteType,
+        name = AnkiFieldTemplates.HoshiNoteType,
         fields = Fields,
-        cardName = AnkiFieldTemplates.KinomotoNoteType,
+        cardName = AnkiFieldTemplates.HoshiNoteType,
         front = readAsset("$AssetDirectory/front.html"),
         back = readAsset("$AssetDirectory/back.html"),
         css = readAsset("$AssetDirectory/style.css"),

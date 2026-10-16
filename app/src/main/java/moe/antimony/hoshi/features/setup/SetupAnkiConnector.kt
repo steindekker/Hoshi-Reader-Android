@@ -18,14 +18,14 @@ import moe.antimony.hoshi.features.anki.AnkiNoteType
 import moe.antimony.hoshi.features.anki.AnkiNoteTypeSpec
 import moe.antimony.hoshi.features.anki.AnkiSettings
 import moe.antimony.hoshi.features.anki.AnkiSettingsRepository
-import moe.antimony.hoshi.features.anki.KinomotoNoteType
+import moe.antimony.hoshi.features.anki.HoshiNoteType
 import moe.antimony.hoshi.features.anki.selectDeckAfterFetch
 
 internal enum class SetupAnkiResult { Connected, Unavailable, Failed }
 
 /**
  * Connects the first-run card format to AnkiDroid once the database permission is granted:
- * finds the shipped Kinomoto note type (creating it when the collection has none) and stores
+ * finds the shipped Hoshi note type (creating it when the collection has none) and stores
  * the real deck and note-type ids. Existing field mappings are kept, so the user never has to
  * remap after setup. AnkiConnect users are left alone.
  */
@@ -46,7 +46,7 @@ internal class SetupAnkiConnector(
         backend = backend,
         settings = settings,
         spec = {
-            KinomotoNoteType.spec { path -> context.assets.open(path).use { it.readBytes().toString(Charsets.UTF_8) } }
+            HoshiNoteType.spec { path -> context.assets.open(path).use { it.readBytes().toString(Charsets.UTF_8) } }
         },
         ioDispatcher = ioDispatcher,
     )
@@ -61,7 +61,9 @@ internal class SetupAnkiConnector(
             if (decks.isEmpty()) return@withContext SetupAnkiResult.Failed
             var noteTypes = backend.fetchNoteTypes()
             val deck = selectDeckAfterFetch(decks, settings.settings.first().withSeamlessFormatIfUnmapped())
-            val noteType = noteTypes.firstOrNull { it.name == AnkiFieldTemplates.KinomotoNoteType }
+            // A collection that has not synced the rename yet still has the old name; reuse it.
+            val noteType = noteTypes.firstOrNull { it.name == AnkiFieldTemplates.HoshiNoteType }
+                ?: noteTypes.firstOrNull { it.name == AnkiFieldTemplates.LegacyHoshiNoteType }
                 ?: backend.createNoteType(spec(), deck)?.also { noteTypes = noteTypes + it }
                 ?: return@withContext SetupAnkiResult.Failed
             settings.update { it.withConnectedNoteType(decks, noteTypes, deck, noteType) }
@@ -86,7 +88,9 @@ internal fun AnkiSettings.withConnectedNoteType(
     noteType: AnkiNoteType,
 ): AnkiSettings {
     val formats = withSeamlessFormatIfUnmapped().cardFormats.map { format ->
-        val targets = format.selectedNoteTypeName == null || format.selectedNoteTypeName == noteType.name
+        val targets = format.selectedNoteTypeName == null ||
+            format.selectedNoteTypeName == noteType.name ||
+            (AnkiFieldTemplates.isHoshiNoteType(format.selectedNoteTypeName) && AnkiFieldTemplates.isHoshiNoteType(noteType.name))
         if (!targets) return@map format
         val formatDeck = decks.firstOrNull { it.id == format.selectedDeckId }
             ?: format.selectedDeckName?.let { name -> decks.firstOrNull { it.name == name } }

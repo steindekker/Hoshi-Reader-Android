@@ -176,10 +176,10 @@ class AnkiFieldTemplatesTest {
     }
 
     @Test
-    fun buildsKinomotoMappingsFromTheInstalledDictionariesAndSentenceModel() {
+    fun buildsHoshiMappingsFromTheInstalledDictionariesAndSentenceModel() {
         val noteType = AnkiNoteType(
             id = 20L,
-            name = AnkiFieldTemplates.KinomotoNoteType,
+            name = AnkiFieldTemplates.HoshiNoteType,
             fields = listOf(
                 "Term",
                 "Reading",
@@ -209,8 +209,8 @@ class AnkiFieldTemplatesTest {
             AnkiFieldTemplates.defaultMappings(noteType),
         )
         val format = AnkiFieldTemplates.seamlessCardFormat("mining")
-        assertEquals(AnkiFieldTemplates.KinomotoNoteType, format.selectedNoteTypeName)
-        assertEquals(AnkiFieldTemplates.KinomotoDeckName, format.selectedDeckName)
+        assertEquals(AnkiFieldTemplates.HoshiNoteType, format.selectedNoteTypeName)
+        assertEquals(AnkiFieldTemplates.HoshiDeckName, format.selectedDeckName)
         assertEquals("hoshi {ae-tags}", format.tags)
     }
 

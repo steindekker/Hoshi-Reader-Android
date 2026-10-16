@@ -2,7 +2,7 @@
 logical-role -> field-name map, and AnkiWeb credentials."""
 import os
 
-NOTETYPE = "jidoujisho Kinomoto"
+NOTETYPE = "Hoshi"  # renamed from "jidoujisho Kinomoto" on 2026-10-16
 DEFAULT_DECK = "Default"
 
 # Logical role -> real Kinomoto field name. The one place to retarget fields.
