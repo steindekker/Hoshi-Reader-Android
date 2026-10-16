@@ -457,9 +457,9 @@ impl Sources {
         (jp, en, plain)
     }
 
-    /// `pack.fields_for`: the pack values for one headword, in key order.
+    /// `pack.fields_for` (without the tags): the pack values for one headword, in key order.
     pub fn fields_for(&self, term: u32, reading: u32) -> Vec<(&'static str, String)> {
-        use crate::pack::{DEFINITION, DEFINITION_SOURCE, EXAMPLES, FREQUENCY, PITCH, TAGS};
+        use crate::pack::{DEFINITION, DEFINITION_SOURCE, EXAMPLES, FREQUENCY, PITCH};
         let term_s = self.str(term);
         let reading_s = self.str(reading);
         let (a, b) = (self.term_start[term as usize] as usize, self.term_start[term as usize + 1] as usize);
@@ -474,7 +474,6 @@ impl Sources {
             return Vec::new();
         };
         let mut out = vec![(DEFINITION, meaning), (DEFINITION_SOURCE, source)];
-        let mut tags = String::from("ankienrich::enriched");
         if !reading_s.is_empty() {
             if let Some(acc) = self.accent.accents_for(term_s, reading_s) {
                 out.push((PITCH, crate::accent::render_multi(reading_s, acc)));
@@ -483,7 +482,6 @@ impl Sources {
         if self.has_examples {
             let (a, b) = (self.ex_start[term as usize] as usize, self.ex_start[term as usize + 1] as usize);
             let ex = examples::examples_for(&self.examples[a..b], reading, |r| self.example(r), |id| self.str(id));
-            tags.push_str(if ex.is_empty() { " ankienrich::no-example" } else { " ankienrich::examples" });
             if !ex.is_empty() {
                 out.push((EXAMPLES, ex));
             }
@@ -493,7 +491,6 @@ impl Sources {
                 out.push((FREQUENCY, rank.to_string()));
             }
         }
-        out.push((TAGS, tags));
         out.retain(|(_, v)| !v.is_empty());
         out
     }

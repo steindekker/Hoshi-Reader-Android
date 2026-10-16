@@ -1,4 +1,4 @@
-//! Port of `ankienrich/pack.py` `build`: pack format 1 (see README).
+//! Pack format 2 (see README): `ankienrich/pack.py` `build` with format-2 key names and no tags.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -15,21 +15,32 @@ use crate::py::{self, PyRandom};
 use crate::sources::Sources;
 use crate::z::PrimedDeflater;
 
-pub const FORMAT: u32 = 1;
+pub const FORMAT: u32 = 2;
 pub const PACK_FILE: &str = "hoshi-pack.sqlite";
 pub const MANIFEST_FILE: &str = "pack.json";
 
-pub const DEFINITION: &str = "ae-definition";
-pub const DEFINITION_SOURCE: &str = "ae-definition-source";
-pub const PITCH: &str = "ae-pitch";
-pub const EXAMPLES: &str = "ae-examples";
-pub const FREQUENCY: &str = "ae-frequency";
-pub const TAGS: &str = "ae-tags";
-pub const KEY_ORDER: [&str; 6] = [DEFINITION, DEFINITION_SOURCE, PITCH, EXAMPLES, FREQUENCY, TAGS];
+pub const DEFINITION: &str = "definition";
+pub const DEFINITION_SOURCE: &str = "definition-source";
+pub const PITCH: &str = "pitch-graph";
+pub const EXAMPLES: &str = "example-sentences";
+pub const FREQUENCY: &str = "frequency-rank";
+pub const KEY_ORDER: [&str; 5] = [DEFINITION, DEFINITION_SOURCE, PITCH, EXAMPLES, FREQUENCY];
 
-/// `json.dumps(DEFAULTS, ensure_ascii=False)` and `json.dumps(FALLBACK_KEYS)`.
-pub const DEFAULTS_JSON: &str = r#"{"ae-definition": "{glossary-first}"}"#;
-pub const FALLBACK_KEYS_JSON: &str = r#"["ae-definition", "ae-definition-source", "ae-examples", "ae-tags"]"#;
+/// Format-1 (anki-enrich) key -> format-2 key; `ae-tags` (anki-enrich's own
+/// bookkeeping tags) has no format-2 counterpart and is dropped.
+pub const LEGACY_KEYS: [(&str, Option<&str>); 6] = [
+    ("ae-definition", Some(DEFINITION)),
+    ("ae-definition-source", Some(DEFINITION_SOURCE)),
+    ("ae-pitch", Some(PITCH)),
+    ("ae-examples", Some(EXAMPLES)),
+    ("ae-frequency", Some(FREQUENCY)),
+    ("ae-tags", None),
+];
+
+/// Values for a term with no row, and the keys still valid when the term is
+/// known under another reading (the reading-dependent pitch graph and rank are not).
+pub const DEFAULTS_JSON: &str = r#"{"definition": "{glossary-first}"}"#;
+pub const FALLBACK_KEYS_JSON: &str = r#"["definition", "definition-source", "example-sentences"]"#;
 
 static FIELDS_NS: AtomicU64 = AtomicU64::new(0);
 static DEFLATE_NS: AtomicU64 = AtomicU64::new(0);

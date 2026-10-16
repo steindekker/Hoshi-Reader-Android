@@ -248,7 +248,7 @@ mod tests {
     #[test]
     fn round_trips_with_dictionary() {
         let zdict = b"<div class=\"aa-jj\" data-dict=\"daijisen\">".repeat(10);
-        let raw = br#"{"ae-definition":"<div class=\"aa-jj\" data-dict=\"daijisen\">x</div>"}"#;
+        let raw = br#"{"definition":"<div class=\"aa-jj\" data-dict=\"daijisen\">x</div>"}"#;
         let mut d = Deflater::new();
         let mut out = Vec::new();
         d.compress(raw, &zdict, &mut out);

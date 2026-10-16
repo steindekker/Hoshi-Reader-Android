@@ -1,6 +1,6 @@
 # hoshi-pack-builder
 
-Builds the Hoshi enrichment pack (`hoshi-pack.sqlite` + `pack.json`) straight from the Yomitan zips. It replaces `anki-enrich pack` and the index builds before it (`defs`, `examples`, `freq`). There is no venv, nothing gets unpacked, and no intermediate sqlite files are written. The output is byte-identical to the Python builder's: every row blob is the same, so the pack `version` is the same.
+Builds the Hoshi enrichment pack (`hoshi-pack.sqlite` + `pack.json`) straight from the Yomitan zips. It replaces `anki-enrich pack` and the index builds before it (`defs`, `examples`, `freq`). There is no venv, nothing gets unpacked, and no intermediate sqlite files are written. It writes pack format 2. The values are the same as the Python builder's, which writes format 1 under the old `ae-*` names: `compare` checks that row by row.
 
 ```bash
 cargo build --release
@@ -31,37 +31,46 @@ This decodes every row of both packs with their own zdict and reports:
 - meta keys that differ (`built_at` always does)
 - rows present in only one pack
 - whether row order matches
-- per `ae-*` key, how many rows differ, with the first differing character shown in context
+- per key, how many rows differ, with the first differing character shown in context
 
 It exits 1 on any difference.
 
-## Pack format 1
+A format-1 pack (anki-enrich's) is read under format-2 names, with `ae-tags` ignored, so a format-2 build compares value for value against the Python builder. Across formats, `format`, `zdict` and `version` necessarily differ, and nothing else may. Against the anki-enrich reference build (851,075 rows) there are no value differences.
 
-The format is what `anki-enrich/ankienrich/pack.py` writes. The app decodes it in `EnrichPack.kt` / `SqliteEnrichPackSource`.
+## Pack format 2
+
+Format 2 is anki-enrich's format 1 (`anki-enrich/ankienrich/pack.py`) with these changes:
+
+- the keys are renamed: `ae-definition` → `definition`, `ae-definition-source` → `definition-source`, `ae-pitch` → `pitch-graph`, `ae-examples` → `example-sentences`, `ae-frequency` → `frequency-rank`
+- `ae-tags`, anki-enrich's own bookkeeping, is gone
+- it is not backwards compatible: a reader refuses a format it does not know
+
+The sentence pitch markup (`{sentence-pitch}`) is computed on device and is not in the pack.
 
 - `meta(key TEXT PRIMARY KEY, value BLOB NOT NULL)`, rows inserted in this order:
-  - `format`: `"1"`
+  - `format`: `"2"`
   - `zdict`: BLOB
-  - `defaults`: `{"ae-definition": "{glossary-first}"}`
-  - `fallback_keys`: `["ae-definition", "ae-definition-source", "ae-examples", "ae-tags"]`
+  - `defaults`: `{"definition": "{glossary-first}"}`
+  - `fallback_keys`: `["definition", "definition-source", "example-sentences"]`
   - `version`
   - `built_at`: `YYYY-MM-DDTHH:MM:SS+00:00`
   - `entries`
-  - `keys`: the `ae-*` keys any row carries, in `KEY_ORDER`
+  - `keys`: the keys any row carries, in key order
 
   All values except `zdict` are TEXT.
 - `entries(term TEXT NOT NULL, reading TEXT NOT NULL, data BLOB NOT NULL)` plus `CREATE INDEX entries_term ON entries (term)`. Pragmas are `page_size = 4096` and `journal_mode = OFF`, and the whole build runs in one transaction.
-- Rows: the distinct `(term, reading or term)` of the definition rows, in definition-chain order: 三省堂, 広辞苑, 実用, 大辞泉 by bank name (`term_bank_1, term_bank_10, …`) and entry order, then JMdict. Headwords with no definition (`nohit`) are skipped.
-- `data` is the JSON for `{key: value}` in `KEY_ORDER` (`ae-definition`, `-definition-source`, `-pitch`, `-examples`, `-frequency`, `-tags`), with empty values dropped. It is serialized as `json.dumps(ensure_ascii=False, separators=(",", ":"))` and compressed with `compressobj(9, DEFLATED, 15, memLevel 9, Z_DEFAULT_STRATEGY, zdict)` (zlib 1.3.2, the release CPython bundles).
+- Lookup: the `(term, reading)` row gives all its values. Otherwise the term's first row (by rowid) gives its `fallback_keys`. Otherwise use `defaults`.
+- Rows: the distinct `(term, reading or term)` of the definition rows, in definition-chain order: 三省堂, 広辞苑, 実用, 大辞泉 by bank name (`term_bank_1, term_bank_10, …`) and entry order, then JMdict. Headwords with no definition are skipped.
+- `data` is the JSON for `{key: value}` in key order (`definition`, `definition-source`, `pitch-graph`, `example-sentences`, `frequency-rank`), with empty values dropped. It is compact, raw UTF-8 and escaped like Python's `json.dumps`, and compressed with zlib 1.3.2 at level 9, window 15, memLevel 9, default strategy, using the preset dictionary `zdict`.
 - `zdict` is trained on one headword in 50, sampled with `random.Random(1).randrange(50) == 0` over the rows. Count every 64-byte chunk at a stride of 16 and keep chunks seen more than 3 times, most common first (ties in first-seen order). Take chunks up to 32 KiB, then concatenate them in reverse.
 - `version` is the first 16 hex characters of SHA-256 over `format`, `zdict`, `defaults` and `fallback_keys`, then `term\0reading\0blob` for each row.
 - `pack.json`:
 
   ```json
-  {"format": 1, "version": "…", "file": "hoshi-pack.sqlite", "size": …, "sha256": "…", "built_at": "…", "entries": …, "sentence": {…}}
+  {"format": 2, "version": "…", "file": "hoshi-pack.sqlite", "size": …, "sha256": "…", "built_at": "…", "entries": …, "sentence": {…}}
   ```
 
-  It is pretty-printed with 2 spaces and ends with a newline. `sentence` is optional.
+  It is pretty-printed with 2 spaces and ends with a newline. `sentence` is optional and keeps its own `format` (1).
 
 The field values follow anki-enrich exactly. Each module notes the Python function it ports.
 
@@ -89,7 +98,7 @@ Compressing:
 - The sentence model is written while the pack is being compressed.
 - SHA-256 runs through ring: about 570 MB/s here, versus 300 MB/s for the portable code on a CPU without SHA extensions.
 
-Measured on 2026-10-16 (i9-10900K, 10 cores / 20 threads) with the same inputs as the reference pack, sentence model included, median of three runs. Every run produced byte-identical rows and version `40a2f699e2afdd56`.
+Measured on 2026-10-16 (i9-10900K, 10 cores / 20 threads) with the same inputs as the reference pack, sentence model included, median of three runs. These runs built format 1 and were byte-identical to the Python pack (version `40a2f699e2afdd56`). Format 2 differs only in key names and the missing tags, and builds in the same time.
 
 | | wall | peak anonymous RSS |
 |---|---|---|
@@ -97,7 +106,7 @@ Measured on 2026-10-16 (i9-10900K, 10 cores / 20 threads) with the same inputs a
 | `hoshi-pack-builder`, default threads (20) | 7.4 s | 1.4 GB |
 | `hoshi-pack-builder --threads 2` (server-like) | 35.6 s | 390 MB (at most 415 MB) |
 
-At 2 threads, deflate is the floor. Compressing the 718k distinct rows at level 9 with the same zlib takes 43 thread-seconds, about 22 s on 2 cores, because output must stay byte-identical. Loading takes 8.5 s. The 2-thread build is about 36 s:
+At 2 threads, deflate is the floor. Compressing the 718k distinct rows at level 9 with the same zlib takes 43 thread-seconds, about 22 s on 2 cores, with the deflate settings fixed by the format. Loading takes 8.5 s. The 2-thread build is about 36 s:
 
 | phase | 2 threads | 20 threads |
 |---|---|---|
