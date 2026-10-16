@@ -526,7 +526,7 @@ refactor goals belong in `docs/ARCHITECTURE_REFACTORING.md`.
   never re-parsed. Without a pack row, `{definition}`,
   `{definition-source}`, `{pitch-graph}` and `{frequency-rank}` fall back to
   the installed dictionaries.
-- The enrichment pack is format 2 (built by `hoshi-pack-builder`): a SQLite
+- The enrichment pack is format 2 (built by the hoshi-suite `server/pack-builder`): a SQLite
   file of zlib rows keyed by (term, reading) with exactly the five pack keys,
   `fallback_keys` for reading-independent values and
   `defaults = {"definition": "{glossary-first}"}`. Other formats are refused,

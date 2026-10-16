@@ -56,7 +56,7 @@ internal fun parseIusc(mAttrs: List<String>): List<ImageCandidate> {
 }
 
 // A real desktop UA is MANDATORY: WebView's default UA makes Bing serve an unrelated
-// default feed. See anki-enrich/docs/image-search-handoff.md. Do not remove.
+// default feed. Do not remove.
 private const val DESKTOP_USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
