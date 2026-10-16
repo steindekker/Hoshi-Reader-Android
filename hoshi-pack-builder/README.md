@@ -5,12 +5,12 @@ Builds the Hoshi enrichment pack (`hoshi-pack.sqlite` + `pack.json`) straight fr
 ```bash
 cargo build --release
 ./target/release/hoshi-pack-builder build \
-  --dicts ~/dicts/yomitan \
-  --jmdict http://<host>:8094/jmdict-english.zip \
+  --dicts <dir-of-yomitan-zips> \
+  --jmdict <url-or-path-to>/jmdict-english.zip \
   --tatoeba ../anki-enrich/dicts/tatoeba \
   --accent ../anki-enrich/ankienrich/data/accent_index.marshal.gz \
   --sudachi-dic ../anki-enrich/.venv/lib/python3.12/site-packages/sudachidict_full/resources/system.dic \
-  --out /tmp/pack
+  --out <out-dir>
 ```
 
 - `--dicts DIR` scans every zip in DIR and identifies each one by its `index.json` title (三省堂国語辞典　第八版, 広辞苑 第七版, 実用日本語表現辞典, 大辞泉 第二版, JMdict…, Jitendex…, NEW斎藤和英大辞典, 用例.jp, JPDB…). `--dict ID=PATH` names a zip explicitly and wins over `--dicts`. A missing dictionary drops its fields, as it does in anki-enrich.
@@ -72,7 +72,7 @@ The field values follow anki-enrich exactly. Each module notes the Python functi
 
 ## Memory and speed
 
-Box has 2 cores and about 1 GB of RAM free.
+The setup server has 2 cores and about 1 GB of RAM free.
 
 - Bank JSON is deserialized one entry at a time.
 - Strings are interned in one arena.
@@ -86,20 +86,20 @@ Measured on 2026-10-16 with the same inputs as the reference pack. Every run pro
 |---|---|---|
 | Python: defs + examples + freq index, then `pack.build` | 281 s (99 + 21 + 1 + 160) | – |
 | `hoshi-pack-builder`, 20 threads (incl. sentence model) | 22 s | – |
-| `hoshi-pack-builder --threads 2` (box-like) | 72 s | 393 MB |
+| `hoshi-pack-builder --threads 2` (server-like) | 72 s | 393 MB |
 
-On box, plan for about 2 GB of free disk during a build:
+On the server, plan for about 2 GB of free disk during a build:
 
 - the zips: about 780 MB
 - the temp store: about 740 MB
 - the output: 380 MB, plus 390 MB with the sentence model
 
-## Box
+## Deploying
 
 The binary needs glibc 2.34 at most. zlib 1.3.2 and sqlite are linked statically.
 
 `hoshi-pack.sqlite` differs from the Python output only in the sqlite library version in the header (byte 100) and the `built_at` text. That is why `pack.json`'s `sha256` differs. The same applies to `jrp-accent.sqlite`.
 
 ```bash
-scp target/release/hoshi-pack-builder <host>:.local/bin/
+scp target/release/hoshi-pack-builder <server>:.local/bin/
 ```

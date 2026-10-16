@@ -1,5 +1,5 @@
 //! Interned strings in one arena: an id per distinct string, no per-string
-//! allocation (box has ~1 GB to spare).
+//! allocation (the setup server has ~1 GB to spare).
 
 use std::hash::BuildHasher;
 

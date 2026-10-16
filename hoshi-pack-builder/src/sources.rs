@@ -2,7 +2,7 @@
 //! definition rows (`defs.sqlite`), examples (`examples.sqlite`), JPDB ranks
 //! (`freq.sqlite`) and the accent index. Strings are interned in one arena and
 //! all definition HTML and example text lives in a temp file read back through
-//! mmap, so the resident set stays small (box has ~1 GB to spare).
+//! mmap, so the resident set stays small (the setup server has ~1 GB to spare).
 
 use std::collections::{BTreeMap, HashSet};
 use std::fs::File;
