@@ -1,0 +1,182 @@
+#!/usr/bin/env node
+// awv: drive an Android app's WebView DOM over CDP, no screenshots needed.
+// Run `tools/emulator.sh webview [package]` first (forwards the socket to :9222).
+// Every command looks through same-origin iframes (Hoshi's dictionary lives in one).
+//
+//   awv targets                 list WebView pages (index, visible, url, title)
+//   awv snap [selector]         outline of visible text/interactive elements:
+//                               selector path, text, and dev=x,y (device pixels, for adb input tap)
+//   awv text [selector]         innerText of the first match (default: body of every frame)
+//   awv find '<text>'           elements whose own text contains <text>, with selector + dev coords
+//   awv click '<selector>'      el.click() on the first match
+//   awv tap '<selector>'        real touch at the element centre (CDP touch events)
+//   awv wait '<selector>|text=<text>' [timeoutSec]   poll until it appears (default 10 s)
+//   awv eval '<js>'             evaluate in the top frame (await allowed), print JSON
+//   awv html [selector]         outerHTML (truncated to 20k chars)
+//
+// Env: AWV_PORT (default 9222), AWV_TARGET (page index; default first visible page)
+
+const port = process.env.AWV_PORT || 9222;
+const [cmd = 'targets', arg, arg2] = process.argv.slice(2);
+
+async function targets() {
+  const res = await fetch(`http://localhost:${port}/json/list`, { signal: AbortSignal.timeout(5000) });
+  return (await res.json()).filter(t => t.type === 'page').map((t, i) => {
+    let d = {};
+    try { d = JSON.parse(t.description || '{}'); } catch {}
+    return { i, visible: !!d.visible, screenX: d.screenX || 0, screenY: d.screenY || 0, url: t.url, title: t.title, ws: t.webSocketDebuggerUrl };
+  });
+}
+
+async function connect() {
+  const ts = await targets();
+  const t = process.env.AWV_TARGET ? ts[+process.env.AWV_TARGET] : (ts.find(t => t.visible) || ts[0]);
+  if (!t) throw new Error('no WebView page targets; is a WebView on screen?');
+  const ws = new WebSocket(t.ws);
+  await new Promise((ok, bad) => { ws.onopen = ok; ws.onerror = () => bad(new Error('ws connect failed')); });
+  let id = 0;
+  const pending = new Map();
+  ws.onmessage = e => {
+    const m = JSON.parse(e.data);
+    if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
+  };
+  const send = (method, params = {}) => new Promise((ok, bad) => {
+    const i = ++id;
+    setTimeout(() => bad(new Error(`${method} timed out: WebView paused? bring the app to the foreground and rerun android-webview-cdp`)), 8000).unref();
+    pending.set(i, m => m.error ? bad(new Error(m.error.message)) : ok(m.result));
+    ws.send(JSON.stringify({ id: i, method, params }));
+  });
+  const evaluate = async expr => {
+    const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true, userGesture: true });
+    if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
+    return r.result.value;
+  };
+  // The WebView's on-screen origin in device pixels, so dev= coords work with `adb shell input tap`.
+  const withLib = body => `(() => { const W = {sx: ${t.screenX}, sy: ${t.screenY}}; ${LIB}; ${body} })()`;
+  return { t, ws, send, evaluate, run: body => evaluate(withLib(body)) };
+}
+
+// In-page helpers. frames() yields [document, offsetX, offsetY] for the top frame
+// and every reachable same-origin iframe, offsets in top-frame CSS pixels.
+const LIB = String.raw`
+  const dpr = window.devicePixelRatio;
+  const frames = () => {
+    const out = document.body ? [[document, 0, 0]] : [];
+    for (let i = 0; i < out.length; i++) {
+      const [doc, ox, oy] = out[i];
+      for (const f of doc.querySelectorAll('iframe,frame')) {
+        let d; try { d = f.contentDocument; } catch {}
+        if (!d || !d.body) continue;
+        const r = f.getBoundingClientRect();
+        out.push([d, ox + r.x + f.clientLeft, oy + r.y + f.clientTop]);
+      }
+    }
+    return out;
+  };
+  const q = sel => { for (const [d, ox, oy] of frames()) { const el = d.querySelector(sel); if (el) return [el, ox, oy]; } return [null]; };
+  const dev = (r, ox, oy) => Math.round(W.sx + (ox + r.x + r.width / 2) * dpr) + ',' + Math.round(W.sy + (oy + r.y + r.height / 2) * dpr);
+  const path = el => {
+    const doc = el.ownerDocument, parts = [];
+    for (; el && el !== doc.body && el !== doc.documentElement && parts.length < 4; el = el.parentElement) {
+      if (el.id) { parts.unshift('#' + CSS.escape(el.id)); break; }
+      let p = el.tagName.toLowerCase();
+      p += [...el.classList].slice(0, 2).map(c => '.' + CSS.escape(c)).join('');
+      const sib = el.parentElement ? [...el.parentElement.children].filter(c => c.tagName === el.tagName) : [];
+      if (sib.length > 1) p += ':nth-of-type(' + (sib.indexOf(el) + 1) + ')';
+      parts.unshift(p);
+    }
+    return parts.join('>');
+  };
+  const INTERACTIVE = 'a,button,input,select,textarea,summary,[onclick],[role=button],[tabindex],[data-action]';
+  const ownText = el => [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim();
+  const label = el => (el.innerText || el.value || el.getAttribute('aria-label') || el.title || el.className?.toString() || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+  const onScreen = r => r.width && r.height && r.bottom > 0 && r.top < innerHeight * 3;
+`;
+
+async function main() {
+  if (cmd === 'targets') {
+    for (const t of await targets()) console.log(`${t.i} visible=${t.visible} at=${t.screenX},${t.screenY} ${t.url} "${t.title}"`);
+    return;
+  }
+  let c;
+  // `wait` also covers the page not existing yet (WebView still loading).
+  for (const deadline = Date.now() + (+arg2 || 10) * 1000; ;) {
+    try { c = await connect(); break; } catch (e) {
+      if (cmd !== 'wait' || Date.now() > deadline) throw e;
+      await new Promise(r => setTimeout(r, 300));
+    }
+  }
+  const sel = JSON.stringify(arg || 'body');
+  try {
+    switch (cmd) {
+      case 'snap':
+        console.log(await c.run(`
+          const out = ['dpr=' + dpr + ' webview_at=' + W.sx + ',' + W.sy + '  (* = interactive, dev = device px for adb input tap)'];
+          for (const [d, ox, oy] of frames()) {
+            const root = d.querySelector(${sel}) || d.body;
+            if (d !== document) out.push('-- iframe ' + d.location.pathname);
+            for (const el of root.querySelectorAll('*')) {
+              const r = el.getBoundingClientRect();
+              if (!onScreen(r) || el.tagName === 'IFRAME') continue;
+              const isI = el.matches(INTERACTIVE) || getComputedStyle(el).cursor === 'pointer';
+              const own = ownText(el);
+              if (!isI && !own) continue;
+              out.push((isI ? '* ' : '  ') + path(el) + ' "' + (isI ? label(el) : own.replace(/\\s+/g, ' ').slice(0, 80)) + '" dev=' + dev(r, ox, oy));
+              if (out.length > 300) { out.push('… truncated, pass a selector'); return out.join('\\n'); }
+            }
+          }
+          return out.join('\\n');`));
+        break;
+      case 'text':
+        console.log(await c.run(arg
+          ? `const [el] = q(${sel}); return el ? el.innerText.trim() : 'no match';`
+          : `return frames().map(([d]) => d.body.innerText.trim()).filter(Boolean).join('\\n---\\n');`));
+        break;
+      case 'find':
+        console.log(await c.run(`
+          const out = [];
+          for (const [d, ox, oy] of frames()) for (const el of d.body.querySelectorAll('*')) {
+            if (el.matches('style,script')) continue;
+            const needle = ${JSON.stringify(arg || '')};
+            if (!ownText(el).includes(needle) && !(el.getAttribute('aria-label') || el.title || '').includes(needle)) continue;
+            const t = el.closest(INTERACTIVE) || el, r = t.getBoundingClientRect();
+            out.push(path(t) + ' "' + label(t) + '" dev=' + dev(r, ox, oy));
+          }
+          return out.slice(0, 40).join('\\n') || 'no match';`));
+        break;
+      case 'html':
+        console.log((await c.run(`const [el] = q(${sel}); return el ? el.outerHTML : 'no match';`)).slice(0, 20000));
+        break;
+      case 'click':
+        console.log(await c.run(`const [el] = q(${sel}); if (!el) return 'no match'; el.scrollIntoView({block: 'center'}); el.click(); return 'clicked ' + path(el);`));
+        break;
+      case 'tap': {
+        const p = await c.run(`const [el, ox, oy] = q(${sel}); if (!el) return null; el.scrollIntoView({block: 'center'}); const r = el.getBoundingClientRect(); return {x: ox + r.x + r.width / 2, y: oy + r.y + r.height / 2};`);
+        if (!p) { console.log('no match'); break; }
+        await c.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: p.x, y: p.y }] });
+        await c.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        console.log(`tapped css ${Math.round(p.x)},${Math.round(p.y)}`);
+        break;
+      }
+      case 'wait': {
+        const deadline = Date.now() + (+arg2 || 10) * 1000;
+        const check = arg?.startsWith('text=')
+          ? `return frames().some(([d]) => d.body.innerText.includes(${JSON.stringify((arg || '').slice(5))}));`
+          : `return !!q(${sel})[0];`;
+        for (;;) {
+          if (await c.run(check).catch(() => false)) { console.log('ok'); break; }
+          if (Date.now() > deadline) { console.log('timeout'); process.exitCode = 1; break; }
+          await new Promise(r => setTimeout(r, 200));
+        }
+        break;
+      }
+      case 'eval':
+        console.log(JSON.stringify(await c.evaluate(arg), null, 1));
+        break;
+      default:
+        console.error(`unknown command: ${cmd}`); process.exitCode = 2;
+    }
+  } finally { c.ws.close(); }
+}
+
+main().catch(e => { console.error('awv:', e.message); process.exit(1); });

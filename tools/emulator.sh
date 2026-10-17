@@ -6,7 +6,11 @@
 #   tools/emulator.sh stop              kill the running emulator
 #   tools/emulator.sh install           assembleDebug + adb install -r (preserves app data)
 #   tools/emulator.sh launch            start the debug app
-#   tools/emulator.sh screenshot FILE   save a PNG of the current screen
+#   tools/emulator.sh ui                list on-screen native elements: text | desc | id | x,y
+#   tools/emulator.sh webview [pkg]     forward the app's WebView DevTools to :9222 for tools/awv
+#   tools/emulator.sh screenshot FILE   save a PNG of the current screen (visual checks only)
+#
+# ANDROID_SERIAL selects the device when more than one is connected.
 set -euo pipefail
 
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
@@ -48,9 +52,45 @@ start() {
   for setting in window_animation_scale transition_animation_scale animator_duration_scale; do
     "$ADB" shell settings put global "$setting" 0
   done
+  # The host resolver can return IPv6-only answers the emulator NAT can't use.
+  "$ADB" shell settings put global private_dns_mode hostname
+  "$ADB" shell settings put global private_dns_specifier one.one.one.one
   "$ADB" shell input keyevent KEYCODE_WAKEUP
   "$ADB" shell wm dismiss-keyguard
   echo "booted: $("$ADB" shell getprop ro.build.version.release | tr -d '\r')"
+}
+
+ui() {
+  local xml
+  xml=$("$ADB" exec-out uiautomator dump /dev/tty 2>/dev/null || true)
+  if [[ "$xml" != *"<hierarchy"* ]]; then
+    # mobile-mcp's on-device server holds UiAutomation and makes uiautomator dump fail.
+    "$ADB" shell pkill -f com.mobilenext.mobilecli.DeviceServer 2>/dev/null || true
+    xml=$("$ADB" exec-out uiautomator dump /dev/tty 2>/dev/null || true)
+  fi
+  [[ "$xml" == *"<hierarchy"* ]] || { echo "uiautomator dump failed" >&2; exit 1; }
+  python3 -I -c '
+import re, sys
+for n in re.findall(r"<node [^>]*>", sys.stdin.read().split("</hierarchy>")[0]):
+    a = dict(re.findall(r"([\w-]+)=\"([^\"]*)\"", n))
+    t, d, i = a.get("text", ""), a.get("content-desc", ""), a.get("resource-id", "")
+    if "systemui" in i or not (t or d or i or a.get("clickable") == "true"): continue
+    x1, y1, x2, y2 = map(int, re.findall(r"\d+", a["bounds"]))
+    flag = " *" if a.get("clickable") == "true" else ""
+    rid = i.split("/")[-1]
+    print(f"{t} | {d} | {rid} | {(x1+x2)//2},{(y1+y2)//2}{flag}")
+' <<<"$xml"
+}
+
+webview() {
+  local pkg="$1" pid sock
+  pid=$("$ADB" shell pidof -s "$pkg" | tr -d '\r') || { echo "$pkg is not running" >&2; exit 1; }
+  # Background apps get frozen and stop answering DevTools.
+  "$ADB" shell am unfreeze --sticky "$pkg" >/dev/null 2>&1 || true
+  sock=$("$ADB" shell cat /proc/net/unix | tr -d '\r' | grep -oE "webview_devtools_remote_${pid}\$" | head -1 || true)
+  [[ -n "$sock" ]] || { echo "no WebView DevTools socket for $pkg: open a WebView screen in a debuggable build" >&2; exit 1; }
+  "$ADB" forward "tcp:${AWV_PORT:-9222}" "localabstract:$sock" >/dev/null
+  echo "$pkg WebView -> localhost:${AWV_PORT:-9222} (use tools/awv)"
 }
 
 case "${1:-}" in
@@ -63,6 +103,8 @@ case "${1:-}" in
     (cd "$ROOT" && ./gradlew assembleDebug)
     "$ADB" install -r "$ROOT"/app/build/outputs/apk/debug/app-debug.apk ;;
   launch) "$ADB" shell am start -W -n "$DEBUG_PACKAGE/moe.antimony.hoshi.MainActivity" ;;
+  ui) ui ;;
+  webview) webview "${2:-$DEBUG_PACKAGE}" ;;
   screenshot) "$ADB" exec-out screencap -p > "${2:?output file}" ;;
-  *) sed -n '2,10p' "$0"; exit 1 ;;
+  *) sed -n '2,13p' "$0"; exit 1 ;;
 esac
