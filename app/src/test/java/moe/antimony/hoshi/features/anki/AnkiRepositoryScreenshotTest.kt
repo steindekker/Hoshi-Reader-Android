@@ -232,9 +232,9 @@ class AnkiRepositoryScreenshotTest {
         val both = AnkiMiningContext(sentence = "s", sasayakiAudioPath = "[sound:cue.m4a]", sentenceAudioPath = "[sound:live.mp3]")
         assertEquals("[sound:live.mp3]", render(both))
         assertEquals("[sound:cue.m4a]", render(both.copy(sentenceAudioPath = null)))
-        // {sasayaki-audio} prefers the Sasayaki cue and falls back to the Live clip.
+        // {sasayaki-audio} only takes the Sasayaki slot, so reader TTS audio never lands in it.
         assertEquals("[sound:cue.m4a]", render(both, "{sasayaki-audio}"))
-        assertEquals("[sound:live.mp3]", render(both.copy(sasayakiAudioPath = null), "{sasayaki-audio}"))
+        assertEquals("", render(both.copy(sasayakiAudioPath = null), "{sasayaki-audio}"))
     }
 
     @Test

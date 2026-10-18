@@ -483,6 +483,9 @@ internal fun LiveView(
             is ReaderLookupPopupBridgeMessage.SasayakiReplayCue,
             is ReaderLookupPopupBridgeMessage.SasayakiTogglePlayback,
             is ReaderLookupPopupBridgeMessage.SasayakiPlayForward,
+            is ReaderLookupPopupBridgeMessage.TtsReplaySentence,
+            is ReaderLookupPopupBridgeMessage.TtsTogglePlayback,
+            is ReaderLookupPopupBridgeMessage.TtsPlayForward,
             -> Unit
         }
     }

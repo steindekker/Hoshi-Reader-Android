@@ -946,7 +946,7 @@
     <string name="live_settings_token">Access token (optional)</string>
     <string name="live_settings_token_hint">Only needed when the bridge is configured with a token.</string>
     <string name="live_settings_token_set">Access token set</string>
-    <string name="live_settings_test">Test connection</string>
+    <string name="live_settings_test" comment="Live host connection test; matches the TTS source test button by design.">Test connection</string>
     <string name="live_settings_test_success">Connected to %1$s (hoshi-bridge %2$s)</string>
     <string name="live_settings_test_failed">Connection failed: %1$s</string>
     <string name="live_settings_error_host">Enter a host name or IP address without http:// or a port</string>

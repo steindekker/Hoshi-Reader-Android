@@ -47,6 +47,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.settings.SettingsDetailScaffold
+import moe.antimony.hoshi.features.settings.SettingsLoadState
 import moe.antimony.hoshi.ui.HoshiDropdownMenu as DropdownMenu
 import moe.antimony.hoshi.ui.asString
 import moe.antimony.hoshi.ui.hoshiOutlinedTextFieldColors
@@ -64,11 +65,11 @@ internal fun LiveSettingsView(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     SettingsDetailScaffold(
+        state = if (state.loaded) SettingsLoadState.Loaded(Unit) else SettingsLoadState.Loading,
         title = stringResource(R.string.settings_live),
         onClose = onClose,
         modifier = modifier,
-    ) { innerPadding ->
-        if (!state.loaded) return@SettingsDetailScaffold
+    ) { innerPadding, _ ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()

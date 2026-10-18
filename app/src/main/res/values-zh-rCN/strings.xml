@@ -944,7 +944,7 @@
     <string name="live_settings_token">访问令牌（可选）</string>
     <string name="live_settings_token_hint">仅当桥接服务配置了令牌时需要。</string>
     <string name="live_settings_token_set">已设置访问令牌</string>
-    <string name="live_settings_test">测试连接</string>
+    <string name="live_settings_test" comment="Live host connection test; matches the TTS source test button by design.">测试连接</string>
     <string name="live_settings_test_success">已连接 %1$s（hoshi-bridge %2$s）</string>
     <string name="live_settings_test_failed">连接失败：%1$s</string>
     <string name="live_settings_error_host">请输入主机名或 IP 地址，不要包含 http:// 或端口</string>

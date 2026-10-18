@@ -492,7 +492,7 @@ internal object AnkiHandlebarRenderer {
             "{image}" -> context.imageValue()
             // Deprecated aliases (pre-merge {book-cover}/{web-image}); resolve to the chosen image.
             "{book-cover}", "{web-image}" -> context.imageValue()
-            "{sasayaki-audio}" -> context.sasayakiAudioPath?.takeIf { it.isNotBlank() } ?: context.sentenceAudioPath.orEmpty()
+            "{sasayaki-audio}" -> context.sasayakiAudioPath.orEmpty()
             // The sentence's audio from wherever this surface has it: the Live cue, else Sasayaki.
             "{sentence-audio}" -> context.sentenceAudioPath?.takeIf { it.isNotBlank() } ?: context.sasayakiAudioPath.orEmpty()
             else -> ""

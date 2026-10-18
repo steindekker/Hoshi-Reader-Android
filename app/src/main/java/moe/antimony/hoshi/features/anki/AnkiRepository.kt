@@ -284,13 +284,13 @@ internal class AnkiRepository(
         val screenshot = context.screenshot
             ?.takeIf { needsImage && context.webImageUrl.isNullOrBlank() }
             ?.let { addScreenshot(it, activeBackend, settings.backendKind) }
-        // {sentence-audio} and the older {sasayaki-audio} both take whichever sentence audio the
-        // context has: the Live cue clip, the reader's TTS audio, or the Sasayaki cue.
-        val needsSentenceAudio = fieldMappings.referencesAnkiHandlebar("{sentence-audio}") ||
-            fieldMappings.referencesAnkiHandlebar("{sasayaki-audio}")
-        val needsSasayakiAudio = needsSentenceAudio
+        // {sentence-audio} takes whichever sentence audio the context has: the Live cue clip, the
+        // reader's TTS audio, or else the Sasayaki cue. {sasayaki-audio} holds recorded audio only
+        // (the Sasayaki cue, or the Live clip for older Live formats), never TTS.
+        val needsSentenceAudio = fieldMappings.referencesAnkiHandlebar("{sentence-audio}")
+        val needsSasayakiAudio = needsSentenceAudio || fieldMappings.referencesAnkiHandlebar("{sasayaki-audio}")
         val sentenceAudio = context.sentenceAudio
-            ?.takeIf { needsSentenceAudio }
+            ?.takeIf { needsSasayakiAudio }
             ?.let { addLiveSentenceAudio(it, activeBackend, settings.backendKind) }
         val uploadedAudio = mutableMapOf<String, Result<String?>>()
         fun uploadSentence(path: String, required: Boolean): String? {
@@ -312,7 +312,7 @@ internal class AnkiRepository(
             },
             sasayakiAudioPath = context.sasayakiAudioPath?.takeIf { needsSasayakiAudio }?.let {
                 uploadSentence(it, required = false)
-            },
+            } ?: sentenceAudio?.ref,
             sentenceOffset = context.sentenceOffset,
             webImagePath = context.webImageUrl?.takeIf { needsImage }?.let {
                 addRemoteImage(it, activeBackend, settings.backendKind)

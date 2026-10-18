@@ -1600,7 +1600,7 @@ test('failed direct add re-enables every format button', async () => {
     const mineButtons = descendants(container).filter((button) => button.dataset.kind === 'mine');
     assert.deepEqual(mineButtons.map((button) => button.disabled), [false, false]);
     assert.equal(mineButtons[0].dataset.state, 'error');
-    assert.equal(mineButtons[1].dataset.state, undefined);
+    assert.equal(mineButtons[1].dataset.state, 'default');
 });
 
 test('duplicate check failure leaves the add button enabled', async () => {
@@ -1618,7 +1618,7 @@ test('duplicate check failure leaves the add button enabled', async () => {
 
     const mineButtons = descendants(container).filter((button) => button.dataset.kind === 'mine');
     assert.deepEqual(mineButtons.map((button) => button.disabled), [false, false]);
-    assert.deepEqual(mineButtons.map((button) => button.dataset.state), [undefined, undefined]);
+    assert.deepEqual(mineButtons.map((button) => button.dataset.state), ['default', 'default']);
 });
 
 test('created card turns the add button into opening that note', async () => {
