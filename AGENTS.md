@@ -47,4 +47,5 @@ Read the UI as text; screenshots are for visual checks only, never for finding w
 
 - Commit finished work with Conventional Commits. Larger features go on a branch.
 - `docs/CHANGELOG.md`: user-visible changes only, under `[Unreleased]`.
+- Releases are tags: the app's version comes from the latest `vX.Y.Z` tag (code `major*10000 + minor*100 + patch`), so there is no version bump. To release, rename `[Unreleased]` to `[vX.Y.Z] - date`, commit, tag `vX.Y.Z` and push the tag; `release-apk.yml` builds the APKs and takes the notes from that section.
 - **This repository is public.** Never commit hostnames, private IPs, personal paths, tokens, keys or credentials, in files, tests or commit messages. Deployment values come from environment variables or local files in `~/.config/hoshi-reader/` (for example `HOSHI_SETUP_URL`, `HOSHI_SETUP_TOKEN`); docs use placeholders.

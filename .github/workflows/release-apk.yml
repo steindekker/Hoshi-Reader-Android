@@ -145,24 +145,6 @@ jobs:
             | base64 --decode > "${keystore}"
           echo "ANDROID_KEYSTORE_FILE=${keystore}" >> "${GITHUB_ENV}"
 
-      - name: Warn if Gradle defaults differ from tag
-        shell: bash
-        run: |
-          set -euo pipefail
-          version_name="${{ needs.resolve-release.outputs.version_name }}"
-          version_code="${{ needs.resolve-release.outputs.version_code }}"
-
-          actual_name="$(sed -n 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)"
-          actual_code="$(sed -n 's/^[[:space:]]*versionCode[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' app/build.gradle.kts | head -n 1)"
-
-          if [[ "${actual_name}" != "${version_name}" ]]; then
-            echo "::warning::app/build.gradle.kts versionName=${actual_name}, expected ${version_name}"
-          fi
-
-          if [[ "${actual_code}" != "${version_code}" ]]; then
-            echo "::warning::app/build.gradle.kts versionCode=${actual_code}, expected ${version_code}"
-          fi
-
       - name: Build and check split release APKs
         id: assets
         shell: bash

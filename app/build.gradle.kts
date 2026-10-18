@@ -57,11 +57,23 @@ require(hoshiSetupToken.all { it.isLetterOrDigit() || it == '-' || it == '_' }) 
 }
 val releaseAbi = providers.gradleProperty("releaseAbi").getOrElse("arm64-v8a")
 require(releaseAbi in listOf("arm64-v8a", "armeabi-v7a", "x86_64"))
-val releaseVersionName = providers.gradleProperty("releaseVersionName").orNull
-val releaseVersionCode = providers.gradleProperty("releaseVersionCode").orNull?.toIntOrNull()
-if (providers.gradleProperty("releaseVersionCode").isPresent && releaseVersionCode == null) {
+// Without CI's release properties, use the latest vX.Y.Z tag reachable from HEAD (none in a
+// shallow clone), encoded the same way release-apk.yml does: 1.5.0 is 1.5.0 (10500).
+val latestReleaseVersion = runCatching {
+    providers.exec {
+        commandLine("git", "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*.[0-9]*.[0-9]*")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.get().trim().removePrefix("v")
+}.getOrNull()?.takeIf { it.matches(Regex("""\d+\.\d+\.\d+""")) }
+val releaseVersionName = providers.gradleProperty("releaseVersionName").orNull ?: latestReleaseVersion
+if (providers.gradleProperty("releaseVersionCode").isPresent &&
+    providers.gradleProperty("releaseVersionCode").get().toIntOrNull() == null
+) {
     throw GradleException("releaseVersionCode must be an integer.")
 }
+val releaseVersionCode = providers.gradleProperty("releaseVersionCode").orNull?.toIntOrNull()
+    ?: releaseVersionName?.split(".")?.mapNotNull(String::toIntOrNull)?.takeIf { it.size == 3 }
+        ?.let { (major, minor, patch) -> major * 10000 + minor * 100 + patch }
 val releaseSigningValues = listOf(
     releaseKeystorePath,
     releaseKeystorePassword,
