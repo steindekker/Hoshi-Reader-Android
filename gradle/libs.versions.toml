@@ -1,4 +1,5 @@
 [versions]
+re2j = "1.8"
 agp = "9.2.0"
 coreKtx = "1.10.1"
 junit = "4.13.2"
@@ -22,10 +23,11 @@ ankidroidApi = "api-v1.1.0"
 hilt = "2.59.2"
 androidxHilt = "1.3.0"
 ksp = "2.3.9"
-sherpaOnnx = "1.13.8"
 okhttp = "5.4.0"
 
 [libraries]
+re2j = { module = "com.google.re2j:re2j", version.ref = "re2j" }
+mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
 jsoup = { module = "org.jsoup:jsoup", version = "1.23.2" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-mockwebserver3 = { group = "com.squareup.okhttp3", name = "mockwebserver3", version.ref = "okhttp" }

@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Cancel
@@ -69,7 +68,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.text.intl.LocaleList
 import androidx.compose.ui.unit.IntSize
@@ -86,6 +84,7 @@ import moe.antimony.hoshi.features.audio.WordAudioPlayer
 import moe.antimony.hoshi.features.anki.AnkiMiningContext
 import moe.antimony.hoshi.features.anki.AnkiMiningPayload
 import moe.antimony.hoshi.features.anki.AnkiViewModel
+import moe.antimony.hoshi.features.anki.AnkiOperationErrorDialog
 import moe.antimony.hoshi.features.reader.MineSentenceMode
 import moe.antimony.hoshi.features.reader.MineWithOptionsRequest
 import moe.antimony.hoshi.features.reader.MineWithOptionsSheetHost
@@ -103,6 +102,7 @@ import moe.antimony.hoshi.features.reader.ReaderPopupHistoryCounts
 import moe.antimony.hoshi.features.reader.ReaderSettings
 import moe.antimony.hoshi.features.reader.androidPixelsToCssPixels
 import moe.antimony.hoshi.features.reader.readerLookupPopupIframeUrl
+import moe.antimony.hoshi.ui.hoshiContentKeyboardOptions
 import moe.antimony.hoshi.ui.asString
 import moe.antimony.hoshi.ui.hoshiSingleLineTextFieldLineLimits
 import moe.antimony.hoshi.ui.hoshiTextFieldCursorBrush
@@ -123,25 +123,6 @@ internal enum class DictionaryExternalLookupFocus {
 
 internal fun dictionaryExternalLookupFocus(query: String): DictionaryExternalLookupFocus =
     if (query.isBlank()) DictionaryExternalLookupFocus.Request else DictionaryExternalLookupFocus.Clear
-
-internal fun dictionarySearchKeyboardOptions(
-    contentLanguageProfile: ContentLanguageProfile = ContentLanguageProfile.Default,
-): KeyboardOptions =
-    KeyboardOptions(
-        keyboardType = dictionarySearchKeyboardType(contentLanguageProfile),
-        imeAction = ImeAction.Search,
-        showKeyboardOnFocus = true,
-        hintLocales = LocaleList(Locale(contentLanguageProfile.inputLocaleTag)),
-    )
-
-private fun dictionarySearchKeyboardType(
-    contentLanguageProfile: ContentLanguageProfile,
-): KeyboardType =
-    if (contentLanguageProfile.dictionaryLanguageId == ContentLanguageProfile.EnglishLanguageId) {
-        KeyboardType.Ascii
-    } else {
-        KeyboardType.Unspecified
-    }
 
 internal fun dictionarySearchTextStyle(
     baseStyle: TextStyle,
@@ -198,8 +179,12 @@ internal fun DictionarySearchView(
     val assets = remember(context) { LookupPopupAssets.load(context) }
     val searchViewModel: DictionarySearchViewModel = hiltViewModel()
     val ankiViewModel: AnkiViewModel = hiltViewModel()
-    val uiState by searchViewModel.uiState.collectAsStateWithLifecycle()
+    val uiState by rememberDictionarySearchState(session, searchViewModel)
     val ankiUiState by ankiViewModel.uiState.collectAsStateWithLifecycle()
+    var ankiOperationError by remember { mutableStateOf<Throwable?>(null) }
+    var ankiSynchronizationWarning by remember { mutableStateOf<Throwable?>(null) }
+    AnkiOperationErrorDialog(ankiOperationError) { ankiOperationError = null }
+    AnkiOperationErrorDialog(ankiSynchronizationWarning, R.string.anki_sync_failed) { ankiSynchronizationWarning = null }
     val profileState by appContainer.profileRepository.state.collectAsStateWithLifecycle()
     var rootIframeAtTop by session.rootAtTop
     var childHistories by session.childHistories
@@ -497,7 +482,12 @@ internal fun DictionarySearchView(
                 } else {
                     popupById(message.popupId)?.state?.ankiContext ?: return
                 }
-                ankiViewModel.mineEntryWithResultAsync(message.formatId, message.payloadJson, miningContext) { result ->
+                ankiViewModel.mineEntryWithResultAsync(
+                    message.formatId, message.payloadJson, miningContext,
+                    onWarning = {},
+                    onError = { ankiOperationError = it },
+                    onSynchronizationFailure = { ankiSynchronizationWarning = it },
+                ) { result ->
                     replyIframeMessage(message.popupId, messageId, readerPopupMineReplyJson(result))
                 }
             }
@@ -531,7 +521,10 @@ internal fun DictionarySearchView(
             }
             is ReaderLookupPopupBridgeMessage.ShowNotes -> {
                 val messageId = message.messageId ?: return
-                ankiViewModel.showNotesAsync(message.formatId, message.valuesByHandlebar, message.noteId) { shown ->
+                ankiViewModel.showNotesAsync(
+                    message.formatId, message.valuesByHandlebar, message.noteId,
+                    onError = { ankiOperationError = it },
+                ) { shown ->
                     replyIframeMessage(message.popupId, messageId, shown.toString())
                 }
             }
@@ -651,6 +644,9 @@ internal fun DictionarySearchView(
             }
             is ReaderLookupPopupBridgeMessage.SasayakiReplayCue,
             is ReaderLookupPopupBridgeMessage.SasayakiTogglePlayback,
+            is ReaderLookupPopupBridgeMessage.TtsReplaySentence,
+            is ReaderLookupPopupBridgeMessage.TtsTogglePlayback,
+            is ReaderLookupPopupBridgeMessage.TtsPlayForward,
             is ReaderLookupPopupBridgeMessage.SasayakiPlayForward,
             -> Unit
         }
@@ -1082,7 +1078,7 @@ private fun DictionarySearchBar(
                         contentLanguageProfile = contentLanguageProfile,
                     ),
                     cursorBrush = hoshiTextFieldCursorBrush(fieldForegroundColor),
-                    keyboardOptions = dictionarySearchKeyboardOptions(contentLanguageProfile),
+                    keyboardOptions = hoshiContentKeyboardOptions(contentLanguageProfile, imeAction = ImeAction.Search),
                     onKeyboardAction = { onSubmit() },
                 )
             }

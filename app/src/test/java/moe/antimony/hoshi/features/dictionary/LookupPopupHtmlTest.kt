@@ -28,6 +28,17 @@ import org.junit.Test
 
 class LookupPopupHtmlTest {
     @Test
+    fun popupExclusionPayloadPreservesExactDictionaryTitles() {
+        val html = LookupPopupHtml.renderIframeDocument(
+            ankiSettings = AnkiPopupSettings(excludedDictionaries = listOf("Dict [2026]", "辞典\"特殊")),
+        )
+        val payload = Json.parseToJsonElement(
+            html.substringAfter("window.excludedDictionaries = ").substringBefore(';'),
+        )
+        assertEquals(Json.parseToJsonElement("""["Dict [2026]","辞典\"特殊"]"""), payload)
+    }
+
+    @Test
     fun popupAudioPayloadKeepsEnabledBuiltInsInConfiguredOrder() {
         val sources = AudioSettings.DefaultAudioSources.reversed().mapIndexed { index, source ->
             source.copy(isEnabled = index != 1)

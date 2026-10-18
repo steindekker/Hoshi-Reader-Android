@@ -136,7 +136,10 @@ window.createPopupGeometry = function({
     }
 
     function visualViewportPointToLayout(x, y) {
-        const scale = bridgeRectScale();
+        // Fixed CSS positions use unzoomed layout pixels, even when Chromium
+        // already includes HTML zoom in DOM rects and needs no bridge correction.
+        const zoom = Number.parseFloat(computedStyle(documentRef.documentElement).zoom);
+        const scale = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
         return {
             x: x / scale,
             y: y / scale,
@@ -761,6 +764,9 @@ function constructGlossaryHtml(entryIndex) {
 
     entry.glossaries.forEach(g => {
         const dictName = g.dictionary;
+        if (window.excludedDictionaries?.includes(dictName)) {
+            return;
+        }
 
         const tempDiv = document.createElement('div');
         try {
@@ -1894,6 +1900,9 @@ async function showAudioCandidateMenu(entryIndex, anchor) {
             const availableHeight = openBelow ? spaceBelow : spaceAbove;
             // Keep the trigger uncovered as asynchronous candidates grow the menu.
             menu.style.maxHeight = `${availableHeight}px`;
+            const availableWidth = Math.max(0, viewport.x - 16);
+            menu.style.minWidth = `${Math.min(180, availableWidth)}px`;
+            menu.style.maxWidth = `${Math.min(280, availableWidth)}px`;
             const menuWidth = menu.offsetWidth || 220;
             const menuHeight = menu.offsetHeight || Math.min(Math.max(1, sources.length) * 40, availableHeight);
             menu.style.left = `${Math.max(8, Math.min(anchorPoint.x - menuWidth, viewport.x - menuWidth - 8))}px`;
@@ -2074,7 +2083,8 @@ function getButtonSlot(kind, entryIndex, formatId = null) {
 }
 
 function updateButtonSlot(slot, changes) {
-    if (!slot || !slot.isConnected) { return; }
+    // History retains detached result nodes, including completed Anki actions.
+    if (!slot) { return; }
     if ('state' in changes) { slot.dataset.state = changes.state; }
     if ('enabled' in changes) { slot.dataset.enabled = String(changes.enabled); }
     applyButtonSlotVisualState(slot);
@@ -2089,8 +2099,11 @@ function setButtonSlotHidden(slot, hidden) {
 function applyButtonSlotVisualState(slot) {
     if (!slot) { return; }
     const kind = slot.dataset.kind;
-    const state = slot.dataset.state || 'default';
-    const enabled = slot.dataset.enabled !== 'false';
+    const mined = kind === 'mine' && window.allowDupes && window.preventAccidentalDuplicates && slot.dataset.mined === 'true';
+    const state = mined ? 'duplicate' : (slot.dataset.state || 'default');
+    const enabled = slot.dataset.enabled !== 'false' && !mined && slot.dataset.mining !== 'true';
+    slot.dataset.state = state;
+    slot.dataset.enabled = String(enabled);
     const formatIcon = (slot.dataset.formatIcon || 'square').replace('-small', '');
     const iconName = kind === 'audio'
         ? (state === 'error' ? 'volume_off' : 'volume_up')
@@ -2152,17 +2165,37 @@ async function mineEntryAtIndex(entryIndex, formatId, buttonsContainer = null) {
     const { expression, reading, frequencies, pitches, rules, matched } = entry;
     const formats = Array.isArray(window.ankiFormats) ? window.ankiFormats : [];
     const mineSlot = buttonSlotInContainer(buttonsContainer, 'mine', entryIndex, formatId);
+    if (!mineSlot || mineSlot.disabled) return;
+    buttonsContainer ??= mineSlot.parentElement?.parentElement;
+    const preventAccidentalDuplicates = window.allowDupes && window.preventAccidentalDuplicates;
+    const mineSlots = formats.map(format => buttonSlotInContainer(buttonsContainer, 'mine', entryIndex, format.id)).filter(Boolean);
+    const previousStates = mineSlots.map(slot => ({ slot, state: slot.dataset.state, enabled: !slot.disabled }));
 
     lastSelection = getPopupSelectionText();
-    formats.forEach((format) => updateButtonSlot(
-        buttonSlotInContainer(buttonsContainer, 'mine', entryIndex, format.id),
-        { enabled: false },
-    ));
+    mineSlots.forEach(slot => {
+        slot.dataset.mining = 'true';
+        updateButtonSlot(slot, { enabled: false });
+    });
 
-    const result = mineResultFromReply(await mineEntry(
-        expression, reading, frequencies, pitches, rules, matched, entryIndex, lastSelection, formatId,
-    ));
+    let result = { added: false, noteId: null };
+    try {
+        result = mineResultFromReply(await mineEntry(
+            expression, reading, frequencies, pitches, rules, matched, entryIndex, lastSelection, formatId,
+        ));
+    } catch {
+        result = { added: false, noteId: null };
+    }
+    mineSlots.forEach(slot => { delete slot.dataset.mining; });
+    if (result.added && preventAccidentalDuplicates) {
+        mineSlot.dataset.mined = 'true';
+        updateButtonSlot(mineSlot, { state: 'duplicate', enabled: false });
+    }
     if (!result.added) {
+        if (preventAccidentalDuplicates) {
+            // Backend recovery must not depend on a second request to the same failing backend.
+            previousStates.forEach(({ slot, state, enabled }) => updateButtonSlot(slot, { state, enabled }));
+            return;
+        }
         formats.forEach((format) => {
             const slot = buttonSlotInContainer(buttonsContainer, 'mine', entryIndex, format.id);
             const failed = format.id === formatId && slot?.dataset.state !== 'duplicate';
@@ -2177,7 +2210,7 @@ async function mineEntryAtIndex(entryIndex, formatId, buttonsContainer = null) {
         return;
     }
     rememberCreatedNote(buttonsContainer, entryIndex, formatId, result.noteId);
-    const checkDuplicate = () => refreshAnkiDuplicateStates(entryIndex, buttonsContainer);
+    const checkDuplicate = () => refreshAnkiDuplicateStates(entryIndex, buttonsContainer, entry);
 
     if (window.useAnkiConnect) {
         await checkDuplicate();
@@ -2257,8 +2290,7 @@ function syncShowNotesButton(container, entryIndex, format, visible) {
     setButtonSlotHidden(existing, !visible);
 }
 
-async function refreshAnkiDuplicateStates(entryIndex, buttonsContainer) {
-    const entry = window.lookupEntries?.[entryIndex];
+async function refreshAnkiDuplicateStates(entryIndex, buttonsContainer, entry = window.lookupEntries?.[entryIndex]) {
     const formats = Array.isArray(window.ankiFormats) ? window.ankiFormats : [];
     if (!entry) return false;
     let states;

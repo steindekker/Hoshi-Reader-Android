@@ -104,6 +104,7 @@ data class AnkiSettings(
     val fieldMappings: Map<String, String> = emptyMap(),
     val tags: String = "",
     val allowDupes: Boolean = false,
+    val preventAccidentalDuplicates: Boolean = false,
     val checkDuplicatesAcrossAllModels: Boolean = false,
     val duplicateScope: AnkiDuplicateScope = AnkiDuplicateScope.Collection,
     val compactGlossaries: Boolean = false,
@@ -228,9 +229,12 @@ data class AnkiPopupSettings(
     val useAnkiConnect: Boolean = false,
     val needsAudio: Boolean = false,
     val needsSasayakiAudio: Boolean = false,
+    val needsSentenceAudio: Boolean = false,
     val allowDupes: Boolean = false,
+    val preventAccidentalDuplicates: Boolean = false,
     val compactGlossaries: Boolean = false,
     val disableShowNotes: Boolean = false,
+    val excludedDictionaries: List<String> = emptyList(),
 )
 
 internal fun Map<String, String>.referencesAnkiHandlebar(handlebar: String): Boolean =
@@ -326,7 +330,10 @@ data class AnkiMiningContext(
     val screenshotPath: String? = null,
     /** The Live cue whose audio the bridge cuts for {sentence-audio}. */
     val sentenceAudio: AnkiLiveCueRef? = null,
-    /** The Anki-attached Live sentence audio ref (resolved in mineEntry). */
+    /**
+     * A local sentence audio file to attach, such as the reader's TTS audio. Resolved in
+     * mineEntry to the Anki-attached ref, which also holds the Live cue's audio.
+     */
     val sentenceAudioPath: String? = null,
 )
 
@@ -521,8 +528,7 @@ internal object AnkiHandlebarRenderer {
         selectedGlossaryFallback: String,
         termDictionaries: List<AnkiTermDictionary>,
     ): String {
-        val selected = singleGlossaryForDictionary(selectedDictionary)
-        if (selected.isNotBlank()) return selected
+        singleGlossaryForDictionaryOrNull(selectedDictionary)?.let { return it }
         if (selectedGlossaryFallback in SelectedGlossaryHandlebars) return ""
         return handlebarToValue(
             handlebar = selectedGlossaryFallback,

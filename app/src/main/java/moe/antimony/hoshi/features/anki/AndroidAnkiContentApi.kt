@@ -2,7 +2,6 @@ package moe.antimony.hoshi.features.anki
 
 import android.app.Activity
 import android.app.Application
-import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -18,6 +17,7 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.text.Normalizer
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 
 class AndroidAnkiContentApi @Inject constructor(
@@ -109,38 +109,27 @@ class AndroidAnkiContentApi @Inject constructor(
             if (mimeType.startsWith("audio/")) "audio" else "image",
         )
 
-    override fun sync(): Boolean =
-        runCatching {
-            appContext.startActivity(ankiDroidSyncIntent())
-            true
-        }.recoverCatching { error ->
-            when (error) {
-                is ActivityNotFoundException -> logAnkiApiFailure("AnkiDroid sync activity is unavailable.", error)
-                else -> logAnkiApiFailure("Unable to start AnkiDroid sync.", error)
-            }
-            false
-        }.getOrDefault(false)
+    override fun sync(): Boolean {
+        appContext.startActivity(ankiDroidSyncIntent())
+        return true
+    }
 
-    override fun openNotes(query: String): Boolean =
-        runCatching {
-            val spec = ankiDroidBrowserIntentSpec(
-                query = query,
-                packageName = AddContentApi.getAnkiDroidPackageName(appContext) ?: "com.ichi2.anki",
-            )
-            val intent = Intent(spec.action, Uri.parse(spec.uri)).setPackage(spec.packageName)
-            // From the visible Hoshi activity, the browser opens on top of Hoshi and Back
-            // returns here; only without one does it need a task of its own.
-            val activity = ResumedActivityTracker.current()
-            if (activity != null) {
-                activity.startActivity(intent)
-            } else {
-                appContext.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }
-            true
-        }.recoverCatching { error ->
-            logAnkiApiFailure("Unable to open the AnkiDroid card browser.", error)
-            false
-        }.getOrDefault(false)
+    override fun openNotes(query: String): Boolean {
+        val spec = ankiDroidBrowserIntentSpec(
+            query = query,
+            packageName = AddContentApi.getAnkiDroidPackageName(appContext) ?: "com.ichi2.anki",
+        )
+        val intent = Intent(spec.action, Uri.parse(spec.uri)).setPackage(spec.packageName)
+        // From the visible Hoshi activity, the browser opens on top of Hoshi and Back
+        // returns here; only without one does it need a task of its own.
+        val activity = ResumedActivityTracker.current()
+        if (activity != null) {
+            activity.startActivity(intent)
+        } else {
+            appContext.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+        return true
+    }
 
     override fun isAvailable(): Boolean =
         AddContentApi.getAnkiDroidPackageName(appContext) != null
@@ -163,6 +152,8 @@ class AndroidAnkiContentApi @Inject constructor(
         if (!isAvailable()) throw AnkiFetchException(AnkiFetchFailure.ApiUnavailable)
         return try {
             block()
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: AnkiFetchException) {
             throw error
         } catch (error: SecurityException) {

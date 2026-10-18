@@ -91,6 +91,8 @@ class MainActivity : ComponentActivity() {
                             pendingDictionaryLookupRequest = pendingDictionaryLookupRequest,
                             onPendingDictionaryLookupConsumed = { pendingDictionaryLookupRequest = null },
                             readerSettings = loadedReaderSettings,
+                            readerSettingsLoadState = settingsState.loadState,
+                            onRetryReaderSettings = settingsViewModel::retry,
                             onReaderSettingsChange = settingsViewModel::update,
                             onReaderKeyEventHandlerChange = { handler ->
                                 readerKeyEventHandler = handler
