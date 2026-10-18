@@ -6,6 +6,8 @@ Historical release notes before v1.3.0 live in [CHANGELOG_ARCHIVE.md](CHANGELOG_
 
 ## [Unreleased]
 
+## [v1.6.0] - 2026-10-18
+
 ### Added
 
 - A welcome screen on first launch sets everything up in one download, over any internet connection: 実用, 三省堂, JMdict, NHK pitch, JPDB frequency, KANJIDIC, the sentence-markup model, and the enrichment pack, so cards get example sentences right away. 実用 is placed above 三省堂. Hoshi asks for AnkiDroid access up front, creates the Hoshi note type when your collection does not have it, and maps the Mining card for `{definition}`, `{definition-source}`, `{pitch-graph}`, `{frequency-rank}`, `{example-sentences}`, and `{sentence-pitch}`, so you can make cards without fetching Anki or remapping fields. You can still switch to your own note type in Settings. Offline audio is optional and off by default; when on, the large audio file downloads in the background. Until then, word audio streams from the audio server.
