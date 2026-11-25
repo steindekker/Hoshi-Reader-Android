@@ -13,14 +13,18 @@ import moe.antimony.hoshi.features.audio.AudioRequestHandler
 import moe.antimony.hoshi.features.audio.LocalAudioRepository
 import moe.antimony.hoshi.features.backup.HoshiBackupRepository
 import moe.antimony.hoshi.features.dictionary.DictionarySettingsRepository
+import moe.antimony.hoshi.features.reader.ReaderBookDocumentCache
+import moe.antimony.hoshi.features.reader.ReaderPageCountRepository
 import moe.antimony.hoshi.features.reader.ReaderFontManager
 import moe.antimony.hoshi.features.reader.ReaderSettingsRepository
 import moe.antimony.hoshi.features.sasayaki.SasayakiPlaybackServiceRuntime
 import moe.antimony.hoshi.features.sasayaki.SasayakiSettingsRepository
 import moe.antimony.hoshi.features.statistics.StatisticsDateProvider
 import moe.antimony.hoshi.features.storage.StorageCleanupRepository
+import moe.antimony.hoshi.features.sync.GoogleDriveSyncManager
+import moe.antimony.hoshi.features.sync.GoogleDriveAuth
 import moe.antimony.hoshi.features.sync.DeviceCodeDriveAuthorizer
-import moe.antimony.hoshi.features.sync.SyncManager
+import moe.antimony.hoshi.features.sync.TtuSyncManager
 import moe.antimony.hoshi.features.sync.SyncSettingsRepository
 import moe.antimony.hoshi.features.update.AndroidUpdateDownloadManager
 import moe.antimony.hoshi.features.update.UpdateCheckService
@@ -46,12 +50,16 @@ internal class HoshiUiDependencies @Inject constructor(
     private val updateSettingsRepositoryProvider: Lazy<UpdateSettingsRepository>,
     private val updateDownloadStoreProvider: Lazy<UpdateDownloadStore>,
     private val epubBookParserProvider: Lazy<EpubBookParser>,
+    private val readerBookDocumentCacheProvider: Lazy<ReaderBookDocumentCache>,
+    private val readerPageCountRepositoryProvider: Lazy<ReaderPageCountRepository>,
     private val readerFontManagerProvider: Lazy<ReaderFontManager>,
     private val localAudioRepositoryProvider: Lazy<LocalAudioRepository>,
     private val backupRepositoryProvider: Lazy<HoshiBackupRepository>,
     private val storageCleanupRepositoryProvider: Lazy<StorageCleanupRepository>,
+    private val googleDriveSyncManagerProvider: Lazy<GoogleDriveSyncManager>,
+    private val googleDriveAuthProvider: Lazy<GoogleDriveAuth>,
     private val deviceCodeDriveAuthorizerProvider: Lazy<DeviceCodeDriveAuthorizer>,
-    private val syncManagerProvider: Lazy<SyncManager>,
+    private val syncManagerProvider: Lazy<TtuSyncManager>,
     private val updateDownloadManagerProvider: Lazy<AndroidUpdateDownloadManager>,
     private val updateCheckServiceProvider: Lazy<UpdateCheckService>,
     private val updatePromptEventsProvider: Lazy<UpdatePromptEvents>,
@@ -73,12 +81,16 @@ internal class HoshiUiDependencies @Inject constructor(
     val updateSettingsRepository: UpdateSettingsRepository get() = updateSettingsRepositoryProvider.get()
     val updateDownloadStore: UpdateDownloadStore get() = updateDownloadStoreProvider.get()
     val epubBookParser: EpubBookParser get() = epubBookParserProvider.get()
+    val readerBookDocumentCache get() = readerBookDocumentCacheProvider.get()
+    val readerPageCountRepository: ReaderPageCountRepository get() = readerPageCountRepositoryProvider.get()
     val readerFontManager: ReaderFontManager get() = readerFontManagerProvider.get()
     val localAudioRepository: LocalAudioRepository get() = localAudioRepositoryProvider.get()
     val backupRepository: HoshiBackupRepository get() = backupRepositoryProvider.get()
     val storageCleanupRepository: StorageCleanupRepository get() = storageCleanupRepositoryProvider.get()
+    val googleDriveSyncManager: GoogleDriveSyncManager get() = googleDriveSyncManagerProvider.get()
+    val googleDriveAuth: GoogleDriveAuth get() = googleDriveAuthProvider.get()
     val deviceCodeDriveAuthorizer: DeviceCodeDriveAuthorizer get() = deviceCodeDriveAuthorizerProvider.get()
-    val syncManager: SyncManager get() = syncManagerProvider.get()
+    val syncManager: TtuSyncManager get() = syncManagerProvider.get()
     val updateDownloadManager: AndroidUpdateDownloadManager get() = updateDownloadManagerProvider.get()
     val updateCheckService: UpdateCheckService get() = updateCheckServiceProvider.get()
     val updatePromptEvents: UpdatePromptEvents get() = updatePromptEventsProvider.get()

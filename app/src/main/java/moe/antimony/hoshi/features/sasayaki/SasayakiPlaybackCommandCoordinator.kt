@@ -6,6 +6,7 @@ class SasayakiPlaybackCommandCoordinator(
     private val playbackState: SasayakiPlaybackStateCoordinator,
     private val playbackLifecycle: SasayakiPlaybackLifecycleController,
     private val cueNavigation: SasayakiCueNavigationController,
+    private val beforeSeek: (Double) -> Unit = {},
 ) {
     fun toggle(
         isPlaying: Boolean,
@@ -79,6 +80,13 @@ class SasayakiPlaybackCommandCoordinator(
         return seek(target, startPlayback = isPlaying, revealCue = true)
     }
 
+    fun restartCurrentCue(currentTime: Double, delay: Double): Boolean {
+        val target = cueNavigation.restartCurrentCueSeekTime(currentTime, delay) ?: return false
+        playbackState.clearStopPlaybackTime()
+        playbackState.setTemporaryPlaybackReturnPosition(null)
+        return seek(target, startPlayback = true, revealCue = true)
+    }
+
     fun skipBackward(
         currentTime: Double,
         seconds: Int,
@@ -134,8 +142,9 @@ class SasayakiPlaybackCommandCoordinator(
         savePosition: Boolean = true,
         displayCue: SasayakiMatch? = null,
         revealCue: Boolean = false,
-    ): Boolean =
-        playbackLifecycle.beginSeek(
+    ): Boolean {
+        beforeSeek(seconds)
+        return playbackLifecycle.beginSeek(
             seconds = seconds,
             startPlayback = startPlayback,
             updateCue = updateCue,
@@ -143,4 +152,5 @@ class SasayakiPlaybackCommandCoordinator(
             displayCue = displayCue,
             revealCue = revealCue,
         )
+    }
 }

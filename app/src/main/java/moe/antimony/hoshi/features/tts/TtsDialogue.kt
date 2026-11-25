@@ -6,33 +6,54 @@ enum class TtsTextRole { Narration, Dialogue }
 data class TtsTextRange(val start: Int, val end: Int, val role: TtsTextRole)
 data class TtsSpokenPart(val role: TtsTextRole, val text: String)
 
-/** Complete paired ranges are found before sentences are sliced, so unmatched openers cannot leak. */
+/** Pair within a paragraph before slicing sentences; an unmatched opener cannot leak to the next paragraph. */
 internal object TtsDialogue {
-    fun ranges(text: String): List<TtsTextRange> {
+    private val opening = mapOf('「' to '」', '『' to '』', '“' to '”', '‘' to '’', '"' to '"')
+
+    private fun latinWordPoint(point: Int) = Character.isLetter(point) && Character.UnicodeScript.of(point) == Character.UnicodeScript.LATIN
+    private fun apostrophe(text: String, index: Int) = index > 0 && index + 1 < text.length &&
+        latinWordPoint(text.codePointBefore(index)) && latinWordPoint(text.codePointAt(index + 1))
+
+    fun pairedQuotes(text: String): List<IntRange> {
         val stack = ArrayDeque<Pair<Char, Int>>()
         val matched = mutableListOf<IntRange>()
-        text.forEachIndexed { index, character -> when (character) {
-            '「', '『' -> stack.addLast(character to index)
-            '」', '』' -> {
-                val opener = if (character == '」') '「' else '『'
-                val found = stack.indexOfLast { it.first == opener }
+        text.forEachIndexed { index, character ->
+            if (character == '\n' || character == '\r') { stack.clear(); return@forEachIndexed }
+            if (character == '’' && apostrophe(text, index)) return@forEachIndexed
+            val closer = character in opening.values && (character != '"' || stack.any { it.first == '"' })
+            if (closer) {
+                val found = stack.indexOfLast { opening[it.first] == character }
                 if (found >= 0) {
                     while (stack.lastIndex > found) stack.removeLast()
                     matched += stack.removeLast().second..index
                 }
-            }
-        } }
+            } else if (character in opening) stack.addLast(character to index)
+        }
+        return matched.sortedBy { it.first }
+    }
+
+    /** Inclusive source ranges; adjacent quotes stay separate for playback navigation. */
+    fun outerQuotes(text: String): List<IntRange> = outerQuotes(pairedQuotes(text))
+
+    fun outerQuotes(matched: List<IntRange>): List<IntRange> {
         val merged = mutableListOf<IntRange>()
         matched.sortedBy { it.first }.forEach { range ->
             val previous = merged.lastOrNull()
-            if (previous != null && range.first <= previous.last + 1) merged[merged.lastIndex] = previous.first..maxOf(previous.last, range.last)
+            if (previous != null && range.first <= previous.last) merged[merged.lastIndex] = previous.first..maxOf(previous.last, range.last)
             else merged += range
         }
+        return merged
+    }
+
+    fun ranges(text: String, quotes: List<IntRange> = outerQuotes(text)): List<TtsTextRange> {
         return buildList {
             var cursor = 0
-            merged.forEach { range ->
+            quotes.forEach { range ->
                 if (cursor < range.first) add(TtsTextRange(cursor, range.first, TtsTextRole.Narration))
-                add(TtsTextRange(range.first, range.last + 1, TtsTextRole.Dialogue))
+                val previous = lastOrNull()
+                if (previous?.role == TtsTextRole.Dialogue && previous.end == range.first)
+                    this[lastIndex] = previous.copy(end = range.last + 1)
+                else add(TtsTextRange(range.first, range.last + 1, TtsTextRole.Dialogue))
                 cursor = range.last + 1
             }
             if (cursor < text.length) add(TtsTextRange(cursor, text.length, TtsTextRole.Narration))

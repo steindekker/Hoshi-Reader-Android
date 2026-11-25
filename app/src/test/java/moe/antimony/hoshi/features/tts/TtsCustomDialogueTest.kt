@@ -33,8 +33,9 @@ class TtsCustomDialogueTest {
                 CustomTtsEngine(transport, { _, _ -> "" }, Dispatchers.IO))
             val audio = TtsAudioRepository(router, folder.root, Dispatchers.IO, TtsExportFallback { _, _ -> error("Unexpected mismatch") })
             try {
-                val sentence = TtsText.chapter(0, "<p>彼は「こんにちは」と言った。</p>").single()
-                val files = audio.audio(sentence, "book", preferences)
+                val sentences = TtsText.chapter(0, "<p>彼は「こんにちは」と言った。</p>")
+                assertEquals(3, sentences.size)
+                val files = sentences.flatMap { audio.audio(it, "book", preferences) }
                 assertEquals(3, files.size)
                 assertEquals(listOf("n", "d", "n"), List(3) {
                     val request = server.takeRequest()
@@ -42,7 +43,7 @@ class TtsCustomDialogueTest {
                     Json.parseToJsonElement(request.body.readUtf8()).jsonObject.getValue("voice").jsonPrimitive.content
                 })
                 assertEquals("n", preferences.settings.voice)
-                assertEquals(files, audio.audio(sentence, "book", preferences))
+                assertEquals(files, sentences.flatMap { audio.audio(it, "book", preferences) })
                 assertEquals(3, server.requestCount)
             } finally { audio.clearPlaybackCache(); client.connectionPool.evictAll(); client.dispatcher.executorService.shutdown() }
         }
@@ -58,7 +59,8 @@ class TtsCustomDialogueTest {
             val transport = OnlineTtsTransport(client, client)
             val audio = TtsAudioRepository(TtsEngineRouter(AndroidTtsEngine(ContextWrapper(null)), OnlineTtsEngine(transport, { _, _ -> "" }, Dispatchers.IO),
                 CustomTtsEngine(transport, { _, _ -> "" }, Dispatchers.IO)), folder.root, Dispatchers.IO, TtsExportFallback { _, _ -> error("Unexpected mismatch") })
-            val sentence = TtsText.chapter(0, "<p>彼は「こんにちは」と言った。</p>").single()
+            val text = "彼は「こんにちは」と言った。"
+            val sentence = TtsText.selection(TtsText.chapter(0, "<p>$text</p>"), text, 0, 0)
             try {
                 try { audio.audio(sentence, "book", preferences); fail("Must fail on the second segment") }
                 catch (error: TtsException) { assertEquals(TtsFailure.Authentication, error.failure) }

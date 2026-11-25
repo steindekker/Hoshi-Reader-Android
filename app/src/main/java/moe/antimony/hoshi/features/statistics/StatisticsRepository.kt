@@ -8,15 +8,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import moe.antimony.hoshi.di.IoDispatcher
 import moe.antimony.hoshi.epub.BookStatisticsStore
+import moe.antimony.hoshi.epub.ReadingSession
+import moe.antimony.hoshi.epub.ReadingSessions
 import moe.antimony.hoshi.epub.StatisticsArchiveSummary
-import moe.antimony.hoshi.epub.ReadingStatistics
 
 internal interface StatisticsRepository {
     suspend fun loadSnapshot(): StatisticsSnapshot
     suspend fun loadBookStatistics(folder: String): StatisticsBookRecords?
-    suspend fun updateDay(folder: String, dateKey: String, characters: Int, totalMinutes: Int)
-    suspend fun deleteDay(folder: String, dateKey: String)
-    suspend fun deleteAll(folder: String)
+    suspend fun editSession(folder: String, id: String, characters: Int?, readingTime: Double?)
+    suspend fun deleteSessions(folder: String, ids: Collection<String>)
     suspend fun loadArchiveSummary(): StatisticsArchiveSummary
     suspend fun clearArchive()
 }
@@ -25,7 +25,7 @@ internal data class StatisticsBookRecords(
     val folder: String,
     val title: String,
     val isArchived: Boolean,
-    val statistics: List<ReadingStatistics>,
+    val sessions: ReadingSessions,
 )
 
 internal data class StatisticsSnapshot(
@@ -45,15 +45,12 @@ internal class AndroidStatisticsRepository @Inject constructor(
         val contributionsByDate = linkedMapOf<LocalDate, MutableList<StatisticsBookContribution>>()
         val readErrors = stored.readErrors.toMutableMap()
         stored.books.forEach { book ->
-            book.statistics.forEach statisticLoop@ { statistic ->
-                val date = try {
-                    LocalDate.parse(statistic.dateKey)
-                } catch (_: java.time.format.DateTimeParseException) {
-                    return@statisticLoop
-                }
+            book.days.forEach { day ->
+                val date = day.date
+                val statistic = day.total
                 contributionsByDate.getOrPut(date) { mutableListOf() } += StatisticsBookContribution(
                     bookId = book.metadata.id,
-                    title = book.metadata.displayTitle.ifBlank { statistic.title.ifBlank { book.folder } },
+                    title = book.metadata.displayTitle.ifBlank { book.folder },
                     coverPath = book.coverPath,
                     characters = statistic.charactersRead,
                     readingSeconds = statistic.readingTime,
@@ -76,14 +73,13 @@ internal class AndroidStatisticsRepository @Inject constructor(
 
     override suspend fun loadBookStatistics(folder: String): StatisticsBookRecords? =
         statisticsStore.loadBook(folder)?.let { book ->
-            StatisticsBookRecords(book.folder, book.metadata.displayTitle.ifBlank { book.folder }, book.isArchived, book.statistics)
+            StatisticsBookRecords(book.folder, book.metadata.displayTitle.ifBlank { book.folder }, book.isArchived, book.sessions)
         }
 
-    override suspend fun updateDay(folder: String, dateKey: String, characters: Int, totalMinutes: Int) =
-        statisticsStore.updateDay(folder, dateKey, characters, totalMinutes)
+    override suspend fun editSession(folder: String, id: String, characters: Int?, readingTime: Double?) =
+        statisticsStore.edit(id, folder, characters, readingTime)
 
-    override suspend fun deleteDay(folder: String, dateKey: String) = statisticsStore.deleteDay(folder, dateKey)
-    override suspend fun deleteAll(folder: String) = statisticsStore.deleteAll(folder)
+    override suspend fun deleteSessions(folder: String, ids: Collection<String>) = statisticsStore.delete(ids, folder)
     override suspend fun loadArchiveSummary(): StatisticsArchiveSummary = statisticsStore.loadArchiveSummary()
     override suspend fun clearArchive() = statisticsStore.clearArchive()
 }

@@ -4,6 +4,8 @@ import android.webkit.WebResourceResponse
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URI
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import moe.antimony.hoshi.epub.EpubBook
 
 internal data class ReaderWebResource(
@@ -12,6 +14,7 @@ internal data class ReaderWebResource(
     val data: ByteArray,
     val statusCode: Int = HttpURLConnection.HTTP_OK,
     val reasonPhrase: String = "OK",
+    val headers: Map<String, String> = emptyMap(),
 ) {
     fun toWebResourceResponse(): WebResourceResponse =
         WebResourceResponse(
@@ -19,7 +22,7 @@ internal data class ReaderWebResource(
             encoding,
             statusCode,
             reasonPhrase,
-            emptyMap(),
+            headers,
             data.inputStream(),
         )
 
@@ -35,20 +38,45 @@ internal data class ReaderWebResource(
     }
 }
 
-internal class ReaderWebResourceBridge(
+internal class ReaderWebResourceBridge private constructor(
     private val book: EpubBook,
     private val fontFileForRequest: (String) -> File?,
+    private val documentCache: ReaderBookDocumentCache?,
 ) {
+    constructor(book: EpubBook, fontFileForRequest: (String) -> File?) : this(book, fontFileForRequest, null)
+
     constructor(
         book: EpubBook,
         fontManager: ReaderFontManager,
-    ) : this(book, fontManager::fontFileForRequest)
+        documentCache: ReaderBookDocumentCache? = null,
+    ) : this(book, fontManager::fontFileForRequest, documentCache)
+
+    private val wholeBook by lazy { documentCache?.document(book) ?: book.buildReaderBookDocument() }
 
     fun resourceForUrl(url: String): ReaderWebResource? {
         val uri = runCatching { URI(url).normalize() }.getOrNull() ?: return null
-        if (uri.scheme != "https" || uri.host != "appassets.androidplatform.net") return null
+        if (uri.scheme != "https" || uri.rawAuthority != "appassets.androidplatform.net") return null
         val path = uri.path.orEmpty()
         return when {
+            path == "/reader-book/index.html" -> ReaderWebResource(
+                mediaType = "text/html", encoding = "UTF-8", data = wholeBook.html,
+                headers = mapOf(
+                    "Cache-Control" to "no-store",
+                    "Content-Security-Policy" to (
+                        "script-src https://appassets.androidplatform.net/popup/reader-popup-host.js; " +
+                            "frame-src https://appassets.androidplatform.net/popup/iframe.html; " +
+                            "object-src 'none'; base-uri 'none'; form-action 'none'"
+                    ),
+                ),
+            )
+            path == "/reader-book/publisher.css" -> ReaderWebResource(
+                mediaType = "text/css", encoding = "UTF-8", data = wholeBook.css,
+                headers = mapOf("Cache-Control" to "no-store"),
+            )
+            path == "/reader-media/image-references.json" -> ReaderWebResource(
+                mediaType = "application/json", encoding = "UTF-8",
+                data = Json.encodeToString(book.imageReferenceCounts).toByteArray(Charsets.UTF_8),
+            )
             path.startsWith("/fonts/") -> fontResource(path.removePrefix("/fonts/")) ?: ReaderWebResource.notFound()
             path.startsWith("/epub/") -> epubResource(path.removePrefix("/epub/")) ?: ReaderWebResource.notFound()
             else -> ReaderWebResource.notFound()
@@ -57,9 +85,8 @@ internal class ReaderWebResourceBridge(
 
     fun imageResourceForUrl(url: String): ReaderWebResource? {
         val uri = runCatching { URI(url).normalize() }.getOrNull() ?: return null
-        if (uri.scheme != "https" || uri.host != "appassets.androidplatform.net") return null
-        val path = uri.path.orEmpty().removePrefix("/epub/")
-        if (path.isBlank() || path == uri.path.orEmpty()) return null
+        if (uri.scheme != "https" || uri.rawAuthority != "appassets.androidplatform.net") return null
+        val path = uri.epubPath()?.takeIf(book::canReadEntry) ?: return null
         val mediaType = book.mediaType(path).substringBefore(';').trim()
         if (!mediaType.startsWith("image/", ignoreCase = true)) return null
         val data = book.readResource(path) ?: return null
@@ -80,6 +107,7 @@ internal class ReaderWebResourceBridge(
     }
 
     private fun epubResource(path: String): ReaderWebResource? {
+        if (!book.canReadEntry(path)) return null
         val mediaType = book.mediaType(path)
         val rawData = book.readResource(path) ?: return null
         val normalizedMediaType = mediaType.substringBefore(';').trim()

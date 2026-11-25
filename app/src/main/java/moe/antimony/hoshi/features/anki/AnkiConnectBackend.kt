@@ -1,7 +1,9 @@
 package moe.antimony.hoshi.features.anki
 
 import java.io.IOException
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.ui.ErrorDiagnosticEvents
 import moe.antimony.hoshi.ui.UiText
@@ -207,6 +209,20 @@ class AnkiConnectBackend(
 
     override fun addMediaFromBytes(bytes: ByteArray, preferredName: String, mimeType: String): String? {
         val filename = ankiConnectMediaFilename(preferredName)
+        storeMediaFile(filename, bytes)
+        return mediaReference(filename, mimeType)
+    }
+
+    override suspend fun addCoverFromBytes(bytes: ByteArray, preferredName: String, mimeType: String): String? {
+        val filename = ankiConnectMediaFilename(preferredName)
+        coroutineContext.ensureActive()
+        val alreadyStored = hasStoredMedia(filename)
+        coroutineContext.ensureActive()
+        if (!alreadyStored) storeMediaFile(filename, bytes)
+        return mediaReference(filename, mimeType)
+    }
+
+    private fun storeMediaFile(filename: String, bytes: ByteArray) {
         request(
             "storeMediaFile",
             buildJsonObject {
@@ -214,11 +230,24 @@ class AnkiConnectBackend(
                 put("data", Base64.getEncoder().encodeToString(bytes))
             },
         )
-        return when {
+    }
+
+    private fun mediaReference(filename: String, mimeType: String): String =
+        when {
             mimeType.startsWith("audio/") -> "[sound:$filename]"
             mimeType.startsWith("image/") -> """<img src="$filename">"""
             else -> filename
         }
+
+    private fun hasStoredMedia(filename: String): Boolean = try {
+        JsonPrimitive(filename) in requestArray(
+            "getMediaFilesNames",
+            buildJsonObject { put("pattern", filename) },
+        )
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Exception) {
+        false
     }
 
     override fun sync(): Boolean {

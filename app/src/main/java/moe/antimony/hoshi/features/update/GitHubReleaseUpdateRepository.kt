@@ -55,6 +55,9 @@ internal data class AvailableUpdate(
     val downloadUrl: String,
     val fallbackDownloadUrls: List<String> = emptyList(),
     val sha256: String?,
+    val previewCommitSha: String? = null,
+    val previewTag: String? = null,
+    val previewPublishedAt: String? = null,
 )
 
 internal fun AvailableUpdate.downloadUrlCandidates(): List<String> =
@@ -117,7 +120,7 @@ private object AndroidSupportedAbis {
         runCatching { Build.SUPPORTED_ABIS.toList() }.getOrDefault(emptyList())
 }
 
-private fun GitHubReleaseAsset.normalizedSha256(): String? =
+internal fun GitHubReleaseAsset.normalizedSha256(): String? =
     digest
         ?.removePrefix("sha256:")
         ?.takeIf { it.matches(Regex("[A-Fa-f0-9]{64}")) }
@@ -161,37 +164,10 @@ internal class GitHubReleaseUpdateRepository private constructor(
     )
 
     override suspend fun latestRelease(): GitHubRelease {
-        val headers = mapOf(
-            "Accept" to "application/vnd.github+json",
-            "User-Agent" to "Hoshi-Reader-Android",
-        )
-        val failures = mutableListOf<Pair<String, Throwable>>()
-        latestReleaseCandidates().forEachIndexed { index, url ->
-            val preferMirrors = index > 0
-            runCatching {
-                GitHubReleaseJson
-                    .parse(httpClient.get(url, headers))
-                    .withDownloadMirrors(downloadMirrorPrefixes, preferMirrors)
-            }.onSuccess { release ->
-                return release
-            }.onFailure { error ->
-                if (error is CancellationException) throw error
-                failures += url to error
-            }
-        }
-        if (failures.size == 1) {
-            val (url, error) = failures.single()
-            throw GitHubReleaseException(url, error)
-        }
-        throw GitHubReleaseException(
-            failures.joinToString("\n\n") { (url, error) -> "$url\n${error.diagnosticMessage()}" },
-        ).apply {
-            failures.forEach { (_, error) -> addSuppressed(error) }
+        return readGitHubApi(latestReleaseUrl, apiMirrorPrefixes, httpClient) { body, preferMirrors ->
+            GitHubReleaseJson.parse(body).withDownloadMirrors(downloadMirrorPrefixes, preferMirrors)
         }
     }
-
-    private fun latestReleaseCandidates(): List<String> =
-        (listOf(latestReleaseUrl) + apiMirrorPrefixes.map { prefix -> prefix + latestReleaseUrl }).distinct()
 
     private fun GitHubRelease.withDownloadMirrors(
         mirrorPrefixes: List<String>,
@@ -226,6 +202,13 @@ internal object UrlConnectionGitHubHttpClient : GitHubHttpClient {
         connection.readTimeout = 15_000
         return connection.use {
             val code = it.responseCode
+            val hasRateLimitHeader = !it.getHeaderField("Retry-After").isNullOrBlank() ||
+                it.getHeaderField("X-RateLimit-Remaining")?.trim() == "0"
+            val failure = when {
+                code == 429 || (code == 403 && hasRateLimitHeader) -> GitHubApiFailure.RateLimited
+                code in 500..599 -> GitHubApiFailure.Transient
+                else -> GitHubApiFailure.Other
+            }
             val details = buildString {
                 append("HTTP $code\n${it.url}")
                 listOf(
@@ -239,31 +222,43 @@ internal object UrlConnectionGitHubHttpClient : GitHubHttpClient {
                 val stream = if (code in 200..299) it.inputStream else it.errorStream
                 stream?.bufferedReader()?.use { reader -> reader.readText() }.orEmpty()
             } catch (error: IOException) {
-                throw GitHubReleaseException(details, error)
+                val readFailure = if (code in 200..299) GitHubApiFailure.Transient else failure
+                throw GitHubReleaseException(details, error, readFailure)
             }
             val mediaType = it.contentType?.substringBefore(';')?.trim().orEmpty()
             val isJson = mediaType.equals("application/json", ignoreCase = true) ||
                 (mediaType.startsWith("application/", ignoreCase = true) && mediaType.endsWith("+json", ignoreCase = true))
             if (code !in 200..299 || !isJson) {
-                throw GitHubReleaseException(listOf(details, body).filter { value -> value.isNotBlank() }.joinToString("\n\n"))
+                val rateLimitMessage = code == 403 && (body.contains("rate limit exceeded", ignoreCase = true) ||
+                    body.contains("secondary rate limit", ignoreCase = true))
+                throw GitHubReleaseException(
+                    listOf(details, body).filter { value -> value.isNotBlank() }.joinToString("\n\n"),
+                    failure = if (rateLimitMessage) GitHubApiFailure.RateLimited else failure,
+                )
             }
             body
         }
     }
 }
 
-private val DefaultApiMirrorPrefixes = listOf(
+internal val DefaultApiMirrorPrefixes = listOf(
     "https://ghproxy.vip/",
 )
 
-private val DefaultDownloadMirrorPrefixes = listOf(
+internal val DefaultDownloadMirrorPrefixes = listOf(
     "https://gh-proxy.com/",
     "https://gh.llkk.cc/",
     "https://ghpull.com/",
     "https://fastgit.cc/",
 )
 
-internal class GitHubReleaseException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
+internal enum class GitHubApiFailure { RateLimited, Transient, Other }
+
+internal class GitHubReleaseException(
+    message: String,
+    cause: Throwable? = null,
+    val failure: GitHubApiFailure = GitHubApiFailure.Other,
+) : RuntimeException(message, cause)
 
 internal object GitHubReleaseJson {
     private val json = Json { ignoreUnknownKeys = true }
@@ -304,3 +299,42 @@ private inline fun <T : HttpURLConnection, R> T.use(block: (T) -> R): R =
     } finally {
         disconnect()
     }
+
+internal fun <T> readGitHubApi(
+    url: String,
+    mirrorPrefixes: List<String>,
+    client: GitHubHttpClient,
+    parse: (String, Boolean) -> T,
+): T {
+    val headers = mapOf("Accept" to "application/vnd.github+json", "User-Agent" to "Hoshi-Reader-Android")
+    val failures = mutableListOf<Pair<String, Throwable>>()
+    (listOf(url) + mirrorPrefixes.map { it + url }).distinct().forEachIndexed { index, candidate ->
+        try {
+            return parse(client.get(candidate, headers), index > 0)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            failures += candidate to error
+        }
+    }
+    val failureKinds = failures.map { (_, error) ->
+        when (error) {
+            is GitHubReleaseException -> error.failure
+            is IOException -> GitHubApiFailure.Transient
+            else -> GitHubApiFailure.Other
+        }
+    }
+    val failure = when {
+        GitHubApiFailure.RateLimited in failureKinds -> GitHubApiFailure.RateLimited
+        GitHubApiFailure.Transient in failureKinds -> GitHubApiFailure.Transient
+        else -> GitHubApiFailure.Other
+    }
+    if (failures.size == 1) {
+        val (source, error) = failures.single()
+        throw GitHubReleaseException(source, error, failure)
+    }
+    throw GitHubReleaseException(
+        failures.joinToString("\n\n") { (source, error) -> "$source\n${error.diagnosticMessage()}" },
+        failure = failure,
+    ).apply { failures.forEach { (_, error) -> addSuppressed(error) } }
+}

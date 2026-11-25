@@ -11,6 +11,63 @@ import java.nio.file.Files
 import java.util.zip.ZipFile
 
 class BookRepositoryDataSourceTest {
+    @Test fun directorySortReadsEachTimestampOnlyOnceEvenWhenFilesChange() {
+        val reads = IntArray(80)
+        val directories = (0 until 80).map { index ->
+            object : java.io.File("book-$index") {
+                override fun lastModified(): Long {
+                    reads[index]++
+                    return if (reads[index] == 1) (index % 7).toLong() else 1_000L + index
+                }
+            }
+        }
+        val expected = directories.indices.sortedByDescending { it % 7 }.map(directories::get)
+        assertEquals(expected, sortBookDirectories(directories))
+        assertTrue(reads.all { it == 1 })
+    }
+
+    @Test
+    fun shelvesUseTheLoadedBookSnapshotAndRefreshOnNextLoad() = runBlocking {
+        val filesDir = Files.createTempDirectory("hoshi-shelf-snapshot").toFile()
+        try {
+            val repository = BookRepository(filesDir)
+            val root = repository.createBookDirectory("book")
+            repository.saveMetadata(root, BookMetadata("id", "Book", folder = "book", lastAccess = 0.0))
+            repository.saveShelves(listOf(BookShelf("Second", listOf("id")), BookShelf("First", emptyList())))
+            val entries = repository.loadBookEntries()
+            val id = entries.single().metadata.id
+            repository.saveShelves(listOf(BookShelf("Second", emptyList()), BookShelf("First", listOf(id))))
+
+            assertEquals(
+                listOf(BookShelf("Second", listOf(id)), BookShelf("First", emptyList())),
+                repository.loadShelves(entries),
+            )
+            assertEquals(
+                listOf(BookShelf("Second", emptyList()), BookShelf("First", listOf(id))),
+                repository.loadShelves(repository.loadBookEntries()),
+            )
+        } finally {
+            filesDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun shelfSnapshotIncludesLegacyMembershipMigration() = runBlocking {
+        val filesDir = Files.createTempDirectory("hoshi-legacy-shelf-snapshot").toFile()
+        try {
+            val repository = BookRepository(filesDir)
+            val root = repository.createBookDirectory("book")
+            repository.saveMetadata(root, BookMetadata("id", "Book", folder = "book", lastAccess = 0.0))
+            filesDir.resolve("Books/shelves.json").writeText("""[{"name":"Shelf","bookIds":["id"]}]""")
+
+            val entries = repository.loadBookEntries()
+
+            assertEquals(listOf(BookShelf("Shelf", listOf(entries.single().metadata.id))), repository.loadShelves(entries))
+        } finally {
+            filesDir.deleteRecursively()
+        }
+    }
+
     @Test
     fun importDataSourceImportsLongTitleWithoutLeavingTemporaryFiles() = runBlocking {
         val filesDir = Files.createTempDirectory("hoshi-long-import").toFile()
@@ -24,8 +81,37 @@ class BookRepositoryDataSourceTest {
         }
 
         assertTrue(root.name.toByteArray(Charsets.UTF_8).size <= 250)
-        assertTrue(root.resolve("${root.name}.epub").isFile)
+        assertTrue(root.resolve("A.epub").isFile)
         assertTrue(filesDir.resolve("ImportTemp").listFiles().orEmpty().isEmpty())
+    }
+
+    @Test
+    fun importingPlaceholderKeepsSidecarsAndExistingLocalBookIsNotImportedAgain() = runBlocking {
+        val filesDir = Files.createTempDirectory("hoshi-placeholder-import").toFile()
+        val source = filesDir.resolve("source.epub")
+        writeMinimalEpubArchive(source, title = "Book")
+        val sidecars = BookSidecarDataSource()
+        val files = BookFileDataSource(filesDir)
+        val root = files.createBookDirectoryForImportedTitle("Book")
+        val metadata = BookMetadata("id", "Book", folder = root.name, lastAccess = 0.0)
+        sidecars.saveMetadata(root, metadata)
+        val bookmark = Bookmark(0, 0.0, 10, 123.0)
+        sidecars.saveBookmark(root, bookmark)
+        var imported = 0
+        val dataSource = BookImportDataSource(filesDir, files, sidecarDataSource = sidecars)
+        source.inputStream().use { input ->
+            dataSource.importBook("Original Name.epub", input) { target, epub ->
+                imported++
+                sidecars.saveMetadata(target, metadata.copy(epub = epub.name))
+            }
+        }
+        assertEquals(bookmark, sidecars.loadBookmark(root))
+        assertTrue(root.resolve("Original Name.epub").isFile)
+        source.inputStream().use { input ->
+            dataSource.importBook("Another Name.epub", input) { _, _ -> imported++ }
+        }
+        assertEquals(1, imported)
+        assertFalse(root.resolve("Another Name.epub").exists())
     }
 
     @Test
@@ -175,12 +261,14 @@ class BookRepositoryDataSourceTest {
         val repository = BookRepository(Files.createTempDirectory("hoshi-packed-cover").toFile())
         val root = repository.createBookDirectory("packed-cover")
         writeMinimalEpubArchive(root.resolve("packed-cover.epub"), title = "Packed Cover")
-        val parsed = EpubBookParser().parse(root)
+        val parsed = EpubBookParser(root.resolve("parser-cache")) { file ->
+            javax.imageio.ImageIO.read(file)?.let { it.width to it.height }
+        }.parse(root)
 
         val coverPath = repository.metadataCoverPath(root, parsed)
 
         assertEquals("Books/packed-cover/cover.jpg", coverPath)
-        assertEquals(listOf(1, 2, 3), root.resolve("cover.jpg").readBytes().map(Byte::toInt))
+        org.junit.Assert.assertArrayEquals(parsed.readResource("OPS/images/cover.jpg"), root.resolve("cover.jpg").readBytes())
     }
 
     @Test

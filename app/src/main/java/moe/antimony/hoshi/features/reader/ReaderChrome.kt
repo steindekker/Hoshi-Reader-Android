@@ -30,6 +30,8 @@ data class ReaderChromeState(
     val backTargetCharacter: Int? = null,
     val forwardTargetCharacter: Int? = null,
     val statistics: ReaderStatisticsChromeState? = null,
+    val pageProgress: ReaderPageProgress? = null,
+    val pageCountsFailed: Boolean = false,
 ) {
     fun progressText(
         settings: ReaderSettings,
@@ -37,12 +39,12 @@ data class ReaderChromeState(
     ): String {
         val lines = mutableListOf<String>()
         if (settings.showProgress) {
-            progressLine(currentCharacter, totalCharacters, settings, progressDisplay)
+            progressLine(currentCharacter, totalCharacters, settings, progressDisplay, pageProgress?.let { it.current to it.total })
                 .takeIf { it.isNotEmpty() }
                 ?.let(lines::add)
         }
         if (settings.showChapterProgress) {
-            progressLine(chapterCurrentCharacter, chapterTotalCharacters, settings, progressDisplay)
+            progressLine(chapterCurrentCharacter, chapterTotalCharacters, settings, progressDisplay, pageProgress?.let { it.chapterCurrent to it.chapterTotal })
                 .takeIf { it.isNotEmpty() }
                 ?.let { lines += "($it)" }
         }
@@ -55,9 +57,12 @@ data class ReaderChromeState(
         total: Int,
         settings: ReaderSettings,
         progressDisplay: ReaderProgressDisplay,
+        pages: Pair<Int, Int>?,
     ): String {
         val parts = mutableListOf<String>()
-        if (settings.showCharacters) {
+        if (settings.usesPageCounts && !pageCountsFailed) {
+            parts += pages?.let { "${it.first} / ${it.second}" } ?: "…"
+        } else if (settings.progressCount != ReaderProgressCount.Off) {
             parts += progressDisplay.countText(current)
             if (total > 0) {
                 parts[parts.lastIndex] = progressDisplay.rangeText(current, total)
@@ -154,7 +159,11 @@ data class ReaderSasayakiBottomPlaybackControls(
     val buttonWidthDp: Int,
     val iconSizeDp: Int,
     val horizontalPaddingDp: Int,
-)
+    val showRestartSentenceButton: Boolean = false,
+) {
+    val widthDp: Int
+        get() = buttonWidthDp * (if (showRestartSentenceButton) 4 else 3) + horizontalPaddingDp
+}
 
 enum class ReaderSasayakiBottomSkipButtonAction {
     Backward,
@@ -288,9 +297,12 @@ fun readerInfoBubbleMetrics(): ReaderInfoBubbleMetrics =
         cornerRadiusDp = 24,
     )
 
-fun readerSystemBarVisibility(focusMode: Boolean): ReaderSystemBarVisibility =
+fun readerSystemBarVisibility(
+    focusMode: Boolean,
+    isFullscreenImageVisible: Boolean,
+): ReaderSystemBarVisibility =
     ReaderSystemBarVisibility(
-        showStatusBar = !focusMode,
+        showStatusBar = !focusMode && !isFullscreenImageVisible,
         showNavigationBar = false,
     )
 
@@ -377,6 +389,7 @@ fun readerSasayakiBottomPlaybackControls(
         buttonWidthDp = readerSasayakiBottomPlaybackButtonWidthDp(metrics.bottomSafeAreaDp),
         iconSizeDp = readerSasayakiBottomPlaybackIconSizeDp(metrics.bottomSafeAreaDp),
         horizontalPaddingDp = 18,
+        showRestartSentenceButton = settings.showReaderRestartSentenceButton,
     )
 
 private fun readerSasayakiBottomPlaybackButtonWidthDp(bottomSafeAreaDp: Int): Int =

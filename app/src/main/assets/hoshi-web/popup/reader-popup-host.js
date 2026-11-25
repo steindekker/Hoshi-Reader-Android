@@ -6,7 +6,6 @@
     const HIGHLIGHT_LINE_SIZE = 1.5;
     const HIGHLIGHT_INLINE_MERGE_TOLERANCE = 1;
     const frames = new Map();
-    const frameSources = new WeakMap();
     let idleRootRecord = null;
     let rootHighlight = null;
     let sasayakiHighlight = null;
@@ -151,7 +150,16 @@
         return message;
     }
 
+    function syncIframeTheme(record) {
+        const {darkMode, eInkMode} = record.payload;
+        const key = `${!!darkMode}/${!!eInkMode}`;
+        if (record.themeKey === key) return;
+        record.themeKey = key;
+        record.iframe.contentWindow?.postMessage({type: 'setPopupTheme', darkMode: !!darkMode, eInkMode: !!eInkMode}, ORIGIN);
+    }
+
     function renderIframe(record) {
+        syncIframeTheme(record);
         record.iframe.contentWindow?.postMessage(iframeRenderMessage(record.payload), ORIGIN);
     }
 
@@ -169,8 +177,8 @@
         const previousHadHistory =
             historyCount(previous, 'backCount') > 0 ||
             historyCount(previous, 'forwardCount') > 0;
-        const hasNextInitialEntry = (next.initialEntryJson || null) !== null;
-        if (!hasNextInitialEntry) return false;
+        const hasNextContent = (next.initialEntryJson || null) !== null || next.sourceText != null;
+        if (!hasNextContent) return false;
         if (previousHadHistory) return true;
         const previousContentKey = previous.contentKey || null;
         const nextContentKey = next.contentKey || null;
@@ -182,6 +190,7 @@
     }
 
     function setContentReady(record, ready) {
+        if (!ready) record.revealNotified = false;
         record.contentReady = ready;
         record.shell.dataset.contentReady = String(ready);
         syncRootReveal();
@@ -190,13 +199,17 @@
     function setRevealReady(record, ready) {
         record.revealReady = ready;
         record.shell.dataset.revealReady = String(ready);
+        if (ready && record.contentReady && record.payload && !record.revealNotified) {
+            record.revealNotified = true;
+            record.iframe.contentWindow?.postMessage({ type: 'popupRevealed', popupId: record.payload.id }, ORIGIN);
+        }
     }
 
     function resetIframe(record) {
         record.iframe.contentWindow?.postMessage({ type: 'resetPopup' }, ORIGIN);
     }
 
-    function createRecord(payload = null) {
+    function createRecord() {
         const shell = document.createElement('div');
         shell.className = 'hoshi-reader-popup-shell';
         shell.dataset.contentReady = 'false';
@@ -204,13 +217,11 @@
         iframe.className = 'hoshi-reader-popup-iframe';
         iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
         shell.dataset.revealReady = 'false';
-        const record = { shell, iframe, payload, contentReady: false, revealReady: false, loaded: false, root: false };
+        const record = { shell, iframe, payload: null, contentReady: false, revealReady: false, loaded: false, root: false };
         iframe.addEventListener('load', () => {
+            record.themeKey = null;
             record.loaded = true;
-            if (record.payload) {
-                frameSources.set(iframe.contentWindow, record.payload.id);
-                renderIframe(record);
-            }
+            if (record.payload) renderIframe(record);
         });
         shell.appendChild(iframe);
         return record;
@@ -237,31 +248,24 @@
 
     function activateRecord(payload, isRoot) {
         let record = frames.get(payload.id);
-        let needsRender = false;
+        const previous = record?.payload;
         if (!record) {
             if (isRoot && idleRootRecord) {
                 record = idleRootRecord;
                 idleRootRecord = null;
-                needsRender = true;
             } else {
-                record = createRecord(payload);
+                record = createRecord();
                 ensureLayer().appendChild(record.shell);
-                needsRender = true;
             }
             frames.set(payload.id, record);
         }
-        if (shouldReplaceIframeContent(record.payload, payload)) {
-            needsRender = true;
-        }
+        const needsRender = shouldReplaceIframeContent(previous, payload);
         record.root = isRoot;
         record.payload = payload;
         if (needsRender) {
             setContentReady(record, false);
             setRevealReady(record, false);
-            resetIframe(record);
-            if (record.iframe.contentWindow) {
-                frameSources.set(record.iframe.contentWindow, payload.id);
-            }
+            if (previous) resetIframe(record);
         }
         return { record, needsRender };
     }
@@ -285,8 +289,9 @@
             resetIframe(record);
             record.loaded = false;
             record.iframe.src = payload.iframeUrl;
-        } else if (needsRender && record.loaded) {
-            renderIframe(record);
+        } else if (record.loaded) {
+            syncIframeTheme(record);
+            if (needsRender) renderIframe(record);
         }
     }
 
@@ -315,7 +320,6 @@
                 record.shell.remove();
             }
         }
-        cleanupLayerIfIdle();
     }
 
     function activeRootRecord() {
@@ -632,8 +636,10 @@
         const items = Array.isArray(payload) ? payload : (payload?.popups || []);
         rootHighlight = Array.isArray(payload) ? null : (payload?.rootHighlight || null);
         const activeIds = new Set(items.map(item => item.id));
-        items.forEach((item, index) => renderPayload(item, index));
+        // Park the outgoing root before allocating the incoming root so it can reuse the loaded iframe.
         removeMissing(activeIds);
+        items.forEach((item, index) => renderPayload(item, index));
+        cleanupLayerIfIdle();
         syncRootReveal();
     }
 
@@ -647,7 +653,7 @@
 
     function resolveMessage(popupId, id, body) {
         const record = frames.get(popupId);
-        record?.iframe.contentWindow?.postMessage({ type: 'reply', id, body }, ORIGIN);
+        record?.iframe.contentWindow?.postMessage({ type: 'reply', popupId, id, body }, ORIGIN);
     }
 
     function highlightSelection(popupId, count) {
@@ -692,12 +698,11 @@
     window.addEventListener('message', function(event) {
         if (event.origin !== ORIGIN) return;
         const data = event.data || {};
-        const popupId = data.popupId || frameSources.get(event.source);
+        const popupId = data.popupId;
         if (data.source !== 'hoshi-popup-iframe' || !popupId) return;
         const record = frames.get(popupId);
-        if (data.name === 'contentReady' && record) {
-            setContentReady(record, true);
-        }
+        if (!record || event.source !== record.iframe.contentWindow) return;
+        if (data.name === 'contentReady') setContentReady(record, true);
         const body = data.name === 'textSelected' ? adjustSelectionBody(popupId, data.body) : data.body;
         postNative({
             name: data.name,
@@ -727,6 +732,7 @@
             writing-mode: horizontal-tb;
             direction: ltr;
             text-orientation: mixed;
+            color-scheme: light;
             background: #fff;
             border: 1px solid rgba(120, 120, 128, 0.36);
             border-radius: 10px;
@@ -758,6 +764,7 @@
             pointer-events: none;
         }
         #${LAYER_ID} .hoshi-reader-popup-shell[data-dark-mode="true"] {
+            color-scheme: dark;
             background: #000;
             border-color: rgba(255, 255, 255, 0.34);
             box-shadow: 0 3px 12px rgba(0, 0, 0, 0.44);
@@ -812,6 +819,7 @@
             border-bottom-color: rgba(255, 255, 255, 0.34);
         }
         #${LAYER_ID} .hoshi-reader-popup-control {
+            display: block;
             appearance: none;
             width: 34px;
             height: 34px;

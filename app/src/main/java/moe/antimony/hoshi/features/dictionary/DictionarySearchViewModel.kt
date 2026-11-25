@@ -30,7 +30,7 @@ import moe.antimony.hoshi.ui.withErrorDetails
 internal interface DictionarySearchRepository {
     val dictionarySettings: Flow<DictionarySettings>
     val audioSettings: Flow<AudioSettings>
-    suspend fun rebuildLookupQuery()
+    suspend fun ensureLookupQueryReady()
     fun lookup(query: String, maxResults: Int, scanLength: Int, options: LookupOptions): List<LookupResult>
     fun dictionaryStyles(): Map<String, String>
     fun lookupKanji(kanji: String): KanjiResult = KanjiResult(kanji, emptyArray())
@@ -45,8 +45,8 @@ internal class AndroidDictionarySearchRepository @Inject constructor(
     override val dictionarySettings: Flow<DictionarySettings> = dictionarySettingsRepository.settings
     override val audioSettings: Flow<AudioSettings> = audioSettingsRepository.settings
 
-    override suspend fun rebuildLookupQuery() {
-        dictionaryRepository.rebuildLookupQuery()
+    override suspend fun ensureLookupQueryReady() {
+        dictionaryRepository.ensureLookupQueryReady()
     }
 
     override fun lookup(query: String, maxResults: Int, scanLength: Int, options: LookupOptions): List<LookupResult> =
@@ -62,6 +62,7 @@ internal class AndroidDictionarySearchRepository @Inject constructor(
 @HiltViewModel
 internal class DictionarySearchViewModel : ViewModel {
     private val repository: DictionarySearchRepository
+    private val history: DictionaryLookupHistory
     private val ioDispatcher: CoroutineDispatcher
     private val injectedScope: CoroutineScope?
     private val scope: CoroutineScope
@@ -70,9 +71,11 @@ internal class DictionarySearchViewModel : ViewModel {
     @Inject
     constructor(
         repository: DictionarySearchRepository,
+        history: DictionaryLookupHistory,
         @IoDispatcher ioDispatcher: CoroutineDispatcher,
     ) : this(
         repository = repository,
+        history = history,
         coroutineScope = null,
         ioDispatcher = ioDispatcher,
         marker = Unit,
@@ -80,10 +83,12 @@ internal class DictionarySearchViewModel : ViewModel {
 
     internal constructor(
         repository: DictionarySearchRepository,
+        history: DictionaryLookupHistory,
         coroutineScope: CoroutineScope,
         ioDispatcher: CoroutineDispatcher,
     ) : this(
         repository = repository,
+        history = history,
         coroutineScope = coroutineScope,
         ioDispatcher = ioDispatcher,
         marker = Unit,
@@ -91,11 +96,13 @@ internal class DictionarySearchViewModel : ViewModel {
 
     private constructor(
         repository: DictionarySearchRepository,
+        history: DictionaryLookupHistory,
         coroutineScope: CoroutineScope?,
         ioDispatcher: CoroutineDispatcher,
         @Suppress("UNUSED_PARAMETER") marker: Unit,
     ) : super() {
         this.repository = repository
+        this.history = history
         this.ioDispatcher = ioDispatcher
         injectedScope = coroutineScope
         collectInitialState()
@@ -105,13 +112,19 @@ internal class DictionarySearchViewModel : ViewModel {
 
     val uiState: StateFlow<DictionarySearchUiState> = _uiState.asStateFlow()
 
+    val historyState: StateFlow<DictionaryLookupHistoryState> get() = history.state
+    fun deleteHistory(text: String) = history.delete(text)
+    fun clearHistory() = history.clear()
+    fun retryHistoryLoad() = history.retryLoad()
+    fun dismissHistoryError() = history.dismissOperationError()
+
     private var observedEffectiveProfileId: String? = null
     private var lookupVersion: Int = 0
 
     private fun collectInitialState() {
         scope.launch {
             withContext(ioDispatcher) {
-                runCatching { repository.rebuildLookupQuery() }
+                runCatching { repository.ensureLookupQueryReady() }
             }
         }
         scope.launch {
@@ -175,13 +188,14 @@ internal class DictionarySearchViewModel : ViewModel {
         }
         scope.launch {
             withContext(ioDispatcher) {
-                runCatching { repository.rebuildLookupQuery() }
+                runCatching { repository.ensureLookupQueryReady() }
             }
         }
     }
 
     fun runLookup() {
         val query = _uiState.value.query
+        history.record(query)
         val dictionarySettings = _uiState.value.dictionarySettings.normalized()
         val requestVersion = ++lookupVersion
         scope.launch {
@@ -196,7 +210,7 @@ internal class DictionarySearchViewModel : ViewModel {
                             lookup = { error("lookup should not run for blank query") },
                         )
                     } else {
-                        repository.rebuildLookupQuery()
+                        repository.ensureLookupQueryReady()
                         val styles = repository.dictionaryStyles()
                         DictionarySearchContent.runLookup(
                             query = query,

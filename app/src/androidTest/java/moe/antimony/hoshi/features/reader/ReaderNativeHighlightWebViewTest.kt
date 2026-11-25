@@ -34,8 +34,8 @@ class ReaderNativeHighlightWebViewTest {
         }
         composeRule.waitForIdle()
         try {
-            for (mode in ReaderViewMode.entries) for (vertical in listOf(false, true)) {
-                val settings = ReaderSettings(viewMode = mode, verticalWriting = vertical, visualNovelRevealSpeed = 0)
+            for (paragraph in listOf(false, true)) for (mode in ReaderViewMode.entries.filter { !paragraph || it == ReaderViewMode.Paginated }) for (vertical in listOf(false, true)) {
+                val settings = ReaderSettings(viewMode = mode, paragraphMode = paragraph, verticalWriting = vertical, textAnimation = false)
                 val loaded = CountDownLatch(1)
                 instrumentation.runOnMainSync {
                     val density = webView.resources.displayMetrics.density
@@ -46,13 +46,14 @@ class ReaderNativeHighlightWebViewTest {
                     webView.webViewClient = object : WebViewClient() {
                         override fun onPageFinished(view: WebView, url: String) { loaded.countDown() }
                     }
+                    val body = readerFixtureBody(mode, "<p>前。<ruby>瑞<rp>(</rp><rt><span>みず</span></rt><rp>)</rp>々<rt>みず</rt></ruby>しさ😀です。</p>")
                     webView.loadDataWithBaseURL(null, """
                         <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
                         <script>window.HoshiReaderRestore={postMessage:()=>window.testRestored=true};</script>
                         $styles<style>$viewport</style>$script
-                        <script>${assets.languageJapaneseJs}
-                        ${assets.selectionJapaneseJs}
-                        ${assets.selectionJs}</script></head><body><p>前。<ruby>瑞<rp>(</rp><rt><span>みず</span></rt><rp>)</rp>々<rt>みず</rt></ruby>しさ😀です。</p></body></html>
+                        <script>${assets.languageAssets.languageJapaneseJs}
+                        ${assets.languageAssets.selectionJapaneseJs}
+                        ${assets.selectionJs}</script></head>$body</html>
                     """.trimIndent(), "text/html", "utf-8", null)
                 }
                 assertTrue(loaded.await(15, TimeUnit.SECONDS))
@@ -62,7 +63,7 @@ class ReaderNativeHighlightWebViewTest {
                     Triple("elementStart", "々", 3), Triple("elementEnd", "瑞々", 2),
                     Triple("annotationOnly", "", 0),
                 )) for (backward in listOf(false, true)) {
-                    val description = "$mode vertical=$vertical $kind backward=$backward"
+                    val description = "$mode paragraph=$paragraph vertical=$vertical $kind backward=$backward"
                     val response = JSONObject(evaluate(webView, """
                         (() => {
                             const h=hoshiHighlights, ruby=document.querySelector('ruby');
@@ -112,6 +113,7 @@ class ReaderNativeHighlightWebViewTest {
                         assertTrue("$description creates a highlight", !response.isNull("created"))
                         val created = response.getJSONObject("created")
                         assertEquals(description, "created", created.getString("action"))
+                        if (mode == ReaderViewMode.Continuous) assertEquals(description, 0, created.getInt("chapterIndex"))
                         assertEquals(description, text, created.getString("text"))
                         assertEquals(description, rawOffset, created.getInt("offset"))
                         assertEquals(description, rawOffset - 1, created.getInt("start"))

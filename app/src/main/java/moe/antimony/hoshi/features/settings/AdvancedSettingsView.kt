@@ -30,20 +30,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.features.anki.AnkiConnectView
 import moe.antimony.hoshi.features.audio.AudioSettingsView
 import moe.antimony.hoshi.features.backup.BackupSettingsView
 import moe.antimony.hoshi.features.sasayaki.SasayakiSettingsView
-import moe.antimony.hoshi.features.sync.SyncSettingsView
 import moe.antimony.hoshi.features.wallpaper.BookCoverWallpaperSettingsView
 
 @Composable
 fun AdvancedSettingsView(
     onClose: () -> Unit,
+    onOpenSync: () -> Unit,
     onBooksRestored: () -> Unit = {},
     onOpenTts: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -67,13 +68,6 @@ fun AdvancedSettingsView(
         BackupSettingsView(
             onClose = { destination = null },
             onBooksRestored = onBooksRestored,
-            modifier = modifier,
-        )
-        return
-    }
-    if (destination == AdvancedDestination.Syncing) {
-        SyncSettingsView(
-            onClose = { destination = null },
             modifier = modifier,
         )
         return
@@ -115,7 +109,13 @@ fun AdvancedSettingsView(
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                                 leadingContent = { Icon(row.icon.imageVector(), contentDescription = null) },
                                 headlineContent = { Text(stringResource(row.titleRes)) },
-                                modifier = Modifier.clickable { if (row.destination == AdvancedDestination.Tts) onOpenTts() else destination = row.destination },
+                                modifier = Modifier.clickable {
+                                    when (row.destination) {
+                                        AdvancedDestination.Tts -> onOpenTts()
+                                        AdvancedDestination.Syncing -> onOpenSync()
+                                        else -> destination = row.destination
+                                    }
+                                },
                             )
                             if (index != section.rows.lastIndex) {
                                 GroupDivider()
@@ -124,15 +124,19 @@ fun AdvancedSettingsView(
                     }
                 }
             }
-            if (isAppLanguagePickerSupported()) {
-                item {
-                    val context = LocalContext.current
-                    GroupCard {
-                        AppLanguageListItem(
-                            selected = context.currentAppLanguageMode(),
-                            onSelected = { mode -> context.setAppLanguageMode(mode) },
-                        )
-                    }
+            item {
+                var languageMode by remember { mutableStateOf(currentAppLanguageMode()) }
+                LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                    languageMode = currentAppLanguageMode()
+                }
+                GroupCard {
+                    AppLanguageListItem(
+                        selected = languageMode,
+                        onSelected = { mode ->
+                            setAppLanguageMode(mode)
+                            languageMode = currentAppLanguageMode()
+                        },
+                    )
                 }
             }
         }
@@ -189,7 +193,7 @@ internal fun advancedSettingsSections(): List<AdvancedSettingsSection> =
         AdvancedSettingsSection(
             rows = listOf(
                 AdvancedSettingsRow(
-                    titleRes = R.string.sync_ttu_sync,
+                    titleRes = R.string.sync_title,
                     destination = AdvancedDestination.Syncing,
                     icon = AdvancedSettingsIcon.Cloud,
                 ),

@@ -41,7 +41,6 @@ import moe.antimony.hoshi.features.reader.ReaderColorSettingRow
 import moe.antimony.hoshi.features.settings.SettingsDetailScaffold
 import moe.antimony.hoshi.features.settings.SettingsLoadState
 import moe.antimony.hoshi.features.settings.rememberSettingsLoader
-import kotlinx.coroutines.flow.combine
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,12 +51,8 @@ fun SasayakiSettingsView(
     val appContainer = LocalHoshiUiDependencies.current
     val scope = rememberCoroutineScope()
     val repository = appContainer.sasayakiSettingsRepository
-    val syncRepository = appContainer.syncSettingsRepository
-    val settingsFlow = remember(repository, syncRepository) {
-        combine(repository.settings, syncRepository.settings) { settings, sync -> settings to sync }
-    }
-    val settingsLoader = settingsFlow.rememberSettingsLoader()
-    val settings = (settingsLoader.state as? SettingsLoadState.Loaded)?.value?.first
+    val settingsLoader = repository.settings.rememberSettingsLoader()
+    val settings = (settingsLoader.state as? SettingsLoadState.Loaded)?.value
     var skipActionMenuExpanded by remember { mutableStateOf(false) }
     var colorDialogRow by remember { mutableStateOf<SasayakiColorRow?>(null) }
 
@@ -74,7 +69,7 @@ fun SasayakiSettingsView(
         onClose = onClose,
         onRetry = settingsLoader.retry,
         modifier = modifier,
-    ) { innerPadding, (loadedSettings, loadedSyncSettings) ->
+    ) { innerPadding, loadedSettings ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -107,19 +102,6 @@ fun SasayakiSettingsView(
                                 )
                             },
                         )
-                        if (loadedSettings.enabled && loadedSyncSettings.enabled) {
-                            SettingsDivider()
-                            ListItem(
-                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                headlineContent = { Text(stringResource(R.string.sync_ttu_sync)) },
-                                trailingContent = {
-                                    Switch(
-                                        checked = loadedSettings.syncEnabled,
-                                        onCheckedChange = { save { current -> current.copy(syncEnabled = it) } },
-                                    )
-                                },
-                            )
-                        }
                         SettingsDivider()
                         ListItem(
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -145,6 +127,20 @@ fun SasayakiSettingsView(
                                         checked = loadedSettings.reverseVerticalReaderSkipButtons,
                                         onCheckedChange = {
                                             save { current -> current.copy(reverseVerticalReaderSkipButtons = it) }
+                                        },
+                                    )
+                                },
+                            )
+                            SettingsDivider()
+                            ListItem(
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                headlineContent = { Text(stringResource(R.string.reader_show_restart_sentence_button)) },
+                                supportingContent = { Text(stringResource(R.string.reader_show_restart_sentence_button_help)) },
+                                trailingContent = {
+                                    Switch(
+                                        checked = loadedSettings.showReaderRestartSentenceButton,
+                                        onCheckedChange = {
+                                            save { current -> current.copy(showReaderRestartSentenceButton = it) }
                                         },
                                     )
                                 },
@@ -202,6 +198,24 @@ fun SasayakiSettingsView(
                                 Switch(
                                     checked = loadedSettings.autoPause,
                                     onCheckedChange = { save { current -> current.copy(autoPause = it) } },
+                                )
+                            },
+                        )
+                        SettingsDivider()
+                        Text(
+                            text = stringResource(R.string.reader_paragraph_mode),
+                            color = colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        )
+                        ListItem(
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            headlineContent = { Text(stringResource(R.string.sasayaki_page_advance)) },
+                            trailingContent = {
+                                Switch(
+                                    checked = loadedSettings.pageAdvance,
+                                    onCheckedChange = { save { current -> current.copy(pageAdvance = it) } },
                                 )
                             },
                         )

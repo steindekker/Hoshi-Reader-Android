@@ -45,7 +45,9 @@ class SasayakiPlayerFacadeTest {
         val player = playerFor(controller)
 
         player.setDelay(0.5)
+        player.saveDelay()
         player.setRate(1.5f)
+        player.saveRate()
         player.clearAudio()
         player.togglePlayback()
         player.pausePlayback()
@@ -65,7 +67,9 @@ class SasayakiPlayerFacadeTest {
         assertEquals(
             listOf(
                 "setDelay:0.5",
+                "saveDelay",
                 "setRate:1.5",
+                "saveRate",
                 "clearAudio",
                 "togglePlayback",
                 "pausePlayback:true",
@@ -129,6 +133,8 @@ class SasayakiPlayerFacadeTest {
     private object NoOpPlaybackRepository : SasayakiPlaybackRepository {
         override suspend fun load(): SasayakiPlaybackData? = null
 
+        override suspend fun saveVolumeGainDb(value: Int) = Unit
+
         override suspend fun save(playback: SasayakiPlaybackData) = Unit
     }
 
@@ -139,7 +145,7 @@ class SasayakiPlayerFacadeTest {
 
         override fun load(
             request: SasayakiPlaybackRuntimeLoadRequest,
-            getCurrentChapterIndex: () -> Int,
+            getCurrentChapterIndex: () -> Int?,
             onCue: (SasayakiMatch, Boolean, SasayakiCueRevealSource) -> Unit,
             onClearCue: () -> Unit,
         ): SasayakiPlaybackControllerContract {
@@ -168,14 +174,29 @@ class SasayakiPlayerFacadeTest {
         override val hasMatch = true
         override val delay = 0.35
         override val rate = 1.25f
+        override val volumeGainError = null
         override val audioStorageSummary = "content URI"
         val commands = mutableListOf<String>()
+        override suspend fun flushSaves() = Unit
+        override fun applySyncedPlayback(value: SasayakiPlaybackData) = Unit
+
         override fun setDelay(value: Double) {
             commands += "setDelay:$value"
         }
 
+        override fun saveDelay() {
+            commands += "saveDelay"
+        }
+
+        override fun setVolumeGainDb(value: Int) = Unit
+        override fun saveVolumeGain() = Unit
+
         override fun setRate(value: Float) {
             commands += "setRate:$value"
+        }
+
+        override fun saveRate() {
+            commands += "saveRate"
         }
 
         override fun importAudio(audioUri: android.net.Uri, copiedAudioFileName: String?) {
@@ -211,6 +232,10 @@ class SasayakiPlayerFacadeTest {
             commands += "previousCue"
         }
 
+        override fun restartCurrentCue() {
+            commands += "restartCurrentCue"
+        }
+
         override fun skipForward(seconds: Int) {
             commands += "skipForward:$seconds"
         }
@@ -227,6 +252,8 @@ class SasayakiPlayerFacadeTest {
             commands += "updateMatchData:${matchData?.matches?.size ?: 0}"
         }
 
+        override fun handlePageChanged(chapterIndex: Int, cueIds: List<String>, play: Boolean?) {}
+        override fun clearPageRange() {}
         override fun restoreCueDisplay() = Unit
 
         override fun findCue(chapterIndex: Int, offset: Int): SasayakiMatch? {

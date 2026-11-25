@@ -10,8 +10,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import moe.antimony.hoshi.R
@@ -21,26 +19,20 @@ import moe.antimony.hoshi.features.settings.SettingsLoadState
 import moe.antimony.hoshi.features.settings.map
 import moe.antimony.hoshi.features.reader.ReaderSettings
 import moe.antimony.hoshi.features.reader.ReaderSettingsRepository
-import moe.antimony.hoshi.features.sync.SyncSettingsRepository
+import moe.antimony.hoshi.features.sync.SyncStorage
 import moe.antimony.hoshi.ui.UiText
 import moe.antimony.hoshi.ui.ErrorDiagnosticEvents
 import moe.antimony.hoshi.ui.withErrorDetails
 
 internal data class StatisticsSettingsValues(
     val settings: ReaderSettings,
-    val syncEnabled: Boolean,
     val archiveSummary: StatisticsArchiveSummary,
 ) {
     val archivedBookCount: Int get() = archiveSummary.bookCount
 }
 
-internal data class StatisticsSettingsPreferences(
-    val settings: ReaderSettings,
-    val syncEnabled: Boolean,
-)
-
 internal data class StatisticsSettingsUiState(
-    val preferences: SettingsLoadState<StatisticsSettingsPreferences> = SettingsLoadState.Loading,
+    val preferences: SettingsLoadState<ReaderSettings> = SettingsLoadState.Loading,
     val archive: SettingsLoadState<StatisticsArchiveSummary> = SettingsLoadState.Loading,
     val isWorking: Boolean = false,
     val error: UiText? = null,
@@ -54,8 +46,7 @@ internal data class StatisticsSettingsUiState(
                 currentArchive is SettingsLoadState.Failed -> currentArchive
                 currentPreferences is SettingsLoadState.Loaded -> currentArchive.map { summary ->
                     StatisticsSettingsValues(
-                        settings = currentPreferences.value.settings,
-                        syncEnabled = currentPreferences.value.syncEnabled,
+                        settings = currentPreferences.value,
                         archiveSummary = summary,
                     )
                 }
@@ -64,9 +55,7 @@ internal data class StatisticsSettingsUiState(
         }
 
     val settings: ReaderSettings?
-        get() = (preferences as? SettingsLoadState.Loaded)?.value?.settings
-    val syncEnabled: Boolean
-        get() = (preferences as? SettingsLoadState.Loaded)?.value?.syncEnabled == true
+        get() = (preferences as? SettingsLoadState.Loaded)?.value
     val archivedBookCount: Int
         get() = (archive as? SettingsLoadState.Loaded)?.value?.bookCount ?: 0
 }
@@ -74,7 +63,6 @@ internal data class StatisticsSettingsUiState(
 @HiltViewModel
 internal class StatisticsSettingsViewModel internal constructor(
     private val readerSettings: Flow<ReaderSettings>,
-    private val syncEnabled: Flow<Boolean>,
     private val updateSettings: suspend ((ReaderSettings) -> ReaderSettings) -> Unit,
     private val repository: StatisticsRepository,
     private val coroutineScope: CoroutineScope?,
@@ -82,15 +70,20 @@ internal class StatisticsSettingsViewModel internal constructor(
     @Inject
     constructor(
         readerSettingsRepository: ReaderSettingsRepository,
-        syncSettingsRepository: SyncSettingsRepository,
+        syncStorage: SyncStorage,
         repository: StatisticsRepository,
     ) : this(
         readerSettingsRepository.settings,
-        syncSettingsRepository.settings.map { it.enabled },
         readerSettingsRepository::update,
         repository,
         null,
-    )
+    ) {
+        scope.launch {
+            syncStorage.booksChanged.collect {
+                if (syncStorage.applyReaderState == null) reload()
+            }
+        }
+    }
 
     private val scope get() = coroutineScope ?: viewModelScope
     private val _uiState = MutableStateFlow(StatisticsSettingsUiState())
@@ -110,10 +103,8 @@ internal class StatisticsSettingsViewModel internal constructor(
         }
         settingsJob = scope.launch {
             try {
-                combine(readerSettings, syncEnabled) { settings, enabled ->
-                    StatisticsSettingsPreferences(settings, enabled)
-                }.collect { preferences ->
-                    _uiState.update { it.copy(preferences = SettingsLoadState.Loaded(preferences)) }
+                readerSettings.collect { settings ->
+                    _uiState.update { it.copy(preferences = SettingsLoadState.Loaded(settings)) }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled

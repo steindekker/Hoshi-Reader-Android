@@ -22,6 +22,7 @@ import moe.antimony.hoshi.features.settings.settingsLoadStates
 enum class TtsPreviewState { Idle, Preparing, Playing }
 
 @OptIn(UnstableApi::class)
+@kotlin.OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class TtsViewModel @Inject constructor(
     private val repository: TtsRepository,
@@ -33,6 +34,17 @@ class TtsViewModel @Inject constructor(
     val playback: TtsPlaybackController,
     @param:ApplicationContext private val context: Context,
 ) : ViewModel() {
+    private val mutableToggleError = MutableStateFlow<TtsError?>(null)
+    val toggleError = mutableToggleError.asStateFlow()
+
+    fun enabled(enabled: Boolean) {
+        viewModelScope.launch {
+            try { repository.enabled(enabled); mutableToggleError.value = null }
+            catch (error: CancellationException) { throw error }
+            catch (error: Exception) { mutableToggleError.value = error.toTtsError(TtsFailure.Storage) }
+        }
+    }
+
     private val mutableError = MutableStateFlow<TtsError?>(null)
     private val mutableReadingError = MutableStateFlow<TtsError?>(null)
     val readingError = mutableReadingError.asStateFlow()
@@ -61,13 +73,12 @@ class TtsViewModel @Inject constructor(
         }
     }
 
-    private val preferencesLoadAttempt = MutableStateFlow(0)
-    val preferencesLoadState = preferencesLoadAttempt.flatMapLatest {
+    val preferencesLoadState = repository.preferencesReloads.flatMapLatest {
         repository.preferences.settingsLoadStates()
     }.stateIn(viewModelScope, SharingStarted.Eagerly, SettingsLoadState.Loading)
     val preferences = preferencesLoadState.map { (it as? SettingsLoadState.Loaded)?.value }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
-    fun retryPreferences() { preferencesLoadAttempt.update { it + 1 } }
+    fun retryPreferences() { repository.retryPreferences() }
     private val mutableCatalog = MutableStateFlow<TtsCatalog?>(null)
     val catalog = mutableCatalog.asStateFlow()
     private val mutableEngines = MutableStateFlow<List<TtsEngineInfo>>(emptyList())
@@ -88,33 +99,67 @@ class TtsViewModel @Inject constructor(
     private var previewPlayer: ExoPlayer? = null
     private var previewFile: java.io.File? = null
 
+    init {
+        viewModelScope.launch {
+            var languageId: String? = null
+            preferencesLoadState.collect { state ->
+                val settings = (state as? SettingsLoadState.Loaded)?.value?.settings
+                val languageChanged = languageId != null && settings != null && languageId != settings.languageId
+                languageId = settings?.languageId
+                if (languageChanged) {
+                    stopPreview()
+                    mutableCatalog.value = null
+                    mutableError.value = null
+                    refresh()
+                }
+                if (settings?.enabled != true) {
+                    stopPreview()
+                    catalogGeneration++
+                    refreshJob?.cancel()
+                    catalogBusy.value = false
+                }
+            }
+        }
+    }
+
     fun refresh(force: Boolean = false) {
         val generation = ++catalogGeneration
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
             var fallback: TtsCatalog? = null
             try {
-                val settings = repository.preferences.first().settings
-                val refreshCatalog = force || !settings.isCustomSource() && TtsOnlineSource.from(settings.engine) == null
-                val optional = settings.customSource()?.takeIf { it.protocol == TtsCustomProtocol.OpenAi }
-                fallback = optional?.let { TtsCatalog(it.id, it.voiceChoices(emptyList(), settings.voice)) }
-                val cached = engine.cachedCatalog(settings)
-                fallback = cached ?: fallback
-                mutableError.value = null
-                mutableCatalog.value = cached ?: fallback
-                catalogBusy.value = refreshCatalog || cached == null
-                mutableEngines.value = engine.installedEngines()
-                mutableCatalog.value = if (!refreshCatalog && cached != null) cached else engine.catalog(settings, refreshCatalog)
-                if (mutableCatalog.value?.voices.isNullOrEmpty() && settings.customSource()?.protocol != TtsCustomProtocol.OpenAi) mutableError.value = TtsFailure.MissingJapanese.toError()
-            } catch (error: TimeoutCancellationException) { mutableError.value = error.toTtsError(TtsFailure.Timeout) }
+                repository.whileEnabled { current ->
+                    val settings = current.settings
+                    val refreshCatalog = force || !settings.isCustomSource() && TtsOnlineSource.from(settings.engine) == null
+                    val optional = settings.customSource()?.takeIf { it.protocol == TtsCustomProtocol.OpenAi }
+                    fallback = optional?.let { TtsCatalog(it.id, it.voiceChoices(emptyList(), settings.voice)) }
+                    val cached = engine.cachedCatalog(settings)
+                    if (generation != catalogGeneration) return@whileEnabled
+                    fallback = cached ?: fallback
+                    mutableError.value = null
+                    mutableCatalog.value = cached ?: fallback
+                    catalogBusy.value = refreshCatalog || cached == null
+                    val installed = engine.installedEngines()
+                    if (generation != catalogGeneration) return@whileEnabled
+                    mutableEngines.value = installed
+                    val loaded = if (!refreshCatalog && cached != null) cached else engine.catalog(settings, refreshCatalog)
+                    if (generation != catalogGeneration) return@whileEnabled
+                    mutableCatalog.value = loaded
+                    if (mutableCatalog.value?.voices.isNullOrEmpty() && settings.customSource()?.protocol != TtsCustomProtocol.OpenAi) mutableError.value = TtsFailure.MissingLanguage.toError()
+                }
+            } catch (error: TimeoutCancellationException) { if (generation == catalogGeneration) mutableError.value = error.toTtsError(TtsFailure.Timeout) }
             catch (error: CancellationException) { throw error }
-            catch (error: Exception) { mutableCatalog.value = fallback; mutableError.value = error.toTtsError(TtsFailure.EngineUnavailable) }
+            catch (error: Exception) { if (generation == catalogGeneration) { mutableCatalog.value = fallback; mutableError.value = error.toTtsError(TtsFailure.EngineUnavailable) } }
             finally { if (generation == catalogGeneration) catalogBusy.value = false }
         }
     }
     fun settings(update: TtsSettingsUpdate) {
+        val languageId = preferences.value?.settings?.languageId ?: return
+        settings(languageId, update)
+    }
+    fun settings(languageId: String, update: TtsSettingsUpdate) {
         viewModelScope.launch { try {
-            val (previous, value) = repository.settings(update)
+            val (previous, value) = repository.settings(languageId, update)
             val playbackOnly = previous.synthesisSettings() == value.synthesisSettings()
             if (!playbackOnly) { stopPreview(); dismissError() }
             previewPlayer?.setPlaybackSpeed(normalizeTtsPlaybackRate(value.playbackRate))
@@ -153,12 +198,13 @@ class TtsViewModel @Inject constructor(
     catch (error: Exception) { error.toTtsError(TtsFailure.Storage) }
 
     /** Tests the draft by synthesizing a sample without saving it or changing the active voice. */
-    suspend fun testConfiguration(source: TtsOnlineSource, region: String, key: String, sample: String): TtsError? = try {
+    suspend fun testConfiguration(source: TtsOnlineSource, region: String, key: String, sample: String, languageId: String? = null): TtsError? = try {
+        val loaded = repository.preferences.first()
+        val current = loaded.copy(settings = loaded.settings.copy(languageId = languageId ?: loaded.settings.languageId))
         val config = configuration(source, region, key)
-        val current = repository.preferences.first()
         val draft = current.copy(settings = current.settings.copy(engine = source.id, sharedRate = 1f, pitch = 0f,
-            online = current.settings.online + (source.id to config), parameters = emptyMap(), routingBySource = emptyMap()))
-        audio.export(TtsSentence(0, 0, 0, sample), null, draft).delete()
+            online = current.settings.online + (source.id to config), parameters = emptyMap(), routingBySource = emptyMap(), routingByLanguageAndSource = emptyMap()))
+        exportWhileEnabled(null, draft) { TtsSentence(0, 0, 0, sample) }?.delete()
         null
     } catch (error: TimeoutCancellationException) { error.toTtsError(TtsFailure.Timeout) }
     catch (error: CancellationException) { throw error }
@@ -180,11 +226,12 @@ class TtsViewModel @Inject constructor(
         null
     } catch (error: CancellationException) { throw error }
     catch (error: Exception) { error.toTtsError(TtsFailure.Storage) }
-    suspend fun testSource(source: TtsCustomSource, key: String, removeKey: Boolean, sample: String): TtsError? = try {
+    suspend fun testSource(source: TtsCustomSource, key: String, removeKey: Boolean, sample: String, languageId: String? = null): TtsError? = try {
+        val loaded = repository.preferences.first()
+        val current = loaded.copy(settings = loaded.settings.copy(languageId = languageId ?: loaded.settings.languageId))
         val draft = customDraft(source, key, removeKey)
-        val current = repository.preferences.first()
         val settings = current.settings.copy(customSources = current.settings.customSources.filterNot { it.id == draft.id } + draft).selectSource(draft.id)
-        audio.export(TtsSentence(0, 0, 0, sample), null, current.copy(settings = settings.forVoice(settings.voice))).delete()
+        exportWhileEnabled(null, current.copy(settings = settings.forVoice(settings.voice))) { TtsSentence(0, 0, 0, sample) }?.delete()
         null
     } catch (error: TimeoutCancellationException) { error.toTtsError(TtsFailure.Timeout) }
     catch (error: CancellationException) { throw error }
@@ -199,7 +246,7 @@ class TtsViewModel @Inject constructor(
     catch (error: Exception) { error.toTtsError(TtsFailure.Storage) }
     suspend fun sourceModels(source: TtsCustomSource, key: String, removeKey: Boolean): List<String> {
         val encrypted = cipher.update(key, source.id, source.encryptedKey, removeKey)
-        return engine.models(source.copy(encryptedKey = encrypted))
+        return repository.whileEnabled { engine.models(source.copy(encryptedKey = encrypted)) }.orEmpty()
     }
     suspend fun save(word: TtsWord): TtsWordError? = try {
         repository.save(word.copy(surface = if (word.regex) word.surface else word.surface.trim()))
@@ -217,10 +264,11 @@ class TtsViewModel @Inject constructor(
         previewJob = viewModelScope.launch {
             mutablePreviewState.value = TtsPreviewState.Preparing
             try {
-                val config = snapshot ?: repository.preferences.first()
-                val file = audio.export(sentence, bookId, config)
+                val file = exportWhileEnabled(bookId, snapshot) { sentence } ?: return@launch
                 previewFile = file
-                val playbackRate = repository.preferences.first().settings.playbackRate
+                val current = repository.preferences.first().settings
+                if (!current.enabled || generation != previewGeneration) { stopPreview(); return@launch }
+                val playbackRate = current.playbackRate
                 previewPlayer = ExoPlayer.Builder(context).build().apply {
                     setPlaybackSpeed(playbackRate)
                     setAudioAttributes(androidx.media3.common.AudioAttributes.Builder().setUsage(androidx.media3.common.C.USAGE_MEDIA).setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_SPEECH).build(), true)
@@ -251,9 +299,26 @@ class TtsViewModel @Inject constructor(
         previewFile?.delete(); previewFile = null
     }
     suspend fun sourceSentence(book: moe.antimony.hoshi.epub.EpubBook, chapter: Int, selection: moe.antimony.hoshi.features.reader.ReaderSelectionData): TtsSentence =
-        books.selection(book, chapter, selection.sentence, selection.normalizedOffset, selection.sentenceOffset)
+        books.selection(book, chapter, selection.sentence, selection.normalizedOffset, selection.sentenceOffset, repository.preferences.first().settings.splitAtClausePunctuation)
 
-    suspend fun sentenceAudio(sentence: TtsSentence, bookId: String?): java.io.File = audio.export(sentence, bookId, repository.preferences.first())
+    suspend fun chapterSentences(book: moe.antimony.hoshi.epub.EpubBook, chapter: Int, splitAtClausePunctuation: Boolean = false): List<TtsSentence> =
+        books.chapter(book, chapter, splitAtClausePunctuation)
+
+    suspend fun sentenceAudio(bookId: String?, sentence: suspend () -> TtsSentence): java.io.File? =
+        exportWhileEnabled(bookId, sentence = sentence)
+
+    private suspend fun exportWhileEnabled(bookId: String?, snapshot: TtsPreferences? = null, sentence: suspend () -> TtsSentence): java.io.File? {
+        var file: java.io.File? = null
+        var delivered = false
+        try {
+            val result = repository.whileEnabled { current ->
+                if (snapshot != null && snapshot.settings.languageId != current.settings.languageId) return@whileEnabled null
+                audio.export(sentence(), bookId, snapshot ?: current).also { file = it }
+            }
+            delivered = result != null
+            return result
+        } finally { if (!delivered) file?.delete() }
+    }
     fun dismissError() { mutableError.value = null; playback.clearError() }
     override fun onCleared() { stopPreview() }
 }

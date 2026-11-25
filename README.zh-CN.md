@@ -9,9 +9,9 @@
 
 [English](README.md) | **简体中文**
 
-Hoshi Reader Android 是一款面向 Android 日语沉浸学习的轻量 EPUB 阅读器 App，支持 Yomitan 辞典查词、Anki 制卡、有声书跟读，以及墨水屏专用的模式选项。
+Hoshi Reader Android 是一款面向日语、英语、汉语与韩语沉浸学习的 EPUB 阅读器，集成 Yomitan 辞典查词、Anki 制卡、有声书跟读和 TTS 朗读，并针对墨水屏优化。
 
-本项目是 [Hoshi Reader](https://github.com/Manhhao/Hoshi-Reader) 的 Android 原生复刻版。
+本项目将 [Hoshi Reader](https://github.com/Manhhao/Hoshi-Reader) 带到 Android，提供原生界面和 Android 专属功能。
 
 <table>
   <tr>
@@ -40,67 +40,58 @@ Hoshi Reader Android 是一款面向 Android 日语沉浸学习的轻量 EPUB �
 
 ### 书架
 
-- 单本、批量或按文件夹递归导入 EPUB，并在书架查看阅读进度。
-- 使用自定义书架整理书籍。
-- 导出 EPUB，或把远端同步的书籍拉回本地书库。
+- 批量或按文件夹递归导入 EPUB，支持自定义书架和 EPUB 导出。
+- 封面可显示、模糊或隐藏。
+- 将书籍封面设为锁屏壁纸或墨水屏设备屏保。
 
 ### 阅读
 
-- 以竖排或横排阅读日文书籍，并在分页和连续滚动之间切换。
-- 自定义主题、字体、段落间距和阅读器控件，并支持配置自定义阅读主题。
-- 支持沉浸式专注模式、音量键翻页和墨水屏显示选项。
-- 全屏查看阅读器图片，支持缩放、复制、保存和分享。
+- 竖排与横排阅读，支持分页与全书跨章连续滚动。分页下的段落模式将每页内容居中显示，并支持句数限制、可选文字动画和点击空白处前进。
+- 下载或导入字体，自定义排版和振假名显示。
+- 全书搜索、章节跳转和音量键翻页。
+- 插图画廊与全屏图片查看，支持缩放、保存和分享。
 
 ### 查词
 
-- 导入、下载、更新和管理 Yomitan 辞典。
-- 在阅读器中点击文本查词，在辞典页搜索，或从其他 Android App 选中文本查词。
-- 点击释义中的生词进行递归查询。
-- 注入自定义 CSS 样式。
-- 使用在线或本地单词音频。
+- 导入或下载 Yomitan 词条、词频、音调和汉字辞典，支持分类与自动更新。
+- 阅读查词、独立辞典搜索、释义内递归查询，以及其他 App 的选词查询。
+- 支持日语与韩语词形还原、按等价拼音归并汉语词条和查看汉字笔顺。
+- 词频排序、自定义弹窗样式与 CSS。
+- 在线与本地单词发音，可选择用于播放和制卡的录音。
+
+### 配置与外观
+
+- 按语言自动切换或为单本书指定独立的辞典、阅读和 Anki 配置。
+- 浅色、深色与自定义主题，全 App 墨水屏适配。
 
 ### 标注与统计
 
-- 阅读时添加五色高亮标注，并随时进行跳转。
-- 阅读数据统计，包括阅读的字符数、时长、阅读速度，可在阅读时实时显示。
+- 五色高亮标注，支持跳转、改色和删除。
+- 阅读时长、字数和速度统计，支持阅读目标、日历热力图、趋势对比和单书汇总。
+- 可编辑阅读记录，并保留已删除书籍的统计。
 
 ### Anki 制卡
 
-- 通过 AnkiDroid 或 AnkiConnect 制卡。
-- 使用 [Lapis](https://github.com/donkuri/lapis) 兼容字段，支持重复检查和媒体导出。
+- 对接 AnkiDroid 和 AnkiConnect，支持多套制卡格式、重复检查和查找已有笔记。
+- 内置 [Lapis](https://github.com/donkuri/lapis)、Kiku、Senren 字段预设，可自定义卡片内容和标签。
+- 随卡片导出书籍封面、单词音频，以及有声书或 TTS 的句子音频。
 
-### 有声书跟读
+### 有声书跟读（Sasayaki）
 
-- 将有声书字幕文件匹配到书籍以高亮当前句子。
-- 跟随高亮自动翻页。
-- 控制播放速度、跳转动作和 Android 系统媒体控制。
+- 有声书字幕与原文对齐，逐句高亮并自动翻页，支持变速、后台播放和段落模式下的可选按页播放。
+- 在设备上转写日语有声书，自动生成字幕。
 
-### 数据同步与迁移
+### TTS 朗读
 
-- 通过 Google Drive 同步阅读进度、统计和书籍，兼容 ッツ Reader。
-- 导入或导出 ッツ bookdata，并使用 `.hoshi` 归档备份或恢复书籍和辞典，兼容 Hoshi Reader iOS。
+- 系统、在线或自托管语音朗读，支持后台播放和语速调节；音色语言跟随当前生效配置（日、英、中、韩），按语言和服务记忆旁白/对话音色。
+- 支持同一段落内日式、弯引号和英文双引号内的对话独立重播，可开启“短句细分”，在分句标点处细分长句以便跳转和重播。
+- 自定义全局或单本书的发音词典，支持正则替换和振假名读音。
 
-## 为什么从 Yomitan + ッツ Reader 迁移到 Hoshi
+### 同步与备份
 
-- **一个 App 替代多段拼接流程：** EPUB 阅读、Yomitan 查词、Anki 制卡、本地音频和有声书跟读都在 Hoshi 内完成。
-- **更快的导入速度和查词速度：** 底层使用 C++ hoshidicts，辞典导入速度提升约百倍，并支持批量导入 Yomitan 辞典；查词路径也做了大量性能优化，在低性能设备和墨水屏设备上尤为明显。
-- **更好的 Android 阅读体验：** 自定义阅读主题、墨水屏显示优化、低性能设备表现和音量键翻页都作为核心阅读体验处理。
-- **标注与书架管理：** 句子高亮和书签可以保存之后想回看的段落；自定义书架和文件夹递归导入让本地书籍整理更灵活。
-- **更顺滑的弹窗与本地音频流程：** 查词弹窗可滑动关闭，本地单词音频可以直接用于阅读和制卡，不需要额外配置 AnkiConnect Android。
-- **直接对接 AnkiDroid 的制卡流程：** Hoshi 可以不经过 AnkiConnect Android，直接与 AnkiDroid 交互完成制卡，让常见 Android 制卡路径更简单。
-- **更顺畅的有声书工作流：** Hoshi 简化有声书配置，并提供更好的有声书音频进度和播放控制；制卡时还能自动把命中的音频片段扩展到完整句子，不需要手动拼接字幕行。
-- **同步与迁移路径：** Google Drive 可同步阅读进度、统计和书籍，并兼容 ッツ；还支持 `.hoshi` iOS 备份恢复和 ッツ bookdata 导入/导出。
-
-## 为什么在 EPUB 阅读场景选择 Hoshi 而不是 jidoujisho
-
-- **阅读场景优先：** Hoshi 把日语 EPUB 阅读、查词和制卡收进一条专注流程；jidoujisho 的视频、漫画、网页和跨媒体工具对只想阅读的用户偏重。
-- **可靠支持核心 Yomitan 辞典：** Hoshi 支持 term、frequency、pitch 三类辞典；jidoujisho 对结构化释义内容和辞典媒体渲染的支持并不可靠。
-- **专门的 C++ 辞典引擎：** 原生 hoshidicts 让导入更快、查词响应更快、辞典占用更紧凑，并为低内存设备提供 Low Memory Usage Mode。
-- **释义内递归查词：** 直接点击辞典释义里的生词即可打开嵌套查词，不需要复制文本、重新搜索或离开当前上下文。
-- **EPUB 阅读器体验：** Hoshi 内置可自定义的 EPUB 阅读器，并把标注和阅读统计接入主阅读流程；jidoujisho 内嵌的 ッツ Reader 版本偏旧，实际会遇到 EPUB 导入失败或打开报错。
-- **墨水屏设备支持：** UI 高对比度、辞典弹窗专用 CSS，以及查词和有声书高亮使用下划线式显示，提升墨水屏可读性，同时兼顾低性能设备。
-- **EPUB 有声书跟读：** Hoshi 会把有声书字幕对齐到书籍文本，用于句子高亮、自动翻页、播放控制和句子音频制卡；jidoujisho 没有面向 EPUB 阅读的等价书籍对齐有声书工作流。
-- **多设备同步与迁移：** Google Drive 同步兼容 ッツ Reader，并支持跨设备导入、导出和备份恢复；jidoujisho 没有对应的同步或备份迁移路径。
+- 通过 Google Drive 同步书籍和阅读数据，兼容 Hoshi Reader iOS、Hoshi Reader Desktop 与 ッツ Reader。
+- 云端书籍按需下载，支持仅删除本地副本。
+- 支持 ッツ bookdata 和 `.hoshi` 备份导入/导出。
 
 ## 下载 Hoshi Reader Android APK
 
@@ -116,21 +107,30 @@ App 交互指南可以参考这篇 Hoshi Reader iOS 使用文档：[Hoshi Reader
 
 ## 开发状态
 
-已完成与 iOS 版的功能对齐，当前的开发重点是打磨 UI 与用户交互。
-
-已发布的用户可见变化见 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
+项目持续增加阅读功能并改进 Android 使用体验。已发布变化与 Unreleased 中的开发内容见 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
 
 ## 功能请求
 
-通用功能请求请优先提交到 iOS 仓库。
+请在本仓库的 [Issues](https://github.com/HuangAntimony/Hoshi-Reader-Android/issues) 提出建议，并描述你的阅读场景。
 
-若为 Android 特有功能，或因 iOS 系统限制无法实现的功能（例如墨水屏主题、音量键翻页等），请在本仓库提交 Issue。
+## 支持开发
+
+如果 Hoshi 对你的阅读有帮助，欢迎通过 [GitHub Sponsors](https://github.com/sponsors/HuangAntimony)、[Ko-fi](https://ko-fi.com/huangantimony) 或微信赞赏支持开发。
+
+<details>
+<summary>微信赞赏</summary>
+
+使用微信扫一扫，或保存图片后在扫一扫中从相册选择。
+
+<img src="app/src/main/assets/wechat_support.png" alt="微信赞赏码" width="320">
+
+</details>
 
 ## 隐私与数据
 
 Hoshi Reader Android 会把导入的书籍、辞典、字体、有声书数据、阅读进度、高亮、统计和设置保存在 App 本地存储中。
 
-Google Drive 同步使用由用户配置的 Google Cloud OAuth 设备代码流程。Anki 制卡会与 AnkiDroid 或已配置的 AnkiConnect 地址通信。更新检查会读取 GitHub Release 元数据。
+Hoshi Google Drive 同步使用 Google Play Services 登录，不可用时使用浏览器 OAuth；TTU 同步使用由用户配置的 Google Cloud OAuth 设备代码流程。两者只请求访问与 App 关联的文件。Anki 制卡会与 AnkiDroid 或已配置的 AnkiConnect 地址通信。在线或自托管 TTS 会将朗读文本发送给所选服务。更新检查会读取 GitHub Release 元数据。
 
 ## 鸣谢
 
@@ -138,6 +138,8 @@ Hoshi Reader Android 基于以下生态：
 
 - [Hoshi Reader iOS](https://github.com/Manhhao/Hoshi-Reader)：参考实现。
 - [hoshidicts](https://github.com/Manhhao/hoshidicts) 及 [hoshidicts-kotlin-bridge](https://github.com/Manhhao/hoshidicts-kotlin-bridge)：Yomitan 辞典支持。
+- [rbook](https://github.com/DevinSterling/rbook)：EPUB 解析，通过 [UniFFI](https://github.com/mozilla/uniffi-rs) 接入。
+- [FFmpeg](https://ffmpeg.org/)：有声书原生解码与重采样。
 - [Yomitan](https://github.com/yomidevs/yomitan)：辞典格式和查词体验参考。
 - [AnkiDroid](https://github.com/ankidroid/Anki-Android)：Android 制卡集成。
 - [Ankiconnect Android](https://github.com/KamWithK/AnkiconnectAndroid)：本地音频行为和 AnkiDroid 重复范围 / checksum 查询参考。

@@ -5,6 +5,9 @@ import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlin.math.ceil
 
+internal fun trendMaxHours(points: List<StatisticsTrendPoint>): Double =
+    maxOf(1.0, ceil((points.maxOfOrNull { it.readingSeconds } ?: 0.0) / 3600.0))
+
 /** The plot and hit testing share a continuous calendar scale, including unequal months. */
 internal fun trendDateFraction(date: LocalDate, range: StatisticsDateRange): Float =
     ChronoUnit.DAYS.between(range.start, date).toFloat() / range.dayCount

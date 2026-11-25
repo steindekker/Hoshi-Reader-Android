@@ -1,5 +1,11 @@
 package moe.antimony.hoshi.features.bookshelf
 
+import moe.antimony.hoshi.features.sync.SyncFileType
+import moe.antimony.hoshi.features.sync.syncKey
+import moe.antimony.hoshi.features.sync.SyncStorage
+import moe.antimony.hoshi.features.sync.SyncReloadScheduler
+import moe.antimony.hoshi.features.sync.syncMessage
+
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,7 +13,11 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -43,12 +53,30 @@ internal class BookshelfViewModel : ViewModel {
         get() = injectedScope ?: viewModelScope
 
     @Inject
-    constructor(repository: BookshelfRepository) : this(
+    constructor(repository: BookshelfRepository, syncStorage: SyncStorage) : this(
         repository = repository,
         coroutineScope = null,
         importGate = PendingImportGate(),
         marker = Unit,
-    )
+    ) {
+        syncReload = SyncReloadScheduler(viewModelScope, { syncStorage.applyReaderState != null }, ::reloadBookEntries)
+        viewModelScope.launch {
+            syncStorage.booksChanged.collect {
+                libraryRevision += 1
+                libraryReloadRequired = true
+                if (uiState.value.hasLoadedBooks) {
+                    if (importInProgress) reloadAfterImport = true else syncReload?.schedule()
+                }
+            }
+        }
+        viewModelScope.launch {
+            syncStorage.records.collect { records ->
+                _uiState.update { state ->
+                    state.copy(canDeleteLocalBookIds = state.bookEntries.filter { it.metadata.epub != null && records.books[it.root.name.syncKey()]?.files?.get(SyncFileType.epub)?.value != null }.mapTo(mutableSetOf()) { it.metadata.id })
+                }
+            }
+        }
+    }
 
     internal constructor(
         repository: BookshelfRepository,
@@ -74,11 +102,69 @@ internal class BookshelfViewModel : ViewModel {
 
     private val _uiState = MutableStateFlow(BookshelfUiState())
     val uiState: StateFlow<BookshelfUiState> = _uiState
-    private var openBookInFlight = false
+    private var openBookJob: Job? = null
+    private var openingBookId: String? = null
+    private var menuDownloads: Job? = null
+    private val downloads = mutableMapOf<String, Deferred<Result<Unit>>>()
+    private var syncReload: SyncReloadScheduler? = null
+    @Volatile private var importInProgress = false
+    private var reloadAfterImport = false
     private var reloadGeneration = 0
+    private var libraryRevision = 0
+    private var libraryReloadRequired = false
+    private var returningBook: BookEntry? = null
+    private val returningBookLoads = mutableSetOf<Deferred<BookshelfBookSnapshot?>>()
+    private val bookRefreshGenerations = mutableMapOf<String, Int>()
+    private var remoteLoadGeneration = 0
     private var remoteLoadJob: Job? = null
     private val remoteImportsInFlight = mutableSetOf<String>()
     private val remoteDeletesInFlight = mutableSetOf<String>()
+
+    fun onBookshelfVisible() {
+        val opened = returningBook
+        if (opened == null || !_uiState.value.hasLoadedBooks || importInProgress) {
+            reloadBookEntries()
+            return
+        }
+        syncReload?.cancel()
+        launchBookshelfOperation {
+            val id = opened.metadata.id
+            val generation = ++reloadGeneration
+            bookRefreshGenerations[id] = generation
+            // Reader exit saves run in application scope. The repository joins them before reading.
+            val load = workScope.async { repository.loadBook(opened) }
+            returningBookLoads += load
+            val snapshot = try {
+                load.await()
+            } finally {
+                returningBookLoads -= load
+            }
+            // Another book can open/return while this book is still saving.
+            // Only a newer refresh of this book or a full load supersedes its snapshot.
+            if (bookRefreshGenerations[id] != generation) return@launchBookshelfOperation
+            bookRefreshGenerations.remove(id)
+            if (returningBook == opened) returningBook = null
+            _uiState.update { state ->
+                val entries = state.bookEntries.mapNotNull { entry ->
+                    if (entry.metadata.id == id) snapshot?.entry else entry
+                }.sortedBooks(state.sortOption)
+                val progress = state.bookProgressById - id + (snapshot?.let { mapOf(id to it.readingState.progress) } ?: emptyMap())
+                val readingStates = state.bookReadingStateById - id + (snapshot?.let { mapOf(id to it.readingState) } ?: emptyMap())
+                val covers = state.coverSourcesById - id + (snapshot?.coverSource?.let { mapOf(id to it) } ?: emptyMap())
+                state.copy(
+                    bookEntries = entries,
+                    bookProgressById = progress,
+                    bookReadingStateById = readingStates,
+                    coverSourcesById = covers,
+                    selectedBookIds = if (snapshot == null) state.selectedBookIds - id else state.selectedBookIds,
+                    canDeleteLocalBookIds = if (snapshot?.entry?.metadata?.epub == null) state.canDeleteLocalBookIds - id else state.canDeleteLocalBookIds,
+                    sections = bookshelfSections(entries, state.shelves, progress, state.showReading, state.sortOption),
+                )
+            }
+            // Sync may have changed other books while Reader suppressed scheduled reloads.
+            if (libraryReloadRequired) reloadBookEntriesSync()
+        }
+    }
 
     fun reloadBookEntries() {
         reloadBookEntries(_uiState.value.sortOption)
@@ -86,11 +172,19 @@ internal class BookshelfViewModel : ViewModel {
 
     fun refreshRemoteBooks() {
         if (!_uiState.value.hasLoadedBooks) return
+        remoteLoadGeneration += 1
         remoteLoadJob?.cancel()
-        val generation = reloadGeneration
-        val localEntries = _uiState.value.bookEntries
-        _uiState.update { it.copy(errorMessage = null) }
-        reloadRemoteBookEntries(localEntries, generation, suppressTransientNetworkErrors = false)
+        workScope.launch {
+            _uiState.update { it.copy(errorMessage = null) }
+            try {
+                repository.syncLibrary()
+                reloadRemoteBookEntries(_uiState.value.bookEntries, suppressTransientNetworkErrors = false)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _uiState.update { it.copy(errorMessage = error.syncMessage()) }
+            }
+        }
     }
 
     fun changeSort(sortOption: BookSortOption) {
@@ -107,25 +201,80 @@ internal class BookshelfViewModel : ViewModel {
     }
 
     fun openBook(entry: BookEntry) {
-        if (openBookInFlight) {
-            return
-        }
-        openBookInFlight = true
-        workScope.launch {
+        if (openingBookId == entry.metadata.id) return
+        openBookJob?.cancel()
+        openingBookId = entry.metadata.id
+        val cloud = entry.metadata.epub == null
+        val download = if (cloud) download(entry) else null
+        openBookJob = workScope.launch {
             _uiState.update { it.copy(errorMessage = null) }
             try {
-                val bookId = repository.openBook(entry)
-                _uiState.update { it.copy(openReaderBookId = bookId) }
-            } catch (error: Throwable) {
-                _uiState.update {
-                    it.copy(
-                        errorMessage = UiText.Resource(R.string.bookshelf_open_failed).withErrorDetails(error),
+                download?.await()?.getOrThrow()
+                val opened = repository.openBook(entry)
+                if (cloud) reloadBookEntriesSync()
+                returningBook = opened
+                // A load started before this write must not restore the old access time.
+                reloadGeneration += 1
+                bookRefreshGenerations.remove(opened.metadata.id)
+                _uiState.update { state ->
+                    val entries = state.bookEntries.map { if (it.metadata.id == entry.metadata.id) opened else it }
+                        .sortedBooks(state.sortOption)
+                    state.copy(
+                        bookEntries = entries,
+                        sections = bookshelfSections(entries, state.shelves, state.bookProgressById, state.showReading, state.sortOption),
+                        openReaderBookId = opened.metadata.id,
+                        openReaderSkipSync = cloud,
                     )
                 }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                val message = if (cloud) {
+                    error.syncMessage(UiText.Resource(R.string.sync_download_book_failed_format, entry.metadata.displayTitle))
+                } else {
+                    UiText.Resource(R.string.bookshelf_open_failed).withErrorDetails(error)
+                }
+                _uiState.update { it.copy(errorMessage = message) }
             } finally {
-                openBookInFlight = false
+                if (openingBookId == entry.metadata.id) openingBookId = null
             }
         }
+    }
+
+    fun downloadBooks(entries: List<BookEntry>) {
+        val previous = menuDownloads
+        menuDownloads = workScope.launch {
+            previous?.join()
+            val failures = mutableListOf<UiText>()
+            _uiState.update { it.copy(errorMessage = null) }
+            for (entry in entries) {
+                download(entry).await().onFailure { error ->
+                    failures += error.syncMessage(UiText.Resource(R.string.sync_download_book_failed_format, entry.metadata.displayTitle))
+                    _uiState.update { it.copy(errorMessage = UiText.Joined(failures.toList(), "\n\n")) }
+                }
+            }
+            reloadBookEntriesSync()
+        }
+    }
+
+    private fun download(entry: BookEntry): Deferred<Result<Unit>> {
+        downloads[entry.metadata.id]?.let { return it }
+        val download = workScope.async(start = CoroutineStart.LAZY) {
+            _uiState.update { it.copy(remoteImportProgressById = it.remoteImportProgressById + (entry.metadata.id to 0.0)) }
+            try {
+                runCatching {
+                    repository.downloadBook(entry) { progress ->
+                        _uiState.update { it.copy(remoteImportProgressById = it.remoteImportProgressById + (entry.metadata.id to progress)) }
+                    }
+                }
+            } finally {
+                downloads -= entry.metadata.id
+                _uiState.update { it.copy(remoteImportProgressById = it.remoteImportProgressById - entry.metadata.id) }
+            }
+        }
+        downloads[entry.metadata.id] = download
+        download.start()
+        return download
     }
 
     fun importBook(uri: Uri, displayName: String? = null) {
@@ -151,40 +300,16 @@ internal class BookshelfViewModel : ViewModel {
         displayName: String? = null,
         importOperation: suspend () -> String,
     ) {
-        if (!importGate.tryStart(importKey)) {
-            return
+        runImport(importKey, importProgressMessage(displayName)) {
+            importOperation()
+            reloadAfterImport = true
         }
-        runLoading(
-            errorPrefix = UiText.Resource(R.string.bookshelf_import_failed),
-            onComplete = { importGate.finish(importKey) },
-            blockingProgressMessage = displayName
-                ?.takeIf { it.isNotBlank() }
-                ?.let { UiText.Resource(R.string.bookshelf_importing_named_format, it) }
-                ?: UiText.Resource(R.string.bookshelf_importing_epub),
-            block = {
-                importOperation()
-                reloadBookEntriesSync()
-            },
-        )
     }
 
     internal fun importBooks(imports: List<PendingBookImport>) {
-        if (imports.isEmpty()) {
-            return
-        }
-        if (imports.size == 1) {
-            val import = imports.single()
-            importBook(import.importKey, import.displayName, import.importOperation)
-            return
-        }
-
-        val importKey = imports.joinToString(separator = "\n") { it.importKey }
-        if (!importGate.tryStart(importKey)) {
-            return
-        }
-
-        workScope.launch {
-            importBooksBatch(imports, importKey)
+        if (imports.isEmpty()) return
+        runImport(imports.joinToString(separator = "\n") { it.importKey }, imports.progressMessage()) {
+            importBooksBatch(imports)
         }
     }
 
@@ -202,99 +327,104 @@ internal class BookshelfViewModel : ViewModel {
     }
 
     internal fun importBookFolder(importsProvider: suspend () -> List<PendingBookImport>) {
-        workScope.launch {
-            _uiState.update {
-                it.copy(
-                    isLoading = true,
-                    blockingProgressMessage = UiText.Resource(R.string.bookshelf_scanning_folder),
-                    statusMessage = null,
-                    errorMessage = null,
-                )
-            }
-            try {
-                val imports = importsProvider()
-                if (imports.isEmpty()) {
-                    _uiState.update {
-                        it.copy(errorMessage = UiText.Resource(R.string.bookshelf_no_epub_files_found))
-                    }
-                    return@launch
-                }
-                if (imports.size == 1) {
-                    _uiState.update { it.copy(isLoading = false, blockingProgressMessage = null) }
-                    val import = imports.single()
-                    importBook(import.importKey, import.displayName, import.importOperation)
-                    return@launch
-                }
-                val importKey = imports.joinToString(separator = "\n") { it.importKey }
-                if (!importGate.tryStart(importKey)) {
-                    return@launch
-                }
-                importBooksBatch(imports, importKey)
-            } catch (error: Throwable) {
-                _uiState.update {
-                    it.copy(
-                        errorMessage = UiText.Resource(R.string.bookshelf_import_failed).withErrorDetails(error),
-                    )
-                }
-            } finally {
-                _uiState.update { it.copy(isLoading = false, blockingProgressMessage = null) }
+        runImport("folder-scan", UiText.Resource(R.string.bookshelf_scanning_folder)) {
+            val imports = importsProvider()
+            if (imports.isEmpty()) {
+                _uiState.update { it.copy(errorMessage = UiText.Resource(R.string.bookshelf_no_epub_files_found)) }
+            } else {
+                importBooksBatch(imports)
             }
         }
     }
 
-    private suspend fun importBooksBatch(imports: List<PendingBookImport>, importKey: String) {
-        val failed = mutableListOf<UiText>()
-        _uiState.update {
-            it.copy(
-                isLoading = true,
-                blockingProgressMessage = UiText.Resource(R.string.bookshelf_importing_progress_format, 1, imports.size),
-                errorMessage = null,
-            )
-        }
-        try {
-            imports.forEachIndexed { index, import ->
-                _uiState.update {
-                    it.copy(
-                        blockingProgressMessage = UiText.Resource(
-                            R.string.bookshelf_importing_progress_format,
-                            index + 1,
-                            imports.size,
-                        ),
-                    )
+    private fun runImport(importKey: String, progressMessage: UiText, block: suspend () -> Unit) {
+        if (!importGate.tryStart(importKey)) return
+        importInProgress = true
+        runLoading(
+            errorPrefix = UiText.Resource(R.string.bookshelf_import_failed),
+            blockingProgressMessage = progressMessage,
+            onComplete = {
+                importInProgress = false
+                importGate.finish(importKey)
+                // Changes arriving during the final load (or a failed import) still need a refresh.
+                if (reloadAfterImport) {
+                    reloadAfterImport = false
+                    syncReload?.cancel()
+                    reloadBookEntries()
                 }
+            },
+        ) {
+            block()
+            if (reloadAfterImport) {
+                reloadAfterImport = false
+                syncReload?.cancel()
                 try {
-                    import.importOperation()
-                } catch (error: Throwable) {
-                    failed += UiText.Literal(import.failureDisplayName()).withErrorDetails(error)
+                    reloadBookEntriesSync()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    val refreshError = UiText.Resource(R.string.bookshelf_update_failed).withErrorDetails(error)
+                    _uiState.update { state ->
+                        state.copy(errorMessage = state.errorMessage?.let { UiText.Joined(listOf(it, refreshError), "\n\n") } ?: refreshError)
+                    }
                 }
             }
-            reloadBookEntriesSync()
-            if (failed.isNotEmpty()) {
-                _uiState.update {
-                    it.copy(
-                        errorMessage = UiText.Resource(
-                            R.string.bookshelf_import_failed_list_format,
-                            UiText.Joined(failed, separator = "\n\n"),
-                        ),
-                    )
-                }
-            }
-        } catch (error: Throwable) {
-            _uiState.update {
-                it.copy(
-                    errorMessage = UiText.Resource(R.string.bookshelf_import_failed).withErrorDetails(error),
-                )
-            }
-        } finally {
-            _uiState.update { it.copy(isLoading = false, blockingProgressMessage = null) }
-            importGate.finish(importKey)
         }
     }
+
+    private suspend fun importBooksBatch(imports: List<PendingBookImport>) {
+        if (imports.size == 1) {
+            val import = imports.single()
+            _uiState.update { it.copy(blockingProgressMessage = importProgressMessage(import.displayName)) }
+            import.importOperation()
+            reloadAfterImport = true
+            return
+        }
+        val failed = mutableListOf<UiText>()
+        imports.forEachIndexed { index, import ->
+            _uiState.update { it.copy(blockingProgressMessage = imports.progressMessage(index + 1)) }
+            try {
+                import.importOperation()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                failed += UiText.Literal(import.failureDisplayName()).withErrorDetails(error)
+            }
+        }
+        reloadAfterImport = true
+        if (failed.isNotEmpty()) {
+            _uiState.update {
+                it.copy(errorMessage = UiText.Resource(
+                    R.string.bookshelf_import_failed_list_format,
+                    UiText.Joined(failed, separator = "\n\n"),
+                ))
+            }
+        }
+    }
+
+    private fun List<PendingBookImport>.progressMessage(current: Int = 1): UiText =
+        if (size == 1) importProgressMessage(single().displayName)
+        else UiText.Resource(R.string.bookshelf_importing_progress_format, current, size)
+
+    private fun importProgressMessage(displayName: String?): UiText = displayName
+        ?.takeIf { it.isNotBlank() }
+        ?.let { UiText.Resource(R.string.bookshelf_importing_named_format, it) }
+        ?: UiText.Resource(R.string.bookshelf_importing_epub)
 
     fun deleteBook(entry: BookEntry) {
         runLoading(errorPrefix = UiText.Resource(R.string.bookshelf_delete_failed)) {
             try {
                 repository.deleteBook(entry)
+            } finally {
+                reloadBookEntriesSync()
+            }
+        }
+    }
+
+    fun deleteLocalBook(entry: BookEntry) {
+        runLoading(errorPrefix = UiText.Resource(R.string.bookshelf_delete_failed)) {
+            try {
+                repository.deleteLocalBook(entry)
             } finally {
                 reloadBookEntriesSync()
             }
@@ -486,7 +616,7 @@ internal class BookshelfViewModel : ViewModel {
     }
 
     fun renameShelf(oldName: String, newName: String) {
-        val trimmedName = newName.trim()
+        val trimmedName = newName.trim().syncKey()
         if (trimmedName.isEmpty()) return
         launchBookshelfOperation {
             repository.renameShelf(oldName, trimmedName)
@@ -497,6 +627,13 @@ internal class BookshelfViewModel : ViewModel {
     fun moveShelf(fromIndex: Int, toIndex: Int) {
         launchBookshelfOperation {
             repository.moveShelf(fromIndex, toIndex)
+            reloadBookEntriesSync()
+        }
+    }
+
+    fun markUnread(entry: BookEntry) {
+        launchBookshelfOperation {
+            repository.markUnread(entry)
             reloadBookEntriesSync()
         }
     }
@@ -591,7 +728,7 @@ internal class BookshelfViewModel : ViewModel {
         bookIds: Set<String>,
         clearSelectionOnSuccess: Boolean,
     ) {
-        val trimmedName = name.trim()
+        val trimmedName = name.trim().syncKey()
         if (trimmedName.isEmpty() || bookIds.isEmpty()) return
         if (_uiState.value.shelfCreationMoveStatus is ShelfCreationMoveStatus.Submitting) return
         _uiState.update { it.copy(shelfCreationMoveStatus = ShelfCreationMoveStatus.Submitting) }
@@ -702,26 +839,40 @@ internal class BookshelfViewModel : ViewModel {
     }
 
     private fun reloadBookEntries(sortOption: BookSortOption) {
+        if (importInProgress) {
+            reloadAfterImport = true
+            return
+        }
         launchBookshelfOperation {
             reloadBookEntriesSync(sortOption)
         }
     }
 
     private suspend fun reloadBookEntriesSync(sortOption: BookSortOption = _uiState.value.sortOption) {
-        val generation = ++reloadGeneration
-        remoteLoadJob?.cancel()
-        val firstResult = loadBookEntries(sortOption)
-        val result = if (firstResult.settings.sortOption != sortOption) {
-            loadBookEntries(firstResult.settings.sortOption)
-        } else {
-            firstResult
+        // Sorting/sync can request a full load while Reader exit is still saving.
+        // Do not invalidate the single-book refresh and then publish pre-save progress.
+        while (true) {
+            val pending = returningBookLoads.filterNot { it.isCompleted }
+            if (pending.isEmpty()) break
+            pending.joinAll()
         }
+        bookRefreshGenerations.clear()
+        val generation = ++reloadGeneration
+        val revision = libraryRevision
+        libraryReloadRequired = true
+        remoteLoadGeneration += 1
+        remoteLoadJob?.cancel()
+        val loaded = loadBookEntries(sortOption)
+        val result = loaded.copy(entries = loaded.entries.sortedBooks(loaded.settings.sortOption))
         if (generation != reloadGeneration) return
+        libraryReloadRequired = revision != libraryRevision
         _uiState.update {
             val validSelectedIds = it.selectedBookIds.intersect(result.entries.mapTo(mutableSetOf()) { entry -> entry.metadata.id })
             it.copy(
                 bookEntries = result.entries,
+                canDeleteLocalBookIds = result.canDeleteLocalBookIds,
                 bookProgressById = result.progressById,
+                bookReadingStateById = result.readingStateById,
                 coverSourcesById = result.coverSourcesById,
                 shelves = result.shelves,
                 sections = bookshelfSections(
@@ -738,25 +889,27 @@ internal class BookshelfViewModel : ViewModel {
                 hideCollapsedShelfThumbnails = result.settings.hideCollapsedShelfThumbnails,
                 selectedBookIds = validSelectedIds,
                 hasLoadedBooks = true,
-                isLoading = false,
-                blockingProgressMessage = null,
-                errorMessage = null,
+                // An already-running reload may finish after an import has started.
+                isLoading = if (importInProgress) it.isLoading else false,
+                blockingProgressMessage = if (importInProgress) it.blockingProgressMessage else null,
             )
         }
-        reloadRemoteBookEntries(result.entries, generation, suppressTransientNetworkErrors = true)
+        reloadRemoteBookEntries(result.entries, suppressTransientNetworkErrors = true)
     }
 
     private suspend fun loadBookEntries(sortOption: BookSortOption): BookshelfLoadResult =
         repository.loadBooks(sortOption, ::showLegacyBookMigrationProgress)
 
     private suspend fun refreshBookProgress() {
-        val refreshedProgressById = repository.loadBookProgress(_uiState.value.bookEntries)
+        val refreshedStatesById = repository.loadBookReadingStates(_uiState.value.bookEntries)
         _uiState.update {
             val currentBookIds = it.bookEntries.mapTo(mutableSetOf()) { entry -> entry.metadata.id }
-            val progressById = (it.bookProgressById + refreshedProgressById)
+            val readingStateById = (it.bookReadingStateById + refreshedStatesById).filterKeys(currentBookIds::contains)
+            val progressById = (it.bookProgressById + refreshedStatesById.mapValues { entry -> entry.value.progress })
                 .filterKeys(currentBookIds::contains)
             it.copy(
                 bookProgressById = progressById,
+                bookReadingStateById = readingStateById,
                 sections = bookshelfSections(
                     entries = it.bookEntries,
                     shelves = it.shelves,
@@ -770,7 +923,7 @@ internal class BookshelfViewModel : ViewModel {
 
     private fun showLegacyBookMigrationProgress(progress: LegacyBookMigrationProgress) {
         _uiState.update {
-            it.copy(
+            if (importInProgress) it else it.copy(
                 isLoading = true,
                 blockingProgressMessage = UiText.Resource(
                     R.string.bookshelf_legacy_migration_progress_format,
@@ -785,13 +938,14 @@ internal class BookshelfViewModel : ViewModel {
 
     private fun reloadRemoteBookEntries(
         localEntries: List<BookEntry>,
-        generation: Int,
         suppressTransientNetworkErrors: Boolean,
     ) {
+        val generation = ++remoteLoadGeneration
+        remoteLoadJob?.cancel()
         remoteLoadJob = workScope.launch {
             try {
                 val remoteResult = repository.loadRemoteBooks(localEntries)
-                if (generation != reloadGeneration) return@launch
+                if (generation != remoteLoadGeneration) return@launch
                 _uiState.update {
                     it.copy(
                         remoteBookEntries = remoteResult.remoteEntries.sortedRemoteBooks(it.sortOption),
@@ -801,7 +955,7 @@ internal class BookshelfViewModel : ViewModel {
                 }
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
-                if (generation != reloadGeneration) return@launch
+                if (generation != remoteLoadGeneration) return@launch
                 if (suppressTransientNetworkErrors && error.isTransientDriveNetworkFailure()) return@launch
                 _uiState.update {
                     it.copy(
@@ -857,6 +1011,8 @@ internal class BookshelfViewModel : ViewModel {
             }
             try {
                 block()
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Throwable) {
                 _uiState.update {
                     it.copy(
@@ -884,3 +1040,8 @@ private fun SyncResult.bookshelfMessage(): UiText? =
         is SyncResult.Synced -> UiText.Resource(R.string.bookshelf_already_synced_format, title)
         SyncResult.Skipped -> null
     }
+
+internal fun List<BookEntry>.sortedBooks(sortOption: BookSortOption): List<BookEntry> = when (sortOption) {
+    BookSortOption.Recent -> sortedByDescending { it.metadata.lastAccess }
+    BookSortOption.Title -> sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.displayTitle })
+}

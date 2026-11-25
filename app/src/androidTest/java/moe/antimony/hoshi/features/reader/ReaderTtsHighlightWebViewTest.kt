@@ -2,6 +2,10 @@ package moe.antimony.hoshi.features.reader
 
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebResourceRequest
+import moe.antimony.hoshi.epub.EpubBook
+import moe.antimony.hoshi.epub.EpubChapter
+import moe.antimony.hoshi.epub.EpubResource
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toPixelMap
@@ -32,7 +36,7 @@ class ReaderTtsHighlightWebViewTest {
     @get:Rule val composeRule = createComposeRule()
 
     @Test
-    fun imageRemainsVisibleDuringPreparationAndSentenceFollowsAfterHold() = runBlocking {
+    fun imageHoldAndPassiveRestorePreserveTheChosenPage() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val assets = ReaderWebAssets.load(instrumentation.targetContext)
         lateinit var webView: WebView
@@ -44,42 +48,59 @@ class ReaderTtsHighlightWebViewTest {
         composeRule.waitForIdle()
         val json = Json { ignoreUnknownKeys = true }
         try {
-            for (mode in ReaderViewMode.entries) for (vertical in listOf(false, true)) {
-                val description = "$mode vertical=$vertical"
-                val settings = ReaderSettings(viewMode = mode, verticalWriting = vertical, visualNovelRevealSpeed = 0)
+            for (paragraph in listOf(false, true)) for (mode in ReaderViewMode.entries.filter { !paragraph || it == ReaderViewMode.Paginated }) for (vertical in listOf(false, true)) {
+                val description = "$mode paragraph=$paragraph vertical=$vertical"
+                val settings = ReaderSettings(viewMode = mode, paragraphMode = paragraph, verticalWriting = vertical, textAnimation = false)
                 val loaded = CountDownLatch(1)
                 val styles = ReaderContentStyles.styleTag(settings = settings, sasayakiBackgroundColor = 0xFF0000FF, readerCssTemplate = assets.readerCss)
-                val script = ReaderPaginationScripts.shellScript(settings = settings, assets = assets)
+                // Paragraph following requires chapter targets before restore; it never wraps lazily.
+                val script = ReaderPaginationScripts.shellScript(settings = settings, assets = assets,
+                    sasayakiCuesJson = """[{"id":"previous","chapterIndex":0,"start":0,"length":3},{"id":"tts-image-next","chapterIndex":0,"start":900,"length":3}]""")
                 val beforeImage = "前です".repeat(300) + "。"
+                val imageStyle = "display:block;break-before:column;break-after:column"
+                val content = "<p>$beforeImage</p><img width='600' height='900' style='$imageStyle' src='divider.svg'/>" +
+                    "<img width='600' height='900' style='$imageStyle' src='art.svg'/><p>後です。</p>"
+                fun svg(color: String) = "<svg xmlns='http://www.w3.org/2000/svg' width='600' height='900'><rect width='600' height='900' fill='$color'/></svg>".toByteArray()
+                val book = EpubBook("Image hold fixture", chapters = listOf(
+                    EpubChapter("one", "one.xhtml", "application/xhtml+xml", "<body>$content</body>"),
+                    EpubChapter("two", "two.xhtml", "application/xhtml+xml", "<img src='divider.svg'/><img src='divider.svg'/><img src='art.svg'/>"),
+                ), resources = mapOf("divider.svg" to EpubResource("image/svg+xml", svg("green")),
+                    "art.svg" to EpubResource("image/svg+xml", svg("red"))))
+                val bridge = ReaderWebResourceBridge(book, fontFileForRequest = { null })
+                val references = bridge.resourceForUrl("https://appassets.androidplatform.net/reader-media/image-references.json")!!.data.decodeToString()
+                assertEquals(3, book.imageReferenceCounts["divider.svg"])
+                assertEquals(2, book.imageReferenceCounts["art.svg"])
                 instrumentation.runOnMainSync {
                     val density = webView.resources.displayMetrics.density
                     val viewport = readerViewportCssLayout(settings,
                         (webView.width / density).toInt(), (webView.height / density).toInt()).cssVariables()
                     webView.webViewClient = object : WebViewClient() {
                         override fun onPageFinished(view: WebView, url: String) { loaded.countDown() }
+                        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest) =
+                            bridge.resourceForUrl(request.url.toString())?.toWebResourceResponse()
                     }
-                    webView.loadDataWithBaseURL(null,
-                        "<!doctype html><html><head><script>window.HoshiReaderRestore={postMessage:()=>window.testRestored=true};</script>$styles<style>$viewport</style>$script</head>" +
-                            "<body><p>$beforeImage</p><img width='600' height='900' style='display:block;break-before:column;break-after:column' " +
-                            "src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22600%22 height=%22900%22%3E%3Crect width=%22600%22 height=%22900%22 fill=%22red%22/%3E%3C/svg%3E'/><p>後です。</p></body></html>",
+                    webView.loadDataWithBaseURL("https://appassets.androidplatform.net/epub/one.xhtml",
+                        "<!doctype html><html><head><script>window.hoshiReaderImageReferenceCounts=$references;window.HoshiReaderRestore={postMessage:()=>window.testRestored=true};</script>$styles<style>$viewport</style>$script</head>${readerFixtureBody(mode, content)}</html>",
                         "text/html", "utf-8", null)
                 }
                 assertTrue(description, loaded.await(15, TimeUnit.SECONDS))
                 composeRule.waitUntil(15_000) { evaluate(webView, "Boolean(window.testRestored)") == "true" }
                 evaluate(webView, "window.hoshiReader.buildNodeOffsets(); true")
-                evaluate(webView, ReaderPaginationScripts.highlightSasayakiCueInvocation(SasayakiCueRange("previous", 0, 3), true))
+                evaluate(webView, ReaderPaginationScripts.highlightSasayakiCueInvocation(SasayakiCueRange("previous", 0, 3, chapterIndex = 0), true))
                 val sentence = TtsSentence(0, 900, 3, "後です。", imageBefore = true)
                 val preparing = TtsPlaybackState(sentences = listOf(sentence), started = true, playing = true, preparing = true)
-                val cue = SasayakiCueRange("tts-image-next", 900, 3)
+                val cue = SasayakiCueRange("tts-image-next", 900, 3, chapterIndex = 0)
                 var shown = 0
+                var firstStop: ReaderSasayakiMediaStop? = null
                 val actions = object : ReaderPlaybackPresentationActions {
                     override suspend fun stopsBeforeCue() = json.decodeFromString(
                         ListSerializer(ReaderSasayakiMediaStop.serializer()),
                         evaluate(webView, ReaderPaginationScripts.sasayakiMediaStopsBeforeCueInvocation(cue)))
                     override suspend fun showStops(stops: List<ReaderSasayakiMediaStop>, countStatistics: Boolean) {
                         assertTrue("$description image stop discovered: " + evaluate(webView,
-                            "JSON.stringify({image:document.querySelector('img').getBoundingClientRect(), current:window.hoshiReader.calculateProgress(), target:window.hoshiReader.sasayakiCueTargetScroll?.({id:'tts-image-next',start:900,length:3}), width:innerWidth,height:innerHeight})"), stops.isNotEmpty())
+                            "JSON.stringify({image:document.querySelector('img').getBoundingClientRect(), current:window.hoshiReader.calculateProgress(), target:window.hoshiReader.sasayakiCueTargetScroll?.({id:'tts-image-next',chapterIndex:0,start:900,length:3}), width:innerWidth,height:innerHeight})"), stops.isNotEmpty())
                         for (stop in stops) {
+                            if (firstStop == null) firstStop = stop
                             evaluate(webView, ReaderPaginationScripts.showSasayakiMediaStopInvocation(
                                 json.encodeToString(ReaderSasayakiMediaStop.serializer(), stop)))
                             // A restore/foreground callback during the hold must not reveal the next sentence.
@@ -102,11 +123,28 @@ class ReaderTtsHighlightWebViewTest {
                     override suspend fun holdVisibleStop(progress: Double?) = error("Same chapter")
                 }
                 revealReaderPlaybackWithMediaStops(0, true, SasayakiCueRevealSource.NaturalPlayback, 300, { 0 }, actions)
-                assertTrue(description, shown > 0)
+                assertEquals("$description only the ordinary illustration holds", 1, shown)
                 assertEquals("\"tts-image-next\"", evaluate(webView, "window.hoshiReader.activeCueId"))
                 composeRule.waitUntil("$description sentence after image", 5_000) { bluePixelCount() > 100 }
+
+                // The user browses back to the illustration while this sentence is playing.
+                evaluate(webView, ReaderPaginationScripts.showSasayakiMediaStopInvocation(
+                    json.encodeToString(ReaderSasayakiMediaStop.serializer(), requireNotNull(firstStop))))
+                composeRule.waitUntil("$description manually chosen image", 5_000) { redPixelCount() > 1000 }
+                val chosenProgress = ReaderPaginationScripts.doubleResult(evaluate(webView, ReaderPaginationScripts.progressInvocation()))
+                val restored = readerTtsPresentation(preparing.copy(preparing = false), sentence, 0,
+                    autoScroll = true, passiveRestore = true)
+                assertEquals(ReaderTtsPresentation.Highlight, restored)
+                evaluate(webView, ReaderPaginationScripts.highlightSasayakiCueInvocation(cue,
+                    reveal = restored == ReaderTtsPresentation.Follow))
+                assertEquals("$description restore preserves the chosen page", chosenProgress,
+                    ReaderPaginationScripts.doubleResult(evaluate(webView, ReaderPaginationScripts.progressInvocation())))
+                assertTrue("$description restore does not reveal the narration", redPixelCount() > 1000)
             }
-        } finally { instrumentation.runOnMainSync { webView.destroy() } }
+        } finally { instrumentation.runOnMainSync {
+            (webView.parent as? android.view.ViewGroup)?.removeView(webView)
+            webView.destroy()
+        } }
     }
 
     @Test
@@ -124,12 +162,15 @@ class ReaderTtsHighlightWebViewTest {
         }
         composeRule.waitForIdle()
         try {
-            for (mode in ReaderViewMode.entries) for (vertical in listOf(false, true)) {
-                val description = "$mode vertical=$vertical"
-                val settings = ReaderSettings(viewMode = mode, verticalWriting = vertical, visualNovelRevealSpeed = 0)
+            for (paragraph in listOf(false, true)) for (mode in ReaderViewMode.entries.filter { !paragraph || it == ReaderViewMode.Paginated }) for (vertical in listOf(false, true)) {
+                val description = "$mode paragraph=$paragraph vertical=$vertical"
+                val settings = ReaderSettings(viewMode = mode, paragraphMode = paragraph, verticalWriting = vertical, textAnimation = false)
                 val loaded = CountDownLatch(1)
                 val styles = ReaderContentStyles.styleTag(settings = settings, sasayakiBackgroundColor = 0xFF0000FF, readerCssTemplate = assets.readerCss)
-                val script = ReaderPaginationScripts.shellScript(settings = settings, assets = assets)
+                val fixtureHtml = "<p>前「𠮟野 、<ruby>東京<rt>とうきょう</rt></ruby>。」後</p>"
+                val sentences = moe.antimony.hoshi.features.tts.TtsText.chapter(0, fixtureHtml, splitAtClausePunctuation = true)
+                val script = ReaderPaginationScripts.shellScript(settings = settings, assets = assets,
+                    sasayakiCuesJson = ReaderSasayakiCues.ttsChapterCuesJson(sentences))
                 instrumentation.runOnMainSync {
                     val density = webView.resources.displayMetrics.density
                     val viewport = readerViewportCssLayout(settings,
@@ -139,25 +180,32 @@ class ReaderTtsHighlightWebViewTest {
                     }
                     webView.loadDataWithBaseURL(null,
                         "<!doctype html><html><head><script>window.HoshiReaderRestore={postMessage:()=>window.testRestored=true};</script>$styles<style>$viewport</style>$script</head>" +
-                            "<body><p>前「𠮟 、<ruby>猫<rt>ねこ</rt></ruby>。」後</p></body></html>",
+                            "${readerFixtureBody(mode, fixtureHtml)}</html>",
                         "text/html", "utf-8", null)
                 }
                 assertTrue(description, loaded.await(15, TimeUnit.SECONDS))
                 composeRule.waitUntil(15_000) {
                     evaluate(webView, "Boolean(window.testRestored)") == "true"
                 }
-                // Wait for production restore (including the VN clone and font layout).
+                // Wait for production restore (including font layout).
                 evaluate(webView, "window.hoshiReader.buildNodeOffsets(); true")
                 val baseline = bluePixelCount()
-                val sentence = moe.antimony.hoshi.features.tts.TtsText.chapter(0,
-                    "<p>前「𠮟 、<ruby>猫<rt>ねこ</rt></ruby>。」後</p>").first()
-                assertEquals("前「𠮟 、ねこ。」", moe.antimony.hoshi.features.tts.TtsText.spoken(sentence, null, emptyList()))
-                val cue = moe.antimony.hoshi.features.sasayaki.SasayakiCueRange("tts-fixture", sentence.start, sentence.length)
-                evaluate(webView, ReaderPaginationScripts.highlightSasayakiCueInvocation(cue, true))
-                composeRule.waitUntil("$description sentence paint", 10_000) { bluePixelCount() > baseline + 100 }
-                assertEquals(description, "\"tts-fixture\"", evaluate(webView, "window.hoshiReader.activeCueId"))
-                evaluate(webView, ReaderPaginationScripts.clearSasayakiCueInvocation())
-                composeRule.waitUntil("$description clear paint", 10_000) { bluePixelCount() <= baseline + 20 }
+                assertEquals(listOf("前", "「𠮟野 、", "東京。」", "後"), sentences.map { it.text })
+                assertEquals("とうきょう。」", moe.antimony.hoshi.features.tts.TtsText.spoken(sentences[2], null, emptyList()))
+                // Revisit the dialogue after the following narration, just as the previous/repeat controls do.
+                for (index in listOf(0, 1, 2, 3, 1)) {
+                    val sentence = sentences[index]
+                    val cue = ReaderSasayakiCues.ttsCue(sentence)
+                    val sourceText = evaluate(webView, "window.hoshiReader.collectSasayakiCueRanges([{id:'probe',chapterIndex:0,start:${sentence.start},length:${sentence.length}}])[0].ranges.map(s=>s.node.textContent.slice(s.start,s.end)).join('')")
+                    // Matchable characters must come from this unit, never its preceding/following narration.
+                    val expected = listOf("前", "𠮟野", "東京", "後")[index]
+                    assertEquals(description, expected, Json.decodeFromString<String>(sourceText).filterNot { it in "「」、。 " })
+                    evaluate(webView, ReaderPaginationScripts.highlightSasayakiCueInvocation(cue, true))
+                    composeRule.waitUntil("$description unit $index paint", 10_000) { bluePixelCount() > baseline + 100 }
+                    assertEquals(description, "\"${cue.id}\"", evaluate(webView, "window.hoshiReader.activeCueId"))
+                    evaluate(webView, ReaderPaginationScripts.clearSasayakiCueInvocation())
+                    composeRule.waitUntil("$description clear paint", 10_000) { bluePixelCount() <= baseline + 20 }
+                }
             }
         } finally {
             instrumentation.runOnMainSync { webView.destroy() }

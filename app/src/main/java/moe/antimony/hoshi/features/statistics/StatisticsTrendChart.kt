@@ -26,8 +26,6 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import kotlin.math.ceil
-import kotlin.math.max
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.ui.theme.LocalHoshiEInkMode
 
@@ -52,7 +50,7 @@ internal fun StatisticsTrendChart(
     val textMeasurer = rememberTextMeasurer()
     val buckets = remember(points, mode) { points.map { requireNotNull(statisticsTrendBucket(mode, it.key)) } }
     val range = remember(buckets) { StatisticsDateRange(buckets.first().start, buckets.last().end) }
-    val maxHours = max(5.0, ceil(points.maxOf { it.readingSeconds } / 3600.0))
+    val maxHours = trendMaxHours(points)
     val topLabel = stringResource(R.string.statistics_chart_hours_format, formatInteger(maxHours.toInt()))
     val zeroLabel = formatInteger(0)
     val averageLabel = stringResource(R.string.statistics_chart_average)

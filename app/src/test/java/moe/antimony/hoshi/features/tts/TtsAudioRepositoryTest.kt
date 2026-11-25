@@ -24,13 +24,31 @@ class TtsAudioRepositoryTest {
     private val next = TtsSentence(0, 0, 3, "次です。")
     private val later = TtsSentence(0, 4, 4, "三つです。")
 
+    @Test fun sameTextAndMultilingualVoiceCannotReuseAudioFromAnotherLanguage() = runBlocking {
+        val requests = mutableListOf<String>()
+        val client = client { requests += it }
+        val repository = repository(client)
+        try {
+            val japanese = repository.audio(next, "book", preferences)
+            val englishConfig = preferences.copy(settings = preferences.settings.copy(languageId = "en"))
+            val english = repository.audio(next, "book", englishConfig)
+            assertNotEquals(japanese, english)
+            assertEquals(english, repository.audio(next, "book", englishConfig))
+            assertEquals(japanese, repository.audio(next, "book", preferences))
+            assertEquals(2, requests.size)
+            assertEquals(listOf("ja-JP", "en-US"), requests.map {
+                Json.parseToJsonElement(it).jsonObject.getValue("voice").jsonObject.getValue("languageCode").jsonPrimitive.content
+            })
+        } finally { repository.clearPlaybackCache(); close(client) }
+    }
+
     @Test fun replayedMultipartAudioSurvivesMaximumPrefetchAndAvoidsNewSynthesis() = runBlocking {
         val syntheses = AtomicInteger()
         val client = client { syntheses.incrementAndGet() }
         val repository = repository(client)
         val configured = preferences.copy(settings = preferences.settings.withRouting(
             TtsVoiceRouting(true, "ja-JP-Neural2-B", "ja-JP-Neural2-C")))
-        val repeated = TtsText.chapter(0, "<p>彼は「こんにちは」と言った。</p>").single()
+        val repeated = selectedSentence("彼は「こんにちは」と言った。")
         fun sentence(index: Int) = TtsSentence(0, index * 10, 4, "文章${index}です。")
         try {
             val playing = repository.audio(repeated, "book", configured)
@@ -53,7 +71,7 @@ class TtsAudioRepositoryTest {
                 json.getValue("input").jsonObject.getValue("text").jsonPrimitive.content
         }
         val repository = repository(client)
-        val sentence = TtsText.chapter(0, "<p>彼は「こんにちは」と言った。</p>").single()
+        val sentence = selectedSentence("彼は「こんにちは」と言った。")
         val configured = preferences.copy(settings = preferences.settings.withRouting(TtsVoiceRouting(true, "ja-JP-Neural2-B", "ja-JP-Neural2-C")))
         try {
             val files = repository.audio(sentence, "book", configured)
@@ -73,7 +91,7 @@ class TtsAudioRepositoryTest {
         val requests = mutableListOf<String>()
         val client = client { requests += it }
         val repository = repository(client)
-        val sentence = TtsText.chapter(0, "<p>「こんにちは」と言った。</p>").single()
+        val sentence = selectedSentence("「こんにちは」と言った。")
         try {
             val same = preferences.copy(settings = preferences.settings.withRouting(TtsVoiceRouting(true, "", "ja-JP-Neural2-B")))
             assertEquals(1, repository.audio(sentence, "book", same).size)
@@ -81,7 +99,7 @@ class TtsAudioRepositoryTest {
             assertTrue(requests.single().contains(sentence.text))
             val invalid = same.copy(settings = same.settings.withRouting(TtsVoiceRouting(true, "ja-JP-Neural2-B", "missing")))
             try { repository.audio(sentence, "book", invalid); fail("Invalid voice must not fall back") }
-            catch (error: TtsException) { assertEquals(TtsFailure.MissingJapanese, error.failure) }
+            catch (error: TtsException) { assertEquals(TtsFailure.MissingLanguage, error.failure) }
             assertEquals(1, requests.size)
         } finally { repository.clearPlaybackCache(); close(client) }
     }
@@ -213,6 +231,25 @@ class TtsAudioRepositoryTest {
         } finally { repository.clearPlaybackCache(); close(client) }
     }
 
+    @Test fun routedPlaybackRecoversFromATemporaryCatalogFailure() = runBlocking {
+        val catalogs = AtomicInteger()
+        val base = client { }
+        val builder = base.newBuilder()
+        builder.interceptors().add(0, Interceptor { chain ->
+            if (chain.request().url.encodedPath.endsWith("voices") && catalogs.incrementAndGet() == 1) {
+                Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(503)
+                    .message("temporary catalog outage").body("unavailable".toResponseBody()).build()
+            } else chain.proceed(chain.request())
+        })
+        val http = builder.build()
+        val repository = repository(http)
+        val routed = preferences.copy(settings = preferences.settings.withRouting(TtsVoiceRouting(true, "ja-JP-Neural2-B", "ja-JP-Neural2-C")))
+        try {
+            assertTrue(repository.audio(next, "book", routed).all { it.isFile })
+            assertEquals(2, catalogs.get())
+        } finally { repository.clearPlaybackCache(); close(http) }
+    }
+
     @Test fun cachedNextSentenceReturnsWhileLaterSynthesisIsStillPending() = runBlocking {
         val pending = CompletableDeferred<Unit>()
         val release = CountDownLatch(1)
@@ -240,6 +277,29 @@ class TtsAudioRepositoryTest {
         }
     }
 
+    @Test fun distinctSentencesSynthesizeConcurrentlyWhileIdenticalRequestsShareAudio() = runBlocking {
+        val started = CountDownLatch(ttsSynthesisConcurrency)
+        val release = CountDownLatch(1)
+        val calls = AtomicInteger()
+        val client = client {
+            calls.incrementAndGet(); started.countDown()
+            check(release.await(10, TimeUnit.SECONDS))
+        }
+        val repository = repository(client)
+        try {
+            coroutineScope {
+                val requests = listOf(next, next, later, later.copy(text = "最後です。"))
+                    .map { sentence -> async(Dispatchers.IO) { repository.audio(sentence, "book", preferences) } }
+                val concurrent = withContext(Dispatchers.IO) { started.await(2, TimeUnit.SECONDS) }
+                release.countDown()
+                val results = requests.awaitAll()
+                assertTrue("Distinct requests must reach the transport together", concurrent)
+                assertEquals(3, calls.get())
+                assertEquals(results[0], results[1])
+            }
+        } finally { release.countDown(); repository.clearPlaybackCache(); close(client) }
+    }
+
     @Test fun concurrentRequestsShareCompletedAudioAndClearingForcesNewSynthesis() = runBlocking {
         val syntheses = AtomicInteger()
         val client = client { syntheses.incrementAndGet() }
@@ -259,6 +319,43 @@ class TtsAudioRepositoryTest {
         } finally { repository.clearPlaybackCache(); close(client) }
     }
 
+    @Test fun clearingDrainsConcurrentWritersBeforeNewRequestsUseTheCache() = runBlocking {
+        val started = CountDownLatch(ttsSynthesisConcurrency)
+        val release = CountDownLatch(1)
+        val calls = AtomicInteger()
+        val active = AtomicInteger()
+        val peak = AtomicInteger()
+        val client = client {
+            val running = active.incrementAndGet()
+            peak.updateAndGet { maxOf(it, running) }
+            try {
+                if (calls.incrementAndGet() <= ttsSynthesisConcurrency) {
+                    started.countDown()
+                    check(release.await(10, TimeUnit.SECONDS))
+                }
+            } finally { active.decrementAndGet() }
+        }
+        val repository = repository(client)
+        try {
+            coroutineScope {
+                val old = (1..ttsSynthesisConcurrency).map { index ->
+                    async(Dispatchers.IO) { repository.audio(next.copy(text = "文章${index}。"), "old", preferences) }
+                }
+                assertTrue(withContext(Dispatchers.IO) { started.await(5, TimeUnit.SECONDS) })
+                val clear = async(start = CoroutineStart.UNDISPATCHED) { repository.clearPlaybackCache() }
+                val fresh = async { repository.audio(later, "new", preferences) }
+                release.countDown()
+                val previousFiles = old.awaitAll().flatten()
+                clear.await()
+                assertFalse(previousFiles.any { it.exists() })
+                assertTrue(fresh.await().all { it.isFile })
+                assertEquals(ttsSynthesisConcurrency, peak.get())
+            }
+        } finally { release.countDown(); repository.clearPlaybackCache(); close(client) }
+    }
+
+    private fun selectedSentence(text: String) = TtsText.selection(TtsText.chapter(0, "<p>$text</p>"), text, 0, 0)
+
     private fun repository(client: OkHttpClient): TtsAudioRepository {
         val online = OnlineTtsEngine(OnlineTtsTransport(client), { _, _ -> "fixture-key" }, Dispatchers.IO)
         return TtsAudioRepository(TtsEngineRouter(AndroidTtsEngine(ContextWrapper(null)), online, CustomTtsEngine(OnlineTtsTransport(), { _, _ -> throw TtsException(TtsFailure.Configuration) }, kotlinx.coroutines.Dispatchers.IO)), folder.root, Dispatchers.IO, TtsExportFallback { _, _ -> throw AssertionError("Unexpected format normalization") })
@@ -273,7 +370,7 @@ class TtsAudioRepositoryTest {
         return OkHttpClient.Builder().addInterceptor { chain ->
             val request = chain.request()
             val body = if (request.url.encodedPath.endsWith("voices")) {
-                """{"voices":[{"name":"ja-JP-Neural2-B","languageCodes":["ja-JP"]},{"name":"ja-JP-Neural2-C","languageCodes":["ja-JP"]}]}"""
+                """{"voices":[{"name":"ja-JP-Neural2-B","languageCodes":["ja-JP","en-US"]},{"name":"ja-JP-Neural2-C","languageCodes":["ja-JP"]}]}"""
             } else {
                 val buffer = okio.Buffer()
                 request.body!!.writeTo(buffer)

@@ -34,17 +34,26 @@ enum class StatisticsSyncMode(val rawValue: String) {
 
 data class SyncSettings(
     val enabled: Boolean = false,
+    val provider: SyncProvider = SyncProvider.Gdrive,
     val mode: SyncMode = SyncMode.Auto,
     val autoSyncEnabled: Boolean = false,
     val authProvider: SyncAuthProvider = SyncAuthProvider.DeviceCode,
     val uploadBooks: Boolean = true,
-)
+    val transferConcurrency: Int = DefaultTransferConcurrency,
+) {
+    companion object {
+        const val DefaultTransferConcurrency = 8
+    }
+}
 
 sealed interface DriveAuthStatus {
     data object Connected : DriveAuthStatus
+    data object RecoveryRequired : DriveAuthStatus
     data object NotConnected : DriveAuthStatus
     data object MissingConfiguration : DriveAuthStatus
     data class Failed(val message: String) : DriveAuthStatus
+
+    val isLinked: Boolean get() = this == Connected || this == RecoveryRequired
 }
 
 sealed interface DriveAuthorizationResult {
@@ -55,9 +64,9 @@ sealed interface DriveAuthorizationResult {
     data class Failed(val message: String) : DriveAuthorizationResult
 }
 
-open class DriveAuthException(message: String) : Exception(message)
+open class DriveAuthException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
-class DriveAuthorizationRequiredException : DriveAuthException("Connect Google Drive before syncing.")
+class DriveAuthorizationRequiredException(cause: Throwable? = null) : DriveAuthException("Connect Google Drive before syncing.", cause)
 
 sealed interface SyncResult {
     data class Synced(val title: String) : SyncResult
@@ -110,17 +119,28 @@ data class ResolvedBookPosition(
 class GoogleDriveApiException(
     message: String,
     val statusCode: Int? = null,
+    val reasons: Set<String> = emptySet(),
 ) : Exception(message) {
     val isStaleCacheError: Boolean get() = statusCode == 404
+    val isRateLimited: Boolean get() = statusCode == 429 ||
+        (statusCode == 403 && reasons.any { it == "userRateLimitExceeded" || it == "rateLimitExceeded" })
 
-    override fun getLocalizedMessage(): String =
-        if (statusCode == null) super.getLocalizedMessage().orEmpty()
-        else "${super.getLocalizedMessage().orEmpty()}\nHTTP $statusCode"
+    override fun getLocalizedMessage(): String = listOfNotNull(
+        super.getLocalizedMessage(), statusCode?.let { "HTTP $it" },
+    ).plus(reasons).distinct().joinToString("\n")
 
     companion object {
         const val NoInternetConnectionMessage = "No internet connection."
     }
 }
+
+open class GoogleDriveUnavailableException(override val cause: Throwable) : Exception(cause.message, cause)
+
+/** A Hoshi metadata HTTP exchange failed; it does not invalidate unrelated payload transfers. */
+internal class GoogleDriveMetadataNetworkException(cause: java.io.IOException) : GoogleDriveUnavailableException(cause)
+
+/** Payload socket/response I/O remains identifiable after credential redaction. */
+internal class DrivePayloadNetworkIOException(message: String) : java.io.IOException(message)
 
 internal fun shouldAttemptDriveRequest(
     hasActiveNetwork: Boolean,
@@ -133,6 +153,7 @@ internal fun shouldAttemptDriveRequest(
 internal fun Throwable.isTransientDriveNetworkFailure(): Boolean = when (this) {
     is GoogleDriveApiException -> statusCode == null &&
         message == GoogleDriveApiException.NoInternetConnectionMessage
+    is GoogleDriveUnavailableException -> cause.isTransientDriveNetworkFailure()
     is java.net.SocketTimeoutException,
     is java.net.SocketException,
     is java.net.UnknownHostException -> true

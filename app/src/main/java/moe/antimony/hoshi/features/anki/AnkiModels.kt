@@ -95,6 +95,8 @@ data class AnkiSettings(
     val schemaVersion: Int = AnkiSettingsSchemaVersion,
     val cardFormats: List<AnkiCardFormat> = emptyList(),
     val backendKind: AnkiBackendKind = AnkiBackendKind.AnkiDroid,
+    val ankiDroidClient: AnkiDroidClient = AnkiDroidClient.AnkiDroid,
+    val ankiDroidClientRevision: Long = 0,
     val selectedDeckId: Long? = null,
     val selectedDeckName: String? = null,
     val selectedNoteTypeId: Long? = null,
@@ -316,6 +318,12 @@ data class AnkiMiningContext(
     val documentTitle: String? = null,
     val coverPath: String? = null,
     val sasayakiAudioPath: String? = null,
+    /**
+     * A local sentence audio file to attach, such as the reader's TTS audio. Resolved in
+     * mineEntry to the Anki-attached ref, which also holds the Live cue's audio.
+     */
+    val sentenceAudioPath: String? = null,
+    val sentenceAudioSuppressed: Boolean = false,
     val sentenceOffset: Int? = null,
     /** The chosen Bing image URL carried from the options sheet (pre-download). */
     val webImageUrl: String? = null,
@@ -330,11 +338,6 @@ data class AnkiMiningContext(
     val screenshotPath: String? = null,
     /** The Live cue whose audio the bridge cuts for {sentence-audio}. */
     val sentenceAudio: AnkiLiveCueRef? = null,
-    /**
-     * A local sentence audio file to attach, such as the reader's TTS audio. Resolved in
-     * mineEntry to the Anki-attached ref, which also holds the Live cue's audio.
-     */
-    val sentenceAudioPath: String? = null,
 )
 
 internal data class AnkiTermDictionary(
@@ -494,7 +497,9 @@ internal object AnkiHandlebarRenderer {
             "{book-cover}", "{web-image}" -> context.imageValue()
             "{sasayaki-audio}" -> context.sasayakiAudioPath.orEmpty()
             // The sentence's audio from wherever this surface has it: the Live cue, else Sasayaki.
-            "{sentence-audio}" -> context.sentenceAudioPath?.takeIf { it.isNotBlank() } ?: context.sasayakiAudioPath.orEmpty()
+            "{sentence-audio}" -> if (context.sentenceAudioSuppressed) "" else {
+                context.sentenceAudioPath?.takeIf { it.isNotBlank() } ?: context.sasayakiAudioPath.orEmpty()
+            }
             else -> ""
         }
     }

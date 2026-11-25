@@ -39,6 +39,12 @@ sealed interface AppRoute : NavKey {
     data class DiagnosticsRecordsRoute(val kind: DiagnosticsRecordKind) : AppRoute
 
     @Serializable
+    data object SyncSettingsRoute : AppRoute
+
+    @Serializable
+    data object SyncQueueRoute : AppRoute
+
+    @Serializable
     data class AnkiCardFormatRoute(
         val formatId: String,
     ) : AppRoute
@@ -50,8 +56,18 @@ sealed interface AppRoute : NavKey {
     data object TtsSettingsRoute : AppRoute
 
     @Serializable
+    data object TtsVoiceSettingsRoute : AppRoute
+
+    @Serializable
+    data object TtsReplacementsSettingsRoute : AppRoute
+
+    @Serializable
+    data object TtsReadingSettingsRoute : AppRoute
+
+    @Serializable
     data class ReaderRoute(
         val bookId: String,
+        val skipSyncOnOpen: Boolean = false,
     ) : AppRoute
 }
 
@@ -67,4 +83,6 @@ enum class SettingsDetailSection {
     Advanced,
     Diagnostics,
     About,
+    Dependencies,
+    Acknowledgements,
 }

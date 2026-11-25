@@ -22,8 +22,12 @@ internal interface TtsPlaybackOutput {
     var onEnded: () -> Unit
     var onPaused: () -> Unit
     var onError: (Throwable) -> Unit
+    var onTransition: (Long) -> Unit
     suspend fun connect()
     fun prepare(files: List<File>, title: String, sentence: String)
+    fun append(files: List<File>, title: String, sentence: String, token: Long)
+    /** Discards later units and returns the actual current token, including undelivered transitions. */
+    fun discardUpcoming(): Long?
     fun setPlaybackRate(rate: Float)
     fun play()
     fun pause()
@@ -36,6 +40,8 @@ internal class AndroidTtsPlaybackOutput(private val context: Context) : TtsPlayb
     override var onEnded: () -> Unit = {}
     override var onPaused: () -> Unit = {}
     override var onError: (Throwable) -> Unit = {}
+    override var onTransition: (Long) -> Unit = {}
+    private var enteredToken: Long? = null
     private var player: ExoPlayer? = null
     private var connection: MediaController? = null
     private var desiredRate = 1f
@@ -45,6 +51,15 @@ internal class AndroidTtsPlaybackOutput(private val context: Context) : TtsPlayb
         next.playbackParameters = PlaybackParameters(desiredRate, 1f)
         next.addListener(object : Player.Listener {
             override fun onEvents(player: Player, events: Player.Events) {
+                if (this@AndroidTtsPlaybackOutput.player !== player) return
+                val token = player.currentMediaItem?.localConfiguration?.tag as? Long
+                if (token != null && token != enteredToken) {
+                    enteredToken = token
+                    onTransition(token)
+                    // Retain only the current unit and its lookahead, not the entire book.
+                    if (player.currentMediaItem?.localConfiguration?.tag == token && player.currentMediaItemIndex > 0)
+                        player.removeMediaItems(0, player.currentMediaItemIndex)
+                }
                 // Inspect the current playlist after batched events, not an old state callback
                 // queued before a seek/clear. Paused completion still belongs to the controller.
                 if (this@AndroidTtsPlaybackOutput.player === player &&
@@ -69,11 +84,35 @@ internal class AndroidTtsPlaybackOutput(private val context: Context) : TtsPlayb
         }
     }
     override fun prepare(files: List<File>, title: String, sentence: String) {
+        enteredToken = null
         requireNotNull(player).apply {
             setMediaItems(files.map { file -> MediaItem.Builder().setUri(file.toURI().toString()).setMediaId(file.name)
                 .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist(sentence).build()).build() })
             prepare()
         }
+    }
+    override fun append(files: List<File>, title: String, sentence: String, token: Long) {
+        requireNotNull(player).apply {
+            val first = mediaItemCount
+            val ended = playbackState == Player.STATE_ENDED
+            addMediaItems(files.mapIndexed { index, file -> MediaItem.Builder().setUri(file.toURI().toString())
+                .setMediaId("tts:$token:$index").setTag(token)
+                .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist(sentence).build()).build() })
+            // Late synthesis / an intentional hold may have let the queue run out. Keep the
+            // prepared player and seek to the appended audio instead of clearing/repreparing it.
+            if (ended) seekTo(first, 0)
+        }
+    }
+    override fun discardUpcoming(): Long? {
+        player?.let { player ->
+            if (player.mediaItemCount == 0) return null
+            val token = player.currentMediaItem?.localConfiguration?.tag
+            var end = player.currentMediaItemIndex + 1
+            while (end < player.mediaItemCount && player.getMediaItemAt(end).localConfiguration?.tag == token) end++
+            if (end < player.mediaItemCount) player.removeMediaItems(end, player.mediaItemCount)
+            return token as? Long
+        }
+        return null
     }
     override fun setPlaybackRate(rate: Float) {
         desiredRate = normalizeTtsPlaybackRate(rate)
@@ -81,6 +120,6 @@ internal class AndroidTtsPlaybackOutput(private val context: Context) : TtsPlayb
     }
     override fun play() { requireNotNull(player).play() }
     override fun pause() { player?.pause() }
-    override fun clear() { player?.stop(); player?.clearMediaItems() }
+    override fun clear() { enteredToken = null; player?.stop(); player?.clearMediaItems() }
     override fun disconnect() { connection?.release(); connection = null }
 }

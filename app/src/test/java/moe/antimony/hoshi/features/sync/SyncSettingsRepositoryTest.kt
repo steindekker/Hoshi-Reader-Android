@@ -23,8 +23,30 @@ class SyncSettingsRepositoryTest {
         repository().use { repository ->
             val settings = repository.settings.first()
 
+            assertEquals(SyncProvider.Gdrive, settings.provider)
             assertFalse(settings.enabled)
             assertTrue(settings.uploadBooks)
+        }
+    }
+
+    @Test
+    fun persistsAndBoundsBookTransferConcurrency() = runBlocking {
+        repository().use { repository ->
+            assertEquals(8, SyncSettings().transferConcurrency)
+            assertEquals(8, repository.settings.first().transferConcurrency)
+            for ((value, expected) in listOf(1 to 1, 2 to 2, 8 to 8, 0 to 1, 9 to 8)) {
+                repository.update { it.copy(transferConcurrency = value) }
+                assertEquals(expected, repository.settings.first().transferConcurrency)
+            }
+        }
+    }
+
+    @Test
+    fun movesAnExistingLoginToTtuOnlyOnce() = runBlocking {
+        repository(hasTtuLogin = { true }).use { repository ->
+            assertEquals(SyncProvider.Ttu, repository.settings.first().provider)
+            repository.update { it.copy(provider = SyncProvider.Gdrive) }
+            assertEquals(SyncProvider.Gdrive, repository.settings.first().provider)
         }
     }
 
@@ -47,13 +69,13 @@ class SyncSettingsRepositoryTest {
         assertEquals(1, drive.clearCacheCalls)
     }
 
-    private fun repository(drive: DriveSyncDataSource = FakeDriveSyncDataSource()): RepositoryHandle {
+    private fun repository(drive: DriveSyncDataSource = FakeDriveSyncDataSource(), hasTtuLogin: suspend () -> Boolean = { false }): RepositoryHandle {
         val scope = CoroutineScope(Dispatchers.IO + Job())
         val dataStore = PreferenceDataStoreFactory.create(
             scope = scope,
             produceFile = { tempFolder.newFile("sync-settings.preferences_pb") },
         )
-        return RepositoryHandle(SyncSettingsRepository(dataStore, drive), scope)
+        return RepositoryHandle(SyncSettingsRepository(dataStore, drive, hasTtuLogin = hasTtuLogin), scope)
     }
 
     private class RepositoryHandle(

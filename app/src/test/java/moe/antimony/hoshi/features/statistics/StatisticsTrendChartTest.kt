@@ -8,6 +8,17 @@ import org.junit.Test
 
 class StatisticsTrendChartTest {
     @Test
+    fun scaleFitsShortSessionsAndRoundsLongSessionsUpToWholeHours() {
+        assertEquals(1.0, trendMaxHours(emptyList()), 0.0)
+        listOf(0.0 to 1.0, 300.0 to 1.0, 3599.0 to 1.0, 3600.0 to 1.0,
+            3601.0 to 2.0, 18000.0 to 5.0, 18001.0 to 6.0).forEach { (seconds, hours) ->
+            val points = listOf(StatisticsTrendPoint("2026-06-29", 0, 0.0),
+                StatisticsTrendPoint("2026-06-30", 100, seconds))
+            assertEquals("Maximum reading seconds: $seconds", hours, trendMaxHours(points), 0.0)
+        }
+    }
+
+    @Test
     fun tapsUseBucketWidthIncludingEmptyBucketsAndExcludeYAxis() {
         val buckets = (0L..29L).map { day ->
             LocalDate.of(2026, 4, 1).plusDays(day).let { StatisticsDateRange(it, it) }

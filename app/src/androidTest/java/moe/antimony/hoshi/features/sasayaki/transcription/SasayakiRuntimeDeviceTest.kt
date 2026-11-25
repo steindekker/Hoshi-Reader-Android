@@ -37,10 +37,10 @@ class SasayakiRuntimeDeviceTest {
         val directory = File(root, abi)
         var confirmed = false
         var requests = 0
-        val transport = SasayakiModelTransport { url ->
+        val transport = SasayakiModelTransport { url, offset ->
             assertTrue("Network/stream access requires consent", confirmed)
             requests++
-            if (payloads == null) HttpSasayakiModelTransport().open(url) else {
+            if (payloads == null) HttpSasayakiModelTransport().open(url, offset) else {
                 val file = File(payloads, url.substringAfterLast('/'))
                 SasayakiDownloadResponse(file.inputStream(), file.length())
             }
@@ -50,7 +50,7 @@ class SasayakiRuntimeDeviceTest {
             store.ensure({ assertEquals(specs.sumOf { it.bytes }, it); confirmed = true }) {}
             assertEquals(1, requests)
             assertTrue(specs.all { !File(directory, it.name).canWrite() })
-            val offline = SasayakiModelStore(directory, SasayakiModelTransport { error("Offline cache opened network") },
+            val offline = SasayakiModelStore(directory, SasayakiModelTransport { _, _ -> error("Offline cache opened network") },
                 Dispatchers.IO, specs, readOnly = true)
             offline.ensure({ fail("Cached runtime asks to download") }) { fail("Cached runtime shows downloading") }
             SasayakiRuntimeRepository(context, Dispatchers.IO).load(directory)

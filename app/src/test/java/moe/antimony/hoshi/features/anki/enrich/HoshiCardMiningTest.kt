@@ -155,7 +155,7 @@ class HoshiCardMiningTest {
         (backend as RecordingBackend).noteTypes = listOf(noteType)
         return AnkiRepository(
             context = ContextWrapper(null),
-            backend = backend,
+            ankiDroidBackendFactory = { backend },
             settingsRepository = InMemorySettings(AnkiSettings(cardFormats = listOf(format))),
             localAudioRepository = LocalAudioRepository(Files.createTempDirectory("hoshi-enrich-test").toFile()),
             ankiConnectBackendFactory = { _, _ -> backend },

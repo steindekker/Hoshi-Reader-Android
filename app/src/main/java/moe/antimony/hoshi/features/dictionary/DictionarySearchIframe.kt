@@ -51,7 +51,7 @@ internal fun dictionarySearchRootFramePayload(
 }
 
 internal fun dictionarySearchResultsContentKey(results: List<LookupResult>, sourceText: String? = null): String? {
-    if (results.isEmpty()) return null
+    if (results.isEmpty() && sourceText.isNullOrBlank()) return null
     val digest = MessageDigest.getInstance("SHA-256")
     if (sourceText != null) {
         digest.update(sourceText.toByteArray(Charsets.UTF_8))
@@ -83,7 +83,7 @@ internal fun dictionarySearchIframePayloads(
     sourceText: String? = null,
     sourceSentenceOffset: Int? = null,
 ): List<ReaderLookupPopupFramePayload> {
-    if (rootResults.isEmpty()) return emptyList()
+    if (rootResults.isEmpty() && sourceText.isNullOrBlank()) return emptyList()
     return listOf(
         dictionarySearchRootFramePayload(
             results = rootResults,

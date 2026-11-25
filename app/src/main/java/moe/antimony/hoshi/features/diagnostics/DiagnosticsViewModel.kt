@@ -20,6 +20,7 @@ import moe.antimony.hoshi.R
 import moe.antimony.hoshi.di.CacheDir
 import moe.antimony.hoshi.di.IoDispatcher
 import moe.antimony.hoshi.ui.UiText
+import moe.antimony.hoshi.ui.resolve
 import moe.antimony.hoshi.ui.withErrorDetails
 
 internal class DiagnosticsRepository @Inject constructor(
@@ -29,7 +30,7 @@ internal class DiagnosticsRepository @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     suspend fun load(): ProcessExitDiagnosticsReport = withContext(ioDispatcher) {
-        loadDiagnosticsReport(nonfatalLogger, context.getString(R.string.diagnostics_load_failed)) {
+        loadDiagnosticsReport(nonfatalLogger, UiText.Resource(R.string.diagnostics_load_failed).resolve(context)) {
             loadProcessExitDiagnosticsReport(context)
         }
     }
@@ -46,6 +47,7 @@ internal class DiagnosticsRepository @Inject constructor(
 internal data class DiagnosticsUiState(
     val report: ProcessExitDiagnosticsReport? = null,
     val loadError: UiText? = null,
+    val linkError: UiText? = null,
 )
 
 @HiltViewModel
@@ -84,4 +86,21 @@ internal class DiagnosticsViewModel internal constructor(
 
     suspend fun shareFile(text: String): File = shareReport(text)
     suspend fun save(uri: Uri, text: String) = saveReport(uri, text)
+
+    fun openBuildCommit(openUrl: (String) -> Unit) {
+        val commit = _state.value.report?.buildCommit ?: return
+        try {
+            openUrl(commit.snapshotUrl)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            _state.update {
+                it.copy(linkError = UiText.Resource(R.string.diagnostics_open_snapshot_failed).withErrorDetails(error))
+            }
+        }
+    }
+
+    fun dismissLinkError() {
+        _state.update { it.copy(linkError = null) }
+    }
 }

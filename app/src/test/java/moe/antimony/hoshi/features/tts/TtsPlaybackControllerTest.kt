@@ -18,6 +18,444 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TtsPlaybackControllerTest {
+    @Test fun rebindingBookRefreshesCoverMetadataWithoutRestartingSpeech() = runTest {
+        fixture { controller, _, _, _ ->
+            controller.play(); runCurrent()
+            val before = controller.state.value
+            val cover = File("cover.png")
+            controller.load(requireNotNull(before.bookId), book, false, cover)
+            assertEquals(cover, controller.state.value.bookCoverFile)
+            assertEquals(before.sentence, controller.state.value.sentence)
+            assertTrue(controller.state.value.playing)
+            val revision = controller.state.value.bookMetadataRevision
+            controller.load(requireNotNull(before.bookId), book, false, cover)
+            assertTrue(controller.state.value.bookMetadataRevision > revision)
+            controller.stop()
+            assertEquals(null, controller.state.value.bookCoverFile)
+        }
+    }
+
+    @Test fun clauseToggleRetainsPendingNextAndPreviousChapterDestinations() = runTest {
+        for (direction in listOf(1, -1)) {
+            val delegate = StandardTestDispatcher(testScheduler)
+            var blockNext = false
+            var blocked: (() -> Unit)? = null
+            val dispatcher = object : CoroutineDispatcher() {
+                override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) {
+                    if (blockNext) { blockNext = false; blocked = { delegate.dispatch(context, block) } }
+                    else delegate.dispatch(context, block)
+                }
+            }
+            val chapters = book.copy(chapters = listOf(
+                book.chapters.single().copy(html = "<p>前文、後文。</p>"),
+                EpubChapter("two", "two.xhtml", "application/xhtml+xml", "<p>次句、末尾。</p>")))
+            fixture(fixtureBook = chapters, bookDispatcher = dispatcher) { controller, _, _, repository ->
+                if (direction < 0) { controller.prepareAt(1, 0); runCurrent() }
+                blockNext = true
+                if (direction > 0) controller.next() else controller.previous()
+                runCurrent()
+                assertNotNull(blocked)
+                repository.settings { it.copy(splitAtClausePunctuation = true) }; runCurrent()
+                blocked!!(); runCurrent()
+                assertFalse(controller.state.value.playing)
+                assertEquals(if (direction > 0) "次句、" else "後文。", controller.state.value.sentence?.text)
+                assertEquals(if (direction > 0) 1 else 0, controller.state.value.sentence?.chapter)
+            }
+        }
+    }
+
+    @Test fun clauseToggleReconcilesQueuedPositionPausesAndRetainsNavigationAndPauses() = runTest {
+        val source = book.copy(chapters = listOf(book.chapters.single().copy(html = "<p>前文、後文。次句、末尾。</p>")))
+        fixture(fixtureBook = source) { controller, output, _, repository ->
+            controller.play(); runCurrent()
+            val tokens = output.queued.keys.toList()
+            output.enterNext(notify = false)
+            repository.settings { it.copy(splitAtClausePunctuation = true, sentencePauseMs = 300) }; runCurrent()
+            tokens.forEach(output.onTransition)
+            assertFalse(controller.state.value.playing)
+            assertEquals("次句、", controller.state.value.sentence?.text)
+            assertEquals(4, controller.state.value.sentence?.start)
+            assertTrue(output.queued.isEmpty())
+            controller.play(); runCurrent()
+            output.onEnded(); runCurrent()
+            advanceTimeBy(299); runCurrent()
+            assertEquals("次句、", controller.state.value.sentence?.text)
+            advanceTimeBy(1); runCurrent()
+            assertEquals("末尾。", controller.state.value.sentence?.text)
+            controller.pause()
+            repository.settings { it.copy(splitAtClausePunctuation = false) }; runCurrent()
+            assertFalse(controller.state.value.playing)
+            assertEquals("次句、末尾。", controller.state.value.sentence?.text)
+            controller.previous(); runCurrent()
+            assertEquals("前文、後文。", controller.state.value.sentence?.text)
+        }
+    }
+
+    @Test fun clauseToggleReplacesPendingPositionAndRejectsLateSynthesis() = runTest {
+        val delegate = StandardTestDispatcher(testScheduler)
+        var blockNext = false
+        var blocked: (() -> Unit)? = null
+        val dispatcher = object : CoroutineDispatcher() {
+            override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) {
+                if (blockNext) { blockNext = false; blocked = { delegate.dispatch(context, block) } }
+                else delegate.dispatch(context, block)
+            }
+        }
+        val source = book.copy(chapters = listOf(book.chapters.single().copy(html = "<p>前文、後文。次句、末尾。</p>")))
+        fixture(fixtureBook = source, bookDispatcher = dispatcher) { controller, output, audio, repository ->
+            blockNext = true
+            controller.startAt(0, 6); runCurrent()
+            assertNotNull(blocked)
+            repository.settings { it.copy(splitAtClausePunctuation = true) }; runCurrent()
+            blocked!!(); runCurrent()
+            assertEquals("末尾。", controller.state.value.sentence?.text)
+            assertFalse(controller.state.value.playing)
+            val release = CompletableDeferred<Unit>()
+            audio.synthesize = { withContext(NonCancellable) { release.await() } }
+            controller.play(); runCurrent()
+            repository.settings { it.copy(splitAtClausePunctuation = false) }; runCurrent()
+            release.complete(Unit); runCurrent()
+            assertEquals("次句、末尾。", controller.state.value.sentence?.text)
+            assertFalse(controller.state.value.playing)
+            assertEquals(0, output.playCount)
+        }
+    }
+
+    @Test fun restartWhilePausedStartsCurrentSentenceAndContinuesNormally() = runTest {
+        fixture { controller, output, _, _ ->
+            controller.startAt(0, 0, singleSentence = true); runCurrent()
+            controller.pause()
+            val preparations = output.prepareCount
+            controller.restartCurrentSentence(); runCurrent()
+            assertTrue(controller.state.value.playing)
+            assertEquals("東京です。", controller.state.value.sentence?.text)
+            assertEquals(preparations + 1, output.prepareCount)
+            output.enterNext(); runCurrent()
+            assertEquals("次です。", controller.state.value.sentence?.text)
+            assertTrue(controller.state.value.playing)
+        }
+    }
+
+    @Test fun restartUsesActualQueuedSentenceAcrossChapterAndRejectsOldCallbacks() = runTest {
+        val chapters = book.copy(chapters = listOf(
+            book.chapters.single().copy(html = "<p>一。</p>"),
+            EpubChapter("two", "two.xhtml", "application/xhtml+xml", "<p>二。三。</p>"),
+        ))
+        fixture(fixtureBook = chapters) { controller, output, _, _ ->
+            controller.play(); runCurrent()
+            val oldTokens = output.queued.keys.toList()
+            output.enterNext(notify = false)
+            controller.restartCurrentSentence(); runCurrent()
+            oldTokens.forEach(output.onTransition)
+            assertEquals("二。", controller.state.value.sentence?.text)
+            assertEquals(1, controller.state.value.sentence?.chapter)
+            assertTrue(controller.state.value.playing)
+            controller.restartCurrentSentence(); runCurrent()
+            assertEquals("二。", controller.state.value.sentence?.text)
+            output.enterNext(); runCurrent()
+            assertEquals("三。", controller.state.value.sentence?.text)
+            assertTrue(controller.state.value.playing)
+        }
+    }
+
+    @Test fun restartAfterLastSentenceStartsItAgain() = runTest {
+        fixture(fixtureBook = book.copy(chapters = listOf(book.chapters.single().copy(html = "<p>末尾。</p>")))) { controller, output, _, _ ->
+            controller.play(); runCurrent()
+            output.onEnded(); runCurrent()
+            assertFalse(controller.state.value.playing)
+            controller.restartCurrentSentence(); runCurrent()
+            assertTrue(controller.state.value.playing)
+            assertEquals("末尾。", controller.state.value.sentence?.text)
+            assertEquals(2, output.prepareCount)
+        }
+    }
+
+    @Test fun restartWhilePausedReconcilesUndeliveredTransitionWithinChapter() = runTest {
+        fixture { controller, output, _, _ ->
+            controller.play(); runCurrent()
+            output.enterNext(notify = false)
+            val resumeLookup = controller.pauseForLookup()
+            controller.restartCurrentSentence(); runCurrent()
+            assertEquals("次です。", controller.state.value.sentence?.text)
+            assertTrue(controller.state.value.playing)
+            controller.pause()
+            resumeLookup(); runCurrent()
+            assertFalse(controller.state.value.playing)
+        }
+    }
+
+    @Test fun restartAfterStopDoesNotStartOrSynthesize() = runTest {
+        fixture { controller, output, audio, _ ->
+            controller.stop()
+            controller.restartCurrentSentence(); runCurrent()
+            assertFalse(controller.state.value.playing)
+            assertEquals(0, output.playCount)
+            assertTrue(audio.requests.isEmpty())
+        }
+    }
+
+    @Test fun prefetchStartsSeveralRequestsButQueuesOnlyInSourceOrder() = runTest {
+        fixture(store = MemoryStore(prefetchPreferences(20)), fixtureBook = shortSentencesBook) { controller, output, audio, _ ->
+            val gates = (1..ttsSynthesisConcurrency).map { CompletableDeferred<Unit>() }
+            val pending = mutableListOf<String>()
+            audio.synthesize = { sentence ->
+                val index = listOf("二。", "三。", "四。").take(ttsSynthesisConcurrency).indexOf(sentence.text)
+                if (index >= 0) { pending += sentence.text; gates[index].await() }
+            }
+            controller.play(); runCurrent()
+            assertEquals(listOf("二。", "三。", "四。").take(ttsSynthesisConcurrency), pending)
+            gates.drop(1).forEach { it.complete(Unit) }; runCurrent()
+            assertTrue(output.queued.isEmpty())
+            assertTrue("A slow first request must not stop a free worker preparing later units", audio.requests.contains("十。"))
+            gates[0].complete(Unit); runCurrent()
+            assertEquals(shortSentencesBook.let { TtsText.chapter(0, it.chapters.single().html) }.drop(1).map { it.text }, output.queued.values.toList())
+        }
+    }
+
+    @Test fun readyPrefetchIsPublishedWhileAFartherChapterIsStillLoading() = runTest {
+        val delegate = StandardTestDispatcher(testScheduler)
+        var blockNext = false
+        var blocked: (() -> Unit)? = null
+        val dispatcher = object : CoroutineDispatcher() {
+            override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) {
+                if (blockNext) {
+                    blockNext = false
+                    blocked = { delegate.dispatch(context, block) }
+                } else delegate.dispatch(context, block)
+            }
+        }
+        val chapters = book.copy(chapters = listOf(
+            book.chapters.single().copy(html = "<p>一。二。</p>"),
+            EpubChapter("two", "two.xhtml", "application/xhtml+xml", "<p>三。</p>"),
+        ))
+        fixture(store = MemoryStore(prefetchPreferences(20)), fixtureBook = chapters, bookDispatcher = dispatcher) { controller, output, audio, _ ->
+            val ready = CompletableDeferred<Unit>()
+            audio.synthesize = { sentence ->
+                if (sentence.text == "二。") { blockNext = true; ready.await() }
+            }
+            controller.play(); runCurrent()
+            assertNotNull(blocked)
+            ready.complete(Unit); runCurrent()
+            assertEquals(listOf("二。"), output.queued.values.toList())
+            requireNotNull(blocked).invoke(); runCurrent()
+            assertEquals(listOf("二。", "三。"), output.queued.values.toList())
+        }
+    }
+
+    @Test fun failedPrefetchDoesNotAbandonLaterSentences() = runTest {
+        fixture { controller, output, audio, _ ->
+            audio.synthesize = { sentence -> if (sentence.text == "次です。") throw TtsException(TtsFailure.Network) }
+            controller.play(); runCurrent()
+            assertTrue(audio.requests.contains("三つです。"))
+            assertTrue(audio.requests.contains("四つです。"))
+            assertTrue(output.queued.isEmpty()) // A failed unit cannot be skipped in the playlist.
+            assertTrue(controller.state.value.playing)
+        }
+    }
+
+    @Test fun fartherChapterReadFailureDoesNotEscapePrefetchOrStopCurrentPlayback() = runTest {
+        val failure = java.io.IOException("fixture chapter unavailable")
+        val unreadable = object : File("fixture-unreadable.xhtml") {
+            override fun isFile(): Boolean = throw failure
+        }
+        val chapters = book.copy(chapters = listOf(
+            book.chapters.single().copy(html = "<p>一。二。</p>"),
+            EpubChapter("two", "two.xhtml", "application/xhtml+xml", "<p>三。</p>"),
+            EpubChapter("three", "three.xhtml", "application/xhtml+xml", ""),
+        ), resources = mapOf("three.xhtml" to moe.antimony.hoshi.epub.EpubResource("application/xhtml+xml", file = unreadable)))
+        moe.antimony.hoshi.ui.ErrorDiagnosticEvents.buffer.drain()
+        fixture(store = MemoryStore(prefetchPreferences(20)), fixtureBook = chapters) { controller, output, _, _ ->
+            controller.play(); runCurrent()
+            assertTrue(controller.state.value.playing)
+            assertNull(controller.state.value.error)
+            assertEquals(listOf("二。"), output.queued.values.toList())
+            assertTrue(moe.antimony.hoshi.ui.ErrorDiagnosticEvents.buffer.drain().any { event ->
+                generateSequence(event.error) { it.cause }.any { it === failure }
+            })
+        }
+    }
+
+    @Test fun prefetchedOrdinaryAndCrossChapterUnitsTransitionWithoutRestartingAudio() = runTest {
+        val chapters = book.copy(chapters = listOf(
+            book.chapters.single().copy(html = "<p>一。二。</p>"),
+            EpubChapter("two", "two.xhtml", "application/xhtml+xml", "<p>三。四。</p>"),
+        ))
+        fixture(fixtureBook = chapters) { controller, output, _, _ ->
+            controller.presentSentence = { sentence, _ -> if (sentence.text != "一。") awaitCancellation() }
+            controller.play(); runCurrent()
+            val clears = output.clearCount
+            assertEquals(listOf("二。", "三。", "四。"), output.queued.values.toList())
+            assertEquals("一。", controller.state.value.sentence?.text)
+            listOf("二。", "三。", "四。").forEach { expected ->
+                output.enterNext(); runCurrent()
+                assertEquals(expected, controller.state.value.sentence?.text)
+                assertFalse(controller.state.value.preparing)
+                assertTrue(controller.state.value.playing)
+            }
+            assertEquals(1, controller.state.value.sentence?.chapter)
+            assertEquals(clears, output.clearCount)
+            assertEquals(1, output.prepareCount)
+            assertEquals(1, output.playCount)
+            output.onEnded(); runCurrent()
+            assertFalse(controller.state.value.playing)
+        }
+    }
+
+    @Test fun manualReplayAndPreferenceChangesRejectOldQueueTransitions() = runTest {
+        fixture { controller, output, _, repository ->
+            controller.play(); runCurrent()
+            val oldTokens = output.queued.keys.toList()
+            controller.repeat(); runCurrent()
+            oldTokens.forEach(output.onTransition)
+            assertEquals(0, controller.state.value.index)
+            val beforePauseChange = output.queued.keys.toList()
+            repository.settings { it.copy(sentencePauseMs = 700) }; runCurrent()
+            assertTrue(output.queued.isEmpty())
+            beforePauseChange.forEach(output.onTransition)
+            assertEquals(0, controller.state.value.index)
+            val plays = output.playCount
+            output.onEnded(); runCurrent(); advanceTimeBy(699); runCurrent()
+            assertEquals(plays, output.playCount)
+            advanceTimeBy(1); runCurrent()
+            assertEquals(1, controller.state.value.index)
+        }
+    }
+
+    @Test fun preferenceChangeConsumesTheAlreadyCurrentUndeliveredTransition() = runTest {
+        fixture { controller, output, _, repository ->
+            controller.play(); runCurrent()
+            output.enterNext(notify = false)
+            val current = requireNotNull(output.currentToken)
+            repository.settings { it.copy(sentencePauseMs = 100) }; runCurrent()
+            assertEquals(1, controller.state.value.index)
+            output.onTransition(current)
+            assertEquals(1, controller.state.value.index)
+            output.onEnded(); runCurrent(); advanceTimeBy(100); runCurrent()
+            assertEquals(2, controller.state.value.index)
+            assertEquals(1, output.prepareCount)
+        }
+    }
+
+    @Test fun undeliveredTransitionCannotOverwriteManualReplayOrTheNextLoadedBook() = runTest {
+        val chapters = book.copy(chapters = listOf(
+            book.chapters.single().copy(html = "<p>一。二。</p>"),
+            EpubChapter("two", "two.xhtml", "application/xhtml+xml", "<p>三。</p>"),
+        ))
+        fixture(fixtureBook = chapters) { controller, output, _, _ ->
+            controller.startAt(0, controller.state.value.sentences[1].start); runCurrent()
+            output.enterNext(notify = false)
+            controller.repeat(); runCurrent()
+            assertEquals("二。", controller.state.value.sentence?.text)
+            output.enterNext(notify = false)
+            controller.load("replacement-book", book, false)
+            controller.play(); runCurrent()
+            assertEquals("東京です。", controller.state.value.sentence?.text)
+            assertTrue(controller.state.value.playing)
+            assertNull(controller.state.value.error)
+        }
+    }
+
+    @Test fun prefetchRechecksTheCurrentPositionAfterSuspendedImageInspection() = runTest {
+        val delegate = StandardTestDispatcher(testScheduler)
+        var blockNext = false
+        var blocked: (() -> Unit)? = null
+        val dispatcher = object : CoroutineDispatcher() {
+            override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) {
+                if (blockNext) {
+                    blockNext = false
+                    blocked = { delegate.dispatch(context, block) }
+                } else delegate.dispatch(context, block)
+            }
+        }
+        val chapters = book.copy(chapters = listOf(
+            book.chapters.single().copy(html = "<p>一。</p>"),
+            EpubChapter("two", "two.xhtml", "application/xhtml+xml", "<p>二。三。</p>"),
+        ))
+        fixture(fixtureBook = chapters, bookDispatcher = dispatcher) { controller, output, audio, _ ->
+            var firstPrefetch = true
+            audio.synthesize = { sentence ->
+                if (sentence.text == "二。" && firstPrefetch) {
+                    firstPrefetch = false
+                    blockNext = true // The outgoing chapter image check must cross dispatchers.
+                }
+            }
+            controller.play(); runCurrent()
+            assertNotNull(blocked)
+            output.onEnded(); runCurrent()
+            assertEquals("二。", controller.state.value.sentence?.text)
+            requireNotNull(blocked).invoke(); runCurrent()
+            assertEquals(1, output.queued.values.count { it == "二。" }) // Foreground append only.
+            assertEquals(2, output.playCount)
+        }
+    }
+
+    @Test fun pausedLateQueueTransitionKeepsLookupResumeValidWithoutPlaying() = runTest {
+        fixture { controller, output, _, _ ->
+            controller.play(); runCurrent()
+            val resume = controller.pauseForLookup()
+            output.enterNext(); runCurrent()
+            assertEquals(1, controller.state.value.index)
+            assertFalse(controller.state.value.playing)
+            assertEquals(1, output.playCount)
+            resume(); runCurrent()
+            assertTrue(controller.state.value.playing)
+            assertEquals(1, output.prepareCount)
+            assertEquals(2, output.playCount)
+        }
+    }
+
+    @Test fun sourceImageBarriersPreventQueueingButDisablingHoldsAllowsIt() = runTest {
+        val cases = listOf(
+            listOf("<p>一。</p><img src='x'/><p>二。</p>"),
+            listOf("<p>一。</p><img src='x'/>", "<p>二。</p>"),
+            listOf("<p>一。</p>", "<img src='x'/>", "<p>二。</p>"),
+            listOf("<p>一。</p>", "<img src='x'/><p>二。</p>"),
+        )
+        for (sources in cases) {
+            val imageChapters = EpubBook("Images", chapters = sources.mapIndexed { i, html ->
+                EpubChapter("$i", "$i.xhtml", "application/xhtml+xml", html)
+            })
+            fixture(fixtureBook = imageChapters) { controller, output, _, _ ->
+                controller.play(); runCurrent()
+                assertTrue(sources.toString(), output.queued.isEmpty())
+                controller.imageHoldMillis = 0; runCurrent()
+                assertEquals(listOf("二。"), output.queued.values.toList())
+            }
+        }
+    }
+
+    @Test fun singleSentencePlaybackNeverQueuesFollowingAudio() = runTest {
+        fixture { controller, output, _, _ ->
+            controller.startAt(0, 0, singleSentence = true); runCurrent()
+            assertTrue(output.queued.isEmpty())
+            output.onEnded(); runCurrent()
+            assertFalse(controller.state.value.playing)
+            assertEquals(0, controller.state.value.index)
+        }
+    }
+
+    @Test fun naturalContinuationNeverClearsOrPreparesThePlayerAgain() = runTest {
+        fixture { controller, output, _, _ ->
+            val clears = output.clearCount
+            controller.play(); runCurrent()
+            repeat(3) { output.onEnded(); runCurrent() }
+            assertEquals(3, controller.state.value.index)
+            assertEquals(clears, output.clearCount)
+            assertEquals(1, output.prepareCount)
+        }
+    }
+
+    @Test fun ordinarySentencePresentationDoesNotGateContinuousAudio() = runTest {
+        fixture { controller, output, _, _ ->
+            controller.presentSentence = { sentence, _ -> if (sentence.start > 0) awaitCancellation() }
+            controller.play(); runCurrent()
+            output.onEnded(); runCurrent()
+            assertEquals(1, controller.state.value.index)
+            assertFalse(controller.state.value.preparing)
+            assertEquals(2, output.playCount)
+        }
+    }
+
     @Test fun synthesisFailureKeepsCategoryAndNestedDiagnosticInPlaybackState() = runTest {
         fixture { controller, _, audio, _ ->
             audio.synthesize = { throw TtsException(TtsFailure.Network, cause = java.io.IOException("connection reset", java.io.IOException("proxy refused connection"))) }
@@ -44,7 +482,7 @@ class TtsPlaybackControllerTest {
 
     @Test fun silentSentencesAdvanceWithoutPlayingEmptyAudioOrAddingPauses() = runTest {
         fixture { controller, output, audio, repository ->
-            repository.settings { TtsSettings(sentencePauseMs = 1000) }; runCurrent()
+            repository.settings { TtsSettings(enabled = true, sentencePauseMs = 1000) }; runCurrent()
             val sentences = controller.state.value.sentences
             audio.silent = { it != sentences.last() }
             val presented = mutableListOf<Pair<TtsSentence, Boolean>>()
@@ -54,7 +492,7 @@ class TtsPlaybackControllerTest {
             assertTrue(controller.state.value.playing)
             assertEquals(1, output.playCount)
             assertEquals(sentences, presented.map { it.first })
-            assertEquals(listOf(false, true, true, true), presented.map { it.second })
+            assertEquals(listOf(false, false, false, false), presented.map { it.second })
             assertEquals(0L, testScheduler.currentTime)
         }
     }
@@ -76,7 +514,7 @@ class TtsPlaybackControllerTest {
     }
 
     @Test fun lookupPauseDuringSilentSentenceImageHoldCannotAdvanceUntilResumed() = runTest {
-        fixture { controller, output, audio, _ ->
+        fixture(fixtureBook = imageBook) { controller, output, audio, _ ->
             audio.silent = { it == controller.state.value.sentences[1] }
             controller.presentSentence = { sentence, hold -> if (hold && sentence == controller.state.value.sentences[1]) delay(1000) }
             controller.play(); runCurrent()
@@ -94,7 +532,7 @@ class TtsPlaybackControllerTest {
 
     @Test fun lookupDuringSentenceDelayResumesNextSentence() = runTest {
         fixture { controller, output, _, repository ->
-            repository.settings { TtsSettings(sentencePauseMs = 1000) }; runCurrent()
+            repository.settings { TtsSettings(enabled = true, sentencePauseMs = 1000) }; runCurrent()
             controller.play(); runCurrent()
             output.onEnded(); runCurrent()
             advanceTimeBy(100); runCurrent()
@@ -194,7 +632,7 @@ class TtsPlaybackControllerTest {
     }
 
     private val chapterBook = EpubBook("Chapters", chapters = (0..5).map { chapter ->
-        EpubChapter("$chapter", "$chapter.xhtml", "application/xhtml+xml", "<img src='image.jpg'/><p>第${chapter}章。</p>")
+        EpubChapter("$chapter", "$chapter.xhtml", "application/xhtml+xml", "<img src='image${chapter}.jpg'/><p>第${chapter}章。</p>")
     })
 
     @Test fun prefetchCrossesChaptersWithoutChangingItsSentenceBound() = runTest {
@@ -226,6 +664,19 @@ class TtsPlaybackControllerTest {
             assertEquals(requests, audio.requests.size)
             controller.startAt(4, 0); runCurrent()
             assertEquals(4, controller.state.value.sentence?.chapter)
+            assertEquals(2, output.playCount)
+        }
+    }
+
+    @Test fun repeatedChapterImagesDoNotPauseNaturalPlayback() = runTest {
+        val repeated = chapterBook.copy(chapters = chapterBook.chapters.map { it.copy(html = "<img src='divider.jpg'/><p>本文。</p>") })
+        fixture(fixtureBook = repeated) { controller, output, _, _ ->
+            val holds = mutableListOf<Int>()
+            controller.presentSentence = { sentence, hold -> if (hold) holds += sentence.chapter }
+            controller.play(); runCurrent()
+            output.onEnded(); runCurrent()
+            assertTrue(holds.isEmpty())
+            assertEquals(1, controller.state.value.sentence?.chapter)
             assertEquals(2, output.playCount)
         }
     }
@@ -283,7 +734,92 @@ class TtsPlaybackControllerTest {
         } finally { backgroundScope.cancel(); runCurrent(); Dispatchers.resetMain() }
     }
 
-    private class MemoryStore(initial: Preferences = emptyPreferences()) : DataStore<Preferences> {
+    @Test fun disablingStopsPlaybackAndInvalidatesLookupResumeWithoutAutoRestart() = runTest {
+        fixture { controller, output, audio, repository ->
+            controller.play(); runCurrent()
+            val resume = controller.pauseForLookup()
+            repository.enabled(false); runCurrent()
+            val count = audio.requests.size
+            controller.play(); controller.startAt(0, 0); resume(); runCurrent()
+            assertFalse(controller.state.value.started)
+            assertFalse(controller.state.value.playing)
+            assertTrue(output.prepared.isEmpty())
+            assertEquals(count, audio.requests.size)
+            repository.enabled(true); runCurrent()
+            resume(); runCurrent()
+            assertFalse(controller.state.value.started)
+            controller.load("book", book, false)
+            controller.startAt(0, 0); runCurrent()
+            assertTrue(controller.state.value.playing)
+        }
+    }
+
+    @Test fun disablingDuringPreparationRejectsLateAudioAndCancelsPrefetch() = runTest {
+        fixture { controller, output, audio, repository ->
+            val release = CompletableDeferred<Unit>()
+            audio.synthesize = { withContext(NonCancellable) { release.await() } }
+            controller.play(); runCurrent()
+            assertTrue(controller.state.value.preparing)
+            repository.enabled(false); runCurrent()
+            release.complete(Unit); runCurrent()
+            output.onEnded(); controller.repeat(); runCurrent()
+            assertFalse(controller.state.value.started)
+            assertFalse(controller.state.value.preparing)
+            assertEquals(0, output.playCount)
+            assertTrue(output.prepared.isEmpty())
+        }
+    }
+
+    @Test fun noPlaybackBeforeFirstPreferencesAndFailedReadCanBeRetried() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            val gate = CompletableDeferred<Unit>()
+            var failure: Throwable? = java.io.IOException("preferences unavailable")
+            val store = object : DataStore<Preferences> {
+                override val data = kotlinx.coroutines.flow.flow {
+                    gate.await()
+                    failure?.let { throw it }
+                    emit(preferencesOf(stringPreferencesKey("preferences") to """{"settings":{"enabled":true}}"""))
+                    awaitCancellation()
+                }
+                override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences = error("Read only fixture")
+            }
+            val output = Output()
+            val audio = Audio()
+            val controller = TtsPlaybackController(TtsBookRepository(UnconfinedTestDispatcher(testScheduler)),
+                TtsRepository(store), audio, output, backgroundScope)
+            controller.load("book", book, false)
+            controller.startAt(0, 0); runCurrent()
+            assertEquals(0, audio.requests.size)
+            assertFalse(controller.state.value.started)
+            gate.complete(Unit); runCurrent()
+            assertNotNull(controller.state.value.error)
+            failure = null
+            controller.retryPreferences(); runCurrent()
+            controller.load("book", book, false)
+            controller.startAt(0, 0); runCurrent()
+            assertTrue(controller.state.value.playing)
+            assertEquals(1, output.playCount)
+            controller.stop()
+        } finally { backgroundScope.cancel(); runCurrent(); Dispatchers.resetMain() }
+    }
+
+    @Test fun disablingWhilePlayingCancelsPendingPrefetch() = runTest {
+        fixture { controller, output, audio, repository ->
+            var cancelled = false
+            audio.synthesize = { sentence ->
+                if (sentence.start > 0) try { awaitCancellation() } finally { cancelled = true }
+            }
+            controller.play(); runCurrent()
+            assertEquals(1, output.playCount)
+            repository.enabled(false); runCurrent()
+            assertTrue(cancelled)
+            assertFalse(controller.state.value.started)
+            assertTrue(output.prepared.isEmpty())
+        }
+    }
+
+    private class MemoryStore(initial: Preferences = preferencesOf(stringPreferencesKey("preferences") to """{"settings":{"enabled":true}}""")) : DataStore<Preferences> {
         override val data = MutableStateFlow(initial)
         override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences = transform(data.value).also { data.value = it }
     }
@@ -311,13 +847,24 @@ class TtsPlaybackControllerTest {
         override var onError: (Throwable) -> Unit = {}
         var appliedRate = 1f
         var playCount = 0
+        var clearCount = 0
+        var prepareCount = 0
         var prepared = emptyList<File>()
+        override var onTransition: (Long) -> Unit = {}
+        val queued = linkedMapOf<Long, String>()
+        override fun append(files: List<File>, title: String, sentence: String, token: Long) { queued[token] = sentence }
+        var currentToken: Long? = null
+        override fun discardUpcoming(): Long? { queued.clear(); return currentToken }
+        fun enterNext(notify: Boolean = true) {
+            val token = queued.keys.first(); queued.remove(token); currentToken = token
+            if (notify) onTransition(token)
+        }
         override suspend fun connect() = Unit
-        override fun prepare(files: List<File>, title: String, sentence: String) { prepared = files }
+        override fun prepare(files: List<File>, title: String, sentence: String) { prepareCount++; prepared = files; currentToken = null }
         override fun setPlaybackRate(rate: Float) { appliedRate = rate }
         override fun play() { playCount++ }
         override fun pause() = Unit
-        override fun clear() { prepared = emptyList() }
+        override fun clear() { clearCount++; prepared = emptyList(); currentToken = null }
         override fun disconnect() = Unit
     }
     private class Audio : TtsAudioSource {
@@ -332,14 +879,15 @@ class TtsPlaybackControllerTest {
         override suspend fun clearPlaybackCache() = Unit
     }
     private val book = EpubBook("Fixture", chapters = listOf(EpubChapter("one", "one.xhtml", "application/xhtml+xml", "<p>東京です。次です。三つです。四つです。</p>")))
-    private suspend fun TestScope.fixture(store: MemoryStore = MemoryStore(), fixtureBook: EpubBook = book, body: suspend (TtsPlaybackController, Output, Audio, TtsRepository) -> Unit) {
+    private val imageBook = book.copy(chapters = listOf(book.chapters.single().copy(html = "<p>東京です。</p><img src='image.png'/><p>次です。三つです。四つです。</p>")))
+    private suspend fun TestScope.fixture(store: MemoryStore = MemoryStore(), fixtureBook: EpubBook = book, bookDispatcher: CoroutineDispatcher? = null, body: suspend (TtsPlaybackController, Output, Audio, TtsRepository) -> Unit) {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val fixtureScope = CoroutineScope(backgroundScope.coroutineContext + SupervisorJob(backgroundScope.coroutineContext[Job]))
         try {
             val repository = TtsRepository(store)
             val output = Output()
             val audio = Audio()
-            val controller = TtsPlaybackController(TtsBookRepository(UnconfinedTestDispatcher(testScheduler)), repository, audio, output, fixtureScope)
+            val controller = TtsPlaybackController(TtsBookRepository(bookDispatcher ?: UnconfinedTestDispatcher(testScheduler)), repository, audio, output, fixtureScope)
             controller.load("book", fixtureBook, false)
             controller.prepareAt(0, 0)
             withTimeout(5_000) { controller.state.first { it.sentences.isNotEmpty() } }
@@ -348,7 +896,7 @@ class TtsPlaybackControllerTest {
         } finally { fixtureScope.cancel(); runCurrent(); Dispatchers.resetMain() }
     }
     private val preferencesKey = stringPreferencesKey("preferences")
-    private fun prefetchPreferences(count: Int) = preferencesOf(preferencesKey to """{"settings":{"prefetchSentences":$count}}""")
+    private fun prefetchPreferences(count: Int) = preferencesOf(preferencesKey to """{"settings":{"enabled":true,"prefetchSentences":$count}}""")
     private val shortSentencesBook = EpubBook("Short sentences", chapters = listOf(EpubChapter("one", "one.xhtml",
         "application/xhtml+xml", "<p>一。二。三。四。五。六。七。八。九。十。</p>")))
 
@@ -461,7 +1009,7 @@ class TtsPlaybackControllerTest {
     }
 
     @Test fun restoredPlaybackRateAppliesBeforePlaybackStarts() = runTest {
-        fixture(store = MemoryStore(preferencesOf(preferencesKey to """{"settings":{"playbackRate":2.5}}"""))) { controller, output, _, _ ->
+        fixture(store = MemoryStore(preferencesOf(preferencesKey to """{"settings":{"enabled":true,"playbackRate":2.5}}"""))) { controller, output, _, _ ->
             assertEquals(2.5f, output.appliedRate)
             controller.play(); runCurrent()
             assertEquals(2.5f, output.appliedRate)
@@ -488,6 +1036,38 @@ class TtsPlaybackControllerTest {
             advanceTimeBy(1); runCurrent()
             assertEquals(1, controller.state.value.index)
             assertEquals(2, output.playCount)
+        }
+    }
+
+    @Test fun quoteUnitsSupportPrefetchReplayNavigationAndSingleSentencePlayback() = runTest {
+        val quotedBook = EpubBook("Quotes", chapters = listOf(
+            EpubChapter("one", "one.xhtml", "application/xhtml+xml", "<p>彼は「はい」と言った。</p>"),
+            EpubChapter("two", "two.xhtml", "application/xhtml+xml", "<p>次。</p>"),
+        ))
+        fixture(store = MemoryStore(prefetchPreferences(3)), fixtureBook = quotedBook) { controller, output, audio, repository ->
+            repository.settings { it.copy(sentencePauseMs = 700) }; runCurrent()
+            controller.play(); runCurrent()
+            assertEquals(listOf("彼は", "「はい」", "と言った。", "次。"), audio.requests)
+            output.onEnded(); runCurrent()
+            advanceTimeBy(699); runCurrent()
+            assertEquals("彼は", controller.state.value.sentence?.text)
+            advanceTimeBy(1); runCurrent()
+            assertEquals("「はい」", controller.state.value.sentence?.text)
+            controller.repeat(); runCurrent()
+            assertEquals("「はい」", controller.state.value.sentence?.text)
+            assertEquals(3, output.playCount)
+            controller.next(); runCurrent()
+            assertEquals("と言った。", controller.state.value.sentence?.text)
+            controller.next(); runCurrent()
+            assertEquals(1, controller.state.value.sentence?.chapter)
+            controller.previous(); runCurrent()
+            assertEquals("と言った。", controller.state.value.sentence?.text)
+            controller.startAt(0, 2, singleSentence = true); runCurrent()
+            assertEquals("「はい」", controller.state.value.sentence?.text)
+            output.onEnded(); runCurrent()
+            advanceTimeBy(700); runCurrent()
+            assertFalse(controller.state.value.playing)
+            assertEquals("「はい」", controller.state.value.sentence?.text)
         }
     }
 
@@ -520,7 +1100,7 @@ class TtsPlaybackControllerTest {
             assertTrue(cancelled)
             assertTrue(controller.state.value.playing)
             assertEquals(1, output.playCount)
-            assertEquals(listOf("一。", "二。", "三。", "二。"), audio.requests)
+            assertEquals(listOf("一。", "二。", "三。", "四。", "五。", "六。", "七。", "二。"), audio.requests)
         }
     }
 
@@ -609,7 +1189,7 @@ class TtsPlaybackControllerTest {
     }
 
     @Test fun onlyNaturalSentenceAdvancesRequestImageHolds() = runTest {
-        fixture { controller, output, _, _ ->
+        fixture(fixtureBook = imageBook) { controller, output, _, _ ->
             val holds = mutableListOf<Boolean>()
             controller.presentSentence = { _, hold -> holds += hold }
             controller.play(); runCurrent()
@@ -619,8 +1199,98 @@ class TtsPlaybackControllerTest {
             assertEquals(listOf(false, true, false, false), holds)
         }
     }
+    @Test fun cancelledReaderRestoreCannotLeaveSpeechPreparingForever() = runTest {
+        fixture(fixtureBook = imageBook) { controller, output, _, _ ->
+            val restore = CompletableDeferred<Unit>()
+            controller.presentSentence = { _, hold -> if (hold) restore.await() }
+            controller.play(); runCurrent()
+            output.onEnded(); runCurrent()
+            assertTrue(controller.state.value.preparing)
+
+            restore.cancel()
+            runCurrent()
+
+            assertEquals(1, controller.state.value.index)
+            assertEquals(2, output.playCount)
+            assertTrue(controller.state.value.playing)
+            assertFalse(controller.state.value.preparing)
+            assertNull(controller.state.value.error)
+        }
+    }
+    @Test fun manualPageTurnCancelsImagePresentationAndPlaysTheWaitingSentenceOnce() = runTest {
+        fixture(fixtureBook = imageBook) { controller, output, _, _ ->
+            val revealed = mutableListOf<String>()
+            var presentationContext: kotlin.coroutines.CoroutineContext? = null
+            controller.presentSentence = { sentence, hold ->
+                if (hold) {
+                    presentationContext = currentCoroutineContext()
+                    delay(1000)
+                }
+                revealed += sentence.text
+            }
+            controller.play(); runCurrent()
+            output.onEnded(); runCurrent()
+            assertEquals(1, output.playCount)
+            assertTrue(controller.state.value.preparing)
+
+            controller.cancelReaderPresentation()
+            runCurrent()
+
+            assertEquals(1, controller.state.value.index)
+            assertEquals(2, output.playCount)
+            assertTrue(controller.state.value.playing)
+            assertFalse(controller.state.value.preparing)
+            assertFalse(requireNotNull(presentationContext).isActive)
+            advanceTimeBy(2000); runCurrent()
+            assertEquals(listOf("東京です。"), revealed)
+            assertEquals(2, output.playCount)
+
+            output.onEnded(); runCurrent()
+            advanceTimeBy(1000); runCurrent()
+            assertEquals(2, controller.state.value.index)
+            assertEquals(3, output.playCount)
+            assertEquals(listOf("東京です。", "三つです。"), revealed)
+        }
+    }
+    @Test fun lookupImmediatelyAfterSkippingImageHoldStillControlsResume() = runTest {
+        fixture(fixtureBook = imageBook) { controller, output, _, _ ->
+            controller.presentSentence = { _, hold -> if (hold) delay(1000) }
+            controller.play(); runCurrent()
+            output.onEnded(); runCurrent()
+
+            controller.cancelReaderPresentation()
+            val resume = controller.pauseForLookup()
+            runCurrent()
+            val playCountAtLookup = output.playCount
+            advanceTimeBy(2000); runCurrent()
+            assertEquals(playCountAtLookup, output.playCount)
+            assertFalse(controller.state.value.playing)
+
+            resume(); runCurrent()
+            assertEquals(1, controller.state.value.index)
+            assertEquals(playCountAtLookup + 1, output.playCount)
+            assertFalse(controller.state.value.preparing)
+        }
+    }
+    @Test fun skippingSilentSentenceImageHoldContinuesToTheNextAudibleSentence() = runTest {
+        fixture { controller, output, audio, _ ->
+            audio.silent = { it == controller.state.value.sentences[1] }
+            controller.presentSentence = { sentence, hold ->
+                if (hold && sentence == controller.state.value.sentences[1]) delay(1000)
+            }
+            controller.play(); runCurrent()
+            output.onEnded(); runCurrent()
+            controller.cancelReaderPresentation()
+            runCurrent()
+
+            assertEquals(2, controller.state.value.index)
+            assertEquals(2, output.playCount)
+            assertTrue(controller.state.value.playing)
+            assertFalse(controller.state.value.preparing)
+        }
+    }
     @Test fun pausingDuringImagePresentationCancelsAudioUntilTheHoldIsResumed() = runTest {
-        fixture { controller, output, _, _ ->
+        fixture(fixtureBook = imageBook) { controller, output, _, _ ->
             controller.presentSentence = { _, hold -> if (hold) delay(1000) }
             controller.play(); runCurrent()
             output.onEnded(); runCurrent()
@@ -665,7 +1335,7 @@ class TtsPlaybackControllerTest {
     }
     @Test fun sentencePauseWaitsBetweenAutomaticSentencesAndStopCancelsIt() = runTest {
         fixture { controller, output, _, repository ->
-            repository.settings { TtsSettings(sentencePauseMs = 1000) }; runCurrent()
+            repository.settings { TtsSettings(enabled = true, sentencePauseMs = 1000) }; runCurrent()
             controller.play(); runCurrent()
             output.onEnded(); runCurrent()
             assertEquals(1, output.playCount)
@@ -682,7 +1352,7 @@ class TtsPlaybackControllerTest {
     }
     @Test fun resumingDuringSentencePauseStartsNextSentenceAndManualNavigationDoesNotWait() = runTest {
         fixture { controller, output, _, repository ->
-            repository.settings { TtsSettings(sentencePauseMs = 1000) }; runCurrent()
+            repository.settings { TtsSettings(enabled = true, sentencePauseMs = 1000) }; runCurrent()
             controller.play(); runCurrent()
             output.onEnded(); runCurrent()
             controller.pause(); controller.play(); runCurrent()
@@ -711,9 +1381,9 @@ class TtsPlaybackControllerTest {
     }
     @Test fun engineFailureIsVisibleAndRetryCanPlay() = runTest {
         fixture { controller, output, audio, _ ->
-            audio.synthesize = { throw TtsException(TtsFailure.MissingJapanese) }
+            audio.synthesize = { throw TtsException(TtsFailure.MissingLanguage) }
             controller.play(); runCurrent()
-            assertEquals(TtsFailure.MissingJapanese, controller.state.value.error?.failure)
+            assertEquals(TtsFailure.MissingLanguage, controller.state.value.error?.failure)
             assertFalse(controller.state.value.playing)
             audio.synthesize = {}
             controller.play(); runCurrent()
@@ -724,7 +1394,7 @@ class TtsPlaybackControllerTest {
     @Test fun changingVoicePausesAndNextPlayUsesNewSettings() = runTest {
         fixture { controller, output, _, repository ->
             controller.play(); runCurrent()
-            repository.settings { TtsSettings().withVoice("new") }; runCurrent()
+            repository.settings { TtsSettings(enabled = true, ).withVoice("new") }; runCurrent()
             assertFalse(controller.state.value.playing)
             assertTrue(output.prepared.isEmpty())
             controller.play(); runCurrent()
@@ -734,7 +1404,7 @@ class TtsPlaybackControllerTest {
     @Test fun synthesisOptionsPauseAndInvalidatePreparedAudio() = runTest {
         fixture { controller, output, _, repository ->
             controller.play(); runCurrent()
-            repository.settings { TtsSettings(pitch = 3f, parameters = mapOf("" to TtsSynthesisOptions(volume = -10f))) }; runCurrent()
+            repository.settings { TtsSettings(enabled = true, pitch = 3f, parameters = mapOf("" to TtsSynthesisOptions(volume = -10f))) }; runCurrent()
             assertFalse(controller.state.value.playing)
             assertTrue(output.prepared.isEmpty())
             controller.play(); runCurrent()

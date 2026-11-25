@@ -38,7 +38,6 @@ class StatisticsSettingsViewModelTest {
             val repository = AndroidStatisticsRepository(store, dispatcher)
             val model = StatisticsSettingsViewModel(
                 MutableStateFlow(ReaderSettings(statisticsResetMinutes = 315)),
-                MutableStateFlow(false),
                 {},
                 repository,
                 backgroundScope,
@@ -58,7 +57,7 @@ class StatisticsSettingsViewModelTest {
             model.dismissError()
             model.clearArchive()
             runCurrent()
-            assertFalse(archive.exists())
+            assertFalse(archive.resolve("corrupt-book").exists())
             assertEquals(0, model.uiState.value.archivedBookCount)
             assertFalse((model.uiState.value.loadState as SettingsLoadState.Loaded).value.archiveSummary.hasArchivedData)
             assertTrue(model.uiState.value.loadState is SettingsLoadState.Loaded)
@@ -69,13 +68,11 @@ class StatisticsSettingsViewModelTest {
     }
 
     @Test
-    fun delayedPreferencesWaitForBothStoredSourcesAndArchiveCount() = runTest {
+    fun delayedPreferencesWaitForStoredSettingsAndArchiveCount() = runTest {
         val firstSettings = CompletableDeferred<ReaderSettings>()
-        val firstSync = CompletableDeferred<Boolean>()
         val persisted = ReaderSettings(statisticsResetMinutes = 315)
         val model = StatisticsSettingsViewModel(
             flow { emit(firstSettings.await()) },
-            flow { emit(firstSync.await()) },
             {},
             StatisticsRepositoryFake().apply { archiveCount = 4 },
             backgroundScope,
@@ -84,12 +81,8 @@ class StatisticsSettingsViewModelTest {
         assertEquals(SettingsLoadState.Loading, model.uiState.value.loadState)
         firstSettings.complete(persisted)
         runCurrent()
-        assertEquals(SettingsLoadState.Loading, model.uiState.value.loadState)
-        firstSync.complete(true)
-        runCurrent()
         val loaded = model.uiState.value.loadState as SettingsLoadState.Loaded
         assertEquals(persisted, loaded.value.settings)
-        assertTrue(loaded.value.syncEnabled)
         assertEquals(4, loaded.value.archivedBookCount)
     }
 
@@ -98,7 +91,6 @@ class StatisticsSettingsViewModelTest {
         val count = CompletableDeferred<Int>()
         val model = StatisticsSettingsViewModel(
             MutableStateFlow(ReaderSettings()),
-            MutableStateFlow(false),
             {},
             object : StatisticsRepositoryFake() {
                 override suspend fun loadArchiveSummary() = StatisticsArchiveSummary(count.await())
@@ -117,7 +109,6 @@ class StatisticsSettingsViewModelTest {
         var attempts = 0
         val model = StatisticsSettingsViewModel(
             MutableStateFlow(ReaderSettings()),
-            MutableStateFlow(false),
             {},
             object : StatisticsRepositoryFake() {
                 override suspend fun loadArchiveSummary(): StatisticsArchiveSummary {
@@ -144,7 +135,6 @@ class StatisticsSettingsViewModelTest {
     @Test
     fun failedSettingsReadCanRetryAndReopenedInstanceStartsLoading() = runTest {
         val persisted = ReaderSettings(statisticsAutostartOnBookOpen = false)
-        val firstSync = CompletableDeferred<Boolean>()
         var attempts = 0
         val source = flow {
             attempts++
@@ -153,7 +143,6 @@ class StatisticsSettingsViewModelTest {
         }
         fun newModel() = StatisticsSettingsViewModel(
             source,
-            flow { emit(firstSync.await()) },
             {},
             StatisticsRepositoryFake(),
             backgroundScope,
@@ -164,8 +153,6 @@ class StatisticsSettingsViewModelTest {
         assertNull(model.uiState.value.settings)
         model.retryLoad()
         assertEquals(SettingsLoadState.Loading, model.uiState.value.loadState)
-        runCurrent()
-        firstSync.complete(false)
         runCurrent()
         assertEquals(persisted, (model.uiState.value.loadState as SettingsLoadState.Loaded).value.settings)
 
@@ -180,7 +167,6 @@ class StatisticsSettingsViewModelTest {
         val pendingSettings = CompletableDeferred<ReaderSettings>()
         val model = StatisticsSettingsViewModel(
             flow { emit(pendingSettings.await()) },
-            MutableStateFlow(false),
             {},
             object : StatisticsRepositoryFake() {
                 override suspend fun loadArchiveSummary(): StatisticsArchiveSummary = throw IOException()
@@ -197,7 +183,6 @@ class StatisticsSettingsViewModelTest {
         var reads = 0
         val model = StatisticsSettingsViewModel(
             MutableStateFlow(ReaderSettings()),
-            MutableStateFlow(false),
             {},
             object : StatisticsRepositoryFake() {
                 override suspend fun loadArchiveSummary(): StatisticsArchiveSummary {
@@ -223,7 +208,7 @@ class StatisticsSettingsViewModelTest {
     fun settingsEditsUseLatestPreferencesAndClearArchiveRefreshesCount() = runTest {
         val settings = MutableStateFlow(ReaderSettings(statisticsSyncEnabled = false))
         val repository = StatisticsRepositoryFake().apply { archiveCount = 3 }
-        val model = StatisticsSettingsViewModel(settings, MutableStateFlow(true), { settings.value = it(settings.value) }, repository, backgroundScope)
+        val model = StatisticsSettingsViewModel(settings, { settings.value = it(settings.value) }, repository, backgroundScope)
         model.reload()
         runCurrent()
         assertEquals(3, model.uiState.value.archivedBookCount)
@@ -243,7 +228,7 @@ class StatisticsSettingsViewModelTest {
     fun failedArchiveClearRetainsCountAndReportsError() = runTest {
         val settings = MutableStateFlow(ReaderSettings())
         val repository = StatisticsRepositoryFake().apply { archiveCount = 2; failWrites = true }
-        val model = StatisticsSettingsViewModel(settings, MutableStateFlow(false), {}, repository, backgroundScope)
+        val model = StatisticsSettingsViewModel(settings, {}, repository, backgroundScope)
         model.reload()
         runCurrent()
         model.clearArchive()

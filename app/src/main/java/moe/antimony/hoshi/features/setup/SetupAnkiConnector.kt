@@ -14,6 +14,8 @@ import moe.antimony.hoshi.di.IoDispatcher
 import moe.antimony.hoshi.features.anki.AnkiBackend
 import moe.antimony.hoshi.features.anki.AnkiBackendKind
 import moe.antimony.hoshi.features.anki.AnkiDeck
+import moe.antimony.hoshi.features.anki.AnkiDroidBackendFactory
+import moe.antimony.hoshi.features.anki.AnkiDroidClient
 import moe.antimony.hoshi.features.anki.AnkiFieldTemplates
 import moe.antimony.hoshi.features.anki.AnkiNoteType
 import moe.antimony.hoshi.features.anki.AnkiNoteTypeSpec
@@ -39,11 +41,11 @@ internal class SetupAnkiConnector(
     @Inject
     constructor(
         @ApplicationContext context: Context,
-        backend: AnkiBackend,
+        ankiDroidBackendFactory: AnkiDroidBackendFactory,
         settings: AnkiSettingsRepository,
         @IoDispatcher ioDispatcher: CoroutineDispatcher,
     ) : this(
-        backend = backend,
+        backend = ankiDroidBackendFactory.create(AnkiDroidClient.AnkiDroid),
         settings = settings,
         spec = { HoshiNoteType.spec(context) },
         ioDispatcher = ioDispatcher,

@@ -154,6 +154,10 @@ class MainShellUiTest {
 
     @Test
     fun bookshelfPullRefreshIsEnabledOnlyForLoadedSyncShelfLikeIos() {
+        assertTrue(shouldEnableBookshelfPullRefresh(
+            syncSettings = SyncSettings(enabled = true), authStatus = DriveAuthStatus.RecoveryRequired,
+            hasLoadedBooks = true, isSelecting = false, fileTaskBlocked = false,
+        ))
         assertTrue(
             shouldEnableBookshelfPullRefresh(
                 syncSettings = SyncSettings(enabled = true),
@@ -378,7 +382,8 @@ class MainShellUiTest {
                 ),
             )
 
-            assertEquals(0.25, loadBookProgressById(listOf(entry), repository).getValue("a"), 0.0001)
+            repository.saveMetadata(root, entry.metadata)
+            assertEquals(0.25, loadBookReadingStatesById(listOf(entry), repository).getValue("a").progress, 0.0001)
         } finally {
             filesDir.deleteRecursively()
         }

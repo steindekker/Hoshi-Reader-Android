@@ -1,28 +1,27 @@
 package moe.antimony.hoshi.features.reader
 
 import android.content.Context
+import moe.antimony.hoshi.webview.SelectionLanguageAssets
 import moe.antimony.hoshi.content.ContentLanguageProfile
 
 internal data class ReaderWebAssets(
-    val languageJapaneseJs: String,
-    val selectionJapaneseJs: String,
-    val selectionEnglishJs: String,
+    val languageAssets: SelectionLanguageAssets = SelectionLanguageAssets { "" },
     val selectionJs: String,
     val readerPaginatedJs: String,
     val readerContinuousJs: String,
-    val readerVisualNovelJs: String,
+    val readerParagraphJs: String,
     val readerViewportJs: String,
+    val readerDocumentPreparationJs: String,
     val readerTextSemanticsJs: String,
     val readerDomTextJs: String,
     val readerMediaSemanticsJs: String,
-    val readerLayoutSemanticsJs: String,
-    val readerVnContentStreamJs: String,
-    val readerVnRangeMapJs: String,
-    val readerVnSelectionProjectionJs: String,
     val readerSasayakiJs: String,
     val highlightsJs: String,
     val readerCss: String,
 ) {
+    // Bound to this immutable asset snapshot; copy() gets its own compiled templates.
+    internal val paginationSource by lazy { ReaderPaginationAssetSource.from(this) }
+
     companion object {
         @Volatile
         private var cached: ReaderWebAssets? = null
@@ -34,21 +33,16 @@ internal data class ReaderWebAssets(
 
         private fun read(context: Context): ReaderWebAssets =
             ReaderWebAssets(
-                languageJapaneseJs = context.readAsset("hoshi-web/shared/language-ja.js"),
-                selectionJapaneseJs = context.readAsset("hoshi-web/shared/selection-ja.js"),
-                selectionEnglishJs = context.readAsset("hoshi-web/shared/selection-en.js"),
+                languageAssets = SelectionLanguageAssets.load(context),
                 selectionJs = context.readAsset("hoshi-web/shared/selection.js"),
                 readerPaginatedJs = context.readAsset("hoshi-web/reader/reader-paginated.js"),
                 readerContinuousJs = context.readAsset("hoshi-web/reader/reader-continuous.js"),
-                readerVisualNovelJs = context.readAsset("hoshi-web/reader/reader-visual-novel.js"),
+                readerParagraphJs = context.readAsset("hoshi-web/reader/reader-paragraph.js"),
                 readerViewportJs = context.readAsset("hoshi-web/reader/reader-viewport.js"),
+                readerDocumentPreparationJs = context.readAsset("hoshi-web/reader/reader-document-preparation.js"),
                 readerTextSemanticsJs = context.readAsset("hoshi-web/reader/reader-text-semantics.js"),
                 readerDomTextJs = context.readAsset("hoshi-web/reader/reader-dom-text.js"),
                 readerMediaSemanticsJs = context.readAsset("hoshi-web/reader/reader-media-semantics.js"),
-                readerLayoutSemanticsJs = context.readAsset("hoshi-web/reader/reader-layout-semantics.js"),
-                readerVnContentStreamJs = context.readAsset("hoshi-web/reader/reader-vn-content-stream.js"),
-                readerVnRangeMapJs = context.readAsset("hoshi-web/reader/reader-vn-range-map.js"),
-                readerVnSelectionProjectionJs = context.readAsset("hoshi-web/reader/reader-vn-selection-projection.js"),
                 readerSasayakiJs = context.readAsset("hoshi-web/reader/reader-sasayaki.js"),
                 highlightsJs = context.readAsset("hoshi-web/reader/highlights.js"),
                 readerCss = context.readAsset("hoshi-web/reader/reader.css"),
@@ -62,7 +56,9 @@ internal data class ReaderWebAssets(
 
     fun selectionSupportJs(contentLanguageProfile: ContentLanguageProfile): String =
         when (contentLanguageProfile.dictionaryLanguageId) {
-            ContentLanguageProfile.EnglishLanguageId -> "$languageJapaneseJs\n$selectionEnglishJs"
-            else -> "$languageJapaneseJs\n$selectionJapaneseJs"
+            ContentLanguageProfile.EnglishLanguageId -> "${languageAssets.languageJapaneseJs}\n${languageAssets.selectionEnglishJs}"
+            ContentLanguageProfile.ChineseLanguageId -> "${languageAssets.languageCjkJs}\n${languageAssets.selectionChineseJs}"
+            ContentLanguageProfile.KoreanLanguageId -> "${languageAssets.languageCjkJs}\n${languageAssets.selectionKoreanJs}"
+            else -> "${languageAssets.languageJapaneseJs}\n${languageAssets.selectionJapaneseJs}"
         }
 }

@@ -6,6 +6,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -27,31 +30,52 @@ class TtsAudioRepository internal constructor(
 ) : TtsAudioSource {
     @Inject constructor(engine: TtsEngineRouter, @CacheDir cache: File, @IoDispatcher ioDispatcher: CoroutineDispatcher,
         fallback: AndroidTtsExportFallback) : this(engine, cache, ioDispatcher, fallback as TtsExportFallback)
-    private val synthesis = Mutex()
+    private val synthesis = Semaphore(ttsSynthesisConcurrency)
+    private val clearing = Mutex()
+    private class KeyLock(val mutex: Mutex = Mutex(), var users: Int = 0)
+    private val keyLocks = mutableMapOf<Pair<Long, String>, KeyLock>()
+    private var cacheEpoch = 0L
     private val cacheLock = Mutex()
     private val files = LinkedHashMap<String, List<File>>(32, .75f, true)
     override suspend fun audio(sentence: TtsSentence, bookId: String?, preferences: TtsPreferences): List<File> =
         withContext(ioDispatcher) {
-            val plan = plan(sentence, bookId, preferences)
+            val epoch = clearing.withLock { cacheLock.withLock { cacheEpoch } }
+            val plan = retryTtsSynthesis { plan(sentence, bookId, preferences) }
             // Prefetch depth and player speed do not change the synthesized audio.
             val identity = plan.joinToString("\u0000") { "${it.settings.synthesisSettings()}\u0000${it.text}" }
             val key = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray()).joinToString("") { "%02x".format(it) }
             cached(key)?.let { return@withContext it }
-            synthesis.withLock {
-                cached(key)?.let { return@withLock it }
-                synthesize(plan, File(cache, "tts/playback")).also { generated ->
-                    // Once returned by the engine, the cache owns these files even if the caller is cancelled.
-                    withContext(NonCancellable) {
+            withKeyLock(epoch to key) {
+                cached(key)?.let { return@withKeyLock it }
+                retryTtsSynthesis {
+                    synthesis.withPermit {
                         cacheLock.withLock {
-                            files[key] = generated
-                            // Cache hits promote the whole sentence, including every playlist fragment.
-                            // The 32-sentence capacity leaves room for the maximum 20-sentence prefetch.
-                            if (files.size > 32) files.remove(files.keys.first())?.forEach { old -> old.delete() }
+                            if (epoch != cacheEpoch) throw CancellationException("Playback cache replaced")
+                        }
+                        synthesize(plan, File(cache, "tts/playback")).also { generated ->
+                            // Own completed files even if cancellation wins their return delivery.
+                            withContext(NonCancellable) {
+                                cacheLock.withLock {
+                                    files[key] = generated
+                                    // 32 entries cover the 20-unit horizon plus current/in-flight work.
+                                    if (files.size > 32) files.remove(files.keys.first())?.forEach { it.delete() }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
+
+    private suspend fun <T> withKeyLock(key: Pair<Long, String>, block: suspend () -> T): T {
+        val entry = cacheLock.withLock { keyLocks.getOrPut(key) { KeyLock() }.also { it.users++ } }
+        try { return entry.mutex.withLock { block() } }
+        finally {
+            withContext(NonCancellable) {
+                cacheLock.withLock { if (--entry.users == 0) keyLocks.remove(key) }
+            }
+        }
+    }
 
     private suspend fun plan(sentence: TtsSentence, bookId: String?, preferences: TtsPreferences): List<TtsSynthesisPart> {
         val settings = preferences.settings
@@ -78,14 +102,19 @@ class TtsAudioRepository internal constructor(
         files[key]?.takeIf { list -> list.all { it.isFile } }
     }
 
-    override suspend fun clearPlaybackCache() = synthesis.withLock {
-        withContext(ioDispatcher) {
-            cacheLock.withLock {
-                files.clear()
-                File(cache, "tts/playback").deleteRecursively()
-                Unit
+    override suspend fun clearPlaybackCache() = clearing.withLock {
+        var acquired = 0
+        try {
+            repeat(ttsSynthesisConcurrency) { synthesis.acquire(); acquired++ }
+            withContext(ioDispatcher) {
+                cacheLock.withLock {
+                    cacheEpoch++
+                    files.clear()
+                    File(cache, "tts/playback").deleteRecursively()
+                    Unit
+                }
             }
-        }
+        } finally { repeat(acquired) { synthesis.release() } }
     }
 
     /** Export has its own lifetime so changing books cannot delete Anki's pending upload. */

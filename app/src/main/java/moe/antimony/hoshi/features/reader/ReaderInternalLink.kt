@@ -1,12 +1,17 @@
 package moe.antimony.hoshi.features.reader
 
 import moe.antimony.hoshi.epub.EpubBook
+import moe.antimony.hoshi.epub.readerHrefBase
 import java.net.URI
 
 internal data class ReaderInternalLinkTarget(
     val position: ReaderChapterPosition,
     val fragment: String?,
 )
+
+internal fun isExternalReaderWebLink(scheme: String?, host: String?): Boolean =
+    (scheme.equals("http", true) || scheme.equals("https", true)) &&
+        !host.isNullOrBlank() && !host.equals("appassets.androidplatform.net", true)
 
 internal fun EpubBook.resolveInternalReaderLink(url: String): ReaderInternalLinkTarget? {
     val uri = runCatching { URI(url) }.getOrNull() ?: return null
@@ -19,10 +24,10 @@ internal fun EpubBook.resolveInternalReaderLink(url: String): ReaderInternalLink
     val href = path.removePrefix("/epub/").readerHrefBase()
     if (href.isBlank()) return null
     val spineIndex = chapters.indexOfFirst { chapter ->
-        val chapterPath = chapter.href.readerHrefBase()
-        href == chapterPath ||
-            href.endsWith("/$chapterPath") ||
-            chapterPath.endsWith("/$href")
+        listOfNotNull(chapter.href, chapter.originalHref).any { candidate ->
+            val chapterPath = candidate.readerHrefBase()
+            href == chapterPath || href.endsWith("/$chapterPath") || chapterPath.endsWith("/$href")
+        }
     }.takeIf { it >= 0 } ?: return null
 
     return ReaderInternalLinkTarget(

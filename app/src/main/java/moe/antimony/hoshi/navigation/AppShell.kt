@@ -68,6 +68,8 @@ import moe.antimony.hoshi.features.statistics.StatisticsSettingsView
 import moe.antimony.hoshi.features.statistics.StatisticsBookView
 import moe.antimony.hoshi.features.live.LiveSettingsView
 import moe.antimony.hoshi.features.live.LiveView
+import moe.antimony.hoshi.features.update.AboutAcknowledgementsScreen
+import moe.antimony.hoshi.features.update.AboutDependenciesScreen
 import moe.antimony.hoshi.features.update.AboutScreen
 import kotlinx.coroutines.launch
 
@@ -194,7 +196,7 @@ fun AppShell(
                     is AppRoute.ReaderRoute -> {
                         clearReaderRoutesOutsideBooks()
                         selectedTab = MainTab.Books
-                        booksBackStack.openReaderRoute(route.bookId)
+                        booksBackStack.openReaderRoute(route.bookId, route.skipSyncOnOpen)
                     }
                     else -> selectTopLevelRoute(route)
                 }
@@ -232,10 +234,10 @@ fun AppShell(
         settingsBackStack.returnFromAnkiFormatDuplicate()
     }
 
-    fun openReader(bookId: String) {
+    fun openReader(bookId: String, skipSyncOnOpen: Boolean) {
         clearReaderRoutesOutsideBooks()
         selectedTab = MainTab.Books
-        booksBackStack.openReaderRoute(bookId)
+        booksBackStack.openReaderRoute(bookId, skipSyncOnOpen)
     }
 
     fun returnToSasayakiReader(bookId: String) {
@@ -367,9 +369,17 @@ fun AppShell(
                     onSelectedTabChange = ::selectMainTab,
                     onOpenAnkiFormat = ::openAnkiFormat,
                     onOpenAnkiAdvanced = ::openAnkiAdvanced,
+                    onOpenAcknowledgements = { settingsBackStack.add(AppRoute.SettingsDetailRoute(SettingsDetailSection.Acknowledgements)) },
+                    onOpenDependencies = { settingsBackStack.add(AppRoute.SettingsDetailRoute(SettingsDetailSection.Dependencies)) },
                     onOpenTts = { settingsBackStack.add(AppRoute.TtsSettingsRoute) },
+                    onOpenSync = { settingsBackStack.add(AppRoute.SyncSettingsRoute) },
                     onOpenDiagnosticsRecords = { kind -> settingsBackStack.add(AppRoute.DiagnosticsRecordsRoute(kind)) },
                 )
+                AppRoute.SyncSettingsRoute -> moe.antimony.hoshi.features.sync.SyncSettingsView(
+                    onClose = ::popRoute,
+                    onOpenQueue = { settingsBackStack.add(AppRoute.SyncQueueRoute) },
+                )
+                AppRoute.SyncQueueRoute -> moe.antimony.hoshi.features.sync.SyncQueueView(onClose = ::popRoute)
                 is AppRoute.DiagnosticsRecordsRoute -> DiagnosticsView(
                     onClose = ::popRoute,
                     records = route.kind,
@@ -382,7 +392,15 @@ fun AppShell(
                     onDuplicated = ::returnFromDuplicatedAnkiFormat,
                     modifier = Modifier.fillMaxSize(),
                 )
-                AppRoute.TtsSettingsRoute -> moe.antimony.hoshi.features.tts.TtsSettingsView(onClose = ::popRoute)
+                AppRoute.TtsSettingsRoute -> moe.antimony.hoshi.features.tts.TtsSettingsView(onClose = ::popRoute,
+                    onOpenSection = { section -> settingsBackStack.add(when (section) {
+                        moe.antimony.hoshi.features.tts.TtsSettingsSection.Voice -> AppRoute.TtsVoiceSettingsRoute
+                        moe.antimony.hoshi.features.tts.TtsSettingsSection.Replacements -> AppRoute.TtsReplacementsSettingsRoute
+                        moe.antimony.hoshi.features.tts.TtsSettingsSection.Reading -> AppRoute.TtsReadingSettingsRoute
+                    }) })
+                AppRoute.TtsVoiceSettingsRoute -> moe.antimony.hoshi.features.tts.TtsSettingsSectionView(moe.antimony.hoshi.features.tts.TtsSettingsSection.Voice, ::popRoute)
+                AppRoute.TtsReplacementsSettingsRoute -> moe.antimony.hoshi.features.tts.TtsSettingsSectionView(moe.antimony.hoshi.features.tts.TtsSettingsSection.Replacements, ::popRoute)
+                AppRoute.TtsReadingSettingsRoute -> moe.antimony.hoshi.features.tts.TtsSettingsSectionView(moe.antimony.hoshi.features.tts.TtsSettingsSection.Reading, ::popRoute)
                 AppRoute.AnkiAdvancedRoute -> AnkiAdvancedView(
                     onClose = ::popRoute,
                     modifier = Modifier.fillMaxSize(),
@@ -390,6 +408,7 @@ fun AppShell(
                 is AppRoute.ReaderRoute -> {
                     ReaderRouteDestination(
                         bookId = route.bookId,
+                        skipSyncOnOpen = route.skipSyncOnOpen,
                         stateHolder = readerRouteStateHolder,
                         readerSettings = currentReaderSettings,
                         onReaderSettingsChange = currentOnReaderSettingsChange,
@@ -528,7 +547,7 @@ private fun TopLevelRouteContent(
     onPendingImportConsumed: () -> Unit,
     readerSettings: ReaderSettings,
     onReaderSettingsChange: ((ReaderSettings) -> ReaderSettings) -> Unit,
-    onOpenReader: (String) -> Unit,
+    onOpenReader: (String, Boolean) -> Unit,
     bookshelfRefreshKey: Int,
     dictionaryFocusRequestKey: Int,
     pendingDictionaryLookupRequest: PendingDictionaryLookupRequest? = null,
@@ -597,6 +616,9 @@ private fun SettingsDetailDestination(
     onOpenAnkiFormat: (String) -> Unit,
     onOpenAnkiAdvanced: () -> Unit,
     onOpenTts: () -> Unit,
+    onOpenSync: () -> Unit,
+    onOpenDependencies: () -> Unit,
+    onOpenAcknowledgements: () -> Unit,
     onOpenDiagnosticsRecords: (DiagnosticsRecordKind) -> Unit,
 ) {
     when (route.section) {
@@ -643,6 +665,7 @@ private fun SettingsDetailDestination(
         )
         SettingsDetailSection.Advanced -> AdvancedSettingsView(
             onOpenTts = onOpenTts,
+            onOpenSync = onOpenSync,
             onClose = onClose,
             onBooksRestored = onBooksRestored,
             modifier = Modifier.fillMaxSize(),
@@ -652,7 +675,11 @@ private fun SettingsDetailDestination(
             onOpenRecords = onOpenDiagnosticsRecords,
             modifier = Modifier.fillMaxSize(),
         )
+        SettingsDetailSection.Acknowledgements -> AboutAcknowledgementsScreen(onClose = onClose)
+        SettingsDetailSection.Dependencies -> AboutDependenciesScreen(onClose = onClose)
         SettingsDetailSection.About -> AboutScreen(
+            onOpenDependencies = onOpenDependencies,
+            onOpenAcknowledgements = onOpenAcknowledgements,
             onClose = onClose,
             modifier = Modifier.fillMaxSize(),
         )
@@ -685,8 +712,9 @@ private fun AppRoute.toMainTab(): MainTab = when (this) {
     AppRoute.StatisticsRoute, AppRoute.StatisticsSettingsRoute, is AppRoute.StatisticsBookRoute -> MainTab.Statistics
     AppRoute.SettingsRoute -> MainTab.Settings
     is AppRoute.ReaderRoute -> MainTab.Books
-    is AppRoute.SettingsDetailRoute, is AppRoute.DiagnosticsRecordsRoute -> MainTab.Settings
-    is AppRoute.AnkiCardFormatRoute, AppRoute.AnkiAdvancedRoute, AppRoute.TtsSettingsRoute -> MainTab.Settings
+    is AppRoute.SettingsDetailRoute, is AppRoute.DiagnosticsRecordsRoute,
+    AppRoute.SyncSettingsRoute, AppRoute.SyncQueueRoute -> MainTab.Settings
+    is AppRoute.AnkiCardFormatRoute, AppRoute.AnkiAdvancedRoute, AppRoute.TtsSettingsRoute, AppRoute.TtsVoiceSettingsRoute, AppRoute.TtsReplacementsSettingsRoute, AppRoute.TtsReadingSettingsRoute -> MainTab.Settings
 }
 
 private fun SettingsDestination.toSection(): SettingsDetailSection = when (this) {

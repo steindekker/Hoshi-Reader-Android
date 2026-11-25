@@ -1,10 +1,15 @@
 package moe.antimony.hoshi.features.sasayaki
 
 import android.content.Context
+import android.content.res.Configuration
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasAnyAncestor
@@ -12,6 +17,7 @@ import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -19,6 +25,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.io.File
+import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,6 +47,66 @@ import org.junit.runner.RunWith
 class SasayakiTranscriptionReaderTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun transcriptionIsTheLeftmostDefaultMatchSource() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        compose.setContent {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                HoshiReaderTheme {
+                    SasayakiMatchModeControl(SasayakiTranscriptionUiState().mode, enabled = true, onSelected = {})
+                }
+            }
+        }
+
+        val transcription = compose.onNodeWithText(context.getString(R.string.sasayaki_transcription))
+        val subtitles = compose.onNodeWithText(context.getString(R.string.sasayaki_match_source_subtitles))
+        assertTrue(transcription.fetchSemanticsNode().boundsInRoot.right <= subtitles.fetchSemanticsNode().boundsInRoot.left)
+        transcription.assertIsSelected()
+    }
+
+    @Test fun transcriptionRemainingTimeShowsSubMinuteLabelInBothLanguages() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val locale = mutableStateOf(Locale.ENGLISH)
+        val state = mutableStateOf(SasayakiTranscriptionUiState(stage = SasayakiTranscriptionStage.Transcribing))
+        compose.setContent {
+            val configuration = Configuration(context.resources.configuration).apply { setLocale(locale.value) }
+            val resources = context.createConfigurationContext(configuration).resources
+            CompositionLocalProvider(LocalResources provides resources) {
+                HoshiReaderTheme {
+                    SasayakiTranscriptionSection(
+                        state = state.value, enabled = true,
+                        preset = SasayakiTranscriptionPreset.Balanced, onPresetChange = {},
+                        onStart = {}, onPause = {}, onConfirmDownload = {},
+                        onRequestClear = {}, onDismissClear = {}, onConfirmClear = {},
+                    )
+                }
+            }
+        }
+
+        fun setRemaining(seconds: Double?, stage: SasayakiTranscriptionStage = SasayakiTranscriptionStage.Transcribing) {
+            compose.runOnIdle { state.value = state.value.copy(remainingSeconds = seconds, stage = stage) }
+        }
+
+        setRemaining(60.0)
+        compose.onNodeWithText("About 1 min left").assertIsDisplayed()
+        setRemaining(60.01)
+        compose.onNodeWithText("About 2 min left").assertIsDisplayed()
+        for (seconds in listOf(59.99, 0.0)) {
+            setRemaining(seconds)
+            compose.onNodeWithText("Less than 1 min left").assertIsDisplayed()
+        }
+
+        for (seconds in listOf(null, -1.0, Double.NaN, Double.POSITIVE_INFINITY)) {
+            setRemaining(seconds)
+            compose.onNodeWithText(" min left", substring = true).assertDoesNotExist()
+        }
+        setRemaining(30.0, SasayakiTranscriptionStage.Aligning)
+        compose.onNodeWithText(" min left", substring = true).assertDoesNotExist()
+
+        setRemaining(30.0)
+        compose.runOnIdle { locale.value = Locale.SIMPLIFIED_CHINESE }
+        compose.onNodeWithText("剩余不到 1 分钟").assertIsDisplayed()
+    }
+
     @Test fun sourceBecomesReadyAndTaskContinuesAcrossClosingAndReopeningControls() = withReader { reader ->
         compose.onNodeWithText(reader.text(R.string.sasayaki_transcription_start)).assertIsNotEnabled()
         compose.onNodeWithText(reader.text(R.string.action_open)).assertDoesNotExist()
@@ -51,10 +118,16 @@ class SasayakiTranscriptionReaderTest {
         reader.batch(10.0)
         compose.waitUntil { reader.model.uiState.value.through == 10.0 && reader.matches.size == 1 }
         assertTrue("Matches arrive before pausing, with the controls sheet closed", reader.model.uiState.value.canPause)
+        assertTrue(reader.repository.savedMatches.isEmpty())
+        compose.runOnIdle {
+            val remote = SasayakiMatchData(emptyList(), 3)
+            assertEquals(reader.matches.last(), reader.model.matchForReader(reader.root, remote))
+        }
         compose.runOnIdle { reader.visible.value = true }
         compose.onAllNodes(hasText("0:00:10 / 0:01:40", substring = true)).assertCountEquals(1)
         compose.onNodeWithText(reader.text(R.string.sasayaki_transcription_pause)).assertIsEnabled().performClick()
         compose.waitUntil { reader.model.uiState.value.canStart }
+        assertEquals(listOf(reader.matches.last()), reader.repository.savedMatches)
         compose.onNodeWithText(reader.text(R.string.sasayaki_transcription_resume)).assertIsEnabled().performClick()
         compose.waitUntil { reader.backend.runs == 2 }
         assertEquals(10.0, reader.backend.resumedFrom, 0.0)
@@ -133,6 +206,7 @@ class SasayakiTranscriptionReaderTest {
     @Test fun presetSelectionIsLockedWhileRunningAndResumeUsesTheNewPreset() = withReader { reader ->
         compose.runOnIdle { reader.playback.value = SasayakiPlaybackData(0.0, audioUri = "content://test/audiobook") }
         compose.waitUntil { reader.model.uiState.value.canStart }
+        compose.onNodeWithText(reader.text(R.string.sasayaki_transcription_performance)).assertExists()
         compose.onNodeWithText(reader.text(R.string.sasayaki_transcription_fast)).performClick()
         compose.onNodeWithText(reader.text(R.string.sasayaki_transcription_fast_description)).assertExists()
         compose.onNodeWithText(reader.text(R.string.sasayaki_transcription_start)).performClick()
@@ -237,6 +311,8 @@ class SasayakiTranscriptionReaderTest {
         var saved: SasayakiTranscript? = null
         override suspend fun load(root: File) = saved
         override suspend fun save(root: File, transcript: SasayakiTranscript) { saved = transcript }
+        val savedMatches = mutableListOf<SasayakiMatchData>()
+        override suspend fun saveMatch(root: File, match: SasayakiMatchData) { savedMatches += match }
         override suspend fun clear(root: File) { saved = null }
         override suspend fun openAlignment(root: File) = SasayakiTranscriptionAlignment { _ -> SasayakiMatchData(emptyList(), 0) }
     }

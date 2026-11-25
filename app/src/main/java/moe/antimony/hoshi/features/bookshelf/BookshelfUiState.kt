@@ -1,6 +1,7 @@
 package moe.antimony.hoshi.features.bookshelf
 
 import moe.antimony.hoshi.epub.BookEntry
+import moe.antimony.hoshi.epub.BookReadingState
 import moe.antimony.hoshi.epub.BookShelf
 import moe.antimony.hoshi.epub.BookSortOption
 import moe.antimony.hoshi.ui.UiText
@@ -25,6 +26,7 @@ data class BookshelfUiState(
     val bookEntries: List<BookEntry> = emptyList(),
     val remoteBookEntries: List<RemoteBookEntry> = emptyList(),
     val bookProgressById: Map<String, Double> = emptyMap(),
+    val bookReadingStateById: Map<String, BookReadingState> = emptyMap(),
     val remoteProgressById: Map<String, Double> = emptyMap(),
     val remoteImportProgressById: Map<String, Double> = emptyMap(),
     val remoteBusyBookIds: Set<String> = emptySet(),
@@ -45,6 +47,8 @@ data class BookshelfUiState(
     val statusMessage: UiText? = null,
     val errorMessage: UiText? = null,
     val openReaderBookId: String? = null,
+    val openReaderSkipSync: Boolean = false,
+    val canDeleteLocalBookIds: Set<String> = emptySet(),
     val shelfCreationMoveStatus: ShelfCreationMoveStatus = ShelfCreationMoveStatus.Idle,
     val shelfCreationMoveDialog: ShelfCreationMoveDialogState? = null,
 )
@@ -70,10 +74,18 @@ data class BookshelfLoadResult(
     val coverSourcesById: Map<String, BookCoverSource>,
     val shelves: List<BookShelf>,
     val settings: BookshelfSettings,
+    val canDeleteLocalBookIds: Set<String> = emptySet(),
+    val readingStateById: Map<String, BookReadingState> = emptyMap(),
 )
 
 data class RemoteBookshelfLoadResult(
     val remoteEntries: List<RemoteBookEntry> = emptyList(),
     val remoteProgressById: Map<String, Double> = emptyMap(),
     val remoteCoverSourcesById: Map<String, BookCoverSource> = emptyMap(),
+)
+
+internal data class BookshelfBookSnapshot(
+    val entry: BookEntry,
+    val readingState: BookReadingState,
+    val coverSource: BookCoverSource?,
 )

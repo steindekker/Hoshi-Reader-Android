@@ -3,6 +3,7 @@ package moe.antimony.hoshi.features.sasayaki
 import android.util.Log
 import kotlinx.coroutines.CancellationException
 import moe.antimony.hoshi.R
+import moe.antimony.hoshi.features.sasayaki.transcription.SasayakiDownloadFailure
 import moe.antimony.hoshi.ui.UiText
 import moe.antimony.hoshi.ui.withErrorDetails
 
@@ -43,7 +44,13 @@ internal fun Throwable.toSasayakiFailureText(fallback: SasayakiFailureKind): UiT
     val failure = this as? SasayakiOperationFailure
     val kind = failure?.kind ?: fallback
     val original = failure?.cause ?: this
-    return sasayakiFailureText(kind).withErrorDetails(original)
+    val operation = if (original is SasayakiDownloadFailure) {
+        UiText.Joined(listOf(sasayakiFailureText(kind), UiText.Resource(
+            R.string.sasayaki_transcription_download_details,
+            original.file.name, original.file.url, original.receivedBytes, original.file.bytes, original.attempts,
+        )))
+    } else sasayakiFailureText(kind)
+    return operation.withErrorDetails(original)
 }
 
 internal fun reportSasayakiFailure(
@@ -52,7 +59,11 @@ internal fun reportSasayakiFailure(
     fallback: SasayakiFailureKind,
 ): UiText {
     val kind = (error as? SasayakiOperationFailure)?.kind ?: fallback
-    runCatching { Log.e(LOG_TAG, "stage=$stage category=${kind.name}", error) }
+    val download = (error as? SasayakiOperationFailure)?.cause as? SasayakiDownloadFailure
+    val context = download?.let {
+        " file=${it.file.name} url=${it.file.url} receivedBytes=${it.receivedBytes}/${it.file.bytes} attempts=${it.attempts}"
+    }.orEmpty()
+    runCatching { Log.e(LOG_TAG, "stage=$stage category=${kind.name}$context", error) }
     return error.toSasayakiFailureText(fallback)
 }
 

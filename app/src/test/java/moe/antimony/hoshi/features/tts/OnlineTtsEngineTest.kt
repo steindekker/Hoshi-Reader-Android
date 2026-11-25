@@ -15,6 +15,80 @@ import org.junit.rules.TemporaryFolder
 
 class OnlineTtsEngineTest {
     @get:Rule val folder = TemporaryFolder()
+
+    @Test fun oldMicrosoftDiskCatalogsAreRefetchedWithCurrentMetadata() = runBlocking {
+        val store = TtsVoiceCatalogStore(folder.newFolder())
+        val config = TtsOnlineConfig()
+        val key = TtsVoiceCatalogKey.online(TtsOnlineSource.Edge, config)
+        var requests = 0
+        val engine = engine(store) {
+            requests++
+            200 to """[{"Locale":"en-US","ShortName":"english","FriendlyName":"English voice"}]""".toByteArray()
+        }
+        val settings = TtsSettings(engine = TtsOnlineSource.Edge.id, languageId = "en")
+        for (previous in listOf("\u0000", "languages-v2\u0000\u0000")) {
+            val hash = java.security.MessageDigest.getInstance("SHA-256").digest(previous.toByteArray())
+                .joinToString("") { "%02x".format(it) }
+            store.write(key.copy(configuration = hash), listOf(TtsVoiceInfo("old-voice", true, languages = listOf("en-US"))))
+            assertNull(engine.cachedCatalog(settings))
+        }
+        val voice = engine.catalog(settings).voices.single()
+        assertEquals("english", voice.id)
+        assertEquals("English voice", voice.label)
+        assertEquals(voice, engine.cachedCatalog(settings)?.voices?.single())
+        assertEquals(1, requests)
+    }
+
+    @Test fun rawCatalogIsSharedAcrossLanguagesAndSynthesisUsesSelectedRegionalLocale() = runBlocking {
+        var catalogs = 0
+        val requests = mutableListOf<String>()
+        val engine = engine { request ->
+            if (request.url.encodedPath.endsWith("list")) {
+                catalogs++
+                200 to """[{"ShortName":"japanese","Locale":"ja-JP"},{"ShortName":"british","Locale":"en-GB"},
+                    {"ShortName":"cantonese","Locale":"yue-HK"},{"ShortName":"korean","Locale":"ko-KR"}]""".toByteArray()
+            } else {
+                val buffer = okio.Buffer(); request.body!!.writeTo(buffer); requests += buffer.readUtf8()
+                200 to wav
+            }
+        }
+        val settings = TtsSettings(engine = TtsOnlineSource.Azure.id, online = mapOf(TtsOnlineSource.Azure.id to TtsOnlineConfig("eastasia", "key")))
+            .withOptions(TtsSynthesisOptions(format = TtsAudioFormat.Wav, style = "unsupported", role = "Girl"))
+        for ((language, voice, locale) in listOf(Triple("ja", "japanese", "ja-JP"), Triple("en", "british", "en-GB"),
+            Triple("zh", "cantonese", "yue-HK"), Triple("ko", "korean", "ko-KR"))) {
+            val config = settings.copy(languageId = language)
+            assertEquals(voice, engine.catalog(config).voices.single().id)
+            engine.synthesize("sample", config, folder.root)
+            assertTrue(requests.last().contains("xml:lang=\"$locale\""))
+            assertFalse(requests.last().contains("express-as"))
+        }
+        assertEquals(1, catalogs)
+        assertEquals("unsupported", settings.options().style)
+        val invalid = settings.copy(languageId = "en").withVoice("japanese")
+        assertEquals(TtsFailure.MissingLanguage, (runCatching { engine.synthesize("text", invalid, folder.root) }.exceptionOrNull() as TtsException).failure)
+        assertEquals(4, requests.size)
+    }
+
+    @Test fun edgeCatalogAndSynthesisSendV2TokensAndMatchingVersion() = runBlocking {
+        val requests = mutableListOf<Request>()
+        val engine = engine { request ->
+            requests += request
+            if (request.url.encodedPath.endsWith("/voices/list"))
+                200 to """[{"Locale":"ja-JP","ShortName":"ja-JP-NanamiNeural"}]""".toByteArray()
+            else 403 to ByteArray(0)
+        }
+        val error = runCatching {
+            engine.synthesize("接続テスト。", TtsSettings(engine = TtsOnlineSource.Edge.id), folder.root)
+        }.exceptionOrNull() as TtsException
+        assertEquals(TtsFailure.Authentication, error.failure)
+        assertEquals(listOf("/consumer/speech/synthesize/readaloud/voices/list",
+            "/consumer/speech/synthesize/readaloud/edge/v1"), requests.map { it.url.encodedPath })
+        for (request in requests) {
+            assertEquals("2-143.0.3650.75", request.url.queryParameter("Sec-MS-GEC-Version"))
+            assertTrue(request.url.queryParameter("Sec-MS-GEC")!!.matches(Regex("[0-9A-F]{16}-[0-9A-F]{64}")))
+        }
+    }
+
     private val wav: ByteArray get() = ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN).apply {
         put("RIFF".toByteArray()); putInt(40); put("WAVEfmt ".toByteArray()); putInt(16)
         putShort(1); putShort(1); putInt(24000); putInt(48000); putShort(2); putShort(16)

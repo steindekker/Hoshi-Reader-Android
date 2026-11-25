@@ -45,6 +45,8 @@ import androidx.compose.ui.unit.dp
 import moe.antimony.hoshi.R
 import moe.antimony.hoshi.epub.EpubBook
 import moe.antimony.hoshi.epub.EpubTocItem
+import moe.antimony.hoshi.epub.readerHrefBase
+import moe.antimony.hoshi.epub.tocCharacterStart
 import moe.antimony.hoshi.ui.hoshiOutlinedTextFieldColors
 import moe.antimony.hoshi.ui.hoshiSingleLineTextFieldLineLimits
 import moe.antimony.hoshi.ui.rememberSyncedTextFieldState
@@ -161,6 +163,7 @@ internal fun ReaderChapterListRow(
     row: ReaderChapterRow,
     progressDisplay: ReaderProgressDisplay,
     onClick: () -> Unit,
+    pageIndex: ReaderPageIndex? = null,
 ) {
     val eInkMode = LocalHoshiEInkMode.current
     val isCurrentEInkRow = eInkMode && row.isCurrent
@@ -210,7 +213,7 @@ internal fun ReaderChapterListRow(
         )
         row.characterCount?.let { count ->
             Text(
-                text = progressDisplay.countText(count),
+                text = pageIndex?.pageAt(count, row.spineIndex, preferSpineStart = true)?.toString() ?: progressDisplay.countText(count),
                 color = rowMetaColor,
                 style = MaterialTheme.typography.bodyMedium,
             )

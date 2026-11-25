@@ -4,8 +4,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.IntSize
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import moe.antimony.hoshi.features.dictionary.LookupPopupItem
 import moe.antimony.hoshi.features.sasayaki.SasayakiSheetTab
+
+private const val AppearancePreviewDelayMs = 250L
 
 internal data class ReaderSearchHighlight(val chapterIndex: Int, val offset: Int, val length: Int)
 
@@ -50,6 +56,7 @@ internal class ReaderWebViewStateHolder(
 
     var lookupPopups by mutableStateOf<List<LookupPopupItem>>(emptyList())
         private set
+    private val miningPopupIds = mutableSetOf<String>()
 
     var readerPosition by mutableStateOf(ReaderPositionState(initialPosition))
         private set
@@ -86,16 +93,18 @@ internal class ReaderWebViewStateHolder(
         mineWithOptionsRequest = null
     }
 
-    fun syncSettings(settings: ReaderSettings) {
+    suspend fun syncSettings(settings: ReaderSettings) {
         val shouldReloadContent = effectiveSettings.readerContentReloadKey() != settings.readerContentReloadKey()
+        val safeAreaChanged = effectiveSettings.topSafeAreaDp != settings.topSafeAreaDp ||
+            effectiveSettings.bottomSafeAreaDp != settings.bottomSafeAreaDp
+        if (showAppearance && (shouldReloadContent || safeAreaChanged)) {
+            // The settings effect cancels this wait on the next edit and flushes on sheet dismissal.
+            delay(AppearancePreviewDelayMs)
+        }
         effectiveSettings = settings
         if (shouldReloadContent) {
             prepareReloadAtDisplayedPosition()
         }
-    }
-
-    fun applySettings(settings: ReaderSettings) {
-        syncSettings(settings)
     }
 
     fun showReaderMenu() {
@@ -127,7 +136,7 @@ internal class ReaderWebViewStateHolder(
     }
 
     fun handleBackNavigation(): Boolean {
-        if (focusMode) {
+        if (focusMode && !effectiveSettings.exitReaderOnFirstBack) {
             exitFocusMode()
             return false
         }
@@ -205,18 +214,33 @@ internal class ReaderWebViewStateHolder(
         }
     }
 
+    fun <T> startLookupMining(
+        readerScope: CoroutineScope,
+        popupId: String,
+        onResult: (T) -> Unit,
+        mine: suspend () -> T,
+    ) {
+        if (!readerScope.isActive || !miningPopupIds.add(popupId)) return
+        readerScope.launch {
+            try {
+                val result = mine()
+                if (lookupPopups.any { it.id == popupId }) onResult(result)
+            } finally {
+                miningPopupIds.remove(popupId)
+            }
+        }
+    }
+
     fun recordDisplayedProgress(progress: Double): ReaderChapterPosition {
         readerPosition = readerPosition.recordPageProgress(progress)
         return readerPosition.displayedPosition
     }
 
-    fun recordContinuousScrollProgress(progress: Double, restoreEpoch: Int): ReaderChapterPosition? {
+    fun recordContinuousScrollProgress(position: ReaderChapterPosition, restoreEpoch: Int): ReaderChapterPosition? {
         if (isWebViewRestoring || restoreEpoch != webViewRestoreEpoch) return null
-        return recordDisplayedProgress(progress)
+        readerPosition = readerPosition.copy(displayedPosition = position)
+        return position
     }
-
-    fun recordContinuousScrollDisplayProgress(progress: Double, restoreEpoch: Int): ReaderChapterPosition? =
-        recordContinuousScrollProgress(progress, restoreEpoch)
 
     fun canAcceptReaderNavigationInput(): Boolean =
         !isWebViewRestoring
@@ -249,6 +273,12 @@ internal class ReaderWebViewStateHolder(
         if (pending.chapterIndex != chapterIndex) return null
         pendingSearchHighlight = null
         return pending
+    }
+
+    fun applySyncedBookmark(position: ReaderChapterPosition) {
+        pendingSearchHighlight = null
+        readerPosition = readerPosition.jumpTo(position)
+        markWebViewRestoring()
     }
 
     fun jumpTo(position: ReaderChapterPosition, fragment: String? = null): ReaderChapterPosition {
@@ -309,13 +339,18 @@ internal class ReaderWebViewStateHolder(
         isWebViewRestoring = false
     }
 
+    fun pageProgress(index: ReaderPageIndex?, currentPage: Int?): ReaderPageProgress? {
+        if (!effectiveSettings.usesPageCounts) return null
+        return index?.progress(readerPosition.displayedPosition, currentPage)
+    }
+
     fun goToNextChapter(lastIndex: Int): ReaderChapterPosition? {
-        val next = readerPosition.loadPosition.nextOrNull(lastIndex) ?: return null
+        val next = readerPosition.displayedPosition.nextOrNull(lastIndex) ?: return null
         return jumpTo(next)
     }
 
     fun goToPreviousChapter(): ReaderChapterPosition? {
-        val previous = readerPosition.loadPosition.previousOrNull() ?: return null
+        val previous = readerPosition.displayedPosition.previousOrNull() ?: return null
         return jumpTo(previous)
     }
 
@@ -347,10 +382,10 @@ internal data class ReaderContentReloadKey(
     val fontSize: Int,
     val furiganaMode: FuriganaMode,
     val viewMode: ReaderViewMode,
-    val visualNovelScreenMode: VisualNovelScreenMode,
-    val visualNovelSentencesPerScreen: Int,
-    val visualNovelPreserveDialogueBubbles: Boolean,
-    val visualNovelMergeCrossScreenSasayakiCues: Boolean,
+    val paragraphMode: Boolean,
+    val paragraphEInkMode: Boolean,
+    val maxSentencesPerPage: Int,
+    val splitDialogue: Boolean,
     val horizontalPadding: Int,
     val verticalPadding: Int,
     val avoidPageBreak: Boolean,
@@ -370,10 +405,10 @@ internal fun ReaderSettings.readerContentReloadKey(): ReaderContentReloadKey =
         fontSize = fontSize,
         furiganaMode = furiganaMode,
         viewMode = viewMode,
-        visualNovelScreenMode = visualNovelScreenMode,
-        visualNovelSentencesPerScreen = visualNovelSentencesPerScreen.coerceIn(1, 12),
-        visualNovelPreserveDialogueBubbles = visualNovelPreserveDialogueBubbles,
-        visualNovelMergeCrossScreenSasayakiCues = visualNovelMergeCrossScreenSasayakiCues,
+        paragraphMode = paragraphMode,
+        paragraphEInkMode = viewMode == ReaderViewMode.Paginated && paragraphMode && eInkMode,
+        maxSentencesPerPage = maxSentencesPerPage.coerceIn(0, 10),
+        splitDialogue = splitDialogue,
         horizontalPadding = horizontalPadding,
         verticalPadding = verticalPadding,
         avoidPageBreak = avoidPageBreak,

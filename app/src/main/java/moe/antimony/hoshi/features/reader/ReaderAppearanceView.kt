@@ -62,6 +62,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -83,6 +85,7 @@ import moe.antimony.hoshi.ui.asString
 import moe.antimony.hoshi.ui.theme.LocalHoshiEInkMode
 import java.util.Locale
 import kotlin.math.round
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -366,12 +369,11 @@ private fun ReaderAppearanceContent(
                         onClick = { fontImporter.launch(ImportFileType.ReaderFont.mimeTypes) },
                     )
                     AppearanceDivider(palette)
-                    StepperRow(
+                    IntegerSliderRow(
                         label = stringResource(R.string.reader_appearance_font_size),
-                        value = settings.fontSize.toString(),
-                        onDecrease = { onSettingsChange { current -> current.copy(fontSize = (current.fontSize - 1).coerceAtLeast(10)) } },
-                        onIncrease = { onSettingsChange { current -> current.copy(fontSize = (current.fontSize + 1).coerceAtMost(60)) } },
-                        palette = palette,
+                        value = settings.fontSize,
+                        range = 10..60,
+                        onChange = { update -> onSettingsChange { it.copy(fontSize = update(it.fontSize)) } },
                     )
                     AppearanceDivider(palette)
                     val furiganaLabels = FuriganaMode.entries.map { stringResource(it.labelResId) }
@@ -390,21 +392,18 @@ private fun ReaderAppearanceContent(
                 AppearanceSection(title = stringResource(R.string.reader_appearance_layout), palette = palette) {
                     val paginatedLabel = stringResource(R.string.reader_appearance_paginated)
                     val continuousLabel = stringResource(R.string.reader_appearance_continuous)
-                    val visualNovelLabel = stringResource(R.string.reader_appearance_visual_novel)
                     SegmentedRow(
                         label = stringResource(R.string.reader_appearance_mode),
-                        options = listOf(paginatedLabel, continuousLabel, visualNovelLabel),
+                        options = listOf(paginatedLabel, continuousLabel),
                         selected = when (settings.viewMode) {
                             ReaderViewMode.Paginated -> paginatedLabel
                             ReaderViewMode.Continuous -> continuousLabel
-                            ReaderViewMode.VisualNovel -> visualNovelLabel
                         },
                         onSelected = { label ->
                             onSettingsChange { current ->
                                 current.copy(
                                     viewMode = when (label) {
                                         continuousLabel -> ReaderViewMode.Continuous
-                                        visualNovelLabel -> ReaderViewMode.VisualNovel
                                         else -> ReaderViewMode.Paginated
                                     },
                                 )
@@ -412,21 +411,57 @@ private fun ReaderAppearanceContent(
                         },
                         palette = palette,
                     )
-                    if (settings.viewMode == ReaderViewMode.Continuous) {
+                    if (settings.viewMode == ReaderViewMode.Paginated) {
                         AppearanceDivider(palette)
-                        SliderRow(
-                            label = stringResource(R.string.reader_appearance_chapter_swipe_distance),
-                            value = settings.chapterSwipeDistance.toString(),
-                            sliderValue = settings.chapterSwipeDistance.toFloat(),
-                            valueRange = 10f..60f,
-                            steps = 9,
-                            onValueChange = { value ->
-                                onSettingsChange { current ->
-                                    current.copy(chapterSwipeDistance = (round(value / 5) * 5).toInt())
-                                }
-                            },
+                        SwitchRow(
+                            label = stringResource(R.string.reader_paragraph_mode),
+                            checked = settings.paragraphMode,
+                            onCheckedChange = { checked -> onSettingsChange { it.copy(paragraphMode = checked) } },
                         )
-                    } else if (readerAppearanceShowsPageSwipeThreshold(settings.viewMode)) {
+                        if (settings.paragraphMode) {
+                            AppearanceDivider(palette)
+                            SliderRow(
+                                label = stringResource(R.string.reader_paragraph_max_sentences),
+                                value = if (settings.maxSentencesPerPage == 0) stringResource(R.string.reader_paragraph_sentence_limit_off) else settings.maxSentencesPerPage.toString(),
+                                sliderValue = settings.maxSentencesPerPage.toFloat(),
+                                valueRange = 0f..10f,
+                                steps = 9,
+                                onValueChange = { value -> onSettingsChange { it.copy(maxSentencesPerPage = round(value).toInt().coerceIn(0, 10)) } },
+                            )
+                            if (settings.maxSentencesPerPage > 0) {
+                                AppearanceDivider(palette)
+                                SwitchRow(
+                                    label = stringResource(R.string.reader_paragraph_split_dialogue),
+                                    checked = settings.splitDialogue,
+                                    onCheckedChange = { checked -> onSettingsChange { it.copy(splitDialogue = checked) } },
+                                )
+                            }
+                            AppearanceDivider(palette)
+                            SwitchRow(
+                                label = stringResource(R.string.reader_paragraph_text_animation),
+                                checked = settings.textAnimation,
+                                onCheckedChange = { checked -> onSettingsChange { it.copy(textAnimation = checked) } },
+                            )
+                            if (settings.textAnimation) {
+                                AppearanceDivider(palette)
+                                SliderRow(
+                                    label = stringResource(R.string.reader_paragraph_text_speed),
+                                    value = stringResource(R.string.reader_paragraph_text_speed_value, settings.textSpeed),
+                                    sliderValue = settings.textSpeed.toFloat(),
+                                    valueRange = 25f..100f,
+                                    steps = 14,
+                                    onValueChange = { value -> onSettingsChange { it.copy(textSpeed = value.toInt().coerceParagraphTextSpeed()) } },
+                                )
+                            }
+                            AppearanceDivider(palette)
+                            SwitchRow(
+                                label = stringResource(R.string.reader_paragraph_click_advance),
+                                checked = settings.paragraphClickAdvance,
+                                onCheckedChange = { checked -> onSettingsChange { it.copy(paragraphClickAdvance = checked) } },
+                            )
+                        }
+                    }
+                    if (readerAppearanceShowsPageSwipeThreshold(settings.viewMode)) {
                         AppearanceDivider(palette)
                         SliderRow(
                             label = stringResource(R.string.reader_appearance_page_swipe_threshold),
@@ -451,115 +486,21 @@ private fun ReaderAppearanceContent(
                             },
                         )
                     }
-                    if (settings.viewMode == ReaderViewMode.VisualNovel) {
-                        AppearanceDivider(palette)
-                        SliderRow(
-                            label = stringResource(R.string.reader_visual_novel_reveal_speed),
-                            value = if (settings.visualNovelRevealSpeed == 0) {
-                                stringResource(R.string.reader_visual_novel_reveal_speed_instant)
-                            } else {
-                                settings.visualNovelRevealSpeed.toString()
-                            },
-                            sliderValue = settings.visualNovelRevealSpeed.toFloat(),
-                            valueRange = 0f..120f,
-                            steps = 23,
-                            onValueChange = { value ->
-                                onSettingsChange { current ->
-                                    current.copy(visualNovelRevealSpeed = (round(value / 5) * 5).toInt())
-                                }
-                            },
-                        )
-                        AppearanceDivider(palette)
-                        val blockLabel = stringResource(R.string.reader_visual_novel_screen_mode_block)
-                        val sentencesLabel = stringResource(R.string.reader_visual_novel_screen_mode_sentences)
-                        SegmentedRow(
-                            label = stringResource(R.string.reader_visual_novel_screen_mode),
-                            options = listOf(blockLabel, sentencesLabel),
-                            selected = when (settings.visualNovelScreenMode) {
-                                VisualNovelScreenMode.Block -> blockLabel
-                                VisualNovelScreenMode.Sentences -> sentencesLabel
-                            },
-                            onSelected = { label ->
-                                onSettingsChange { current ->
-                                    current.copy(
-                                        visualNovelScreenMode = if (label == sentencesLabel) {
-                                            VisualNovelScreenMode.Sentences
-                                        } else {
-                                            VisualNovelScreenMode.Block
-                                        },
-                                    )
-                                }
-                            },
-                            palette = palette,
-                        )
-                        if (settings.visualNovelScreenMode == VisualNovelScreenMode.Sentences) {
-                            AppearanceDivider(palette)
-                            StepperRow(
-                                label = stringResource(R.string.reader_visual_novel_sentences_per_screen),
-                                value = settings.visualNovelSentencesPerScreen.toString(),
-                                onDecrease = {
-                                    onSettingsChange { current ->
-                                        current.copy(
-                                            visualNovelSentencesPerScreen =
-                                                (current.visualNovelSentencesPerScreen - 1).coerceAtLeast(1),
-                                        )
-                                    }
-                                },
-                                onIncrease = {
-                                    onSettingsChange { current ->
-                                        current.copy(
-                                            visualNovelSentencesPerScreen =
-                                                (current.visualNovelSentencesPerScreen + 1).coerceAtMost(12),
-                                        )
-                                    }
-                                },
-                                palette = palette,
-                            )
-                            AppearanceDivider(palette)
-                            SwitchRow(
-                                label = stringResource(R.string.reader_visual_novel_preserve_dialogue),
-                                checked = settings.visualNovelPreserveDialogueBubbles,
-                                onCheckedChange = { checked ->
-                                    onSettingsChange { current ->
-                                        current.copy(visualNovelPreserveDialogueBubbles = checked)
-                                    }
-                                },
-                            )
-                        }
-                        AppearanceDivider(palette)
-                        SwitchRow(
-                            label = stringResource(R.string.reader_visual_novel_click_advance),
-                            checked = settings.visualNovelClickAdvance,
-                            onCheckedChange = { checked ->
-                                onSettingsChange { current -> current.copy(visualNovelClickAdvance = checked) }
-                            },
-                        )
-                        AppearanceDivider(palette)
-                        SwitchRow(
-                            label = stringResource(R.string.reader_visual_novel_merge_cross_screen_sasayaki_cues),
-                            checked = settings.visualNovelMergeCrossScreenSasayakiCues,
-                            onCheckedChange = { checked ->
-                                onSettingsChange { current ->
-                                    current.copy(visualNovelMergeCrossScreenSasayakiCues = checked)
-                                }
-                            },
-                        )
-                    }
                     AppearanceDivider(palette)
-                    StepperRow(
+                    IntegerSliderRow(
                         label = stringResource(R.string.reader_appearance_horizontal_padding),
-                        value = "${settings.horizontalPadding}%",
-                        onDecrease = { onSettingsChange { current -> current.copy(horizontalPadding = (current.horizontalPadding - 1).coerceAtLeast(0)) } },
-                        onIncrease = { onSettingsChange { current -> current.copy(horizontalPadding = (current.horizontalPadding + 1).coerceAtMost(50)) } },
-                        palette = palette,
+                        value = settings.horizontalPadding,
+                        range = 0..50,
+                        suffix = "%",
+                        onChange = { update -> onSettingsChange { it.copy(horizontalPadding = update(it.horizontalPadding)) } },
                     )
                     AppearanceDivider(palette)
-                    StepperRow(
+                    IntegerSliderRow(
                         label = stringResource(R.string.reader_appearance_vertical_padding),
-                        value = "${settings.verticalPadding}%",
-                        onDecrease = { onSettingsChange { current -> current.copy(verticalPadding = (current.verticalPadding - 1).coerceAtLeast(0)) } },
-                        onIncrease = { onSettingsChange { current -> current.copy(verticalPadding = (current.verticalPadding + 1).coerceAtMost(50)) } },
-                        palette = palette,
+                        value = settings.verticalPadding,
+                        range = 0..50,
+                        suffix = "%",
+                        onChange = { update -> onSettingsChange { it.copy(verticalPadding = update(it.verticalPadding)) } },
                     )
                     AppearanceDivider(palette)
                     SliderRow(
@@ -587,7 +528,7 @@ private fun ReaderAppearanceContent(
                             }
                         },
                     )
-                    if (settings.viewMode != ReaderViewMode.VisualNovel) {
+                    if (!settings.paragraphMode || settings.viewMode != ReaderViewMode.Paginated) {
                         AppearanceDivider(palette)
                         SwitchRow(
                             label = stringResource(R.string.reader_appearance_avoid_page_break),
@@ -677,18 +618,19 @@ private fun ReaderAppearanceContent(
                     )
                     if (readerAppearanceShowsAlwaysShowProgress(settings)) {
                         AppearanceDivider(palette)
-                        SwitchRow(
-                            label = stringResource(
-                                if (progressDisplay.usesWords) {
-                                    R.string.reader_appearance_show_word_count
-                                } else {
-                                    R.string.reader_appearance_show_character_count
-                                },
-                            ),
-                            checked = settings.showCharacters,
-                            onCheckedChange = { checked ->
-                                onSettingsChange { current -> current.copy(showCharacters = checked) }
+                        val countLabels = listOf(
+                            stringResource(R.string.reader_count_off),
+                            stringResource(if (progressDisplay.usesWords) R.string.reader_count_words else R.string.reader_count_characters),
+                            stringResource(R.string.reader_count_pages),
+                        )
+                        SegmentedRow(
+                            label = stringResource(R.string.reader_count),
+                            options = countLabels,
+                            selected = countLabels[settings.progressCount.ordinal],
+                            onSelected = { label ->
+                                onSettingsChange { current -> current.copy(progressCount = ReaderProgressCount.entries[countLabels.indexOf(label)]) }
                             },
+                            palette = palette,
                         )
                         AppearanceDivider(palette)
                         SwitchRow(
@@ -991,7 +933,7 @@ internal fun readerAppearanceBottomSafeAreaFromSlider(value: Float): Int =
         .coerceReaderBottomSafeAreaDp()
 
 internal fun readerAppearanceShowsPageSwipeThreshold(viewMode: ReaderViewMode): Boolean =
-    viewMode == ReaderViewMode.Paginated || viewMode == ReaderViewMode.VisualNovel
+    viewMode == ReaderViewMode.Paginated
 
 internal fun readerAppearancePageSwipeThresholdSliderSteps(): Int =
     (ReaderPageSwipeThresholdMaxPx - ReaderPageSwipeThresholdMinPx) /
@@ -1491,71 +1433,51 @@ private fun SliderRow(
             onValueChange = onValueChange,
             valueRange = valueRange,
             steps = steps,
+            colors = readerSliderColorsWithoutTicks(),
         )
     }
 }
 
 @Composable
-private fun StepperRow(
+private fun IntegerSliderRow(
     label: String,
-    value: String,
-    onDecrease: () -> Unit,
-    onIncrease: () -> Unit,
-    palette: AppearancePalette,
+    value: Int,
+    range: IntRange,
+    suffix: String = "",
+    onChange: ((Int) -> Int) -> Unit,
 ) {
+    var dragValue by remember { mutableStateOf<Int?>(null) }
+    val shown = dragValue ?: value
     val metrics = readerSheetDensityMetrics()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = metrics.appearanceRowVerticalPaddingDp.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(value, style = MaterialTheme.typography.bodyLarge)
-            Surface(
-                shape = RoundedCornerShape(18.dp),
-                color = palette.stepperContainer,
-                border = hoshiContainerBorder(),
-                contentColor = palette.onGroup,
+    Column(Modifier.padding(horizontal = 14.dp, vertical = metrics.appearanceSliderVerticalPaddingDp.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+            Text("$shown$suffix", style = MaterialTheme.typography.bodyLarge)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(
+                onClick = { onChange { (it - 1).coerceIn(range) } },
+                enabled = shown > range.first,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = onDecrease,
-                        modifier = Modifier.size(metrics.stepperButtonSizeDp.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Remove,
-                            contentDescription = stringResource(R.string.action_decrease),
-                            modifier = Modifier.size(metrics.stepperIconSizeDp.dp),
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .size(width = 1.dp, height = 28.dp)
-                            .background(palette.stepperDivider),
-                    )
-                    IconButton(
-                        onClick = onIncrease,
-                        modifier = Modifier.size(metrics.stepperButtonSizeDp.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Add,
-                            contentDescription = stringResource(R.string.action_increase),
-                            modifier = Modifier.size(metrics.stepperIconSizeDp.dp),
-                        )
-                    }
-                }
+                Icon(Icons.Rounded.Remove, stringResource(R.string.action_decrease))
+            }
+            Slider(
+                value = shown.coerceIn(range).toFloat(),
+                onValueChange = { dragValue = it.roundToInt() },
+                onValueChangeFinished = {
+                    dragValue?.let { selected -> if (selected != value) onChange { selected } }
+                    dragValue = null
+                },
+                modifier = Modifier.weight(1f).semantics { contentDescription = label },
+                valueRange = range.first.toFloat()..range.last.toFloat(),
+                steps = range.last - range.first - 1,
+                colors = readerSliderColorsWithoutTicks(),
+            )
+            IconButton(
+                onClick = { onChange { (it + 1).coerceIn(range) } },
+                enabled = shown < range.last,
+            ) {
+                Icon(Icons.Rounded.Add, stringResource(R.string.action_increase))
             }
         }
     }
@@ -1580,8 +1502,6 @@ private data class AppearancePalette(
     val segmentSelected: Color,
     val segmentSelectedContent: Color,
     val segmentUnselectedContent: Color,
-    val stepperContainer: Color,
-    val stepperDivider: Color,
 )
 
 @Composable
@@ -1606,8 +1526,6 @@ private fun appearancePalette(): AppearancePalette {
         segmentSelected = segmentedControlColors.selected,
         segmentSelectedContent = segmentedControlColors.selectedContent,
         segmentUnselectedContent = segmentedControlColors.unselectedContent,
-        stepperContainer = hoshiSurfaces.nested,
-        stepperDivider = colorScheme.outline,
     )
 }
 

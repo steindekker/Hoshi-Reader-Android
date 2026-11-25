@@ -120,6 +120,8 @@ import moe.antimony.hoshi.ui.HoshiDropdownMenu as DropdownMenu
 import moe.antimony.hoshi.ui.UiText
 import moe.antimony.hoshi.ui.asString
 import moe.antimony.hoshi.ui.resolve
+import moe.antimony.hoshi.ui.theme.HoshiWebView
+import moe.antimony.hoshi.ui.theme.LocalHoshiDarkTheme
 import moe.antimony.hoshi.ui.theme.hoshiContainerBorder
 import moe.antimony.hoshi.ui.theme.hoshiSurfaces
 import moe.antimony.hoshi.webview.applyHoshiWebViewSecurityDefaults
@@ -191,7 +193,7 @@ internal fun LiveView(
     var mineWithOptionsRequest by remember { mutableStateOf<MineWithOptionsRequest?>(null) }
     var transcriptExpanded by rememberSaveable { mutableStateOf(true) }
     val snackbarHostState = remember { SnackbarHostState() }
-    val popupDarkMode = hoshiSurfaces.page.luminance() < 0.5f
+    val popupDarkMode = LocalHoshiDarkTheme.current
     val cue = uiState.focusedCue
     val lookup = uiState.lookup
     val popupOptions = dictionarySearchPopupOptions(
@@ -227,8 +229,6 @@ internal fun LiveView(
         readerSettings.popupReducedMotionScrolling,
         readerSettings.popupReducedMotionScrollPercent,
         readerSettings.popupReducedMotionSwipeThreshold,
-        popupDarkMode,
-        readerSettings.eInkMode,
         popupAudioSettings,
         ankiUiState.popupSettings,
         fontFaceCss,
@@ -239,6 +239,7 @@ internal fun LiveView(
     ) {
         LookupPopupHtml.renderIframeDocument(
             assets = null,
+            assetVersion = assets.hashCode(),
             dictionaryStyles = uiState.dictionaryStyles,
             settings = uiState.dictionarySettings,
             swipeToDismiss = readerSettings.popupSwipeToDismiss,
@@ -246,8 +247,6 @@ internal fun LiveView(
             reducedMotionScrolling = readerSettings.popupReducedMotionScrolling,
             reducedMotionScrollPercent = readerSettings.popupReducedMotionScrollPercent,
             reducedMotionSwipeThreshold = readerSettings.popupReducedMotionSwipeThreshold,
-            darkMode = popupDarkMode,
-            eInkMode = readerSettings.eInkMode,
             audioSettings = popupAudioSettings,
             noAudioFoundText = noAudioFoundText,
             audioLoadingText = audioLoadingText,
@@ -615,7 +614,7 @@ private fun LiveIframeHost(
         session = session,
         modifier = modifier,
         factory = { viewContext ->
-            WebView(viewContext).apply {
+            HoshiWebView(viewContext).apply {
                 applyHoshiWebViewSecurityDefaults()
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false

@@ -8,20 +8,39 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.distinctUntilChanged
+import moe.antimony.hoshi.profiles.ProfileRepository
+import kotlinx.serialization.Transient
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.json.Json
 
 @Serializable
 data class TtsSettings(
+    val enabled: Boolean = false,
     val engine: String = "", @SerialName("rate") val sharedRate: Float = 1f,
     val customSources: List<TtsCustomSource> = emptyList(),
     val online: Map<String, TtsOnlineConfig> = emptyMap(), val pitch: Float = 0f,
     val parameters: Map<String, TtsSynthesisOptions> = emptyMap(), val sentencePauseMs: Long = 0,
     val prefetchSentences: Int = 5, val playbackRate: Float = 1f, val useRubyReadings: Boolean = true,
+    @Transient val languageId: String = "ja",
+    val splitAtClausePunctuation: Boolean = false,
+    val routingByLanguageAndSource: Map<String, Map<String, TtsVoiceRouting>> = emptyMap(),
+    // Decode-only legacy routing; normalized before every write.
     val routingBySource: Map<String, TtsVoiceRouting> = emptyMap(),
 ) {
-    val voice: String get() = routingBySource[engine]?.narration.orEmpty()
+    val voice: String get() = routing().narration
     val rate: Float get() = customSource()?.rate ?: sharedRate
 }
 typealias TtsSettingsUpdate = (TtsSettings) -> TtsSettings
@@ -34,25 +53,62 @@ data class TtsPreferences(val settings: TtsSettings = TtsSettings(), val words: 
 private val Context.ttsStore by preferencesDataStore("japanese_tts")
 
 @Singleton
-class TtsRepository internal constructor(private val store: androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences>) {
-    @Inject constructor(@ApplicationContext context: Context) : this(context.ttsStore)
+class TtsRepository internal constructor(
+    private val store: androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences>,
+    private val language: Flow<String> = flowOf("ja"),
+) {
+    @Inject constructor(@ApplicationContext context: Context, profiles: ProfileRepository) : this(context.ttsStore,
+        profiles.state.map { it.effectiveContentLanguageProfile.id }.distinctUntilChanged())
     private val key = stringPreferencesKey("preferences")
     private val json = Json { ignoreUnknownKeys = true }
-    val preferences = store.data.map { decode(it[key]) }
+    val preferences = combine(store.data, language) { data, languageId ->
+        decode(data[key]).let { it.copy(settings = it.settings.copy(languageId = languageId)) }
+    }.distinctUntilChanged()
+    private val reloadRequests = MutableStateFlow(0)
+    internal val preferencesReloads = reloadRequests.asStateFlow()
+
+    /** A settings retry also recovers readers and other retained routes whose read flow failed. */
+    fun retryPreferences() { reloadRequests.update { it + 1 } }
+
+    suspend fun enabled(enabled: Boolean) {
+        store.edit {
+            val current = decode(it[key])
+            it[key] = json.encodeToString(current.copy(settings = current.settings.copy(enabled = enabled)))
+        }
+        retryPreferences()
+    }
+
+    /** Disabled is a deliberate no-op; real storage/synthesis failures and caller cancellation propagate. */
+    internal suspend fun <T> whileEnabled(action: suspend (TtsPreferences) -> T): T? = try {
+        coroutineScope {
+            val current = preferences.first()
+            if (!current.settings.enabled) return@coroutineScope null
+            val work = async { action(current) }
+            val watcher = launch {
+                preferences.first { !it.settings.enabled || it.settings.languageId != current.settings.languageId }
+                work.cancel(TtsDisabledCancellation())
+            }
+            try { work.await() } finally { watcher.cancel() }
+        }
+    } catch (_: TtsDisabledCancellation) { null }
     private fun decode(value: String?): TtsPreferences {
         val preferences = value?.let { json.decodeFromString<TtsPreferences>(it) } ?: TtsPreferences()
-        return preferences.copy(settings = preferences.settings.copy(
+        return preferences.copy(settings = preferences.settings.migrateRouting().copy(
             playbackRate = normalizeTtsPlaybackRate(preferences.settings.playbackRate),
             sentencePauseMs = preferences.settings.sentencePauseMs.coerceIn(0, ttsSentencePauseMaxMs)))
     }
 
-    suspend fun settings(update: TtsSettingsUpdate): Pair<TtsSettings, TtsSettings> {
+    suspend fun settings(update: TtsSettingsUpdate): Pair<TtsSettings, TtsSettings> = settings(language.first(), update)
+
+    /** The caller captures the displayed language before launching its write coroutine. */
+    suspend fun settings(languageId: String, update: TtsSettingsUpdate): Pair<TtsSettings, TtsSettings> {
         var result: Pair<TtsSettings, TtsSettings>? = null
         store.edit {
             val current = decode(it[key])
-            val next = normalizeSettings(update(current.settings))
+            val previous = current.settings.copy(languageId = languageId)
+            val next = normalizeSettings(update(previous)).migrateRouting().copy(languageId = languageId)
             it[key] = json.encodeToString(current.copy(settings = next))
-            result = current.settings to next
+            result = previous to next
         }
         return checkNotNull(result)
     }
@@ -96,8 +152,7 @@ class TtsRepository internal constructor(private val store: androidx.datastore.c
             val created = settings.customSources.none { profile -> profile.id == value.id }
             val protocolChanged = settings.customSources.any { it.id == value.id && it.protocol != value.protocol }
             val sources = settings.customSources.filterNot { profile -> profile.id == value.id } + value
-            val updated = settings.copy(customSources = sources,
-                routingBySource = if (protocolChanged) settings.routingBySource - value.id else settings.routingBySource)
+            val updated = (if (protocolChanged) settings.withoutSourceRouting(value.id) else settings).copy(customSources = sources)
             val next = if (created || updated.engine == value.id) updated.selectSource(value.id) else updated
             it[key] = json.encodeToString(current.copy(settings = next))
         }
@@ -106,8 +161,7 @@ class TtsRepository internal constructor(private val store: androidx.datastore.c
         store.edit {
             val current = decode(it[key])
             val selected = if (current.settings.engine == id) current.settings.selectSource("") else current.settings
-            val next = selected.copy(customSources = selected.customSources.filterNot { source -> source.id == id },
-                routingBySource = selected.routingBySource - id)
+            val next = selected.withoutSourceRouting(id).copy(customSources = selected.customSources.filterNot { source -> source.id == id })
             it[key] = json.encodeToString(current.copy(settings = next))
         }
     }
@@ -124,3 +178,5 @@ class TtsRepository internal constructor(private val store: androidx.datastore.c
         store.edit { it[key] = json.encodeToString(decode(it[key]).let { old -> old.copy(words = old.words.filterNot { w -> w.id == id }) }) }
     }
 }
+
+private class TtsDisabledCancellation : CancellationException("TTS disabled")

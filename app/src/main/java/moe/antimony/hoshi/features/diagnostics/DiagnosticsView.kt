@@ -2,6 +2,7 @@ package moe.antimony.hoshi.features.diagnostics
 
 import moe.antimony.hoshi.ui.theme.hoshiSurfaces
 import android.content.Intent
+import android.net.Uri
 import android.content.ClipData
 import androidx.core.content.FileProvider
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -76,7 +77,6 @@ import moe.antimony.hoshi.features.settings.GroupCard
 import moe.antimony.hoshi.features.settings.GroupDivider
 import moe.antimony.hoshi.features.settings.SectionTitle
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DiagnosticsView(
     onClose: () -> Unit,
@@ -84,11 +84,24 @@ fun DiagnosticsView(
     records: DiagnosticsRecordKind? = null,
     modifier: Modifier = Modifier,
 ) {
+    val viewModel: DiagnosticsViewModel = hiltViewModel()
+    DiagnosticsScreen(viewModel, onClose, onOpenRecords, records, modifier, webViewDebugging = { WebViewDebuggingSetting() })
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun DiagnosticsScreen(
+    viewModel: DiagnosticsViewModel,
+    onClose: () -> Unit,
+    onOpenRecords: (DiagnosticsRecordKind) -> Unit,
+    records: DiagnosticsRecordKind? = null,
+    modifier: Modifier = Modifier,
+    webViewDebugging: @Composable () -> Unit = {},
+) {
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    val viewModel: DiagnosticsViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val report = state.report
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.reload() }
@@ -112,12 +125,18 @@ fun DiagnosticsView(
             },
         )
     }
-    operationError?.let { message ->
+    (operationError ?: state.linkError?.asString())?.let { message ->
         HoshiAlertDialog(
-            onDismissRequest = { operationError = null },
+            onDismissRequest = {
+                operationError = null
+                viewModel.dismissLinkError()
+            },
             text = { ErrorDetailsText(message) },
             confirmButton = {
-                TextButton(onClick = { operationError = null }) { Text(stringResource(R.string.action_ok)) }
+                TextButton(onClick = {
+                    operationError = null
+                    viewModel.dismissLinkError()
+                }) { Text(stringResource(R.string.action_ok)) }
             },
         )
     }
@@ -144,7 +163,8 @@ fun DiagnosticsView(
             },
         )
     }
-    val shareText = remember(report, locale) { report?.toShareText(nonfatalLabels).orEmpty() }
+    val buildCommitLabel = stringResource(R.string.build_commit)
+    val shareText = remember(report, locale) { report?.toShareText(nonfatalLabels, buildCommitLabel).orEmpty() }
     BackHandler(onBack = onClose)
     val saveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         if (uri == null || shareText.isBlank()) return@rememberLauncherForActivityResult
@@ -238,6 +258,19 @@ fun DiagnosticsView(
                                 GroupDivider()
                                 DiagnosticsInfoRow(stringResource(R.string.diagnostics_version_code), report.versionCode.toString())
                                 GroupDivider()
+                                val commit = report.buildCommit
+                                DiagnosticsInfoRow(
+                                    stringResource(R.string.build_commit),
+                                    commit?.shortSha ?: stringResource(R.string.diagnostics_unavailable),
+                                    onClick = commit?.let {
+                                        {
+                                            viewModel.openBuildCommit { url ->
+                                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                            }
+                                        }
+                                    },
+                                )
+                                GroupDivider()
                                 DiagnosticsInfoRow(stringResource(R.string.diagnostics_android_sdk), report.sdkInt.toString())
                             }
                             Spacer(Modifier.height(24.dp))
@@ -248,6 +281,8 @@ fun DiagnosticsView(
                                 GroupDivider()
                                 DiagnosticsInfoRow(stringResource(R.string.diagnostics_version_name),
                                     report.webViewVersionName ?: stringResource(R.string.diagnostics_unavailable))
+                                GroupDivider()
+                                webViewDebugging()
                             }
                             Spacer(Modifier.height(24.dp))
                             GroupCard {
@@ -276,22 +311,34 @@ fun DiagnosticsView(
                         }
                     }
                     DiagnosticsRecordKind.Crashes -> {
-                        if (report.capturedCrashes.isEmpty()) {
+                        val crashes = report.crashes
+                        if (crashes.isEmpty()) {
                             item { DiagnosticsEmptyText(stringResource(R.string.diagnostics_no_crashes)) }
                         } else {
-                            items(report.capturedCrashes) { crash ->
-                                DiagnosticsRecordRow(stringResource(R.string.diagnostics_captured_crash), crash.timestampMillis,
-                                    crash.text.lineSequence().firstOrNull().orEmpty()) {
-                                    selectedDetails = crash.text
+                            items(crashes) { crash ->
+                                val title = if (crash is CrashDiagnosticRecord.Captured) {
+                                    R.string.diagnostics_captured_crash
+                                } else {
+                                    crash.reason.messageRes()
+                                }
+                                DiagnosticsRecordRow(stringResource(title), crash.timestampMillis,
+                                    crash.summary) {
+                                    selectedDetails = when (crash) {
+                                        is CrashDiagnosticRecord.Captured -> crash.record.text
+                                        is CrashDiagnosticRecord.SystemExit -> report.copy(
+                                            capturedCrashes = emptyList(), nonfatalErrors = emptyList(), records = listOf(crash.record),
+                                        ).toShareText()
+                                    }
                                 }
                             }
                         }
                     }
                     DiagnosticsRecordKind.ProcessExits -> {
-                        if (report.records.isEmpty()) {
+                        val exits = report.processExits
+                        if (exits.isEmpty()) {
                             item { DiagnosticsEmptyText(stringResource(R.string.diagnostics_no_process_exits)) }
                         }
-                        items(report.records) { exit ->
+                        items(exits) { exit ->
                             DiagnosticsRecordRow(stringResource(exit.reason.messageRes()), exit.timestampMillis,
                                 exit.description.orEmpty()) {
                                 selectedDetails = report.copy(capturedCrashes = emptyList(), nonfatalErrors = emptyList(),
@@ -306,13 +353,20 @@ fun DiagnosticsView(
 }
 
 @Composable
-private fun DiagnosticsInfoRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+private fun DiagnosticsInfoRow(label: String, value: String, onClick: (() -> Unit)? = null) {
+    Row(Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+        .padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(label, Modifier.weight(0.35f), style = MaterialTheme.typography.bodyMedium)
-        SelectionContainer(Modifier.weight(0.65f)) {
-            Text(value, Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodyMedium,
-                color = hoshiSurfaces.muted, textAlign = TextAlign.End,
+        if (onClick != null) {
+            Text(value, Modifier.weight(0.65f), style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.End,
                 maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+        } else {
+            SelectionContainer(Modifier.weight(0.65f)) {
+                Text(value, Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodyMedium,
+                    color = hoshiSurfaces.muted, textAlign = TextAlign.End,
+                    maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+            }
         }
     }
 }

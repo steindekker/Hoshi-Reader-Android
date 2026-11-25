@@ -21,7 +21,7 @@ class SasayakiPlayer private constructor(
         bookCoverFile: File?,
         matchData: SasayakiMatchData?,
         initialPlayback: SasayakiPlaybackData?,
-        getCurrentChapterIndex: () -> Int,
+        getCurrentChapterIndex: () -> Int?,
         onCue: (SasayakiMatch, Boolean, SasayakiCueRevealSource) -> Unit,
         onClearCue: () -> Unit,
         playbackServiceRuntime: SasayakiPlaybackRuntime,
@@ -68,15 +68,28 @@ class SasayakiPlayer private constructor(
     val hasMatch: Boolean get() = controller.hasMatch
     val delay: Double get() = controller.delay
     val rate: Float get() = controller.rate
+    val volumeGainError: UiText? get() = controller.volumeGainError
     val audioStorageSummary: String get() = controller.audioStorageSummary
+
+    suspend fun flushSaves() = controller.flushSaves()
+
+    fun applySyncedPlayback(value: SasayakiPlaybackData) = controller.applySyncedPlayback(value)
 
     fun setDelay(value: Double) {
         controller.setDelay(value)
     }
 
+    fun saveDelay() = controller.saveDelay()
+
     fun setRate(value: Float) {
         controller.setRate(value)
     }
+
+    fun saveRate() = controller.saveRate()
+
+    fun setVolumeGainDb(value: Int) = controller.setVolumeGainDb(value)
+
+    fun saveVolumeGain() = controller.saveVolumeGain()
 
     fun importAudio(audioUri: Uri, copiedAudioFileName: String? = null) {
         controller.importAudio(audioUri = audioUri, copiedAudioFileName = copiedAudioFileName)
@@ -109,6 +122,10 @@ class SasayakiPlayer private constructor(
         controller.previousCue()
     }
 
+    fun restartCurrentCue() {
+        controller.restartCurrentCue()
+    }
+
     fun skipForward(seconds: Int) {
         controller.skipForward(seconds)
     }
@@ -120,6 +137,11 @@ class SasayakiPlayer private constructor(
     fun seekTo(seconds: Double) {
         controller.seekTo(seconds)
     }
+
+    fun handlePageChanged(chapterIndex: Int, cueIds: List<String>, play: Boolean?) =
+        controller.handlePageChanged(chapterIndex, cueIds, play)
+
+    fun clearPageRange() = controller.clearPageRange()
 
     fun updateMatchData(matchData: SasayakiMatchData?) {
         controller.updateMatchData(matchData)
@@ -158,7 +180,7 @@ class SasayakiPlayer private constructor(
             bookCoverFile: File?,
             matchData: SasayakiMatchData?,
             initialPlayback: SasayakiPlaybackData?,
-            getCurrentChapterIndex: () -> Int,
+            getCurrentChapterIndex: () -> Int?,
             onCue: (SasayakiMatch, Boolean, SasayakiCueRevealSource) -> Unit,
             onClearCue: () -> Unit,
             playbackServiceRuntime: SasayakiPlaybackRuntime,

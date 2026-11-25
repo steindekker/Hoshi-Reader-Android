@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -12,6 +14,10 @@ val rustDebugJniLibsDir = layout.buildDirectory.dir("jniLibs/debug").get().asFil
 val rustReleaseJniLibsDir = layout.buildDirectory.dir("jniLibs/release").get().asFile
 val cargo = System.getenv("HOME") + "/.cargo/bin/cargo"
 val androidNdkHome = System.getenv("ANDROID_NDK_HOME") ?: "/opt/homebrew/share/android-ndk"
+val secrets = Properties().apply {
+    val secretsFile = rootProject.file("secrets.properties")
+    if (secretsFile.isFile) secretsFile.inputStream().use { load(it) }
+}
 val releaseSigningNames = listOf(
     "ANDROID_KEYSTORE_FILE",
     "ANDROID_KEYSTORE_PASSWORD",
@@ -66,6 +72,20 @@ val latestReleaseVersion = runCatching {
     }.standardOutput.asText.get().trim().removePrefix("v")
 }.getOrNull()?.takeIf { it.matches(Regex("""\d+\.\d+\.\d+""")) }
 val releaseVersionName = providers.gradleProperty("releaseVersionName").orNull ?: latestReleaseVersion
+val buildCommitSha = providers.gradleProperty("buildCommitSha").orElse(
+    if (rootProject.file(".git").exists()) {
+        providers.exec {
+            workingDir(rootProject.projectDir)
+            commandLine("git", "rev-parse", "HEAD")
+            isIgnoreExitValue = true
+        }.standardOutput.asText.map { it.trim() }
+    } else {
+        providers.provider { "" }
+    }
+).get()
+require(buildCommitSha.isEmpty() || buildCommitSha.matches(Regex("[0-9a-f]{40}"))) {
+    "buildCommitSha must be a full lowercase Git commit SHA."
+}
 if (providers.gradleProperty("releaseVersionCode").isPresent &&
     providers.gradleProperty("releaseVersionCode").get().toIntOrNull() == null
 ) {
@@ -154,13 +174,14 @@ android {
         versionName = "1.5.0"
         releaseVersionCode?.let { versionCode = it }
         releaseVersionName?.let { versionName = it }
+        buildConfigField("String", "BUILD_COMMIT_SHA", "\"$buildCommitSha\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "HOSHI_SETUP_URL", "\"$hoshiSetupUrl\"")
         buildConfigField("String", "HOSHI_SETUP_TOKEN", "\"$hoshiSetupToken\"")
         externalNativeBuild {
             cmake {
-                targets += listOf("hoshidicts_jni")
+                targets += listOf("hoshidicts_jni", "hoshilocalaudio_jni")
             }
         }
     }
@@ -177,6 +198,13 @@ android {
     }
 
     buildTypes {
+        configureEach {
+            val key = "HOSHI_GOOGLE_CLIENT_ID_${name.uppercase()}"
+            val clientId = providers.environmentVariable(key).getOrElse(secrets.getProperty(key, "")).trim()
+            buildConfigField("String", "HOSHI_GOOGLE_CLIENT_ID", "\"$clientId\"")
+            manifestPlaceholders["googleOAuthRedirectScheme"] = clientId.split('.').reversed().joinToString(".")
+                .ifEmpty { "moe.antimony.hoshi.$name.oauth" }
+        }
         debug {
             applicationIdSuffix = ".debug"
             manifestPlaceholders["appLabel"] = "Hoshi Debug"
@@ -227,12 +255,16 @@ android {
 }
 
 dependencies {
+    implementation(libs.google.play.services.auth)
+    implementation(libs.kotlinx.coroutines.play.services)
+    implementation(libs.androidx.browser)
     implementation(libs.jsoup)
     implementation(project(":hoshi-card"))
     implementation(libs.okhttp)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.compose.material3)
     implementation(libs.material.color.utilities)
     implementation(libs.androidx.compose.material3.adaptive.navigation.suite)
@@ -263,6 +295,7 @@ dependencies {
     implementation(libs.google.dagger.hilt.android)
     implementation(libs.re2j)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.serialization.protobuf)
     implementation("net.java.dev.jna:jna:${libs.versions.jna.get()}@aar")
     ksp(libs.androidx.hilt.compiler)
     ksp(libs.google.dagger.hilt.android.compiler)

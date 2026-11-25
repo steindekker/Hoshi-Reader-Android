@@ -1,23 +1,6 @@
 package moe.antimony.hoshi.features.reader
 
-internal enum class ReaderProgressPersistenceEvent {
-    PaginatedPageTurnCompleted,
-    ContinuousScrollChanged,
-    ContinuousScrollIdle,
-}
-
-internal enum class ReaderProgressPersistenceAction {
-    DisplayOnly,
-    SaveBookmark,
-}
-
-internal fun readerProgressPersistenceAction(
-    event: ReaderProgressPersistenceEvent,
-): ReaderProgressPersistenceAction = when (event) {
-    ReaderProgressPersistenceEvent.PaginatedPageTurnCompleted -> ReaderProgressPersistenceAction.SaveBookmark
-    ReaderProgressPersistenceEvent.ContinuousScrollChanged -> ReaderProgressPersistenceAction.DisplayOnly
-    ReaderProgressPersistenceEvent.ContinuousScrollIdle -> ReaderProgressPersistenceAction.SaveBookmark
-}
+import moe.antimony.hoshi.features.sync.SyncProvider
 
 internal enum class ReaderLifecycleAutoSyncEvent {
     Resume,
@@ -35,10 +18,11 @@ internal data class ReaderLifecycleAutoSyncPlan(
 internal fun readerLifecycleAutoSyncPlan(
     event: ReaderLifecycleAutoSyncEvent,
     inactiveElapsedMillis: Long? = null,
+    provider: SyncProvider = SyncProvider.Ttu,
 ): ReaderLifecycleAutoSyncPlan = when (event) {
     ReaderLifecycleAutoSyncEvent.Resume -> ReaderLifecycleAutoSyncPlan(
         importOnForeground = inactiveElapsedMillis != null &&
-            inactiveElapsedMillis >= AutoSyncForegroundThresholdMillis,
+            (provider == SyncProvider.Gdrive || inactiveElapsedMillis >= AutoSyncForegroundThresholdMillis),
     )
     ReaderLifecycleAutoSyncEvent.Pause,
     ReaderLifecycleAutoSyncEvent.Dispose -> ReaderLifecycleAutoSyncPlan(

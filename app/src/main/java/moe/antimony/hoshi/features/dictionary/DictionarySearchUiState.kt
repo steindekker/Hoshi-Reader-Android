@@ -23,6 +23,10 @@ internal data class DictionarySearchUiState(
     val forwardSignal: Int = 0,
 ) {
     val hasResults: Boolean get() = results.isNotEmpty()
+    val hasLookupContent: Boolean get() = hasResults ||
+        (hasSearched && !isSearching && lastQuery.isNotBlank() && errorMessage == null)
+    val showLookupHistory: Boolean get() = query.isBlank() && lastQuery.isBlank() &&
+        !hasResults && popups.isEmpty() && !isSearching && errorMessage == null
 }
 
 internal data class DictionarySearchRenderState(
@@ -48,18 +52,10 @@ internal object DictionarySearchContent {
             )
         }
         val results = lookup(trimmed)
-        if (results.isEmpty()) {
-            return DictionarySearchRenderState(
-                lastQuery = trimmed,
-                results = emptyList(),
-                hasResults = false,
-                dictionaryStyles = emptyMap(),
-            )
-        }
         return DictionarySearchRenderState(
             lastQuery = trimmed,
             results = results,
-            hasResults = true,
+            hasResults = results.isNotEmpty(),
             dictionaryStyles = dictionaryStyles,
         )
     }

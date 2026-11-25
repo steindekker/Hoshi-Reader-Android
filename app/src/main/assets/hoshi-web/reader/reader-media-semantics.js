@@ -19,6 +19,53 @@
       .some(function(token) { return token.toLowerCase().indexOf('gaiji') >= 0; });
   }
 
+  var imageReferenceCounts = global.hoshiReaderImageReferenceCounts || {};
+  var imageReferenceCountsPromise;
+
+  function setImageReferenceCounts(counts) {
+    imageReferenceCounts = counts || {};
+  }
+
+  function loadImageReferenceCounts() {
+    if (!imageReferenceCountsPromise) {
+      imageReferenceCountsPromise = global.hoshiReaderImageReferenceCounts || typeof global.fetch !== 'function'
+        ? Promise.resolve()
+        : global.fetch('https://appassets.androidplatform.net/reader-media/image-references.json')
+          .then(function(response) { return response.ok ? response.json() : null; })
+          .then(setImageReferenceCounts)
+          .catch(function() { /* Unknown counts preserve ordinary image holds. */ });
+    }
+    return imageReferenceCountsPromise;
+  }
+
+  function shouldHoldMedia(element) {
+    if (!element) return true;
+    var tag = String(element.tagName || '').toLowerCase();
+    if (tag === 'img' && isGaijiImage(element)) return false;
+    if (tag === 'picture' || tag === 'svg') {
+      var descendants = Array.from(element.querySelectorAll ? element.querySelectorAll('*') : []);
+      if (tag === 'svg' && descendants.some(function(child) {
+        return ['path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'text', 'use', 'foreignobject'].indexOf(String(child.tagName || '').toLowerCase()) >= 0;
+      })) return true;
+      var images = descendants.filter(function(child) {
+        return ['img', 'image'].indexOf(String(child.tagName || '').toLowerCase()) >= 0;
+      });
+      return !images.length || images.some(shouldHoldMedia);
+    }
+    if (tag !== 'img' && tag !== 'image') return true;
+    var source = tag === 'img' ? imageSource(element) : svgImageSource(element);
+    if (!source) return true;
+    try {
+      var doc = documentForNode(element);
+      var url = new URL(source, doc && doc.baseURI);
+      if (url.origin !== 'https://appassets.androidplatform.net' || url.pathname.indexOf('/epub/') !== 0) return true;
+      var path = decodeURIComponent(url.pathname.slice('/epub/'.length));
+      return !(Number(imageReferenceCounts[path]) >= 3);
+    } catch (_error) {
+      return true;
+    }
+  }
+
   function isLargeImage(img) {
     return Number(img && img.naturalWidth || 0) > 256 || Number(img && img.naturalHeight || 0) > 256;
   }
@@ -160,7 +207,7 @@
     if (!svgImage) return '';
     return svgImage.href && svgImage.href.baseVal
       ? svgImage.href.baseVal
-      : ((svgImage.getAttribute && (svgImage.getAttribute('href') || svgImage.getAttribute('xlink:href'))) || '');
+      : ((svgImage.getAttribute && (svgImage.getAttribute('href') || svgImage.getAttribute('xlink:href') || svgImage.getAttribute('data-hoshi-image-href'))) || '');
   }
 
   function postImageBridge(src, imageBridge, doc) {
@@ -170,22 +217,49 @@
     }
   }
 
+  var liveBlurTargets;
+  var liveBlurEnabled;
+
+  function applyImageBlur(element, wrap, enabled) {
+    if (!enabled) {
+      element.classList.remove('blurred');
+      var wrapper = element.hoshiReaderBlurWrapper;
+      if (wrapper && wrapper.parentNode && element.parentNode === wrapper) {
+        wrapper.parentNode.insertBefore(element, wrapper);
+        wrapper.parentNode.removeChild(wrapper);
+        element.hoshiReaderBlurWrapper = null;
+      }
+      return;
+    }
+    element.classList.add('blurred');
+    if (wrap && element.parentNode && !element.parentElement?.classList.contains('blur-wrapper')) {
+      var wrapper = documentForNode(element).createElement('span');
+      wrapper.className = 'blur-wrapper';
+      element.parentNode.insertBefore(wrapper, element);
+      wrapper.appendChild(element);
+      element.hoshiReaderBlurWrapper = wrapper;
+    }
+  }
+
+  function setImageBlur(enabled) {
+    if (!liveBlurTargets || liveBlurEnabled === enabled) return;
+    liveBlurEnabled = enabled;
+    liveBlurTargets.forEach(function(wrap, element) { applyImageBlur(element, wrap, enabled); });
+  }
+
   function setupReaderImage(element, src, options) {
     options = options || {};
     if (!element || !src || element.hoshiReaderImageSetup) return;
     element.hoshiReaderImageSetup = true;
     var blurElement = options.blurElement || element;
-    if (options.blurImages) {
-      blurElement.classList.add('blurred');
-      if (options.wrap && !(blurElement.parentElement && blurElement.parentElement.classList.contains('blur-wrapper'))) {
-        var doc = documentForNode(blurElement);
-        if (doc && doc.createElement && blurElement.parentNode) {
-          var target = doc.createElement('span');
-          target.className = 'blur-wrapper';
-          blurElement.parentNode.insertBefore(target, blurElement);
-          target.appendChild(blurElement);
-        }
+    if (liveBlurTargets) {
+      // Several <image> nodes may share one SVG. Register its visual state only once.
+      if (!liveBlurTargets.has(blurElement)) {
+        liveBlurTargets.set(blurElement, options.wrap);
+        if (liveBlurEnabled) applyImageBlur(blurElement, options.wrap, true);
       }
+    } else if (options.blurImages) {
+      applyImageBlur(blurElement, options.wrap, true);
     }
     element.addEventListener('click', function(event) {
       event.preventDefault();
@@ -198,11 +272,41 @@
     });
   }
 
+  // SVG image elements lack HTML's loading attribute. Observe the sized SVG viewport,
+  // which also works when the unloaded raster has no bounds of its own.
+  var svgObserver;
+  var pendingBookSvg = new Set();
+
+  function loadSvgImages(svg) {
+    svg.querySelectorAll('image[data-hoshi-image-href]').forEach(function(image) {
+      image.setAttribute('href', image.getAttribute('data-hoshi-image-href'));
+      image.removeAttribute('data-hoshi-image-href');
+    });
+  }
+
+  function deferSvgImages(svg) {
+    if (!global.IntersectionObserver) {
+      loadSvgImages(svg);
+      return;
+    }
+    if (!svgObserver) {
+      svgObserver = new global.IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (!entry.isIntersecting) return;
+          loadSvgImages(entry.target);
+          svgObserver.unobserve(entry.target);
+        });
+      }, { root: documentForNode(svg).body, rootMargin: '100%' });
+    }
+    svgObserver.observe(svg);
+  }
+
   function setupSvgImages(scope, options) {
     var svgImages = Array.from(scope.querySelectorAll ? scope.querySelectorAll('svg image') : []);
     svgImages.forEach(function(svgImage) {
       var svg = svgImage.closest && svgImage.closest('svg');
       if (!svg) return;
+      if (svgImage.getAttribute('data-hoshi-image-href')) pendingBookSvg.add(svg);
       if (svg.getAttribute('preserveAspectRatio') === 'none') {
         svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
       }
@@ -215,17 +319,24 @@
     });
   }
 
+  function observeBookImagesAtReadingPosition() {
+    pendingBookSvg.forEach(deferSvgImages);
+    pendingBookSvg.clear();
+  }
+
   function setupImage(img, options, resolve) {
+    var setupIllustration = function() {
+      img.classList.add('block-img');
+      setupReaderImage(img, imageSource(img), {
+        blurImages: options.blurImages,
+        imageBridge: options.imageBridge,
+        wrap: true
+      });
+    };
+    if (img.hasAttribute?.('data-hoshi-sized-art')) setupIllustration();
     var mark = function() {
       markTextColorImage(img);
-      if (!isGaijiImage(img) && isLargeImage(img)) {
-        img.classList.add('block-img');
-        setupReaderImage(img, imageSource(img), {
-          blurImages: options.blurImages,
-          imageBridge: options.imageBridge,
-          wrap: true
-        });
-      }
+      if (!isGaijiImage(img) && isLargeImage(img)) setupIllustration();
       if (resolve) resolve();
     };
     var fail = function() {
@@ -248,6 +359,10 @@
     options = options || {};
     scope = scope || global.document || (typeof document !== 'undefined' ? document : null);
     if (!scope || !scope.querySelectorAll) return Promise.resolve();
+    if (options.liveBlur && !liveBlurTargets) {
+      liveBlurTargets = new Map();
+      liveBlurEnabled = !!options.blurImages;
+    }
     ensureGaijiTextColorFilter(documentForNode(scope));
     setupSvgImages(scope, options);
     var images = Array.from(scope.querySelectorAll('img'));
@@ -265,7 +380,12 @@
 
   global.hoshiReaderMediaSemantics = {
     isGaijiImage: isGaijiImage,
+    setImageReferenceCounts: setImageReferenceCounts,
+    loadImageReferenceCounts: loadImageReferenceCounts,
+    shouldHoldMedia: shouldHoldMedia,
+    setImageBlur: setImageBlur,
     setupReaderImage: setupReaderImage,
+    observeBookImagesAtReadingPosition: observeBookImagesAtReadingPosition,
     setupReaderImages: setupReaderImages
   };
 })(window);

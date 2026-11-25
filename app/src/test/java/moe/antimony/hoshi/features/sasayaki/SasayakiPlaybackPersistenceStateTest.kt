@@ -2,11 +2,17 @@ package moe.antimony.hoshi.features.sasayaki
 
 import moe.antimony.hoshi.epub.SasayakiPlaybackData
 
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -15,7 +21,76 @@ import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class SasayakiPlaybackPersistenceStateTest {
+    @Test
+    fun previewsGainWithoutWritingAndRestoresTheLastSavedGainAfterFailure() = runTest {
+        val attempted = mutableListOf<Int>()
+        val repository = object : SasayakiPlaybackRepository {
+            override suspend fun load() = null
+            override suspend fun save(playback: SasayakiPlaybackData) = error("Unexpected progress write")
+
+            override suspend fun saveVolumeGainDb(value: Int) {
+                attempted += value
+                if (value == 9) error("Gain write failed")
+            }
+        }
+        val applied = mutableListOf<Int>()
+        val state = SasayakiPlaybackPersistenceState(
+            playbackRepository = repository,
+            audioSourceRepository = SasayakiAudioRepository(File("book-root")),
+            initialPlayback = SasayakiPlaybackData(lastPosition = 42.0, volumeGainDb = -3),
+            persistenceScope = backgroundScope,
+            persistenceDispatcher = Dispatchers.Unconfined,
+            onVolumeGainChanged = applied::add,
+        )
+        assertEquals(-3, state.playback.volumeGainDb)
+
+        state.setVolumeGainDb(6)
+        state.setVolumeGainDb(8)
+        state.setVolumeGainDb(10)
+        runCurrent()
+        assertTrue(attempted.isEmpty())
+        assertEquals(listOf(6, 8, 10), applied)
+        state.applySyncedPlayback(SasayakiPlaybackData(lastPosition = 200.0, volumeGainDb = -3))
+        assertEquals(10, state.playback.volumeGainDb)
+
+        state.saveVolumeGain()
+        state.flush()
+        assertEquals(listOf(10), attempted)
+        assertNull(state.volumeGainSaveError)
+
+        state.setVolumeGainDb(9)
+        state.saveVolumeGain()
+        state.flush()
+        assertEquals(listOf(10, 9), attempted)
+        assertEquals(listOf(6, 8, 10, 9, 10), applied)
+        assertEquals(10, state.playback.volumeGainDb)
+        assertEquals(200.0, state.playback.lastPosition, 0.0)
+        assertNotNull(state.volumeGainSaveError)
+    }
+
+    @Test
+    fun flushWaitsForLocalSavesAndSyncedPlaybackDoesNotSaveAgain() = runTest {
+        val repository = BlockingPlaybackRepository()
+        val state = SasayakiPlaybackPersistenceState(
+            repository, SasayakiAudioRepository(File("book-root")), null,
+            backgroundScope, Dispatchers.Unconfined,
+        )
+        state.savePosition(1.0)
+        state.savePosition(2.0)
+        val flush = launch { state.flush() }
+        runCurrent()
+        assertTrue(flush.isActive)
+        repository.completeFirstSave()
+        runCurrent()
+        assertTrue(flush.isCompleted)
+        val synced = SasayakiPlaybackData(lastPosition = 42.0, delay = 0.5, rate = 1.2f, modified = 1234)
+        state.applySyncedPlayback(synced)
+        assertEquals(synced, state.playback)
+        assertEquals(listOf(1.0, 2.0), repository.saved.map { it.lastPosition })
+    }
+
     @Test
     fun loadsPlaybackAndSavesDelayRateAndPositionChanges() {
         val initial = SasayakiPlaybackData(
@@ -34,8 +109,6 @@ class SasayakiPlaybackPersistenceStateTest {
         )
 
         assertEquals(initial, state.playback)
-        assertEquals(0.25, state.delay, 0.0)
-        assertEquals(1.1f, state.rate)
 
         state.setDelay(-0.15)
         assertEquals(-0.15, repository.saved.last().delay, 0.0)
@@ -139,6 +212,8 @@ class SasayakiPlaybackPersistenceStateTest {
 
         override suspend fun load(): SasayakiPlaybackData? = initial
 
+        override suspend fun saveVolumeGainDb(value: Int) = Unit
+
         override suspend fun save(playback: SasayakiPlaybackData) {
             saved += playback
         }
@@ -149,6 +224,8 @@ class SasayakiPlaybackPersistenceStateTest {
         private var firstSaveContinuation: Continuation<Unit>? = null
 
         override suspend fun load(): SasayakiPlaybackData? = null
+
+        override suspend fun saveVolumeGainDb(value: Int) = Unit
 
         override suspend fun save(playback: SasayakiPlaybackData) {
             saved += playback
@@ -169,6 +246,8 @@ class SasayakiPlaybackPersistenceStateTest {
         val attempted = mutableListOf<SasayakiPlaybackData>()
 
         override suspend fun load(): SasayakiPlaybackData? = null
+
+        override suspend fun saveVolumeGainDb(value: Int) = Unit
 
         override suspend fun save(playback: SasayakiPlaybackData) {
             attempted += playback

@@ -1,0 +1,455 @@
+package moe.antimony.hoshi.features.sync
+
+import java.io.File
+import java.util.UUID
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import moe.antimony.hoshi.di.FilesDir
+import moe.antimony.hoshi.di.IoDispatcher
+import moe.antimony.hoshi.epub.BookEntry
+import moe.antimony.hoshi.epub.BookMetadata
+import moe.antimony.hoshi.epub.BookRepository
+import moe.antimony.hoshi.epub.Bookmark
+import moe.antimony.hoshi.epub.ReadingSessions
+import moe.antimony.hoshi.epub.SasayakiPlaybackData
+import moe.antimony.hoshi.epub.writeBookJson
+
+@Singleton
+class SyncStorage @Inject constructor(
+    @param:FilesDir private val filesDir: File,
+    private val books: BookRepository,
+    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+) {
+    private val mutableRecords = MutableStateFlow(SyncState())
+    val records = mutableRecords.asStateFlow()
+    var state: SyncState
+        get() = mutableRecords.value
+        private set(value) { mutableRecords.value = value }
+    private var loaded = false
+    private val sidecars get() = books.sidecarDataSource
+    private val statistics get() = books.statisticsStore
+    private val booksDirectory get() = filesDir.resolve("Books")
+    private val revision = MutableStateFlow(0)
+    val booksChanged = revision.asStateFlow()
+    var onChange: (() -> Unit)? = null
+    var syncEnabled: (suspend () -> Boolean)? = null
+    var applyReaderState: (suspend (key: String, book: SyncBook, bookmarkChanged: Boolean, audiobookChanged: Boolean, highlightsChanged: Boolean) -> Unit)? = null
+
+    init {
+        statistics.onSave = { folder, sessions -> handleSessionsChange(folder.syncKey(), sessions) }
+        books.onBookChange = { key, fileType ->
+            transaction {
+                handleBookChange(key)
+                if (fileType != null) {
+                    markFileChanged(key, fileType)
+                    saveChanges(false)
+                }
+            }
+        }
+        books.onShelvesChange = ::handleShelvesChange
+    }
+
+    suspend fun <T> transaction(action: suspend () -> T): T = withContext(ioDispatcher) {
+        books.storageLock.withLock {
+            if (!loaded) reload()
+            action()
+        }
+    }
+
+    suspend fun reload() = withContext(ioDispatcher) {
+        val file = booksDirectory.resolve(".sync.json")
+        state = if (file.isFile) runCatching { SyncFormat.json.decodeFromString<SyncState>(file.readText()) }.getOrDefault(SyncState()) else SyncState()
+        loaded = true
+    }
+
+    suspend fun save() = withContext(ioDispatcher) {
+        writeBookJson(booksDirectory.resolve(".sync.json"), SyncFormat.json.encodeToString(state))
+    }
+
+    suspend fun saveChanges(booksChanged: Boolean = true) {
+        save()
+        if (booksChanged) notifyBooksChanged()
+        onChange?.invoke()
+    }
+
+    fun notifyBooksChanged() {
+        revision.value += 1
+    }
+
+    suspend fun updateRecord(key: String, transform: (SyncRecord) -> SyncRecord) = transaction {
+        state = state.copy(books = state.books + (key to transform(state.books.getValue(key))))
+    }
+
+    suspend fun removeRecord(key: String) = transaction {
+        state = state.copy(books = state.books - key)
+    }
+
+    suspend fun setShelvesPending(pending: Boolean) = transaction {
+        state = state.copy(shelvesPending = pending)
+    }
+
+    suspend fun markPending(key: String) = transaction {
+        if (!state.books.getValue(key).pending) {
+            updateRecord(key) { it.copy(pending = true) }
+            save()
+        }
+        onChange?.invoke()
+    }
+
+    suspend fun resetSyncState() = transaction {
+        state = state.copy(books = state.books.filterKeys { books.loadMetadata(resolveBookDirectory(it)) != null })
+        for ((key, record) in state.books) {
+            val archived = books.loadMetadata(bookDirectory(key)) == null
+            updateRecord(key) { record.copy(generation = if (archived) 0 else 1, deleted = archived, files = emptyMap(), attached = false, pending = true) }
+        }
+        setShelvesPending(true)
+        saveChanges()
+    }
+
+    suspend fun hasData(): Boolean = transaction {
+        bookDirectories().any { root ->
+            if (root.parentFile!!.name == "statistics_archive") statistics.loadSessions(root).values.any { it.value != null }
+            else books.loadMetadata(root)?.epub != null
+        }
+    }
+
+    suspend fun removeDeletionRecords() = transaction {
+        val cleared = mutableListOf<File>()
+        for (root in bookDirectories()) {
+            val archived = root.parentFile!!.name == "statistics_archive"
+            val sessions = statistics.loadSessions(root)
+            val liveSessions = sessions.filterValues { it.value != null }
+            if (archived && liveSessions.isEmpty()) {
+                cleared += root
+                continue
+            }
+            if (liveSessions.size != sessions.size) statistics.applySessions(root, liveSessions)
+            if (archived) continue
+
+            val highlights = sidecars.loadHighlightRecords(root)
+            val liveHighlights = highlights.filterValues { it.value != null }
+            if (liveHighlights.size != highlights.size) sidecars.saveHighlightRecords(root, liveHighlights)
+            val metadata = books.loadMetadata(root)
+            val shelves = metadata?.shelves
+            if (shelves != null && shelves.any { !it.value.value }) {
+                sidecars.saveMetadata(root, metadata.copy(shelves = shelves.filterValues { it.value }))
+            }
+        }
+        val shelves = books.loadShelfList()
+        if (shelves.any { it.value.value == null }) books.saveShelfList(shelves.filterValues { it.value != null })
+        state = state.copy(books = state.books - cleared.map { it.name.syncKey() }.toSet())
+        save()
+        cleared.forEach { it.deleteRecursively() }
+    }
+
+    suspend fun prepareLibrary() = transaction {
+        val empty = mutableListOf<File>()
+        for (root in bookDirectoryCandidates()) {
+            val archived = root.parentFile!!.name == "statistics_archive"
+            // Existing live records need no preparation; avoid decoding their metadata again.
+            val key = root.name.syncKey()
+            val record = state.books[key]
+            if (!archived && record != null) {
+                // Older shelf loaders could recreate a deleted book's directory. Reapply
+                // its state on the next sync even when the remote version is unchanged.
+                if (record.deleted && root.isDirectory) updateRecord(key) { it.copy(pending = true) }
+                continue
+            }
+            if (books.loadMetadata(root) == null) continue
+            prepareBook(root)
+            // Live sessions are read/migrated when syncing the book, not during startup.
+            if (archived && statistics.loadSessions(root).isEmpty()) empty += root
+        }
+        books.loadShelfList()
+        save()
+        empty.forEach { it.deleteRecursively() }
+    }
+
+    suspend fun prepareBook(root: File) = transaction {
+        val key = root.name.syncKey()
+        if (state.books[key] != null) return@transaction
+        val archived = root.parentFile!!.name == "statistics_archive"
+        var record = SyncRecord(generation = if (archived) 0 else 1, deleted = archived)
+        for (type in SyncFileType.entries) {
+            if (sourceURL(key, type) != null) record = record.copy(sources = record.sources + (type to System.currentTimeMillis()))
+        }
+        state = state.copy(books = state.books + (key to record))
+    }
+
+    suspend fun loadBook(key: String, remote: SyncBook? = null): SyncBook? = transaction {
+        val record = state.books[key] ?: return@transaction null
+        val root = resolveBookDirectory(key)
+        val metadata = books.loadMetadata(root)
+            ?: return@transaction if (remote != null && record.deleted) SyncBook(record.generation, true, remote.metadata, characterCount = remote.characterCount, files = record.files) else null
+        var book = SyncBook(
+            generation = record.generation,
+            deleted = record.deleted,
+            metadata = Timestamped(metadata.modified ?: 0, SyncMetadata(metadata.displayTitle, metadata.author)),
+            characterCount = maxOf(metadata.characterCount ?: 0, books.loadBookInfo(root)?.characterCount ?: 0),
+            files = record.files,
+            sessions = statistics.loadSessions(root),
+        )
+        if (!record.deleted) {
+            val bookmark = books.loadBookmark(root)
+            val playback = books.loadSasayakiPlayback(root)
+            book = book.copy(
+                bookmark = bookmark?.let { Timestamped(it.lastModified?.appleDateMilliseconds() ?: DistantPast, SyncBookmark(it.characterCount)) },
+                audiobook = playback?.let { Timestamped(it.modified ?: 0, SyncPlayback(it.lastPosition, it.delay, it.rate.toDouble())) },
+                highlights = books.loadHighlightRecords(root).mapValues { (_, change) -> change.replacing(change.value?.let(::SyncHighlight)) },
+                shelves = metadata.shelves.orEmpty(),
+            )
+        }
+        book
+    }
+
+    suspend fun applyBook(key: String, book: SyncBook) = transaction {
+        val oldRecord = state.books[key]
+        val bookURL = bookDirectory(key)
+        val existing = books.loadMetadata(bookURL)
+        val folder = existing?.folder ?: bookURL.name
+        var changed = existing != null && (book.deleted || oldRecord?.generation != book.generation)
+        if (book.deleted && existing != null) {
+            statistics.archiveBook(bookURL)
+            bookURL.deleteRecursively()
+        }
+        val root = bookDirectory(folder, book.deleted)
+        val stored = book.deleted && book.sessions.isEmpty()
+        val oldMetadata = books.loadMetadata(root)
+        val title = oldMetadata?.title ?: book.metadata.value.title
+        val metadata = BookMetadata(
+            id = oldMetadata?.id ?: UUID.randomUUID().toString().uppercase(),
+            title = title,
+            author = book.metadata.value.author,
+            epub = oldMetadata?.epub,
+            cover = oldMetadata?.cover,
+            folder = oldMetadata?.folder ?: folder,
+            lastAccess = if (!book.deleted && book.bookmark != null) maxOf(oldMetadata?.lastAccess ?: DistantPast.appleDateSeconds(), book.bookmark.modified.appleDateSeconds()) else oldMetadata?.lastAccess ?: DistantPast.appleDateSeconds(),
+            renamedTitle = book.metadata.value.title.takeIf { it != title },
+            modified = book.metadata.modified,
+            characterCount = book.characterCount,
+            shelves = book.shelves.takeUnless { book.deleted },
+            profileId = oldMetadata?.profileId,
+            bookLanguage = oldMetadata?.bookLanguage,
+        )
+        if (!stored && metadata != oldMetadata) {
+            sidecars.saveMetadata(root, metadata)
+            changed = true
+        }
+        var record = (state.books[key] ?: SyncRecord(book.generation, book.deleted)).copy(
+            generation = book.generation, deleted = book.deleted, files = book.files, attached = true,
+        )
+        if (statistics.loadSessions(root) != book.sessions) {
+            statistics.applySessions(root, book.sessions)
+            changed = true
+        }
+        if (!book.deleted) {
+            statistics.restore(folder)
+            var bookmark = books.loadBookmark(root)
+            val bookmarkChanged = book.bookmark?.let { bookmark?.characterCount != it.value.characterCount } ?: false
+            book.bookmark?.let { change ->
+                val modified = bookmark?.lastModified?.appleDateMilliseconds() ?: DistantPast
+                if (bookmarkChanged) {
+                    changed = true
+                    val position = books.loadBookInfo(root)?.resolveTtuCharacterPosition(change.value.characterCount)
+                    bookmark = Bookmark(position?.spineIndex ?: 0, position?.progress ?: 0.0, change.value.characterCount)
+                }
+                if (bookmarkChanged || modified != change.modified) sidecars.saveBookmark(root, bookmark!!.copy(lastModified = change.modified.appleDateSeconds()))
+            }
+            val storedHighlights = books.loadHighlightRecords(root).mapValues { (_, change) -> change.replacing(change.value?.let(::SyncHighlight)) }
+            val highlightsChanged = (storedHighlights.keys + book.highlights.keys).any { storedHighlights[it]?.value != book.highlights[it]?.value }
+            if (storedHighlights != book.highlights) {
+                sidecars.saveHighlightRecords(root, book.highlights.mapValues { (id, change) -> change.replacing(change.value?.highlight(id)) })
+            }
+            var audiobookChanged = false
+            book.audiobook?.let { change ->
+                val playback = books.loadSasayakiPlayback(root) ?: SasayakiPlaybackData(0.0)
+                val value = change.value
+                // Compare with the persisted snapshot under the storage lock, not the live
+                // player, which may have advanced while this local snapshot was reconciled.
+                audiobookChanged = playback.lastPosition != value.lastPosition || playback.delay != value.delay || playback.rate != value.rate.toFloat()
+                if (playback.modified != change.modified || audiobookChanged) {
+                    sidecars.saveSasayakiPlayback(root, playback.copy(lastPosition = value.lastPosition, delay = value.delay, rate = value.rate.toFloat(), modified = change.modified))
+                }
+            }
+            applyReaderState?.invoke(key, book, bookmarkChanged, audiobookChanged, highlightsChanged)
+        } else {
+            record = record.copy(sources = record.sources - SyncFileType.epub - SyncFileType.sasayaki)
+            if (oldRecord?.deleted != true || oldRecord.generation != book.generation) {
+                record = record.copy(sources = record.sources - SyncFileType.cover)
+            }
+        }
+        state = state.copy(books = state.books + (key to record))
+        clearUnusedCover(key, book.sessions)
+        if (state.books[key] != oldRecord) save()
+        if (stored) root.deleteRecursively()
+        if (changed) notifyBooksChanged()
+    }
+
+    suspend fun handleBookImport(book: BookMetadata, root: File) = transaction {
+        val key = book.folder!!.syncKey()
+        val archive = bookDirectory(key, true)
+        if (books.loadMetadata(archive) != null) prepareBook(archive)
+        state.books[key]?.takeIf { it.deleted }?.let { old ->
+            updateRecord(key) {
+                SyncRecord(maxOf(1, old.generation + 1), false, attached = old.attached || old.generation > 0, cleanup = old.cleanup + old.generation)
+            }
+        }
+        sidecars.saveMetadata(root, book.copy(modified = System.currentTimeMillis()))
+        statistics.restore(book.folder)
+        prepareBook(root)
+        for (type in SyncFileType.entries) if (sourceURL(key, type) != null) markFileChanged(key, type)
+        updateRecord(key) { it.copy(pending = true) }
+        saveChanges()
+    }
+
+    suspend fun deleteLocalBook(key: String) = books.workRegistry.delete(bookDirectory(key)) {
+        transaction {
+            val root = bookDirectory(key)
+            val metadata = books.loadMetadata(root)!!
+            root.resolve(metadata.epub!!).delete()
+            sidecars.saveMetadata(root, metadata.copy(epub = null))
+            updateRecord(key) { it.copy(sources = it.sources - SyncFileType.epub) }
+            save()
+            notifyBooksChanged()
+        }
+    }
+
+    suspend fun deleteBook(key: String) = books.workRegistry.delete(bookDirectory(key)) {
+        transaction {
+            val root = bookDirectory(key)
+            statistics.archiveBook(root)
+            val archive = bookDirectory(key, true)
+            val stored = statistics.loadSessions(archive).isEmpty()
+            if (stored && !state.books.getValue(key).attached && syncEnabled?.invoke() != true) {
+                removeRecord(key)
+                save()
+                archive.deleteRecursively()
+                root.deleteRecursively()
+                notifyBooksChanged()
+                return@transaction
+            }
+            updateRecord(key) { record ->
+                record.copy(deleted = true, pending = true, cleanup = record.cleanup + record.generation,
+                    files = record.files - SyncFileType.epub - SyncFileType.sasayaki,
+                    sources = record.sources - SyncFileType.epub - SyncFileType.sasayaki)
+            }
+            saveChanges()
+            root.deleteRecursively()
+            if (stored) archive.deleteRecursively()
+            clearUnusedCover(key)
+            saveChanges()
+        }
+    }
+
+    suspend fun handleBookChange(folder: String) = transaction {
+        if (state.books[folder] == null) {
+            prepareBook(resolveBookDirectory(folder))
+            save()
+        }
+        markPending(folder)
+    }
+
+    suspend fun markFileChanged(key: String, fileType: SyncFileType) = transaction {
+        updateRecord(key) { it.copy(sources = it.sources + (fileType to System.currentTimeMillis()), pending = true) }
+    }
+
+    suspend fun handleShelvesChange() = transaction {
+        setShelvesPending(true)
+        saveChanges()
+    }
+
+    suspend fun applyShelves(shelves: Map<String, Timestamped<Int?>>) = transaction {
+        if (shelves != books.loadShelfList()) {
+            sidecars.saveShelfList(booksDirectory, shelves)
+            notifyBooksChanged()
+        }
+    }
+
+    suspend fun sourceURL(key: String, fileType: SyncFileType): File? = transaction {
+        val root = resolveBookDirectory(key)
+        val metadata = books.loadMetadata(root)
+        when (fileType) {
+            SyncFileType.epub -> metadata?.epub?.let { root.resolve(it) }
+            SyncFileType.cover -> metadata?.let { books.coverFile(BookEntry(root, it)) }
+            SyncFileType.sasayaki -> root.resolve("sasayaki_match.json").takeIf { it.isFile }
+        }
+    }
+
+    suspend fun clearUnusedCover(key: String, sessions: ReadingSessions? = null) = transaction {
+        val record = state.books.getValue(key)
+        if (!record.deleted) return@transaction
+        val root = resolveBookDirectory(key)
+        if ((sessions ?: statistics.loadSessions(root)).values.all { it.value == null }) {
+            val metadata = books.loadMetadata(root)
+            if (metadata != null) {
+                books.coverFile(BookEntry(root, metadata))?.let { cover ->
+                    cover.delete()
+                    sidecars.saveMetadata(root, metadata.copy(cover = null))
+                }
+            }
+            val published = record.files[SyncFileType.cover]
+            if (published?.value == null && (record.sources[SyncFileType.cover] ?: Long.MIN_VALUE) <= (published?.modified ?: Long.MIN_VALUE)) return@transaction
+            val modified = System.currentTimeMillis()
+            updateRecord(key) { it.copy(files = it.files + (SyncFileType.cover to Timestamped(modified, null)),
+                sources = it.sources + (SyncFileType.cover to modified), cleanup = it.cleanup + it.generation, pending = true) }
+        }
+    }
+
+    suspend fun removeBookFiles(key: String) = transaction {
+        val root = resolveBookDirectory(key)
+        books.loadMetadata(root)?.let { metadata ->
+            metadata.epub?.let { root.resolve(it).delete() }
+            books.coverFile(BookEntry(root, metadata))?.delete()
+            listOf("bookinfo.json", "sasayaki_match.json", "sasayaki_transcript.json", "bookmark.json", "highlights.json").forEach { root.resolve(it).delete() }
+            books.loadSasayakiPlayback(root)?.let { sidecars.saveSasayakiPlayback(root, it.copy(lastPosition = 0.0, delay = 0.0, rate = 1f, modified = null)) }
+            sidecars.saveMetadata(root, metadata.copy(epub = null, cover = null))
+        }
+        updateRecord(key) { it.copy(sources = emptyMap()) }
+    }
+
+    private fun bookDirectoryCandidates(): List<File> =
+        listOf(booksDirectory, booksDirectory.resolve("statistics_archive")).flatMap { it.listFiles().orEmpty().toList() }
+
+    suspend fun bookDirectories(): List<File> = transaction {
+        bookDirectoryCandidates().filter { books.loadMetadata(it) != null }
+    }
+
+    suspend fun bookDirectory(folder: String, archived: Boolean = false): File = withContext(ioDispatcher) {
+        val directory = if (archived) booksDirectory.resolve("statistics_archive") else booksDirectory
+        findSyncBookDirectory(directory, folder)
+    }
+
+    suspend fun resolveBookDirectory(folder: String): File = transaction {
+        val live = bookDirectory(folder)
+        if (books.loadMetadata(live) != null) live else bookDirectory(folder, true)
+    }
+
+    private suspend fun handleSessionsChange(folder: String, sessions: ReadingSessions) = transaction {
+        if (state.books[folder] == null) {
+            prepareBook(resolveBookDirectory(folder))
+            save()
+        }
+        if (state.books.getValue(folder).deleted) {
+            clearUnusedCover(folder, sessions)
+            updateRecord(folder) { it.copy(pending = true) }
+            saveChanges(false)
+        } else markPending(folder)
+    }
+
+    companion object {
+        const val DistantPast = -62_135_769_600_000L
+    }
+}
+
+internal fun findSyncBookDirectory(directory: File, folder: String): File {
+    val key = folder.syncKey()
+    val exact = directory.resolve(key)
+    return exact.takeIf { it.exists() }
+        ?: directory.listFiles().orEmpty().firstOrNull { it.name.syncKey() == key }
+        ?: exact
+}

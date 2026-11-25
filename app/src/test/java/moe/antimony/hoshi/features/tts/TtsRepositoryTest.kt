@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.preferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -15,6 +16,38 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TtsRepositoryTest {
+    @Test fun globalSwitchDefaultsOffAndPreservesConfigurationAcrossReload() = runTest {
+        val store = MemoryStore(preferencesOf(stringPreferencesKey("preferences") to
+            """{"settings":{"engine":"online:edge","rate":1.5}}"""))
+        val repository = TtsRepository(store)
+        assertFalse(repository.preferences.first().settings.enabled)
+        repository.save(TtsWord("word", "今日", "きょう"))
+        val before = repository.preferences.first()
+        repository.enabled(true)
+        assertTrue(TtsRepository(store).preferences.first().settings.enabled)
+        repository.enabled(false)
+        assertEquals(before, TtsRepository(store).preferences.first())
+        assertEquals(before.settings.synthesisSettings(), before.settings.copy(enabled = true).synthesisSettings())
+    }
+
+    @Test fun disabledWorkDoesNotRunAndTurningOffCancelsPendingWork() = runTest {
+        val repository = TtsRepository(MemoryStore(preferencesOf()))
+        assertNull(repository.whileEnabled { error("Disabled work must not run") })
+        repository.enabled(true)
+        val started = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var cancelled = false
+        val job = async {
+            repository.whileEnabled {
+                started.complete(Unit)
+                try { kotlinx.coroutines.awaitCancellation() } finally { cancelled = true }
+            }
+        }
+        started.await()
+        repository.enabled(false)
+        assertNull(job.await())
+        assertTrue(cancelled)
+    }
+
     @Test fun removingOneCloudKeyPersistsWithoutChangingOtherPreferences() = runTest {
         val store = MemoryStore(preferencesOf())
         val repository = TtsRepository(store)
@@ -136,6 +169,47 @@ class TtsRepositoryTest {
         assertEquals("dialogue", disabled.routing().dialogue)
         assertEquals(TtsVoiceRouting(true, "azure", "other"), disabled.selectSource(TtsOnlineSource.Azure.id).routing())
         assertEquals(first.synthesisSettings(), first.copy(routingBySource = first.routingBySource + ("unselected" to TtsVoiceRouting(true, "a", "b"))).synthesisSettings())
+    }
+
+    @Test fun legacyRoutesMigrateOnlyToJapaneseAndWritesRetainTheirCapturedLanguage() = runTest {
+        val key = stringPreferencesKey("preferences")
+        val store = MemoryStore(preferencesOf(key to """{"settings":{"engine":"online:edge","routingBySource":{"online:edge":{"narration":"nanami"}}}}"""))
+        val language = MutableStateFlow("en")
+        val repository = TtsRepository(store, language)
+        assertEquals("en", repository.preferences.first().settings.languageId)
+        assertEquals("", repository.preferences.first().settings.voice)
+        repository.settings("en") { it.withVoice("aria") }
+        language.value = "ko"
+        repository.settings("en") { it.withRouting(it.routing().copy(dialogue = "guy", enabled = true, initialized = true)) }
+        assertEquals("", repository.preferences.first().settings.voice)
+        repository.settings("ko") { it.withVoice("sunhi").copy(splitAtClausePunctuation = true) }
+        language.value = "ja"
+        assertEquals("nanami", repository.preferences.first().settings.voice)
+        language.value = "en"
+        val english = repository.preferences.first().settings
+        assertEquals("aria", english.voice)
+        assertEquals("guy", english.routing().dialogue)
+        assertTrue(english.splitAtClausePunctuation)
+        val persisted = store.data.value[key]!!
+        assertFalse(persisted.contains("routingBySource"))
+        assertFalse(persisted.contains("languageId"))
+        assertEquals("aria", TtsRepository(store, MutableStateFlow("en")).preferences.first().settings.voice)
+    }
+
+    @Test fun protocolChangeAndDeletionRemoveRoutesInEveryLanguage() = runTest {
+        val language = MutableStateFlow("ja")
+        val repository = TtsRepository(MemoryStore(preferencesOf()), language)
+        val source = TtsCustomSource("custom:test", "Local", baseUrl = "https://example.com/v1", model = "tts")
+        repository.saveSource(source)
+        for (id in listOf("ja", "en", "zh", "ko")) repository.settings(id) { it.withVoice(id) }
+        repository.saveSource(source.copy(protocol = TtsCustomProtocol.Vits))
+        for (id in listOf("ja", "en", "zh", "ko")) {
+            language.value = id
+            assertEquals("", repository.preferences.first().settings.voice)
+            repository.settings(id) { it.withVoice("VITS:1") }
+        }
+        repository.deleteSource(source.id)
+        assertTrue(repository.preferences.first().settings.routingByLanguageAndSource.values.all { source.id !in it })
     }
 
     private class MemoryStore(initial: Preferences) : DataStore<Preferences> {

@@ -93,6 +93,10 @@ class TestElement {
         return this.attributes.get(name) ?? null;
     }
 
+    removeAttribute(name) {
+        this.attributes.delete(name);
+    }
+
     setAttribute(name, value) {
         this.attributes.set(name, String(value));
     }
@@ -110,7 +114,9 @@ class TestElement {
     querySelectorAll(selector) {
         const result = [];
         const visit = (node) => {
+            if (selector === '*' && node !== this && node.nodeType === 1) result.push(node);
             if (selector === 'img' && node.tagName === 'IMG') result.push(node);
+            if (selector === 'image[data-hoshi-image-href]' && node.tagName === 'IMAGE' && node.getAttribute('data-hoshi-image-href')) result.push(node);
             if (selector === 'svg image' && node.tagName === 'IMAGE' && node.closest('svg')) result.push(node);
             node.childNodes?.forEach(visit);
         };
@@ -139,8 +145,8 @@ function image(attributes = {}) {
     return img;
 }
 
-function loadMediaSemanticsContext() {
-    const window = {};
+function loadMediaSemanticsContext({ fetch, counts, IntersectionObserver } = {}) {
+    const window = { fetch, IntersectionObserver, hoshiReaderImageReferenceCounts: counts };
     const documentElement = new TestElement('html');
     const document = {
         baseURI: 'https://example.invalid/chapter.xhtml',
@@ -195,6 +201,45 @@ function loadMediaSemantics() {
     return loadMediaSemanticsContext().media;
 }
 
+test('image counts start immediately, share readiness, and update media holds after JSON is ready', async () => {
+    let resolveJson;
+    const requests = [];
+    const { media } = loadMediaSemanticsContext({ fetch(url) {
+        requests.push(url);
+        return Promise.resolve({ ok: true, json: () => new Promise(resolve => { resolveJson = resolve; }) });
+    } });
+    const img = new TestElement('img', { src: 'https://appassets.androidplatform.net/epub/images/divider.jpg' });
+    const ready = media.loadImageReferenceCounts();
+    assert.deepEqual(requests, ['https://appassets.androidplatform.net/reader-media/image-references.json']);
+    assert.equal(media.loadImageReferenceCounts(), ready);
+    let finished = false;
+    ready.then(() => { finished = true; });
+    await Promise.resolve();
+    assert.equal(finished, false);
+    assert.equal(media.shouldHoldMedia(img), true);
+    resolveJson({ 'images/divider.jpg': 3 });
+    await ready;
+    assert.equal(media.shouldHoldMedia(img), false);
+});
+
+test('unknown image counts preserve ordinary holds on request or JSON failure', async () => {
+    for (const fetch of [
+        () => Promise.reject(new Error('unavailable')),
+        () => Promise.resolve({ ok: false, json: () => assert.fail('non-OK body') }),
+        () => Promise.resolve({ ok: true, json: () => Promise.reject(new Error('invalid JSON')) }),
+    ]) {
+        const { media } = loadMediaSemanticsContext({ fetch });
+        await media.loadImageReferenceCounts();
+        assert.equal(media.shouldHoldMedia(new TestElement('img', { src: 'https://appassets.androidplatform.net/epub/images/divider.jpg' })), true);
+    }
+});
+
+test('supplied image counts remain available without a fetch', async () => {
+    const { media } = loadMediaSemanticsContext({ counts: { 'images/divider.jpg': 3 }, fetch: () => assert.fail('counts already supplied') });
+    await media.loadImageReferenceCounts();
+    assert.equal(media.shouldHoldMedia(new TestElement('img', { src: 'https://appassets.androidplatform.net/epub/images/divider.jpg' })), false);
+});
+
 function clickEvent() {
     return {
         type: 'click',
@@ -243,6 +288,44 @@ test('shared media setup blurs, wraps, posts native image taps, and guards dupli
     assert.deepEqual(messages, ['https://example.invalid/images/pic.jpg']);
 });
 
+test('whole-book blur updates loaded and pending images and keeps reveals when the setting is reapplied', async () => {
+    const media = loadMediaSemantics();
+    const root = new TestElement('section');
+    const ready = root.appendChild(image({ src: 'ready.png' }));
+    const pending = root.appendChild(image({ src: 'later.png' }));
+    const last = root.appendChild(image({ src: 'last.png' }));
+    pending.complete = last.complete = false;
+    const svg = root.appendChild(new TestElement('svg'));
+    svg.appendChild(new TestElement('image', { href: 'page.png' }));
+    const gaiji = root.appendChild(image({ src: 'glyph.png', class: 'gaiji' }));
+    const messages = [];
+    await media.setupReaderImages(root, {
+        liveBlur: true, blurImages: false, waitForImages: false,
+        imageBridge: { postMessage: url => messages.push(url) },
+    });
+    media.setImageBlur(true);
+    assert.ok(ready.classList.contains('blurred'));
+    assert.ok(ready.parentNode.classList.contains('blur-wrapper'));
+    assert.ok(svg.classList.contains('blurred'));
+    assert.equal(gaiji.classList.contains('blurred'), false);
+    ready.dispatchEvent(clickEvent());
+    media.setImageBlur(true);
+    assert.equal(ready.classList.contains('blurred'), false);
+    ready.dispatchEvent(clickEvent());
+    assert.deepEqual(messages, ['https://example.invalid/ready.png']);
+    pending.onload();
+    assert.ok(pending.classList.contains('blurred'));
+    media.setImageBlur(false);
+    assert.equal(pending.classList.contains('blurred'), false);
+    assert.equal(svg.classList.contains('blurred'), false);
+    assert.deepEqual(root.childNodes, [ready, pending, last, svg, gaiji]);
+    last.onload();
+    assert.equal(last.classList.contains('blurred'), false);
+    media.setImageBlur(true);
+    assert.ok(ready.classList.contains('blurred'));
+    assert.ok(last.classList.contains('blurred'));
+});
+
 test('shared media setup scans scoped images, svg images, gaiji, and src fallbacks', async () => {
     const media = loadMediaSemantics();
     const messages = [];
@@ -274,6 +357,36 @@ test('shared media setup scans scoped images, svg images, gaiji, and src fallbac
         'https://example.invalid/images/large.jpg',
         'https://example.invalid/images/plate.jpg',
     ]);
+});
+
+test('merged SVG artwork retains its source for taps and media holds before it nears the viewport', async () => {
+    const seen = new Set();
+    let notify;
+    class IntersectionObserver {
+        constructor(callback) { notify = callback; }
+        observe(svg) { seen.add(svg); }
+        unobserve(svg) { seen.delete(svg); }
+    }
+    const { media } = loadMediaSemanticsContext({ counts: { 'images/page.jpg': 3 }, IntersectionObserver });
+    const source = 'https://appassets.androidplatform.net/epub/images/page.jpg';
+    const messages = [];
+    const svg = new TestElement('svg');
+    const plate = new TestElement('image', { 'data-hoshi-image-href': source });
+    svg.appendChild(plate);
+    await media.setupReaderImages(svg, { imageBridge: { postMessage: url => messages.push(url) } });
+    assert.equal(plate.getAttribute('href'), null);
+    assert.equal(media.shouldHoldMedia(plate), false);
+    plate.dispatchEvent(clickEvent());
+    assert.deepEqual(messages, [source]);
+    assert.equal(seen.size, 0);
+    media.observeBookImagesAtReadingPosition();
+    assert.ok(seen.has(svg));
+    notify([{ target: svg, isIntersecting: false }]);
+    assert.equal(plate.getAttribute('href'), null);
+    notify([{ target: svg, isIntersecting: true }]);
+    assert.equal(plate.getAttribute('href'), source);
+    assert.equal(plate.getAttribute('data-hoshi-image-href'), null);
+    assert.equal(seen.size, 0);
 });
 
 test('shared media setup installs one gaiji filter colored from the Reader text variable', async () => {
@@ -468,4 +581,57 @@ test('shared media setup handles gaiji failures after non-blocking setup', async
     assert.equal(root.childNodes[0].tagName, 'SPAN');
     assert.equal(root.childNodes[0].getAttribute('data-hoshi-gaiji-alt'), '冴');
     assert.equal(root.childNodes[1], withoutAlt);
+});
+
+test('image holds exclude only resources with at least three book references', () => {
+    const { media, document } = loadMediaSemanticsContext();
+    media.setImageReferenceCounts({ 'images/divider.jpg': 3, 'images/twice.jpg': 2 });
+    document.baseURI = 'https://appassets.androidplatform.net/epub/Text/chapter.xhtml';
+    for (const [src, expected] of [['../images/divider.jpg', false], ['../images/twice.jpg', true], ['../images/art.jpg', true]]) {
+        const img = image({ src });
+        img.ownerDocument = document;
+        assert.equal(media.shouldHoldMedia(img), expected);
+        assert.equal(img.getAttribute('src'), src);
+    }
+});
+
+test('media wrappers do not reintroduce repeated-image holds and mixed artwork still holds', () => {
+    const { media, document } = loadMediaSemanticsContext();
+    document.baseURI = 'https://appassets.androidplatform.net/epub/chapter.xhtml';
+    media.setImageReferenceCounts({ 'divider.jpg': 3 });
+    for (const [wrapperTag, imageTag, sourceAttribute] of [['picture', 'img', 'src'], ['svg', 'image', 'xlink:href']]) {
+        const wrapper = new TestElement(wrapperTag);
+        const repeated = new TestElement(imageTag, { [sourceAttribute]: 'divider.jpg' });
+        repeated.ownerDocument = document;
+        wrapper.appendChild(repeated);
+        assert.equal(media.shouldHoldMedia(wrapper), false);
+        const ordinary = new TestElement(imageTag, { [sourceAttribute]: 'art.jpg' });
+        ordinary.ownerDocument = document;
+        wrapper.appendChild(ordinary);
+        assert.equal(media.shouldHoldMedia(wrapper), true);
+        wrapper.removeChild(ordinary);
+        if (wrapperTag === 'svg') {
+            wrapper.appendChild(new TestElement('path'));
+            assert.equal(media.shouldHoldMedia(wrapper), true);
+        }
+    }
+    const unknown = image({ src: 'unknown.jpg' });
+    unknown.ownerDocument = document;
+    assert.equal(media.shouldHoldMedia(unknown), true);
+    media.setImageReferenceCounts(null);
+    const repeated = image({ src: 'divider.jpg' });
+    repeated.ownerDocument = document;
+    assert.equal(media.shouldHoldMedia(repeated), true);
+});
+
+test('responsive images use the selected candidate count and retain unique artwork', () => {
+    const { media, document } = loadMediaSemanticsContext();
+    document.baseURI = 'https://appassets.androidplatform.net/epub/chapter.xhtml';
+    media.setImageReferenceCounts({ 'fallback.jpg': 3, 'divider.webp': 3, 'art.webp': 1 });
+    const img = image({ src: 'fallback.jpg' });
+    img.ownerDocument = document;
+    img.currentSrc = 'https://appassets.androidplatform.net/epub/divider.webp';
+    assert.equal(media.shouldHoldMedia(img), false);
+    img.currentSrc = 'https://appassets.androidplatform.net/epub/art.webp';
+    assert.equal(media.shouldHoldMedia(img), true);
 });

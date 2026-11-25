@@ -76,8 +76,8 @@ internal class SetupRepository @Inject constructor(
             runBlocking { cardData.install(catalogUrl, manifest, onProgress) }
         },
         addAudioServer = { server -> runBlocking { audioSettings.update { it.withFallbackAudioServer(server) } } },
-        audioInstalled = localAudio::canOpenDatabase,
-        installAudio = { file -> localAudio.installDownloadedDatabase(file) },
+        audioInstalled = { runBlocking { localAudio.canOpenDatabase() } },
+        installAudio = { file -> runBlocking { localAudio.installDownloadedDatabase(file) } },
         enableAudio = { runBlocking { audioSettings.update { it.withLocalAudioEnabled(true) } } },
         applyAnki = { runBlocking { ankiSettings.update { it.withSeamlessFormatIfUnmapped() } } },
         markComplete = {

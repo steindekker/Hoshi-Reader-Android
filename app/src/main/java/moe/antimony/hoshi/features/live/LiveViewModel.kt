@@ -166,7 +166,7 @@ internal class LiveViewModel internal constructor(
 
     private fun collectSettings() {
         scope.launch {
-            withContext(ioDispatcher) { runCatching { lookupRepository.rebuildLookupQuery() } }
+            withContext(ioDispatcher) { runCatching { lookupRepository.ensureLookupQueryReady() } }
         }
         scope.launch {
             lookupRepository.dictionarySettings.collect { settings ->
@@ -254,7 +254,7 @@ internal class LiveViewModel internal constructor(
         if (previous == null || previous == profileId) return
         local.update { it.copy(lookup = LiveLookupState(), dictionaryStyles = emptyMap()) }
         scope.launch {
-            withContext(ioDispatcher) { runCatching { lookupRepository.rebuildLookupQuery() } }
+            withContext(ioDispatcher) { runCatching { lookupRepository.ensureLookupQueryReady() } }
         }
     }
 

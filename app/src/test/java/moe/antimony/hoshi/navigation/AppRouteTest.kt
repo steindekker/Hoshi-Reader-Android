@@ -1,5 +1,7 @@
 package moe.antimony.hoshi.navigation
 
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -37,8 +39,10 @@ class AppRouteTest {
     }
 
     @Test
-    fun readerRoutesCarryOnlyStableBookIds() {
-        assertRouteConstructor("ReaderRoute", String::class.java)
+    fun readerRoutesPreserveCloudDownloadSyncStateAndReadOlderRoutes() {
+        val downloaded = AppRoute.ReaderRoute("book-a", skipSyncOnOpen = true)
+        assertEquals(downloaded, Json.decodeFromString<AppRoute.ReaderRoute>(Json.encodeToString(downloaded)))
+        assertEquals(AppRoute.ReaderRoute("book-a"), Json.decodeFromString<AppRoute.ReaderRoute>("""{"bookId":"book-a"}"""))
     }
 
     @Test
@@ -80,6 +84,8 @@ class AppRouteTest {
                 "Advanced",
                 "Diagnostics",
                 "About",
+                "Dependencies",
+                "Acknowledgements",
             ),
             sectionClass.enumConstants.orEmpty().map { (it as Enum<*>).name },
         )

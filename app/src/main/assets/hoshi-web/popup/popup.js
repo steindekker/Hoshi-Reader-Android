@@ -27,6 +27,7 @@ let currentDictionaryMedia = null;
 let selectedDictionaries = {};
 let dictionaryMediaObserver = null;
 let renderGeneration = 0;
+const pendingGlossaryIndexes = new WeakMap();
 let kanjiRedirectRequestId = 0;
 let hostEntrySetVersion = 0;
 let activeEntrySetVersion = 0;
@@ -1095,6 +1096,7 @@ function createDefinitionImageCanvas(imageUrl, alt, onLoad) {
 }
 
 function renderDefinitionImageToCanvas(canvas, image, usedWidth, invAspectRatio, appearance) {
+    canvas.hoshiRedraw = () => renderDefinitionImageToCanvas(canvas, image, usedWidth, invAspectRatio, appearance);
     const emSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
     const scaleFactor = Math.ceil(window.devicePixelRatio * 2);
     const pixelWidth = Math.round(usedWidth * emSize * scaleFactor);
@@ -1121,7 +1123,8 @@ function renderDefinitionImageToCanvas(canvas, image, usedWidth, invAspectRatio,
 
     if (appearance === 'monochrome') {
         context.globalCompositeOperation = 'source-in';
-        context.fillStyle = window.matchMedia?.('(prefers-color-scheme: dark)')?.matches ? '#ffffff' : '#000000';
+        context.fillStyle = getComputedStyle(canvas).getPropertyValue('--text-color').trim()
+            || getComputedStyle(document.body).getPropertyValue('--text-color').trim() || '#000000';
         context.fillRect(0, 0, canvas.width, canvas.height);
         context.globalCompositeOperation = 'source-over';
     }
@@ -2393,9 +2396,9 @@ function createGlossarySection(dictName, contents, isFirst, entryIdx) {
     const dictStyle = window.dictionaryStyles?.[dictName] ?? '';
     dictWrapper.appendChild(el('style', {
         textContent: `
-            [data-dictionary="${dictName}"] {
+            :where(div)[data-dictionary="${dictName}"] {
+                color: var(--text-color);
                 ${dictStyle}
-                color: var(--text-color) !important;
             }
         `.trim()
     }));
@@ -2465,6 +2468,7 @@ function replaceHostEntrySet() {
 window.resetPopupResults = function() {
     renderSourceText(null);
     renderGeneration++;
+    finishPopupReveal?.();
     replaceHostEntrySet();
     popupTermNavigator.reset();
     flushPendingHistoryRestore();
@@ -2490,6 +2494,7 @@ function appendPendingHistoryRestore(flush = false) {
     if (chunk.length) {
         pending.container.append(...chunk);
         observePendingDictionaryMedia(pending.container);
+        applyHoshiPopupThemeOverrides(pending.container);
         popupTermNavigator.entryRendered();
     }
     if (!pending.nodes.length) {
@@ -2643,7 +2648,7 @@ function renderSourceText(sourceText, sentenceOffset = null) {
     };
 }
 
-window.replacePopupResults = function(count, initialEntries, sourceText = null, sentenceOffset = null) {
+window.replacePopupResults = function(count, initialEntries, sourceText = null, sentenceOffset = null, waitForHostReveal = false) {
     renderSourceText(sourceText, sentenceOffset);
     closeOverlay();
     popupTermNavigator.reset();
@@ -2662,7 +2667,7 @@ window.replacePopupResults = function(count, initialEntries, sourceText = null, 
         container.innerHTML = '';
     }
     window.hoshiPopupObserveContentReady?.();
-    window.renderPopup();
+    window.renderPopup(waitForHostReveal);
     requestAnimationFrame(() => {
         popupGeometry.setScrollTop(0);
     });
@@ -2685,8 +2690,8 @@ function renderedEntryCount(nodes) {
     return nodes.filter((node) => node?.dataset?.entryIndex !== undefined).length;
 }
 
-function hasRenderedEntry(container, index) {
-    return [...container.childNodes].some((node) => node?.dataset?.entryIndex === String(index));
+function renderedEntry(container, index) {
+    return [...container.childNodes].find((node) => node?.dataset?.entryIndex === String(index));
 }
 
 function restore(snapshot) {
@@ -2701,8 +2706,8 @@ function restore(snapshot) {
     const container = document.getElementById('entries-container');
     const nodes = [...snapshot.nodes];
     activeEntrySetVersion = snapshot.entrySetVersion;
-    const shouldResumeRender = snapshot.entrySetVersion === hostEntrySetVersion
-        && snapshot.entryCount > renderedEntryCount(nodes);
+    const shouldResumeRender = nodes.some(node => pendingGlossaryIndexes.has(node))
+        || (snapshot.entrySetVersion === hostEntrySetVersion && snapshot.entryCount > renderedEntryCount(nodes));
     const shouldDeferOffscreenNodes = !shouldResumeRender && snapshot.scrollTop === 0 && nodes.length > 6;
     if (shouldDeferOffscreenNodes) {
         container.replaceChildren(...nodes.splice(0, 4));
@@ -2737,21 +2742,15 @@ function navigate(origin, destination) {
 window.navigateBack = () => navigate(backStack, forwardStack);
 window.navigateForward = () => navigate(forwardStack, backStack);
 
+window.setHoshiPopupTheme = ({darkMode, eInkMode}) => {
+    const root = document.documentElement;
+    root.dataset.hoshiColorScheme = darkMode ? 'dark' : 'light';
+    root.dataset.hoshiEinkMode = String(!!eInkMode);
+    applyHoshiPopupThemeOverrides();
+};
+
 function applyHoshiPopupThemeOverrides(root = document) {
-    const colorScheme = document.documentElement.dataset.hoshiColorScheme;
-    const buttonColor = colorScheme === 'dark' ? 'rgba(235, 235, 245, 0.92)' : 'rgba(60, 60, 67, 0.86)';
-    const tableHeaderBackgroundColor = colorScheme === 'dark' ? '#333333' : '#eeeeee';
-    const tableHeaderTextColor = colorScheme === 'dark' ? '#ffffff' : '#000000';
-    root.querySelectorAll('button.button-slot').forEach(button => {
-        button.style.setProperty('color', buttonColor, 'important');
-    });
-    root.querySelectorAll('table[data-sc-content="formsTable"] th, table[data-sc-content="formsTable"] .gloss-sc-th').forEach(header => {
-        header.style.setProperty('background-color', tableHeaderBackgroundColor, 'important');
-        header.style.setProperty('color', tableHeaderTextColor, 'important');
-        header.querySelectorAll('*').forEach(child => {
-            child.style.setProperty('color', 'inherit', 'important');
-        });
-    });
+    root.querySelectorAll('canvas.gloss-image').forEach(canvas => canvas.hoshiRedraw?.());
 }
 
 function popupEventTarget(event) {
@@ -2869,7 +2868,28 @@ function installPopupDocumentTapHandlers() {
 
 installPopupDocumentTapHandlers();
 
-window.renderPopup = function() {
+let finishPopupReveal = null;
+const POPUP_REVEAL_TIMEOUT_MS = 500;
+
+window.hoshiPopupRevealed = () => finishPopupReveal?.();
+
+function afterFirstPopupFrame() {
+    return new Promise(resolve => {
+        const finish = () => {
+            clearTimeout(timeout);
+            finishPopupReveal = null;
+            resolve();
+        };
+        const timeout = setTimeout(finish, POPUP_REVEAL_TIMEOUT_MS);
+        finishPopupReveal = finish;
+    }).then(() => new Promise(resolve => {
+        // Give the host a frame to paint before building more glossary DOM.
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+    }));
+}
+
+window.renderPopup = function(waitForHostReveal = false) {
+    finishPopupReveal?.();
     const container = document.getElementById('entries-container');
     if (!window.entryCount) {
         return;
@@ -2878,37 +2898,48 @@ window.renderPopup = function() {
 
     (async () => {
         for (let idx = 0; idx < window.entryCount; idx++) {
-            if (hasRenderedEntry(container, idx)) continue;
-            const entry = window.lookupEntries?.[idx] ?? await webkit.messageHandlers.getEntry.postMessage(idx);
+            let entryDiv = renderedEntry(container, idx);
+            if (entryDiv && !pendingGlossaryIndexes.has(entryDiv)) continue;
+            // A restored history entry can finish rendering from its cached data. Only the
+            // current host result set may fetch entries across the bridge.
+            const entry = window.lookupEntries?.[idx] ?? (activeEntrySetVersion === hostEntrySetVersion
+                ? await webkit.messageHandlers.getEntry.postMessage(idx)
+                : null);
             if (generation !== renderGeneration) return;
             if (!entry) continue;
 
             window.lookupEntries ??= [];
             window.lookupEntries[idx] = entry;
 
-            if (idx > 0) {
-                container.appendChild(document.createElement('hr'));
+            const initialHostedEntry = waitForHostReveal && idx === 0 && !entryDiv;
+            if (!entryDiv) {
+                if (idx > 0) {
+                    container.appendChild(document.createElement('hr'));
+                }
+
+                entryDiv = el('div', {
+                    className: 'entry',
+                    'data-entry-index': idx,
+                });
+                entryDiv.appendChild(createEntryHeader(entry, idx));
+
+                if (window.audioEnableAutoplay && window.audioSources?.length && idx === 0) {
+                    playEntryAudio(idx);
+                }
+
+                const tags = createTags(entry);
+                if (tags) {
+                    entryDiv.appendChild(tags);
+                }
+
+                pendingGlossaryIndexes.set(entryDiv, 0);
+                container.appendChild(entryDiv);
+                popupTermNavigator.entryRendered();
+                if (!initialHostedEntry) {
+                    await new Promise(r => requestAnimationFrame(r));
+                    if (generation !== renderGeneration) return;
+                }
             }
-
-            const entryDiv = el('div', {
-                className: 'entry',
-                'data-entry-index': idx,
-            });
-            entryDiv.appendChild(createEntryHeader(entry, idx));
-
-            if (window.audioEnableAutoplay && window.audioSources?.length && idx === 0) {
-                playEntryAudio(idx);
-            }
-
-            const tags = createTags(entry);
-            if (tags) {
-                entryDiv.appendChild(tags);
-            }
-
-            container.appendChild(entryDiv);
-            popupTermNavigator.entryRendered();
-            await new Promise(r => requestAnimationFrame(r));
-            if (generation !== renderGeneration) return;
 
             const grouped = {};
             entry.glossaries.forEach(g => {
@@ -2920,12 +2951,16 @@ window.renderPopup = function() {
             });
 
             const dictNames = Object.keys(grouped);
-            for (let dictIdx = 0; dictIdx < dictNames.length; dictIdx++) {
+            for (let dictIdx = pendingGlossaryIndexes.get(entryDiv); dictIdx < dictNames.length; dictIdx++) {
                 entryDiv.appendChild(createGlossarySection(dictNames[dictIdx], grouped[dictNames[dictIdx]], dictIdx === 0, idx));
+                pendingGlossaryIndexes.set(entryDiv, dictIdx + 1);
                 applyHoshiPopupThemeOverrides(entryDiv);
-                await new Promise(r => requestAnimationFrame(r));
+                await (initialHostedEntry && dictIdx === 0
+                    ? afterFirstPopupFrame()
+                    : new Promise(r => requestAnimationFrame(r)));
                 if (generation !== renderGeneration) return;
             }
+            pendingGlossaryIndexes.delete(entryDiv);
         }
         if (generation !== renderGeneration) return;
 

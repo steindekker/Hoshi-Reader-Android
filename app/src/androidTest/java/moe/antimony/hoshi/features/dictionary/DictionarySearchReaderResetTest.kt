@@ -54,7 +54,8 @@ class DictionarySearchReaderResetTest {
     fun clearingInactiveSearchRemovesItsPageAndSurvivesBookProfileChanges() {
         val repository = MemorySearchRepository()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
-        val viewModel = DictionarySearchViewModel(repository, scope, Dispatchers.Unconfined)
+        val history = DictionaryLookupHistoryRepository(DictionaryHistoryDeviceStore(), scope, Dispatchers.Unconfined)
+        val viewModel = DictionarySearchViewModel(repository, history, scope, Dispatchers.Unconfined)
         viewModel.applyExternalLookup("猫")
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val assets = LookupPopupAssets.load(context)
@@ -215,7 +216,7 @@ private class MemorySearchRepository : DictionarySearchRepository {
             audioSources = listOf(AudioSource("Memory", "https://example.invalid/list?term={term}")),
         ),
     )
-    override suspend fun rebuildLookupQuery() = Unit
+    override suspend fun ensureLookupQueryReady() = Unit
     override fun dictionaryStyles(): Map<String, String> = emptyMap()
     override fun lookup(query: String, maxResults: Int, scanLength: Int, options: LookupOptions): List<LookupResult> =
         listOf(

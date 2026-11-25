@@ -7,6 +7,7 @@ import android.annotation.SuppressLint
 import android.view.MotionEvent
 import android.webkit.WebView
 import androidx.activity.compose.BackHandler
+import moe.antimony.hoshi.ui.theme.HoshiWebView
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -46,7 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.luminance
+import moe.antimony.hoshi.ui.theme.LocalHoshiDarkTheme
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -180,6 +181,8 @@ internal fun DictionarySearchView(
     val searchViewModel: DictionarySearchViewModel = hiltViewModel()
     val ankiViewModel: AnkiViewModel = hiltViewModel()
     val uiState by rememberDictionarySearchState(session, searchViewModel)
+    val historyState by searchViewModel.historyState.collectAsStateWithLifecycle()
+    if (isActive) DictionaryLookupHistoryError(historyState.operationError, searchViewModel::dismissHistoryError)
     val ankiUiState by ankiViewModel.uiState.collectAsStateWithLifecycle()
     var ankiOperationError by remember { mutableStateOf<Throwable?>(null) }
     var ankiSynchronizationWarning by remember { mutableStateOf<Throwable?>(null) }
@@ -204,7 +207,7 @@ internal fun DictionarySearchView(
     val fontFaceCss = remember(fontManager, fontLibraryState.revision) { fontManager.popupFontFaceCss() }
     val rootContentLanguageProfile = profileState.effectiveContentLanguageProfile
     val readerPopupBridgeHolder = session.bridge
-    val popupDarkMode = hoshiSurfaces.page.luminance() < 0.5f
+    val popupDarkMode = LocalHoshiDarkTheme.current
     val popupOptions = dictionarySearchPopupOptions(
         readerSettings = readerSettings,
         dictionarySettings = uiState.dictionarySettings,
@@ -244,8 +247,6 @@ internal fun DictionarySearchView(
         readerSettings.popupReducedMotionScrolling,
         readerSettings.popupReducedMotionScrollPercent,
         readerSettings.popupReducedMotionSwipeThreshold,
-        popupDarkMode,
-        readerSettings.eInkMode,
         popupAudioSettings,
         ankiUiState.popupSettings,
         fontFaceCss,
@@ -256,6 +257,7 @@ internal fun DictionarySearchView(
     ) {
         LookupPopupHtml.renderIframeDocument(
             assets = null,
+            assetVersion = assets.hashCode(),
             dictionaryStyles = uiState.dictionaryStyles,
             settings = uiState.dictionarySettings,
             swipeToDismiss = readerSettings.popupSwipeToDismiss,
@@ -263,8 +265,6 @@ internal fun DictionarySearchView(
             reducedMotionScrolling = readerSettings.popupReducedMotionScrolling,
             reducedMotionScrollPercent = readerSettings.popupReducedMotionScrollPercent,
             reducedMotionSwipeThreshold = readerSettings.popupReducedMotionSwipeThreshold,
-            darkMode = popupDarkMode,
-            eInkMode = readerSettings.eInkMode,
             audioSettings = popupAudioSettings,
             noAudioFoundText = noAudioFoundText,
             audioLoadingText = audioLoadingText,
@@ -291,6 +291,7 @@ internal fun DictionarySearchView(
     val iframePayloads = remember(
         uiState.results,
         uiState.lastQuery,
+        uiState.hasLookupContent,
         uiState.sentenceOffset,
         themedPopups,
         childHistories,
@@ -305,7 +306,7 @@ internal fun DictionarySearchView(
     ) {
         dictionarySearchIframePayloads(
             rootResults = uiState.results,
-            sourceText = uiState.lastQuery,
+            sourceText = uiState.lastQuery.takeIf { uiState.hasLookupContent },
             sourceSentenceOffset = uiState.sentenceOffset,
             childPopups = themedPopups,
             childHistories = childHistories,
@@ -668,8 +669,25 @@ internal fun DictionarySearchView(
             .background(hoshiSurfaces.page)
             .onSizeChanged { viewportSize = it },
     ) {
+        DictionaryLookupHistoryContent(
+            searchState = uiState,
+            historyState = historyState,
+            onSelect = { text ->
+                childHistories = emptyMap()
+                rootIframeAtTop = true
+                pullDistancePx = 0f
+                suppressAutomaticFocus = true
+                focusManager.clearFocus(force = true)
+                keyboardController?.hide()
+                searchViewModel.applyExternalLookup(text)
+            },
+            onDelete = searchViewModel::deleteHistory,
+            onClear = searchViewModel::clearHistory,
+            onRetry = searchViewModel::retryHistoryLoad,
+            modifier = Modifier.fillMaxSize().padding(top = searchBarBottomDp.dp),
+        )
         when {
-            uiState.hasResults -> {
+            uiState.hasLookupContent -> {
                 DictionarySearchIframeHost(
                     session = session,
                     callbackHolder = readerPopupBridgeHolder,
@@ -717,7 +735,7 @@ internal fun DictionarySearchView(
                 text = requireNotNull(uiState.errorMessage).asString(),
                 modifier = Modifier.fillMaxSize(),
             )
-            uiState.hasSearched && !uiState.isSearching -> DictionarySearchMessage(
+            uiState.hasSearched && !uiState.isSearching && !uiState.showLookupHistory -> DictionarySearchMessage(
                 text = "",
                 modifier = Modifier.fillMaxSize(),
             )
@@ -731,7 +749,7 @@ internal fun DictionarySearchView(
                 rootHighlight = null,
             )
         }
-        if (uiState.hasResults && pullDistancePx > 1f) {
+        if (uiState.hasLookupContent && pullDistancePx > 1f) {
             DictionaryPullResetIndicator(
                 distancePx = pullDistancePx,
                 thresholdPx = with(density) { DictionaryPullResetThreshold.toPx() },
@@ -795,7 +813,7 @@ private fun DictionarySearchIframeHost(
         session = session,
         modifier = modifier.fillMaxSize(),
         factory = { viewContext ->
-            WebView(viewContext).apply {
+            HoshiWebView(viewContext).apply {
                 applyHoshiWebViewSecurityDefaults()
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false

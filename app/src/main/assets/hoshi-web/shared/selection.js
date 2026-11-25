@@ -188,7 +188,6 @@ window.hoshiSelection = {
         imageTapResult: null,
         rubyAwareRects: false,
         scaleRects: true,
-        textProjection: null,
     },
     scanDelimiters: '。、！？…‥「」『』（）()【】〈〉《》〔〕｛｝{}［］[]：；:;，,.─\n\r',
     sentenceDelimiters: '。！？.!?\n\r',
@@ -197,6 +196,27 @@ window.hoshiSelection = {
 
     configure(options = {}) {
         this.options = { ...this.options, ...options };
+        const policies = window.hoshiSelectionLanguagePolicies;
+        const policy = policies?.[this.options.language] || policies?.default;
+        this.languagePolicy = policy;
+        const bindCharacterBoundary = fn => fn
+            ? char => fn.call(policy, char, this)
+            : () => true;
+        const bindTextBoundary = (fn, characterBoundary) => {
+            if (fn) return (text, offset, char) => fn.call(policy, text, offset, this, char);
+            if (characterBoundary) return (text, offset, char = this.codePointAt(text, offset)) =>
+                characterBoundary.call(policy, char, this);
+            return () => true;
+        };
+        const scan = policy?.isScanBoundary;
+        const hit = policy?.isHitBoundary || scan;
+        const wordStart = policy?.isWordStartBoundary || hit;
+        this.isScanBoundary = bindCharacterBoundary(scan);
+        this.isHitBoundary = bindCharacterBoundary(hit);
+        this.isWordStartBoundary = bindCharacterBoundary(wordStart);
+        this.isScanBoundaryAt = bindTextBoundary(policy?.isScanBoundaryAt, scan);
+        this.isHitBoundaryAt = bindTextBoundary(policy?.isHitBoundaryAt, hit);
+        this.isWordStartBoundaryAt = bindTextBoundary(policy?.isWordStartBoundaryAt, wordStart);
     },
 
     postTextSelected(selection) {
@@ -236,62 +256,8 @@ window.hoshiSelection = {
         return right > left && bottom > top ? { x: left, y: top, width: right - left, height: bottom - top } : null;
     },
 
-    languagePolicy() {
-        const configured = String(
-            this.options.language ||
-            document.documentElement?.dataset?.hoshiContentLanguage ||
-            'ja'
-        );
-        const normalized = configured.toLowerCase().split('-')[0];
-        const policies = window.hoshiSelectionLanguagePolicies || {};
-        return policies[normalized] || policies[configured] || policies.default;
-    },
-
-    isScanBoundary(char) {
-        const policy = this.languagePolicy();
-        if (!policy) return true;
-        return policy.isScanBoundary.call(policy, char, this);
-    },
-
-    isScanBoundaryAt(text, offset) {
-        const policy = this.languagePolicy();
-        if (!policy) return true;
-        if (policy.isScanBoundaryAt) return policy.isScanBoundaryAt.call(policy, text, offset, this);
-        return policy.isScanBoundary.call(policy, this.codePointAt(text, offset), this);
-    },
-
-    isHitBoundary(char) {
-        const policy = this.languagePolicy();
-        if (!policy) return true;
-        const isBoundary = policy.isHitBoundary || policy.isScanBoundary;
-        return isBoundary.call(policy, char, this);
-    },
-
-    isHitBoundaryAt(text, offset) {
-        const policy = this.languagePolicy();
-        if (!policy) return true;
-        if (policy.isHitBoundaryAt) return policy.isHitBoundaryAt.call(policy, text, offset, this);
-        const isBoundary = policy.isHitBoundary || policy.isScanBoundary;
-        return isBoundary.call(policy, this.codePointAt(text, offset), this);
-    },
-
-    isWordStartBoundary(char) {
-        const policy = this.languagePolicy();
-        if (!policy) return true;
-        const isBoundary = policy.isWordStartBoundary || policy.isHitBoundary || policy.isScanBoundary;
-        return isBoundary.call(policy, char, this);
-    },
-
-    isWordStartBoundaryAt(text, offset) {
-        const policy = this.languagePolicy();
-        if (!policy) return true;
-        if (policy.isWordStartBoundaryAt) return policy.isWordStartBoundaryAt.call(policy, text, offset, this);
-        const isBoundary = policy.isWordStartBoundary || policy.isHitBoundary || policy.isScanBoundary;
-        return isBoundary.call(policy, this.codePointAt(text, offset), this);
-    },
-
     selectionStartForHit(hit) {
-        const policy = this.languagePolicy();
+        const policy = this.languagePolicy;
         if (!policy) return hit;
         const normalizedHit = {
             ...hit,
@@ -330,7 +296,7 @@ window.hoshiSelection = {
         if (start >= text.length) return text.length;
         const codePoint = text.codePointAt(start);
         if (codePoint === undefined) return text.length;
-        return start + String.fromCodePoint(codePoint).length;
+        return start + (codePoint > 0xffff ? 2 : 1);
     },
 
     previousCodePointStartOffset(text, offset) {
@@ -372,7 +338,7 @@ window.hoshiSelection = {
 
     findParagraph(node) {
         let el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
-        return el?.closest('p, .glossary-content, .expr-tag') || null;
+        return el?.closest('p, li, .glossary-content, .expr-tag') || this.chapterForNode(node);
     },
 
     createWalker(rootNode) {
@@ -593,6 +559,7 @@ window.hoshiSelection = {
     },
 
     selectText(x, y, maxLength, rectX = x, rectY = y) {
+        this.lastTapWasText = false;
         const viewport = window.hoshiReader?.contentViewport?.();
         if (viewport && (x < viewport.left || x >= viewport.right || y < viewport.top || y >= viewport.bottom)) {
             this.clearSelection();
@@ -607,12 +574,7 @@ window.hoshiSelection = {
         }
         const furigana = hitElement?.closest('ruby.furigana-hidden');
         if (furigana) {
-            const group = this.revealFurigana(furigana);
-            const projection = this.options.textProjection;
-            group.forEach(ruby => {
-                const sourceRuby = projection?.sourceRubyForRenderedRuby?.(ruby);
-                if (sourceRuby) this.revealFurigana(sourceRuby);
-            });
+            this.revealFurigana(furigana);
             this.clearSelection();
             return 'furigana';
         }
@@ -622,15 +584,8 @@ window.hoshiSelection = {
             this.clearSelection();
             return null;
         }
-        const projection = this.options.textProjection;
-        const semanticHit = projection
-            ? projection.toSemanticHit?.(rawHit)
-            : rawHit;
-        if (!semanticHit) {
-            this.clearSelection();
-            return null;
-        }
-        const hit = this.selectionStartForHit(semanticHit);
+        this.lastTapWasText = true;
+        const hit = this.selectionStartForHit(rawHit);
 
         if (this.selection &&
             hit.node === this.selection.startNode &&
@@ -656,11 +611,11 @@ window.hoshiSelection = {
 
             while (offset < content.length && text.length < maxLength) {
                 const char = this.codePointAt(content, offset);
-                if (this.isScanBoundaryAt(content, offset)) {
+                if (this.isScanBoundaryAt(content, offset, char)) {
                     break;
                 }
                 text += char;
-                offset = this.nextCodePointOffset(content, offset);
+                offset += char.length;
             }
 
             if (offset > start) {
@@ -678,9 +633,7 @@ window.hoshiSelection = {
         if (!text) {
             return null;
         }
-        const visibleRanges = projection
-            ? projection.visibleRangesForSemanticRanges?.(ranges)
-            : ranges;
+        const visibleRanges = ranges;
         if (!visibleRanges?.length) {
             return null;
         }
@@ -694,15 +647,14 @@ window.hoshiSelection = {
         };
 
         const sentenceContext = this.getSentenceContext(hit.node, hit.offset);
-        const normalizedOffset = projection
-            ? projection.normalizedOffsetForHit?.(hit) ?? null
-            : window.hoshiReader
+        const normalizedOffset = window.hoshiReader
                 ? this.getNormalizedOffset(hit.node, hit.offset)
                 : null;
         this.postTextSelected({
             text,
             sentence: sentenceContext.sentence,
             rect: this.getSelectionRect(rectX, rectY),
+            chapterIndex: this.chapterIndex(hit.node),
             normalizedOffset,
             sentenceOffset: sentenceContext.sentenceOffset
         });
@@ -884,6 +836,15 @@ window.hoshiSelection = {
         });
     },
 
+    chapterForNode(node) {
+        return window.hoshiReader?.chapterForNode?.(node) ?? null;
+    },
+
+    chapterIndex(node) {
+        const section = this.chapterForNode(node);
+        return section ? Number(section.dataset.hoshiChapter) : null;
+    },
+
     getNormalizedOffset(targetNode, offset) {
         let count = window.hoshiReader.nodeStartOffsets.get(targetNode) ?? 0;
         const text = targetNode.textContent;
@@ -1039,8 +1000,7 @@ window.hoshiSelection = {
         const segments = window.hoshiReaderDomText.selectedTextSegments(range);
         if (!segments.length) return null;
         const first = { node: segments[0].node, offset: segments[0].start };
-        const projection = this.options.textProjection;
-        const hit = projection ? projection.toSemanticHit?.(first) : first;
+        const hit = first;
         if (!hit) return null;
         const context = this.getSentenceContext(hit.node, hit.offset);
         const rect = range.getBoundingClientRect();
@@ -1048,7 +1008,8 @@ window.hoshiSelection = {
             text: segments.map(({ node, start, end }) => node.textContent.slice(start, end)).join(''),
             sentence: context.sentence,
             sentenceOffset: context.sentenceOffset,
-            normalizedOffset: projection ? projection.normalizedOffsetForHit?.(hit) : this.getNormalizedOffset(hit.node, hit.offset),
+            chapterIndex: this.chapterIndex(hit.node),
+            normalizedOffset: this.getNormalizedOffset(hit.node, hit.offset),
             rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
         };
     },
@@ -1059,6 +1020,8 @@ window.hoshiSelection = {
         this.selection = null;
     }
 };
+
+window.hoshiSelection.configure();
 
 let lastHasSelection = false;
 document.addEventListener('contextmenu', event => window.hoshiSelection.recoverNativeSelectionMenu(event));

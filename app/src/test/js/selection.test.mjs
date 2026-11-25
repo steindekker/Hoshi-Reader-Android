@@ -13,6 +13,9 @@ function selectionSource() {
         japaneseLanguageUrl,
         japaneseSelectionUrl,
         englishSelectionUrl,
+        new URL('../../main/assets/hoshi-web/shared/language-cjk.js', import.meta.url),
+        new URL('../../main/assets/hoshi-web/shared/selection-zh.js', import.meta.url),
+        new URL('../../main/assets/hoshi-web/shared/selection-ko.js', import.meta.url),
         new URL('../../main/assets/hoshi-web/reader/reader-dom-text.js', import.meta.url),
         sharedSelectionUrl,
     ].map((url) => fs.readFileSync(url, 'utf8')).join('\n');
@@ -194,16 +197,70 @@ function loadAdjacentExpressionTags() {
     return selection;
 }
 
-function scanTextFromOffset(text, offset, configureOptions = {}) {
+function scanTextFromOffset(text, offset, configureOptions = {}, scanOtherLanguages = false) {
     const { document, selection, textNode, window } = loadSelection(text);
     document.pointElement = hitElement([]);
     selection.configure(configureOptions);
     selection.postTextSelected = () => {};
     selection.clearSelection = () => {};
     selection.getCharacterAtPoint = () => ({ node: textNode, offset });
-    window.scanNonJapaneseText = false;
+    window.scanNonJapaneseText = scanOtherLanguages;
     return selection.selectText(1, 1, 80);
 }
+
+function loadGlossaryList() {
+    const fixture = loadSelection('逢瀬');
+    const { document, selection, textNode, window } = fixture;
+    function element(selector, parentElement) {
+        return {
+            nodeType: 1,
+            parentElement,
+            closest(selectors) {
+                return selectors.split(',').map((s) => s.trim()).includes(selector)
+                    ? this : parentElement?.closest(selectors) ?? null;
+            },
+        };
+    }
+    const glossary = element('.glossary-content');
+    const firstItem = element('li', glossary);
+    const secondItem = element('li', glossary);
+    // Inline markup within a list item must remain one lookup context.
+    textNode.textContent = '逢';
+    textNode.parentElement = element('span', firstItem);
+    const suffix = { nodeType: 3, textContent: '瀬', parentElement: element('ruby', firstItem) };
+    const nextTerm = { nodeType: 3, textContent: '瀬戸際', parentElement: secondItem };
+    document.createTreeWalker = (root) => treeWalker(root === firstItem
+        ? [textNode, suffix] : root === secondItem ? [nextTerm] : [textNode, suffix, nextTerm]);
+    document.pointElement = hitElement([]);
+    selection.clearSelection = () => {};
+    selection.getSelectionRect = () => ({ x: 0, y: 0, width: 1, height: 1 });
+    selection.postTextSelected = (value) => { fixture.posted = value; };
+    window.scanNonJapaneseText = false;
+    fixture.scan = (node) => {
+        selection.selection = null;
+        selection.getCharacterAtPoint = () => ({ node, offset: 0 });
+        return selection.selectText(1, 1, 80);
+    };
+    return { fixture, textNode, suffix, nextTerm };
+}
+
+test('glossary lookup stops at the current list item instead of joining the next term', () => {
+    const { fixture, suffix } = loadGlossaryList();
+    assert.equal(fixture.scan(suffix), '瀬');
+    assert.equal(fixture.posted.sentence, '逢瀬');
+    assert.equal(fixture.posted.sentenceOffset, 1);
+    assert.equal(fixture.selection.selection.ranges.length, 1);
+});
+
+test('glossary list lookup keeps inline text together and excludes preceding items from context', () => {
+    const { fixture, textNode, nextTerm } = loadGlossaryList();
+    assert.equal(fixture.scan(textNode), '逢瀬');
+    assert.equal(fixture.posted.sentence, '逢瀬');
+    assert.equal(fixture.posted.sentenceOffset, 0);
+    assert.equal(fixture.scan(nextTerm), '瀬戸際');
+    assert.equal(fixture.posted.sentence, '瀬戸際');
+    assert.equal(fixture.posted.sentenceOffset, 0);
+});
 
 function hitElement(matches) {
     return {
@@ -319,107 +376,74 @@ test('shared selection can preserve reader link and image tap tokens', () => {
     assert.equal(selection.imageTapResult(), 'image');
 });
 
-test('shared selection reads semantic text while keeping projected visible ranges', () => {
-    const sourceText = '現在激しい抵抗を見せていた。';
-    const { document, selection, textNode: sourceNode, window } = loadSelection(sourceText);
-    const renderedNode = {
-        nodeType: 3,
-        textContent: '激',
-        parentElement: null,
-    };
-    let projectedRanges = null;
-    let posted = null;
-    document.pointElement = hitElement([]);
-    window.getSelection = () => null;
-    selection.getCharacterAtPoint = () => ({ node: renderedNode, offset: 0 });
-    selection.postTextSelected = (payload) => {
-        posted = payload;
-    };
-    selection.configure({
-        textProjection: {
-            toSemanticHit(renderedHit) {
-                assert.equal(renderedHit.node, renderedNode);
-                return { node: sourceNode, offset: sourceText.indexOf('激') };
-            },
-            normalizedOffsetForHit() {
-                return 314;
-            },
-            visibleRangesForSemanticRanges(ranges) {
-                projectedRanges = ranges;
-                return [{ node: renderedNode, start: 0, end: 1 }];
-            },
-        },
-    });
-    window.scanNonJapaneseText = false;
-
-    const selected = selection.selectText(1, 1, 80);
-
-    assert.equal(selected, '激しい抵抗を見せていた');
-    assert.equal(posted.text, '激しい抵抗を見せていた');
-    assert.equal(posted.sentence, sourceText);
-    assert.equal(posted.sentenceOffset, sourceText.indexOf('激'));
-    assert.equal(posted.normalizedOffset, 314);
-    assert.equal(projectedRanges.length, 1);
-    assert.equal(projectedRanges[0].node, sourceNode);
-    assert.equal(selection.selection.ranges[0].node, renderedNode);
-});
-
-test('shared selection fails closed when a configured text projection cannot map the hit', () => {
-    const { document, selection, textNode, window } = loadSelection('激');
-    document.pointElement = hitElement([]);
-    window.getSelection = () => null;
-    selection.getCharacterAtPoint = () => ({ node: textNode, offset: 0 });
-    selection.configure({
-        textProjection: {
-            toSemanticHit() {
-                return null;
-            },
-        },
-    });
-    window.scanNonJapaneseText = false;
-
-    assert.equal(selection.selectText(1, 1, 80), null);
-    assert.equal(selection.selection, null);
-});
-
-test('english selection can start before the visible clone fragment and continue in source text', () => {
-    const sourceText = 'A difficult resistance.';
-    const { document, selection, textNode: sourceNode, window } = loadSelection(sourceText);
-    const renderedNode = {
-        nodeType: 3,
-        textContent: 'A diff',
-        parentElement: null,
-    };
-    document.pointElement = hitElement([]);
-    window.getSelection = () => null;
-    selection.getCharacterAtPoint = () => ({ node: renderedNode, offset: 5 });
-    selection.configure({
-        language: 'en',
-        textProjection: {
-            toSemanticHit() {
-                return { node: sourceNode, offset: 5 };
-            },
-            normalizedOffsetForHit() {
-                return 5;
-            },
-            visibleRangesForSemanticRanges() {
-                return [{ node: renderedNode, start: 2, end: 6 }];
-            },
-        },
-    });
-
-    assert.equal(selection.selectText(1, 1, 80), 'difficult resistance');
-    assert.equal(selection.selection.startOffset, 2);
-    assert.equal(selection.selection.ranges[0].node, renderedNode);
-});
-
 test('shared selection treats missing language policy as a no-scan boundary', () => {
     const selection = loadSharedSelectionWithoutPolicy();
 
-    assert.equal(selection.languagePolicy(), undefined);
     assert.doesNotThrow(() => selection.isScanBoundary('猫'));
     assert.equal(selection.isScanBoundary('猫'), true);
     assert.equal(selection.selectionStartForHit({ node: {}, offset: 3 }).offset, 3);
+});
+
+test('configuration selects the language policy before scanning without rereading configuration', () => {
+    const { selection, window, textNode } = loadSelection('猫');
+    selection.configure({ language: 'ja' });
+    Object.defineProperty(selection.options, 'language', {
+        get() { assert.fail('character scanning must not read the configured language'); },
+    });
+    Object.defineProperty(window, 'hoshiSelectionLanguagePolicies', {
+        get() { assert.fail('character scanning must not look up the language policy'); },
+    });
+    Object.defineProperty(window, 'hoshiLanguageUtilities', {
+        get() { assert.fail('character scanning must not look up fixed language utilities'); },
+    });
+    Object.defineProperty(selection.languagePolicy, 'isScanBoundaryAt', {
+        get() { assert.fail('character scanning must not choose a boundary implementation'); },
+    });
+    for (const char of '猫が本を読んでいる') {
+        assert.equal(selection.isScanBoundary(char), false);
+        assert.equal(selection.isScanBoundaryAt(char, 0), false);
+        assert.equal(selection.isHitBoundary(char), false);
+        assert.equal(selection.isHitBoundaryAt(char, 0), false);
+        assert.equal(selection.isWordStartBoundary(char), false);
+        assert.equal(selection.isWordStartBoundaryAt(char, 0), false);
+    }
+    assert.equal(selection.selectionStartForHit({ node: textNode, offset: 0 }).offset, 0);
+});
+
+test('Japanese scanning extracts each codepoint once and reuses its UTF-16 width', () => {
+    const { document, selection, textNode, window } = loadSelection('猫𠮟る');
+    document.pointElement = hitElement([]);
+    selection.configure({ language: 'ja' });
+    selection.clearSelection = () => {};
+    selection.getCharacterAtPoint = () => ({ node: textNode, offset: 0 });
+    selection.getSelectionRect = () => null;
+    selection.getSentenceContext = () => ({ sentence: '猫𠮟る', sentenceOffset: 0 });
+    selection.postTextSelected = () => {};
+    window.scanNonJapaneseText = false;
+    let extractions = 0;
+    const extract = selection.codePointAt;
+    selection.codePointAt = function(...args) { extractions++; return extract.apply(this, args); };
+    selection.nextCodePointOffset = () => assert.fail('scanning already knows the codepoint width');
+
+    assert.equal(selection.selectText(1, 1, 16), '猫𠮟る');
+    assert.equal(extractions, 3);
+    assert.equal(selection.selection.ranges[0].end, 4);
+});
+
+test('configuration changes switch language policies and can pick up newly loaded rules', () => {
+    const { selection, window } = loadSelection('猫');
+    window.scanNonJapaneseText = false;
+    for (const language of ['ja', 'en', 'zh', 'ko', 'ja']) {
+        selection.configure({ language });
+        assert.equal(selection.isScanBoundary('あ'), language === 'zh' || language === 'ko');
+        assert.equal(selection.isScanBoundary('한'), language === 'ja' || language === 'zh');
+    }
+    selection.configure({ language: 'en' });
+    assert.equal(selection.isScanBoundary('-'), true);
+    const replacement = { isScanBoundary: () => false };
+    window.hoshiSelectionLanguagePolicies = { en: replacement };
+    selection.configure({ language: 'en' });
+    assert.equal(selection.isScanBoundary('-'), false);
 });
 
 test('english reader selection ignores the Japanese non-Japanese scan toggle', () => {
@@ -774,23 +798,6 @@ test('Toggle setup marks only annotated ruby and other modes leave reveal marker
 });
 
 
-test('VN reveal also updates source ruby group so clones retain reveal on return', () => {
-    const { document, selection, window } = loadSelection('日本語。');
-    window.getSelection = () => null;
-    const clones = rubyGroupFixture();
-    const sources = rubyGroupFixture();
-    selection.configure({ textProjection: {
-        sourceRubyForRenderedRuby: (ruby) => sources[clones.indexOf(ruby)],
-    } });
-    document.pointElement = clones[2];
-    assert.equal(selection.selectText(10, 10, 16), 'furigana');
-    for (const index of [0, 2, 3]) {
-        assert.equal(clones[index].classList.contains('furigana-hidden'), false);
-        assert.equal(sources[index].classList.contains('furigana-hidden'), false);
-    }
-    assert.equal(sources[5].classList.contains('furigana-hidden'), true);
-});
-
 test('ruby reveal stops at styled siblings and non-ASCII whitespace as in iOS', () => {
     const { selection } = loadSelection('日本語。');
     for (const separator of [{ nodeType: 1, localName: 'span' }, { nodeType: 3, nodeValue: '\u00a0' }]) {
@@ -804,26 +811,6 @@ test('ruby reveal stops at styled siblings and non-ASCII whitespace as in iOS', 
         assert.equal(nodes[2].classList.contains('furigana-hidden'), false);
     }
 });
-
-test('native pronunciation selection uses full source sentence and excludes ruby annotations', () => {
-    const { selection, textNode, window } = loadSelection('東京へ行きました。');
-    const source = { node: textNode, offset: 0 };
-    selection.configure({ textProjection: {
-        toSemanticHit: () => source,
-        normalizedOffsetForHit: () => 42,
-    }});
-    window.getSelection = () => ({ rangeCount: 1, getRangeAt: () => ({
-        collapsed: false, startContainer: textNode, startOffset: 0,
-        endContainer: textNode, endOffset: 2, commonAncestorContainer: textNode,
-        comparePoint: () => 0, intersectsNode: node => node === textNode,
-        getBoundingClientRect: () => ({ x: 0, y: 0, width: 10, height: 20 }),
-    }) });
-    const result = selection.nativeSelectionContext();
-    assert.equal(result.text, '東京');
-    assert.equal(result.sentence, '東京へ行きました。');
-    assert.equal(result.normalizedOffset, 42);
-});
-
 
 test('native selection locks the reader before notifying Android, independent of menu visibility', () => {
     const { selection, window, changeNativeSelection } = loadSelection('本文');
@@ -1182,4 +1169,53 @@ test('continuous native menu clips to the body viewport while retaining full Web
     window.getSelection = () => ({ isCollapsed: false, rangeCount: 1, toString: () => '読書', getRangeAt: () => range });
     assert.deepEqual(JSON.parse(JSON.stringify(selection.nativeSelectionMenuRect())),
         { left: 40, right: 360, top: 80, bottom: 720, viewportWidth: 400 });
+});
+
+for (const [language, text, offset, expected] of [
+    ['zh', '学习汉语。下一句', 2, '汉语'],
+    ['ko', '읽었어요 다음', 2, '어요'],
+    ['ko', '읽었어요。다음', 0, '읽었어요'],
+    ['zh', 'ㄅㄆㄇ', 0, 'ㄅㄆㄇ'],
+    ['ko', 'ᄀㄱꥠힰﾡ', 0, 'ᄀㄱꥠힰﾡ'],
+    ['zh', '𠀀中文', 1, '𠀀中文'],
+    ['ko', '漢字한글', 0, '漢字한글'],
+]) {
+    test(`${language} scans from the clicked codepoint: ${text}`, () => {
+        assert.equal(scanTextFromOffset(text, offset, { language }), expected);
+    });
+}
+
+for (const language of ['zh', 'ko']) {
+    test(`${language} excludes Latin text when other-language scanning is disabled`, () => {
+        assert.equal(scanTextFromOffset('reading', 0, { language }), null);
+    });
+}
+
+for (const language of ['zh', 'ko']) {
+    test(`${language} allows mixed Latin text when other-language scanning is enabled`, () => {
+        assert.equal(scanTextFromOffset('reading 字', 0, { language }, true), 'reading');
+    });
+}
+
+test('whole-book lookup uses the tapped section for source offset, scan and sentence context', () => {
+    const { document, selection, textNode, window } = loadSelection('東京');
+    const section = { dataset: { hoshiChapter: '3' } };
+    textNode.parentElement = { closest: selector => selector === '[data-hoshi-chapter]' ? section : null };
+    const previous = { nodeType: 3, textContent: '大阪' };
+    const next = { nodeType: 3, textContent: '京都' };
+    document.createTreeWalker = root => treeWalker(root === section ? [textNode] : [previous, textNode, next]);
+    document.pointElement = hitElement([]);
+    window.hoshiReader = {
+        chapterForNode: node => node.parentElement.closest('[data-hoshi-chapter]'), activeChapterIndex: 2,
+        nodeStartOffsets: new WeakMap([[textNode, 0]]), isMatchableChar: () => true,
+    };
+    selection.getCharacterAtPoint = () => ({ node: textNode, offset: 1 });
+    selection.clearSelection = () => {};
+    selection.getSelectionRect = () => ({ x: 0, y: 0, width: 1, height: 1 });
+    let payload;
+    selection.postTextSelected = data => { payload = data; };
+    assert.equal(selection.selectText(1, 1, 80), '京');
+    assert.equal(payload.sentence, '東京');
+    assert.equal(payload.chapterIndex, 3);
+    assert.equal(payload.normalizedOffset, 1);
 });

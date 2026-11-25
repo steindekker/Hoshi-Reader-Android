@@ -2,7 +2,6 @@ __HOSHI_READER_VIEWPORT_SCRIPT__
 __HOSHI_READER_TEXT_SEMANTICS_SCRIPT__
 __HOSHI_READER_DOM_TEXT_SCRIPT__
 __HOSHI_READER_MEDIA_SEMANTICS_SCRIPT__
-__HOSHI_READER_LAYOUT_SEMANTICS_SCRIPT__
 
 window.hoshiReader = {
   pageHeight: 0,
@@ -16,6 +15,7 @@ window.hoshiReader = {
   activeCueId: null,
   nodeStartOffsets: new WeakMap(),
   nodeStartRawOffsets: new WeakMap(),
+  indexedTextNodes: null,
   paginationMetrics: null,
   isVertical: function() {
     return window.getComputedStyle(document.body).writingMode === "vertical-rl";
@@ -71,6 +71,8 @@ window.hoshiReader = {
     return fallbackOffset;
   },
   notifyRestoreComplete: function() {
+    this.notifyPageChanged();
+    window.hoshiParagraph?.animatePage();
     if (window.HoshiReaderRestore && window.HoshiReaderRestore.postMessage) {
       window.HoshiReaderRestore.postMessage(__HOSHI_RESTORE_TOKEN_LITERAL__);
     }
@@ -89,18 +91,25 @@ window.hoshiReader = {
   buildNodeOffsets: function() {
     var offsets = new WeakMap();
     var rawOffsets = new WeakMap();
-    var walker = this.createWalker();
+    var entries = [];
+    // Whole-chapter scans filter in JS to avoid a native-to-JS callback per node.
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     var count = 0;
     var rawCount = 0;
     var node;
     while (node = walker.nextNode()) {
+      if (this.isFurigana(node)) continue;
       offsets.set(node, count);
       rawOffsets.set(node, rawCount);
-      count += this.countChars(node.textContent);
-      rawCount += this.countRawChars(node.textContent);
+      var text = node.textContent;
+      var length = this.countChars(text);
+      entries.push({ node: node, text: text, count: length });
+      count += length;
+      rawCount += this.countRawChars(text);
     }
     this.nodeStartOffsets = offsets;
     this.nodeStartRawOffsets = rawOffsets;
+    this.indexedTextNodes = entries;
     // Wrapping/unwrapping moves text nodes and invalidates live CSS Ranges.
     if (window.hoshiHighlights?.searchRange) window.hoshiHighlights.refreshSearchHighlight();
     this.paginationMetrics = null;
@@ -291,7 +300,8 @@ __HOSHI_READER_SASAYAKI_SCRIPT__
     var scrollEl = document.body;
     var pageSize = Math.max(1, vertical ? (this.pageHeight || window.innerHeight) : (this.pageWidth || window.innerWidth));
     var totalSize = vertical ? scrollEl.scrollHeight : scrollEl.scrollWidth;
-    var maxScroll = Math.max(0, totalSize - pageSize);
+    // Share the last whole-page boundary across turns, jumps and measurement.
+    var maxScroll = Math.floor(Math.max(0, totalSize - pageSize) / pageSize) * pageSize;
     return { vertical: vertical, scrollEl: scrollEl, pageSize: pageSize, maxScroll: maxScroll };
   },
   getPagePosition: function(context) {
@@ -328,6 +338,7 @@ __HOSHI_READER_SASAYAKI_SCRIPT__
     window.lastPageScroll = clamped;
     this.assignPagePosition(context, clamped);
     this.refreshSasayakiCuePresentation();
+    this.notifyPageChanged();
     return clamped;
   },
   setNativeSelectionActive: function(active) {
@@ -419,8 +430,9 @@ __HOSHI_READER_SASAYAKI_SCRIPT__
     var rect = this.getRect(range);
     var currentScroll = this.getPagePosition(context);
     var anchor = (context.vertical ? (rect.top + rect.bottom) / 2 : (rect.left + rect.right) / 2) + currentScroll;
-    var targetScroll = this.alignToPage(context, anchor);
-    if (targetScroll === currentScroll) return false;
+    var targetScroll = Math.min(this.alignToPage(context, anchor), context.maxScroll);
+    // WebView can round the assigned CSS offset to a fractional device-pixel position.
+    if (Math.abs(targetScroll - currentScroll) < 1) return false;
     this.setPagePosition(context, targetScroll);
     var self = this;
     requestAnimationFrame(function() {
@@ -448,49 +460,139 @@ __HOSHI_READER_SASAYAKI_SCRIPT__
       setTimeout(run, 200);
     }
   },
+  // The visible Reader drains these steps synchronously. The hidden renderer yields
+  // between bounded batches and checks the native foreground gate before each batch.
+  measurementYield: function() {
+    return new Promise(resolve => {
+      var attempt = () => {
+        if (window.HoshiReaderPages?.canMeasure(__HOSHI_RESTORE_TOKEN_LITERAL__) !== false) resolve();
+        else setTimeout(schedule, 50);
+      };
+      var schedule = () => {
+        // Repeated idle periods can spend seconds waiting between a few ms of
+        // work, especially in a transparent WebView. Queue a low-priority task;
+        // the native activity gate and bounded batches still protect reading.
+        if (window.scheduler?.postTask) {
+          window.scheduler.postTask(attempt, { priority: 'background' });
+        } else if (window.MessageChannel) {
+          var channel = new window.MessageChannel();
+          channel.port1.onmessage = () => {
+            channel.port1.close();
+            channel.port2.close();
+            attempt();
+          };
+          channel.port2.postMessage(null);
+        } else {
+          setTimeout(attempt, 0);
+        }
+      };
+      schedule();
+    });
+  },
+  drainMeasurementSteps: async function(steps) {
+    while (true) {
+      await this.measurementYield();
+      // Amortize cheap batches without occupying the renderer for a whole chapter.
+      var deadline = window.performance.now() + 4;
+      do {
+        var step = steps.next();
+        if (step.done) return step.value;
+      } while (window.performance.now() < deadline);
+    }
+  },
   buildPaginationMetrics: function() {
+    var steps = this.paginationMetricSteps();
+    var step;
+    do { step = steps.next(); } while (!step.done);
+    return step.value;
+  },
+  adjacentCharacterRects: function(index, range, context, scroll) {
+    var nodes = [];
+    for (var i = index; i < this.indexedTextNodes.length && nodes.length < 32; i++) {
+      var entry = this.indexedTextNodes[i];
+      if (nodes.length && nodes[nodes.length - 1].nextSibling !== entry.node) break;
+      var text = entry.text;
+      // Ruby stabilization produces adjacent one-character text nodes. Keep the
+      // DOM intact, but cross the DOM geometry boundary once for the whole run.
+      if (text.length !== 1 || !this.textSemantics().isJapaneseBreakCharacter(text) || /\p{Mark}/u.test(text)) break;
+      nodes.push(entry.node);
+    }
+    if (nodes.length < 2) return null;
+    range.setStart(nodes[0], 0);
+    range.setEnd(nodes[nodes.length - 1], 1);
+    var rects = range.getClientRects();
+    // CSSOM returns text boxes in content order. Only use an unambiguous one
+    // box per node result; collapsed/fragmented boxes retain individual reads.
+    var page = null;
+    var usable = rects.length === nodes.length;
+    for (var rect of rects) {
+      var start = (context.vertical ? rect.top : rect.left) + scroll;
+      var end = (context.vertical ? rect.bottom : rect.right) + scroll;
+      var first = Math.floor((start + 0.5) / context.pageSize);
+      var last = Math.floor((end - 0.5) / context.pageSize);
+      if (rect.width <= 0 || rect.height <= 0 || first !== last || (page !== null && page !== first)) usable = false;
+      page = first;
+    }
+    // Remember failed runs too, so a crossing group is probed only once.
+    return { nodes: nodes, rects: usable ? rects : null, index: 0 };
+  },
+  paginationMetricSteps: function*() {
     var context = this.getScrollContext();
     var currentScroll = this.getPagePosition(context);
-    var maxAlignedScroll = Math.floor(context.maxScroll / context.pageSize) * context.pageSize;
     if (context.pageSize <= 0) {
-      var emptyMetrics = { minScroll: 0, maxScroll: 0, totalChars: 0, progressStops: [] };
+      var emptyMetrics = { minScroll: 0, maxScroll: 0, totalChars: 0, textRanges: [] };
       this.paginationMetrics = emptyMetrics;
       return emptyMetrics;
     }
     var lastContentEdge = 0;
     var firstContentEdge = null;
-    var progressStops = [];
-    var exploredChars = 0;
+    var textRanges = [];
     var totalChars = 0;
-    var walker = this.createWalker();
-    var node;
-    while (node = walker.nextNode()) {
-      var nodeLen = this.countChars(node.textContent);
+    if (!this.indexedTextNodes) this.buildNodeOffsets();
+    var entries = this.indexedTextNodes;
+    var range = document.createRange();
+    var batch = null;
+    for (var index = 0; index < entries.length; index++) {
+      if (index % 32 === 31) yield;
+      var entry = entries[index];
+      var node = entry.node;
+      var nodeLen = entry.count;
       totalChars += nodeLen;
-      if (nodeLen <= 0) continue;
-      var range = document.createRange();
-      range.selectNodeContents(node);
-      var rects = range.getClientRects();
-      var progressRect = this.getRect(range);
-      var nodeStartEdge = progressRect && progressRect.width > 0 && progressRect.height > 0
-        ? (context.vertical ? progressRect.top : progressRect.left) + currentScroll
-        : null;
+      // Reveal includes punctuation-only nodes even though progress does not.
+      if (!entry.text.trim()) continue;
+      if (batch?.nodes[batch.index] !== node) batch = this.adjacentCharacterRects(index, range, context, currentScroll);
+      var rects;
+      if (batch?.rects) rects = [batch.rects[batch.index]];
+      else {
+        range.selectNodeContents(node);
+        rects = range.getClientRects();
+      }
+      if (batch) batch.index++;
+      var firstRect = rects[0] || range.getBoundingClientRect();
+      var first = (context.vertical ? firstRect.top : firstRect.left) + currentScroll;
+      var minStart = Infinity;
+      var maxEnd = rects.length ? -Infinity : Infinity;
       for (var i = 0; i < rects.length; i++) {
         var rect = rects[i];
         if (rect.width <= 0 || rect.height <= 0) continue;
         var startEdge = (context.vertical ? rect.top : rect.left) + currentScroll;
         var endEdge = (context.vertical ? rect.bottom : rect.right) + currentScroll;
-        firstContentEdge = firstContentEdge === null ? startEdge : Math.min(firstContentEdge, startEdge);
-        lastContentEdge = Math.max(lastContentEdge, endEdge);
+        minStart = Math.min(minStart, startEdge);
+        maxEnd = Math.max(maxEnd, endEdge);
+        if (nodeLen > 0) {
+          firstContentEdge = firstContentEdge === null ? startEdge : Math.min(firstContentEdge, startEdge);
+          lastContentEdge = Math.max(lastContentEdge, endEdge);
+        }
       }
-      if (nodeStartEdge !== null) {
-        progressStops.push({ scroll: nodeStartEdge, exploredChars: exploredChars + nodeLen });
-      }
-      exploredChars += nodeLen;
+      // Keep document order and content coordinates for reveal/progress reuse.
+      // buildNodeOffsets invalidates these measurements whenever text is wrapped.
+      textRanges.push({ node: node, first: first, start: minStart, end: maxEnd, count: nodeLen });
     }
 
-    var media = document.querySelectorAll('img, svg, image, video, canvas');
+    // Paragraph layout can leave a final publisher ornament after the last text.
+    var media = document.querySelectorAll('img, svg, image, video, canvas' + (window.hoshiParagraph?.enabled ? ', p' : ''));
     for (var j = 0; j < media.length; j++) {
+      if (j % 32 === 31) yield;
       var mediaRect = media[j].getBoundingClientRect();
       if (mediaRect.width <= 0 || mediaRect.height <= 0) continue;
       var mediaStart = (context.vertical ? mediaRect.top : mediaRect.left) + currentScroll;
@@ -499,31 +601,115 @@ __HOSHI_READER_SASAYAKI_SCRIPT__
       lastContentEdge = Math.max(lastContentEdge, mediaEnd);
     }
 
-    var minScroll = firstContentEdge === null ? 0 : Math.min(maxAlignedScroll, this.alignContentStartToPage(context, firstContentEdge));
+    var minScroll = firstContentEdge === null ? 0 : Math.min(context.maxScroll, this.alignContentStartToPage(context, firstContentEdge));
     var lastContentScroll = lastContentEdge <= 0 ? 0 : this.alignToPage(context, lastContentEdge - 1);
     var maxScroll = Math.min(context.maxScroll, lastContentScroll);
-    progressStops.sort(function(a, b) { return a.scroll - b.scroll; });
     var metrics = {
       minScroll: minScroll,
       maxScroll: maxScroll,
       totalChars: totalChars,
-      progressStops: progressStops
+      textRanges: textRanges
     };
     this.paginationMetrics = metrics;
     return metrics;
   },
+  pageStops: function() {
+    var context = this.getScrollContext();
+    var last = this.contentLastPageScroll(context);
+    return Array.from({ length: Math.floor(last / context.pageSize) + 1 }, (_, i) => i * context.pageSize);
+  },
+  currentPage: function() {
+    var context = this.getScrollContext();
+    var scroll = this.getPagePosition(context);
+    // Use the actual position and absorb device-pixel rounding without scanning text.
+    return context.pageSize > 0 ? Math.max(0, Math.round(scroll / context.pageSize)) : 0;
+  },
+  notifyPageChanged: function() {
+    if (window.hoshiReaderPageReporting && window.HoshiReaderPage?.postMessage) {
+      window.HoshiReaderPage.postMessage(__HOSHI_RESTORE_TOKEN_LITERAL__, this.currentPage());
+    }
+  },
+  calculatePageStartsForMeasurement: async function() {
+    if (!this.paginationMetrics) await this.drainMeasurementSteps(this.paginationMetricSteps());
+    return this.drainMeasurementSteps(this.pageStartSteps());
+  },
+  calculatePageStarts: function() {
+    var steps = this.pageStartSteps();
+    var step;
+    do { step = steps.next(); } while (!step.done);
+    return step.value;
+  },
+  pageStartSteps: function*() {
+    var context = this.getScrollContext();
+    var scroll = this.getPagePosition(context);
+    var metrics = this.paginationMetrics || this.buildPaginationMetrics();
+    var stops = this.pageStops();
+    var starts = new Array(stops.length).fill(null);
+    var work = 0;
+    var range = document.createRange();
+    for (var entry of metrics.textRanges) {
+      if (++work % 32 === 0) yield;
+      if (!entry.count || !Number.isFinite(entry.start) || !Number.isFinite(entry.end)) continue;
+      var firstPage = Math.max(0, Math.min(stops.length - 1, Math.floor(entry.start / context.pageSize)));
+      var lastPage = Math.min(stops.length - 1, Math.floor((entry.end - 0.5) / context.pageSize));
+      var text = entry.node.textContent;
+      var countedOffset = 0;
+      var countedCharacters = 0;
+      for (var page = firstPage; page <= lastPage; page++) {
+        if (++work % 32 === 0) yield;
+        if (starts[page] !== null) continue;
+        var count = 0;
+        if (entry.start < stops[page] - 0.5) {
+          // Search UTF-16 directly, keeping both ends on code-point boundaries.
+          // Page stops are ordered, so count each intervening prefix only once.
+          var low = countedOffset, high = text.length;
+          while (low < high) {
+            var mid = Math.floor((low + high) / 2);
+            var code = text.charCodeAt(mid);
+            if (mid > low && code >= 0xDC00 && code <= 0xDFFF &&
+                text.charCodeAt(mid - 1) >= 0xD800 && text.charCodeAt(mid - 1) <= 0xDBFF) mid--;
+            var next = mid + (text.codePointAt(mid) > 0xFFFF ? 2 : 1);
+            range.setStart(entry.node, mid);
+            range.setEnd(entry.node, next);
+            var rect = this.getRect(range);
+            var edge = (context.vertical ? rect.top : rect.left) + scroll;
+            if (edge < stops[page] - 0.5) low = next;
+            else high = mid;
+          }
+          while (countedOffset < low) {
+            var end = Math.min(low, countedOffset + 4096);
+            if (end < low && text.charCodeAt(end) >= 0xDC00 && text.charCodeAt(end) <= 0xDFFF &&
+                text.charCodeAt(end - 1) >= 0xD800 && text.charCodeAt(end - 1) <= 0xDBFF) end--;
+            countedCharacters += this.countChars(text.slice(countedOffset, end));
+            countedOffset = end;
+            if (countedOffset < low) yield;
+          }
+          count = countedCharacters;
+        }
+        // A hanging punctuation/whitespace suffix can extend into this page
+        // after all counted characters have ended. A later node can still be
+        // in the previous column; let the next actual text on this page win.
+        if (count >= entry.count) continue;
+        starts[page] = this.nodeStartOffsets.get(entry.node) + count;
+      }
+    }
+    // Images and blank pages share the next text position, but retain their page.
+    for (var page = starts.length - 1; page >= 0; page--) {
+      starts[page] ??= starts[page + 1] ?? metrics.totalChars;
+    }
+    return starts;
+  },
   calculateProgress: function() {
     var context = this.getScrollContext();
-    var walker = this.createWalker();
-    var totalChars = 0;
+    var scroll = this.getPagePosition(context);
+    var metrics = this.paginationMetrics || this.buildPaginationMetrics();
     var exploredChars = 0;
-    var node;
-    while (node = walker.nextNode()) {
-      var nodeLen = this.countChars(node.textContent);
-      totalChars += nodeLen;
-      if (nodeLen > 0) exploredChars += this.countCharsBeforeViewport(node, context);
+    for (var entry of metrics.textRanges) {
+      if (entry.count <= 0) continue;
+      if (entry.end <= scroll) exploredChars += entry.count;
+      else if (entry.start < scroll) exploredChars += this.countCharsBeforeViewport(entry.node, context);
     }
-    return totalChars > 0 ? exploredChars / totalChars : 0;
+    return metrics.totalChars > 0 ? exploredChars / metrics.totalChars : 0;
   },
   restoreProgress: async function(progress) {
     await document.fonts.ready;
@@ -550,25 +736,19 @@ __HOSHI_READER_SASAYAKI_SCRIPT__
       });
       return;
     }
-    var walker = this.createWalker();
-    var totalChars = 0;
-    var node;
-    while (node = walker.nextNode()) {
-      totalChars += this.countChars(node.textContent);
-    }
+    if (!this.indexedTextNodes) this.buildNodeOffsets();
+    var totalChars = this.indexedTextNodes.reduce((sum, entry) => sum + entry.count, 0);
     var targetCharCount = Math.ceil(totalChars * progress);
     var runningSum = 0;
     var targetNode = null;
     var targetOffset = 0;
-    walker = this.createWalker();
-    while (node = walker.nextNode()) {
-      var nodeLen = this.countChars(node.textContent);
-      if ((runningSum + nodeLen) > targetCharCount) {
-        targetNode = node;
-        targetOffset = this.textOffsetForCharCount(node, Math.max(0, targetCharCount - runningSum));
+    for (var entry of this.indexedTextNodes) {
+      if ((runningSum + entry.count) > targetCharCount) {
+        targetNode = entry.node;
+        targetOffset = this.textOffsetForCharCount(entry.node, Math.max(0, targetCharCount - runningSum));
         break;
       }
-      runningSum += nodeLen;
+      runningSum += entry.count;
     }
     if (targetNode) {
       var range = document.createRange();
@@ -616,9 +796,15 @@ __HOSHI_READER_SASAYAKI_SCRIPT__
     });
     return true;
   },
+  paginateWithProgress: function(direction) {
+    // Return the accepted page and its progress together, before reveal frames paint.
+    var result = this.paginate(direction);
+    return result === 'scrolled' ? this.calculateProgress() : result;
+  },
   paginate: function(direction) {
     window.hoshiHighlights?.clearSearchHighlight?.();
     if (this.nativeSelectionActive) return "blocked";
+    window.hoshiParagraph?.finishTextAnimation();
     var context = this.getScrollContext();
     if (context.pageSize <= 0) return "limit";
     var currentScroll = this.getPagePosition(context);
@@ -631,6 +817,7 @@ __HOSHI_READER_SASAYAKI_SCRIPT__
         targetForward = Math.min(targetForward, maxPageScroll);
         if (targetForward <= (currentScroll + 1)) return "limit";
         this.setPagePosition(context, targetForward);
+        window.hoshiParagraph?.animatePage();
         return "scrolled";
       }
       return "limit";
@@ -645,6 +832,11 @@ __HOSHI_READER_SASAYAKI_SCRIPT__
     }
   }
 };
+__HOSHI_READER_PARAGRAPH_SCRIPT__
+window.hoshiParagraph.enabled = __HOSHI_PARAGRAPH_ENABLED__;
+if (window.hoshiParagraph.enabled) window.hoshiParagraph.installTapHandler();
+window.hoshiParagraph.configureAnimation(__HOSHI_PARAGRAPH_TEXT_ANIMATION__, __HOSHI_PARAGRAPH_TEXT_SPEED__);
+window.addEventListener('pagehide', () => window.hoshiParagraph.finishTextAnimation());
 __HOSHI_HIGHLIGHTS_SCRIPT__
 window.hoshiReader.initialize = function() {
   if (window.hoshiReader.didInitialize) return;
@@ -661,31 +853,58 @@ window.hoshiReader.initialize = function() {
   document.documentElement.style.setProperty('--hoshi-image-max-height', Math.max(1, Math.floor(window.innerHeight * __HOSHI_IMAGE_HEIGHT_VIEWPORT_RATIO__)) + 'px');
   window.hoshiReader.pageHeight = pageHeight;
   window.hoshiReader.pageWidth = pageWidth;
+  var imageReferencesReady = window.hoshiReaderMeasurement ? Promise.resolve()
+    : window.hoshiReaderMediaSemantics.loadImageReferenceCounts();
   var images = Array.from(document.querySelectorAll('img'));
   var imageSetupPromise = window.hoshiReaderMediaSemantics.setupReaderImages(document, {
     blurImages: __HOSHI_BLUR_IMAGES__,
     imageBridge: window.HoshiReaderImage,
     waitForImages: true
   });
+  var selectedFontReady = window.hoshiReaderViewport.preloadBodyFont();
   var spacer = document.createElement('div');
   spacer.style.height = __HOSHI_TRAILING_SPACER_HEIGHT_LITERAL__;
   spacer.style.width = __HOSHI_TRAILING_SPACER_WIDTH_LITERAL__;
   spacer.style.display = 'block';
   spacer.style.breakInside = 'avoid';
   document.body.appendChild(spacer);
-  window.hoshiReader.normalizeRubyTextNodes();
-  window.hoshiReader.stabilizeRubyAdjacentTextNodes();
-  Promise.all([
-    Promise.resolve(document.fonts && document.fonts.ready),
-    imageSetupPromise
-  ]).then(function() {
-    if (!images.length) return;
-    return new Promise(function(resolve) { setTimeout(resolve, 50); });
-  }).then(function() {
-    window.hoshiReaderLayoutSemantics.sanitizeInlineBlocks(document, window.hoshiReader.isVertical());
-    window.hoshiReader.buildNodeOffsets();
-    __HOSHI_RESTORE_SCRIPTS__
-  });
+  var prepare = async () => {
+    if (window.hoshiReaderMeasurement) await this.measurementYield();
+    // Prepare the final DOM while document-start preparation still suppresses
+    // publisher layout. Only cross-page fragment detection needs visible geometry.
+    window.hoshiReader.normalizeRubyTextNodes();
+    window.hoshiReader.stabilizeRubyAdjacentTextNodes();
+    if (window.hoshiParagraph.enabled) {
+      window.hoshiParagraph.layoutParagraphs(__HOSHI_PARAGRAPH_MAX_SENTENCES__, __HOSHI_PARAGRAPH_SPLIT_DIALOGUE__);
+    }
+    if (selectedFontReady) await selectedFontReady;
+    if (window.hoshiReaderMeasurement) await this.measurementYield();
+    window.hoshiReaderDocumentPreparation?.resume();
+    Promise.all([
+      Promise.resolve(document.fonts && document.fonts.ready),
+      imageSetupPromise
+    ]).then(function() {
+      // Hidden measurement reads geometry after image setup and font readiness;
+      // those reads flush layout and do not need the visible image-settle delay.
+      if (!images.length || window.hoshiReaderMeasurement) return;
+      return new Promise(function(resolve) { setTimeout(resolve, 50); });
+    }).then(async function() {
+      if (window.hoshiReaderMeasurement) await window.hoshiReader.measurementYield();
+      if (window.hoshiParagraph.enabled) {
+        window.hoshiParagraph.fragmentBlocks();
+      }
+      var installHighlights = __HOSHI_INITIAL_HIGHLIGHTS__;
+      if (installHighlights) {
+        await imageReferencesReady;
+        installHighlights();
+      }
+      window.hoshiReader.buildNodeOffsets();
+      return imageReferencesReady;
+    }).then(function() {
+      __HOSHI_RESTORE_SCRIPTS__
+    });
+  };
+  prepare();
 };
 window.addEventListener('load', function() {
   window.hoshiReader.initialize();

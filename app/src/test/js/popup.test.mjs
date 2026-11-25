@@ -72,6 +72,10 @@ class FakeElement {
         return this.attributes.get(name) ?? null;
     }
 
+    hasAttribute(name) {
+        return this.attributes.has(name);
+    }
+
     appendChild(child) {
         child.parentElement = this;
         if (this.childProbeWidth !== undefined) {
@@ -1845,6 +1849,58 @@ test('kanji history resumes entries that were still loading when redirect starte
     assert.equal(setup.entriesContainer.children.filter((node) => node.dataset?.entryIndex !== undefined).length, 2);
 });
 
+test('a hosted popup keeps its first glossary in place while deferring the remaining glossary', async () => {
+    const { context, entriesContainer } = popupContext();
+    const entry = {
+        expression: '猫',
+        reading: '',
+        glossaries: [
+            { dictionary: 'First', content: 'cat' },
+            { dictionary: 'Second', content: 'feline' },
+        ],
+    };
+    const glossaries = () => entriesContainer.children[0].children.filter(node => node.className === 'glossary-group');
+
+    context.window.replacePopupResults(1, [entry], null, null, true);
+    await flushAsyncWork();
+
+    const [first] = glossaries();
+    assert.equal(glossaries().length, 1);
+    first.open = false;
+
+    context.window.hoshiPopupRevealed();
+    await flushAsyncWork();
+
+    assert.equal(glossaries().length, 2);
+    assert.equal(glossaries()[0], first);
+    assert.equal(first.open, false);
+});
+
+test('going back from a kanji redirect resumes a partially rendered entry', async () => {
+    const { context, entriesContainer } = popupContext();
+    context.window.replacePopupResults(1, [{
+        expression: '猫',
+        reading: '',
+        glossaries: [
+            { dictionary: 'First', content: 'cat' },
+            { dictionary: 'Second', content: 'feline' },
+        ],
+    }], null, null, true);
+    await flushAsyncWork();
+
+    const entry = entriesContainer.children[0];
+    const glossaries = () => entry.children.filter(node => node.className === 'glossary-group');
+    const [first] = glossaries();
+    assert.equal(glossaries().length, 1);
+    context.redirectKanji({ character: '猫', entries: [] });
+    context.window.navigateBack();
+    await flushAsyncWork();
+
+    assert.equal(entriesContainer.children[0], entry);
+    assert.equal(glossaries().length, 2);
+    assert.equal(glossaries()[0], first);
+});
+
 test('term redirect history never resumes old DOM from the replacement host result set', async () => {
     let resolveOldSecondEntry;
     const oldSecondEntry = new Promise((resolve) => { resolveOldSecondEntry = resolve; });
@@ -2202,3 +2258,21 @@ test('audio menu fits a narrow zoomed viewport even when its preferred minimum w
     assert.ok(left >= 8 * zoom && right <= 320 - 8 * zoom, 'menu fits horizontally with scaled margins');
     assert.ok(top >= 64 + 4 * zoom && bottom <= 240 - 8 * zoom, 'menu fits below the trigger');
 });
+
+for (const language of ['zh', 'ko']) {
+    test(`${language} profile preserves glossary language detection across multiple lines`, () => {
+        const { context, document } = popupContext({ loadJapaneseLanguageAsset: true });
+        document.documentElement.lang = language;
+        const glossary = new FakeElement();
+        context.renderStructuredContent(glossary, 'English definition');
+        assert.equal(glossary.getAttribute('lang'), null);
+        const example = new FakeElement();
+        context.renderStructuredContent(example, 'English definition\n日本語です');
+        assert.equal(example.getAttribute('lang'), 'ja');
+        const explicitLanguage = new FakeElement();
+        context.renderStructuredContent(explicitLanguage, {
+            tag: 'span', lang: language, content: 'English definition\n日本語です',
+        });
+        assert.equal(explicitLanguage.children[0].getAttribute('lang'), language);
+    });
+}

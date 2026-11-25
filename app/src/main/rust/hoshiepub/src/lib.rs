@@ -21,6 +21,7 @@ pub struct ManifestItem {
     pub href: String,
     pub media_type: String,
     pub properties: Option<String>,
+    pub fallback_id: Option<String>,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -86,11 +87,21 @@ impl EpubBook {
             .map(|creator| creator.value().to_string())
     }
 
-    pub fn cover_href(&self) -> Option<String> {
-        self.epub
-            .manifest()
-            .cover_image()
-            .map(|e| e.href_raw().to_string())
+    pub fn cover_hrefs(&self) -> Vec<String> {
+        let manifest = self.epub.manifest();
+        let metadata = self.epub.metadata();
+        // Preserve EPUB 3 priority, but let the reader try EPUB 2 declarations
+        // when a preferred resource is missing, corrupt or unsupported.
+        manifest
+            .by_property("cover-image")
+            .chain(
+                metadata
+                    .by_property("cover")
+                    .filter(|entry| entry.kind().is_epub2_meta())
+                    .filter_map(|entry| manifest.by_id(entry.value())),
+            )
+            .map(|entry| entry.href_raw().to_string())
+            .collect()
     }
 
     pub fn manifest(&self) -> Vec<ManifestItem> {
@@ -104,6 +115,7 @@ impl EpubBook {
                     href: entry.href_raw().to_string(),
                     media_type: entry.media_type().to_string(),
                     properties: if props.is_empty() { None } else { Some(props) },
+                    fallback_id: entry.fallback().map(|fallback| fallback.id().to_string()),
                 }
             })
             .collect()

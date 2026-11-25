@@ -299,7 +299,7 @@ private class FakeLookupRepository : DictionarySearchRepository {
     override val dictionarySettings: StateFlow<DictionarySettings> = MutableStateFlow(DictionarySettings())
     override val audioSettings: StateFlow<AudioSettings> = MutableStateFlow(AudioSettings())
 
-    override suspend fun rebuildLookupQuery() = Unit
+    override suspend fun ensureLookupQueryReady() = Unit
 
     override fun lookup(query: String, maxResults: Int, scanLength: Int, options: LookupOptions): List<LookupResult> = results
 

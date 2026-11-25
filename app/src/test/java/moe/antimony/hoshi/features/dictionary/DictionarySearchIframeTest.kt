@@ -131,6 +131,27 @@ class DictionarySearchIframeTest {
         assertNotEquals(firstPayload.contentKey, secondPayload.contentKey)
     }
 
+    @Test
+    fun unmatchedSentenceStillProducesSourceOnlyFrameAndDistinctContentIdentity() {
+        val sentence = "──今、猫がいる。\n次の行。"
+        val payload = dictionarySearchIframePayloads(
+            rootResults = emptyList(), childPopups = emptyList(), childHistories = emptyMap(),
+            viewport = ReaderLookupPopupViewport(390.0, 700.0), searchBarBottomDp = 86.0,
+            darkMode = false, eInkMode = false, iframeUrl = "https://appassets.androidplatform.net/popup/iframe.html",
+            sourceText = sentence,
+        ).single()
+        assertEquals(sentence, payload.sourceText)
+        assertEquals(0, payload.entriesCount)
+        assertEquals(null, payload.initialEntryJson)
+        assertNotEquals(null, payload.contentKey)
+        assertNotEquals(payload.contentKey, dictionarySearchResultsContentKey(emptyList(), "──別の文章。"))
+        assertEquals(emptyList<Any>(), dictionarySearchIframePayloads(
+            rootResults = emptyList(), childPopups = emptyList(), childHistories = emptyMap(),
+            viewport = ReaderLookupPopupViewport(390.0, 700.0), searchBarBottomDp = 86.0,
+            darkMode = false, eInkMode = false, iframeUrl = "https://appassets.androidplatform.net/popup/iframe.html",
+        ))
+    }
+
     private fun lookupResult(matched: String): LookupResult = LookupResult(
         matched = matched,
         term = TermResult(

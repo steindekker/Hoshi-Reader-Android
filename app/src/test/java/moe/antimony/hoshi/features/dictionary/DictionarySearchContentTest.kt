@@ -13,6 +13,15 @@ import org.junit.Test
 
 class DictionarySearchContentTest {
     @Test
+    fun sourceOnlyContentRequiresACompletedSuccessfulLookup() {
+        val completed = DictionarySearchUiState(lastQuery = "──猫。", hasSearched = true)
+        assertTrue(completed.hasLookupContent)
+        assertFalse(completed.copy(isSearching = true).hasLookupContent)
+        assertFalse(completed.copy(errorMessage = moe.antimony.hoshi.ui.UiText.Literal("failed")).hasLookupContent)
+        assertFalse(DictionarySearchUiState(query = "──猫。").hasLookupContent)
+    }
+
+    @Test
     fun blankQueryClearsSearchContentLikeIos() {
         val state = DictionarySearchContent.runLookup(
             query = "   ",

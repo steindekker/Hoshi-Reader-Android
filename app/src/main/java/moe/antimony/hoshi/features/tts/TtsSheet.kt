@@ -56,24 +56,15 @@ fun TtsSheet(
 }
 
 @Composable
-fun TtsSettingsView(onClose: () -> Unit, modifier: Modifier = Modifier) {
-    val viewModel: TtsViewModel = hiltViewModel()
-    val state by viewModel.preferencesLoadState.collectAsStateWithLifecycle()
-    SettingsDetailScaffold(state = state, title = stringResource(R.string.tts_title), onClose = onClose, onRetry = viewModel::retryPreferences, modifier = modifier) { padding, _ ->
-        TtsPanel(viewModel, null, null, Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding))
-    }
-}
-
-@Composable
-internal fun TtsPanel(viewModel: TtsViewModel, bookId: String?, onStart: (() -> Unit)?, modifier: Modifier) {
+internal fun TtsPanel(viewModel: TtsViewModel, bookId: String?, onStart: (() -> Unit)?, modifier: Modifier, section: TtsSettingsSection? = null) {
     val state by viewModel.preferencesLoadState.collectAsStateWithLifecycle()
     SettingsContent(state, modifier, viewModel::retryPreferences) { preferences ->
-        TtsLoadedPanel(viewModel, bookId, onStart, modifier, preferences)
+        if (preferences.settings.enabled) TtsLoadedPanel(viewModel, bookId, onStart, modifier, preferences, section)
     }
 }
 
 @Composable
-private fun TtsLoadedPanel(viewModel: TtsViewModel, bookId: String?, onStart: (() -> Unit)?, modifier: Modifier, preferences: TtsPreferences) {
+private fun TtsLoadedPanel(viewModel: TtsViewModel, bookId: String?, onStart: (() -> Unit)?, modifier: Modifier, preferences: TtsPreferences, section: TtsSettingsSection?) {
     val readingSettingsState by viewModel.readingSettingsLoadState.collectAsStateWithLifecycle()
     val readingSettings = (readingSettingsState as? SettingsLoadState.Loaded)?.value
     var colorRow by remember { mutableStateOf<SasayakiColorRow?>(null) }
@@ -86,12 +77,15 @@ private fun TtsLoadedPanel(viewModel: TtsViewModel, bookId: String?, onStart: ((
     val error by viewModel.error.collectAsStateWithLifecycle()
     val readingError by viewModel.readingError.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    val currentTab = section?.ordinal ?: selectedTab
     var editor by remember { mutableStateOf<TtsWord?>(null) }
     var customEditor by remember { mutableStateOf<TtsCustomSource?>(null) }
     var configureSource by remember { mutableStateOf<TtsOnlineSource?>(null) }
     val context = LocalContext.current
-    val sample = stringResource(if (preferences.settings.routing().enabled) R.string.tts_dialogue_sample else R.string.tts_sample)
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
+    val sample = stringResource(preferences.settings.sampleRes())
+    if (currentTab == 0) {
+        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
+    }
     DisposableEffect(viewModel) { onDispose { viewModel.stopPreview() } }
     Column(modifier) {
         if (onStart != null) {
@@ -100,22 +94,26 @@ private fun TtsLoadedPanel(viewModel: TtsViewModel, bookId: String?, onStart: ((
                 onRepeat = { viewModel.stopPreview(); viewModel.playback.repeat() },
                 onToggle = { viewModel.stopPreview(); if (playback.playing) viewModel.playback.pause() else if (playback.started) viewModel.playback.play() else onStart() })
         }
-        ReaderSheetTabs(
+        if (section == null) ReaderSheetTabs(
             labels = listOf(stringResource(R.string.tts_tab_voice), stringResource(R.string.tts_tab_dictionary), stringResource(R.string.settings_title)),
             selectedIndex = selectedTab, onSelected = { selectedTab = it },
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = if (onStart == null) 12.dp else 0.dp, bottom = 10.dp),
         )
-        if (selectedTab == 1) {
+        if (currentTab == 1) {
             TtsDictionaryList(
                 words = preferences.words.filter { bookId == null || it.bookId == null || it.bookId == bookId },
                 onAdd = { editor = TtsWord(UUID.randomUUID().toString(), "", "") },
                 onEdit = { editor = it }, modifier = Modifier.weight(1f),
             )
-        } else if (selectedTab == 2) {
+        } else if (currentTab == 2) {
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 28.dp)) {
-                ReaderSheetSwitchRow(stringResource(R.string.tts_use_ruby), preferences.settings.useRubyReadings,
-                    onCheckedChange = viewModel::useRubyReadings)
                 SettingsContent(readingSettingsState, Modifier.fillMaxWidth().padding(20.dp), viewModel::retryReadingSettings) { settings ->
+                    ReaderSheetSwitchRow(stringResource(R.string.tts_use_ruby), preferences.settings.useRubyReadings,
+                        onCheckedChange = viewModel::useRubyReadings)
+                    ReaderSheetSwitchRow(stringResource(R.string.tts_split_clauses), preferences.settings.splitAtClausePunctuation,
+                        onCheckedChange = { enabled -> viewModel.settings(preferences.settings.languageId) { it.copy(splitAtClausePunctuation = enabled) } })
+                    Text(stringResource(R.string.tts_split_clauses_hint), style = MaterialTheme.typography.bodySmall,
+                        color = hoshiSurfaces.muted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
                     SharedReaderPlaybackSettings(settings, viewModel::readingSettings, { colorRow = it })
                 }
                 readingError?.let { failure ->
@@ -125,9 +123,14 @@ private fun TtsLoadedPanel(viewModel: TtsViewModel, bookId: String?, onStart: ((
                 }
             }
         } else {
+            val singleVoiceSample = stringResource(preferences.settings.sampleRes(dialogue = false))
             TtsVoiceSettings(preferences.settings, catalog, engines, busy, preview, error ?: playback.error,
-                onSettings = viewModel::settings,
-                onPreview = { viewModel.preview(TtsSentence(0, 0, 0, sample), bookId) }, onStopPreview = viewModel::stopPreview,
+                onSettings = { viewModel.settings(preferences.settings.languageId, it) },
+                onPreview = { viewModel.preview(TtsSentence(0, 0, 0, sample), bookId, preferences) },
+                onPreviewVoice = { id ->
+                    val audition = preferences.copy(settings = preferences.settings.forVoice(id))
+                    viewModel.preview(TtsSentence(0, 0, 0, singleVoiceSample), bookId, audition)
+                }, onStopPreview = viewModel::stopPreview,
                 onRetry = { viewModel.dismissError(); viewModel.refresh(force = true) }, onConfigure = { configureSource = it },
                 onSystemSettings = {
                     try { context.startActivity(Intent("com.android.settings.TTS_SETTINGS")) }
@@ -140,12 +143,12 @@ private fun TtsLoadedPanel(viewModel: TtsViewModel, bookId: String?, onStart: ((
     }
     customEditor?.let { source ->
         TtsCustomSourceEditor(source, preferences.settings.customSources.any { it.id == source.id },
-            onTest = { draft, key, remove -> viewModel.testSource(draft, key, remove, sample) },
+            onTest = { draft, key, remove -> viewModel.testSource(draft, key, remove, sample, preferences.settings.languageId) },
             onSave = viewModel::saveSource, onDelete = { viewModel.deleteSource(source.id) }, onModels = viewModel::sourceModels,
-            onDismiss = { customEditor = null }, selectedVoice = preferences.settings.routingBySource[source.id]?.narration.orEmpty())
+            onDismiss = { customEditor = null }, selectedVoice = preferences.settings.routing(source.id).narration)
     }
     configureSource?.let { source ->
-        TtsSourceConfigurationSheet(source, preferences.settings.online[source.id] ?: TtsOnlineConfig(), viewModel) { configureSource = null }
+        TtsSourceConfigurationSheet(source, preferences.settings.online[source.id] ?: TtsOnlineConfig(), viewModel, preferences.settings) { configureSource = null }
     }
     colorRow?.let { row ->
         readingSettings?.let { settings ->
@@ -266,7 +269,7 @@ internal fun TtsFailure.messageRes(): Int = when (this) {
     TtsFailure.InvalidResponse -> R.string.tts_response_error
     TtsFailure.Storage -> R.string.tts_storage_error
     TtsFailure.NoEngine -> R.string.tts_no_engine
-    TtsFailure.MissingJapanese -> R.string.tts_missing_japanese
+    TtsFailure.MissingLanguage -> R.string.tts_missing_language
     TtsFailure.EngineUnavailable -> R.string.tts_engine_unavailable
     TtsFailure.Timeout -> R.string.tts_timeout
     TtsFailure.EmptyText -> R.string.tts_empty_text

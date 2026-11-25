@@ -8,6 +8,52 @@ import java.nio.file.Files
 
 class ProcessExitDiagnosticsTest {
     @Test
+    fun crashHistoryIsNewestFirstAndNativeCrashesRemainVisibleWithoutATrace() {
+        val report = report(
+            captured = listOf(CapturedCrashRecord(10_000, "old local stack")),
+            exits = listOf(exit(30_000, ProcessExitReason.NativeCrash, "crash")),
+        )
+
+        assertEquals(listOf(30_000L, 10_000L), report.crashes.map { it.timestampMillis })
+        assertEquals(ProcessExitReason.NativeCrash, report.crashes.first().reason)
+        assertTrue(report.toShareText().contains("Reason: Native crash"))
+    }
+
+    @Test
+    fun nativeAndJavaSystemCrashesBelongToCrashHistoryRatherThanOtherExits() {
+        val report = report(
+            exits = listOf(
+                exit(30_000, ProcessExitReason.NativeCrash, "native abort"),
+                exit(20_000, ProcessExitReason.JavaCrash, "java failure"),
+                exit(10_000, ProcessExitReason.LowMemory, "low memory"),
+            ),
+        )
+
+        val text = report.toShareText()
+
+        assertEquals(2, Regex("(?m)^Crash \\d+$").findAll(text).count())
+        assertEquals(1, Regex("(?m)^Exit \\d+$").findAll(text).count())
+        assertTrue(text.substringBefore("Exit 1").contains("Reason: Native crash"))
+        assertTrue(text.substringBefore("Exit 1").contains("Reason: Java crash"))
+        assertTrue(text.substringAfter("Exit 1").contains("Reason: Low memory kill"))
+    }
+
+    @Test
+    fun localAndSystemCrashRecordsStaySeparateWhileAppearingOnlyInCrashHistory() {
+        val report = report(
+            captured = listOf(CapturedCrashRecord(10_000, "Captured Hoshi crash\njava.lang.IllegalStateException: captured detail")),
+            exits = listOf(exit(10_000, ProcessExitReason.JavaCrash, "system detail")),
+        )
+
+        val text = report.toShareText()
+
+        assertEquals(2, Regex("(?m)^Crash \\d+$").findAll(text).count())
+        assertFalse(text.contains("Exit 1"))
+        assertEquals(1, Regex("java.lang.IllegalStateException: captured detail").findAll(text).count())
+        assertTrue(text.contains("Description: system detail"))
+    }
+
+    @Test
     fun diagnosticsExportPreservesOutputFailureAndRejectsMissingStream() {
         val failure = java.io.IOException("Document provider revoked access")
         val result = runCatching { saveDiagnosticsReport("report") { throw failure } }
@@ -23,6 +69,7 @@ class ProcessExitDiagnosticsTest {
             packageName = "moe.antimony.hoshi.debug",
             versionName = "0.1.5",
             versionCode = 105,
+            buildCommitSha = "0123456789abcdef0123456789abcdef01234567",
             sdkInt = 35,
             webViewPackageName = "com.google.android.webview",
             webViewVersionName = "125.0.6422.165",
@@ -57,14 +104,28 @@ class ProcessExitDiagnosticsTest {
         assertTrue(text.contains("Hoshi Diagnostics"))
         assertTrue(text.contains("Package: moe.antimony.hoshi.debug"))
         assertTrue(text.contains("Version: 0.1.5 (105)"))
+        assertTrue(text.contains("0123456789abcdef0123456789abcdef01234567"))
+        assertTrue(text.contains("https://github.com/HuangAntimony/Hoshi-Reader-Android/tree/0123456789abcdef0123456789abcdef01234567"))
         assertTrue(text.contains("Android SDK: 35"))
         assertTrue(text.contains("WebView: com.google.android.webview 125.0.6422.165"))
-        assertTrue(text.contains("Captured Crash 1"))
+        assertTrue(text.contains("Crash 1"))
         assertTrue(text.contains("java.util.regex.PatternSyntaxException"))
         assertTrue(text.contains("AnkiRepositoryKt.<clinit>"))
         assertTrue(text.contains("Reason: Java crash"))
         assertTrue(text.contains("Description: FATAL EXCEPTION: main"))
         assertTrue(text.contains("java.lang.IllegalStateException: boom"))
+    }
+
+    @Test
+    fun unknownBuildDoesNotProduceASnapshotLink() {
+        for (sha in listOf(null, "", "unknown", "abcdef0", "../main")) {
+            val report = ProcessExitDiagnosticsReport(
+                packageName = "moe.antimony.hoshi", versionName = "1.4.0",
+                versionCode = 10400, sdkInt = 35, records = emptyList(), buildCommitSha = sha,
+            )
+            assertEquals(null, report.buildCommit)
+            assertFalse(report.toShareText().contains("/tree/"))
+        }
     }
 
     @Test
@@ -198,4 +259,16 @@ class ProcessExitDiagnosticsTest {
         )
     }
 
+    private fun report(
+        captured: List<CapturedCrashRecord> = emptyList(),
+        exits: List<ProcessExitRecord> = emptyList(),
+    ) = ProcessExitDiagnosticsReport(
+        packageName = "moe.antimony.hoshi.debug", versionName = "1.4.0", versionCode = 10400,
+        sdkInt = 34, capturedCrashes = captured, records = exits,
+    )
+
+    private fun exit(time: Long, reason: ProcessExitReason, description: String) = ProcessExitRecord(
+        timestampMillis = time, reason = reason, status = 0, importance = 100,
+        pssKb = 0, rssKb = 0, description = description, trace = null,
+    )
 }

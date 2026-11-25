@@ -16,8 +16,197 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 class SasayakiPlaybackControllerDeferredCommandTest {
+    @Test fun previewsDelayAndRateUntilTheirSlidersFinish() {
+        val saved = mutableListOf<SasayakiPlaybackData>()
+        val sentences = mutableListOf<String?>()
+        val harness = controllerHarness(
+            matchData = SasayakiMatchData(
+                listOf(
+                    SasayakiMatch("first", 3.0, 4.0, "first", 0, 0, 5),
+                    SasayakiMatch("second", 4.0, 5.0, "second", 0, 5, 6),
+                ),
+                0,
+            ),
+            initialPosition = 4.2,
+            onMediaSentenceChanged = { sentences += it },
+            playbackRepository = object : SasayakiPlaybackRepository {
+                override suspend fun load(): SasayakiPlaybackData? = null
+                override suspend fun saveVolumeGainDb(value: Int) = Unit
+                override suspend fun save(playback: SasayakiPlaybackData) {
+                    saved += playback
+                }
+            },
+        )
+        val controller = harness.controller
+        controller.togglePlayback()
+        assertEquals("second", sentences.last())
+        val writesBeforeDrag = saved.size
+
+        controller.setDelay(0.25)
+        controller.setDelay(0.5)
+        controller.setRate(1.25f)
+        controller.setRate(1.5f)
+
+        assertEquals("first", sentences.last())
+        assertEquals(0.5, controller.delay, 0.0)
+        assertEquals(1.5f, controller.rate)
+        assertEquals(listOf("rate:1.25", "rate:1.5"), harness.engine.events.takeLast(2))
+        assertEquals(writesBeforeDrag, saved.size)
+
+        harness.engine.reportPosition(5_000, 30_000)
+        val progress = saved.last()
+        assertEquals(writesBeforeDrag + 1, saved.size)
+        assertEquals(5.0, progress.lastPosition, 0.0)
+        assertEquals(0.0, progress.delay, 0.0)
+        assertEquals(1f, progress.rate)
+
+        controller.saveDelay()
+        controller.saveRate()
+        assertEquals(
+            listOf(progress.copy(delay = 0.5), progress.copy(delay = 0.5, rate = 1.5f)),
+            saved.drop(writesBeforeDrag + 1),
+        )
+        assertEquals(0.5, controller.delay, 0.0)
+        assertEquals(1.5f, controller.rate)
+    }
+
+    @Test fun lateServiceReadinessDoesNotRestoreReleasedBookOrItsGain() {
+        var serviceReady: (() -> Unit)? = null
+        val harness = controllerHarness(
+            initialGainDb = 6,
+            onPlaybackStartRequested = { serviceReady = it },
+        )
+        harness.controller.togglePlayback()
+        harness.controller.release()
+        requireNotNull(serviceReady).invoke()
+
+        assertFalse(harness.preparer.prepared)
+        assertTrue(harness.engine.events.isEmpty())
+    }
+
+    @Test fun audioFailureClearsTheMediaSentence() {
+        val sentences = mutableListOf<String?>()
+        val harness = controllerHarness(
+            matchData = SasayakiMatchData(listOf(SasayakiMatch("first", 3.0, 4.0, "first", 0, 0, 5)), 0),
+            onMediaSentenceChanged = { sentences += it },
+        )
+        harness.controller.togglePlayback()
+        assertEquals("first", sentences.last())
+        harness.engine.callbacks!!.onError(IllegalStateException("fixture audio failure"))
+        assertEquals(null, sentences.last())
+        harness.controller.release()
+    }
+
+    @Test fun completionRefreshesMediaSentenceAtTheEndOfTheAudio() {
+        val sentences = mutableListOf<String?>()
+        val harness = controllerHarness(
+            matchData = SasayakiMatchData(listOf(SasayakiMatch("first", 3.0, 4.0, "first", 0, 0, 5)), 0),
+            onMediaSentenceChanged = { sentences += it },
+        )
+        harness.controller.togglePlayback()
+        assertEquals("first", sentences.last())
+        harness.engine.currentPositionMs = harness.engine.durationMs
+        harness.engine.callbacks!!.onCompletion()
+        assertEquals(null, sentences.last())
+        harness.controller.release()
+    }
+
+    @Test fun pauseBetweenTicksUsesActualAudioPositionForTheMediaSentence() {
+        for (playerPause in listOf(false, true)) {
+            val sentences = mutableListOf<String?>()
+            val harness = controllerHarness(
+                matchData = SasayakiMatchData(listOf(SasayakiMatch("first", 3.0, 4.0, "first", 0, 0, 5)), 0),
+                onMediaSentenceChanged = { sentences += it },
+            )
+            harness.controller.togglePlayback()
+            harness.engine.currentPositionMs = 4050
+            if (playerPause) harness.engine.callbacks!!.onPlaybackActiveChanged(false)
+            else harness.controller.pausePlayback(false)
+            assertEquals(null, sentences.last())
+            assertEquals(4.05, harness.controller.currentTime, 0.0)
+            harness.controller.setDelay(0.1)
+            assertEquals("first", sentences.last())
+            harness.controller.release()
+        }
+    }
+
+    @Test fun mediaSentenceFollowsPositionAndDelayIndependentlyOfReaderPresentation() {
+        val first = SasayakiMatch("first", 3.0, 4.0, "first", 1, 0, 5)
+        val second = SasayakiMatch("second", 5.0, 6.0, "second", 2, 0, 6)
+        val sentences = mutableListOf<String?>()
+        val displayed = mutableListOf<String>()
+        val harness = controllerHarness(
+            matchData = SasayakiMatchData(listOf(first, second), 0),
+            onMediaSentenceChanged = { sentences += it },
+            onCue = { cue, _, _ -> displayed += cue.text },
+        )
+        harness.controller.autoScroll = false
+        harness.controller.togglePlayback()
+        assertEquals(listOf("first"), sentences)
+        assertTrue(displayed.isEmpty())
+        harness.controller.pausePlayback(false)
+        assertEquals(listOf("first"), sentences)
+        harness.controller.seekTo(4.5)
+        assertEquals(listOf("first", null), sentences)
+        harness.controller.seekTo(5.5)
+        assertEquals("second", sentences.last())
+        assertFalse(harness.controller.isPlaying)
+        harness.controller.setDelay(2.0)
+        assertEquals("first", sentences.last())
+        harness.controller.updateMatchData(SasayakiMatchData(listOf(first.copy(text = "revised")), 0))
+        assertEquals("revised", sentences.last())
+        val count = sentences.size
+        harness.engine.reportPosition(5500, 30_000)
+        assertEquals(count, sentences.size)
+        harness.controller.updateMatchData(null)
+        assertEquals(null, sentences.last())
+        harness.controller.release()
+    }
+
     @get:Rule
     val temporaryFolder = TemporaryFolder()
+
+    @Test
+    fun restartStartsPausedCueAndIgnoresFixedSkipSetting() {
+        val cue = SasayakiMatch("current", 3.0, 5.0, "current", 0, 0, 7)
+        val displayed = mutableListOf<Pair<SasayakiMatch, Boolean>>()
+        val harness = controllerHarness(
+            matchData = SasayakiMatchData(listOf(cue), 0),
+            onCue = { match, reveal, _ -> displayed += match to reveal },
+        )
+        harness.controller.readerSkipButtonAction = SasayakiReaderSkipButtonAction.Seconds30
+
+        harness.controller.restartCurrentCue()
+
+        assertEquals(listOf("seek:3000", "start:1.0"), harness.engine.events)
+        assertTrue(harness.controller.isPlaying)
+        assertEquals(3.0, harness.controller.playback.lastPosition, 0.0)
+        assertTrue(displayed.contains(cue to true))
+
+        harness.engine.events.clear()
+        harness.controller.restartCurrentCue()
+        assertEquals(listOf("pause", "seek:3000", "start:1.0"), harness.engine.events)
+        assertTrue(harness.controller.isPlaying)
+    }
+
+    @Test
+    fun restartWithoutAnyCueDoesNotPrepareOrStartAudio() {
+        val harness = controllerHarness()
+        harness.controller.restartCurrentCue()
+        assertFalse(harness.preparer.prepared)
+        assertTrue(harness.engine.events.isEmpty())
+        assertFalse(harness.controller.isPlaying)
+    }
+
+    @Test
+    fun restartBeforeFirstCueDoesNotPrepareOrStartAudio() {
+        val harness = controllerHarness(matchData = SasayakiMatchData(
+            listOf(SasayakiMatch("first", 10.0, 12.0, "first", 0, 0, 5)), 0,
+        ))
+        harness.controller.restartCurrentCue()
+        assertFalse(harness.preparer.prepared)
+        assertTrue(harness.engine.events.isEmpty())
+    }
 
     @Test
     fun skipForwardPreparesAudioBeforeSeekingWhenEngineIsNotLoadedYet() {
@@ -298,13 +487,257 @@ class SasayakiPlaybackControllerDeferredCommandTest {
         assertTrue(harness.controller.isPlaying)
     }
 
+    @Test
+    fun pageTurnPlaysForwardPausesAtBoundaryBeforeDispatchAndBackwardOnlySeeks() {
+        val cues = listOf(SasayakiMatch("page", 4.0, 12.0, "page", 0, 0, 4),
+            SasayakiMatch("next", 8.0, 10.0, "next", 0, 4, 4))
+        val displayed = mutableListOf<String>()
+        val harness = controllerHarness(matchData = SasayakiMatchData(cues, 0),
+            onCue = { cue, _, _ -> displayed += cue.id })
+        harness.controller.handlePageChanged(0, listOf("page"), true)
+        assertTrue(harness.controller.isPlaying)
+        assertTrue(harness.engine.events.contains("seek:4000"))
+        displayed.clear()
+        harness.engine.reportPosition(8100, 90_000)
+        assertFalse(harness.controller.isPlaying)
+        assertTrue(displayed.isEmpty())
+        harness.engine.events.clear()
+        harness.controller.handlePageChanged(0, listOf("page"), false)
+        assertFalse(harness.controller.isPlaying)
+        assertTrue(harness.engine.events.contains("seek:4000"))
+        assertFalse(harness.engine.events.any { it.startsWith("start") })
+    }
+
+    @Test
+    fun passivePageRefreshOutsidePlaybackDoesNotBlockFollowingOrChangeTransport() {
+        var chapter = 0
+        val displayed = mutableListOf<String>()
+        val harness = controllerHarness(
+            matchData = SasayakiMatchData(listOf(
+                SasayakiMatch("past", 0.0, 2.0, "past", 0, 0, 4),
+                SasayakiMatch("playing", 4.0, 6.0, "playing", 0, 4, 4),
+                SasayakiMatch("future", 20.0, 22.0, "future", 0, 8, 4),
+            ), 0),
+            initialPosition = 4.5,
+            getCurrentChapterIndex = { chapter },
+            onCue = { cue, _, _ -> displayed += cue.id },
+        )
+        harness.controller.togglePlayback()
+        for ((pageChapter, ids) in listOf(1 to emptyList(), 0 to listOf("future"), 0 to listOf("past"))) {
+            chapter = pageChapter
+            displayed.clear()
+            harness.engine.events.clear()
+            harness.controller.handlePageChanged(chapter, ids, null)
+            assertTrue(harness.engine.events.isEmpty())
+            assertEquals(4.5, harness.controller.currentTime, 0.0)
+            harness.engine.reportPosition(4500, 90_000)
+            assertEquals("Follow must survive passive refresh: $ids", listOf("playing"), displayed)
+            assertTrue(harness.controller.isPlaying)
+        }
+
+        // An explicit turn to a page without cues still pauses without seeking.
+        displayed.clear()
+        harness.controller.handlePageChanged(chapter, emptyList(), false)
+        assertFalse(harness.controller.isPlaying)
+        assertEquals(4.5, harness.controller.currentTime, 0.0)
+        assertTrue(displayed.isEmpty())
+    }
+
+    @Test
+    fun playbackCommandsAfterCueLessPageCanFollowAudioAgain() {
+        val cue = SasayakiMatch("audio", 4.0, 6.0, "audio", 0, 0, 5)
+        for (command in listOf("play", "next", "seek")) {
+            var chapter = 1
+            val displayed = mutableListOf<String>()
+            val harness = controllerHarness(
+                matchData = SasayakiMatchData(listOf(cue), 0),
+                initialPosition = if (command == "play") 4.5 else 3.5,
+                getCurrentChapterIndex = { chapter },
+                onCue = { match, _, _ -> displayed += match.id },
+            )
+            harness.controller.handlePageChanged(chapter, emptyList(), true)
+            assertFalse(harness.controller.isPlaying)
+            assertTrue(displayed.isEmpty())
+
+            when (command) {
+                "play" -> harness.controller.togglePlayback()
+                "next" -> harness.controller.nextCue()
+                "seek" -> harness.controller.seekTo(4.0)
+            }
+            assertTrue("$command must release the empty page's cue restriction", displayed.contains("audio"))
+            chapter = 0
+            harness.controller.handlePageChanged(chapter, listOf("audio"), null)
+            if (!harness.controller.isPlaying) harness.controller.togglePlayback()
+            harness.engine.reportPosition(6100, 90_000)
+            assertFalse("$command must still stop at the followed page end", harness.controller.isPlaying)
+        }
+    }
+
+    @Test
+    fun playAfterPageEndCanFollowAndStopAtTheNextPage() {
+        val displayed = mutableListOf<String>()
+        val harness = controllerHarness(
+            matchData = SasayakiMatchData(listOf(
+                SasayakiMatch("first", 4.0, 6.0, "first", 0, 0, 5),
+                SasayakiMatch("second", 6.0, 8.0, "second", 0, 5, 6),
+            ), 0),
+            onCue = { cue, _, _ -> displayed += cue.id },
+        )
+        harness.controller.handlePageChanged(0, listOf("first"), true)
+        harness.engine.reportPosition(6100, 90_000)
+        assertFalse(harness.controller.isPlaying)
+        displayed.clear()
+
+        harness.controller.togglePlayback()
+        assertTrue(harness.controller.isPlaying)
+        assertTrue(displayed.contains("second"))
+        harness.controller.handlePageChanged(0, listOf("second"), null)
+        harness.engine.reportPosition(8100, 90_000)
+        assertFalse(harness.controller.isPlaying)
+    }
+
+    @Test
+    fun passivePageRefreshBindsNewPageEvenWhenAudioHasNotReachedIt() {
+        val cue = SasayakiMatch("destination", 4.0, 6.0, "destination", 1, 0, 11)
+        val harness = controllerHarness(
+            matchData = SasayakiMatchData(listOf(cue), 0), initialPosition = 3.5,
+        )
+        harness.controller.togglePlayback()
+        harness.engine.events.clear()
+        harness.controller.handlePageChanged(1, listOf("destination"), null)
+        assertTrue(harness.engine.events.isEmpty())
+        assertEquals(3.5, harness.controller.currentTime, 0.0)
+        harness.engine.reportPosition(6100, 90_000)
+        assertFalse(harness.controller.isPlaying)
+    }
+
+    @Test
+    fun passivePageRefreshAtMillisecondSeekTargetStillStopsAtPageEnd() {
+        val cue = SasayakiMatch("page", 4.1000000000000005, 6.0, "page", 0, 0, 4)
+        val harness = controllerHarness(
+            matchData = SasayakiMatchData(listOf(cue), 0), initialPosition = 4.1,
+        )
+        harness.controller.handlePageChanged(0, listOf("page"), null)
+        harness.controller.togglePlayback()
+        harness.engine.reportPosition(6100, 90_000)
+        assertFalse(harness.controller.isPlaying)
+    }
+
+    @Test
+    fun nextCuePageRefreshPreservesTransportAndStopsAtTheNewPageEnd() {
+        val harness = controllerHarness(matchData = SasayakiMatchData(listOf(
+            SasayakiMatch("first", 4.0, 6.0, "first", 0, 0, 4),
+            SasayakiMatch("second", 8.0, 10.0, "second", 0, 4, 4),
+            SasayakiMatch("third", 12.0, 14.0, "third", 0, 8, 4),
+        ), 0))
+        for (playing in listOf(false, true)) {
+            harness.controller.handlePageChanged(0, listOf("first"), playing)
+            harness.controller.nextCue()
+            assertEquals(8.0, harness.controller.currentTime, 0.0)
+            assertEquals(playing, harness.controller.isPlaying)
+            harness.engine.events.clear()
+
+            // Reader reports the followed page without issuing another transport command.
+            harness.controller.handlePageChanged(0, listOf("second"), null)
+            assertTrue(harness.engine.events.isEmpty())
+            assertEquals(8.0, harness.controller.currentTime, 0.0)
+            assertEquals(playing, harness.controller.isPlaying)
+
+            if (!playing) harness.controller.togglePlayback()
+            harness.engine.reportPosition(10_100, 90_000)
+            assertFalse(harness.controller.isPlaying)
+        }
+    }
+
+    @Test
+    fun emptyPageDoesNotSeekRefreshDoesNotStartAndDisablingRemovesBoundary() {
+        val cue = SasayakiMatch("page", 4.0, 6.0, "page", 0, 0, 4)
+        val harness = controllerHarness(matchData = SasayakiMatchData(listOf(cue), 0))
+        harness.controller.handlePageChanged(0, listOf("page"), null)
+        assertFalse(harness.preparer.prepared)
+        harness.controller.handlePageChanged(0, listOf("page"), true)
+        harness.engine.events.clear()
+        harness.controller.handlePageChanged(0, emptyList(), true)
+        assertFalse(harness.controller.isPlaying)
+        assertFalse(harness.engine.events.any { it.startsWith("seek") })
+        harness.controller.handlePageChanged(0, listOf("page"), true)
+        harness.controller.clearPageRange()
+        harness.engine.reportPosition(7000, 90_000)
+        assertTrue(harness.controller.isPlaying)
+    }
+
+    @Test
+    fun releasedControllerRejectsLatePageCallback() {
+        val cue = SasayakiMatch("page", 4.0, 6.0, "page", 0, 0, 4)
+        val harness = controllerHarness(matchData = SasayakiMatchData(listOf(cue), 0))
+        harness.controller.release()
+        harness.controller.handlePageChanged(0, listOf("page"), true)
+        assertFalse(harness.preparer.prepared)
+    }
+
+    @Test
+    fun pageSeekFromLaterPositionAppliesTargetBeforeCheckingPageEnd() {
+        val cue = SasayakiMatch("page", 4.0, 6.0, "page", 0, 0, 4)
+        val harness = controllerHarness(matchData = SasayakiMatchData(listOf(cue), 0), initialPosition = 20.0)
+        harness.controller.handlePageChanged(0, listOf("page"), true)
+        assertEquals(4.0, harness.controller.currentTime, 0.0)
+        assertTrue(harness.controller.isPlaying)
+    }
+
+    @Test
+    fun pageDisableOrNewEmptyPageCancelsPendingPageSeekPlayback() {
+        val cue = SasayakiMatch("page", 4.0, 6.0, "page", 0, 0, 4)
+        val harness = controllerHarness(matchData = SasayakiMatchData(listOf(cue), 0))
+        harness.engine.completeSeeksImmediately = false
+        harness.controller.handlePageChanged(0, listOf("page"), true)
+        harness.controller.clearPageRange()
+        harness.engine.callbacks!!.onSeekComplete()
+        assertFalse(harness.controller.isPlaying)
+        harness.controller.handlePageChanged(0, listOf("page"), true)
+        harness.controller.handlePageChanged(0, emptyList(), false)
+        harness.engine.callbacks!!.onSeekComplete()
+        assertFalse(harness.controller.isPlaying)
+    }
+
+    @Test
+    fun matchesInOtherChaptersDoNotRemoveCurrentPageBoundary() {
+        val cue = SasayakiMatch("page", 4.0, 6.0, "page", 0, 0, 4)
+        val harness = controllerHarness(matchData = SasayakiMatchData(listOf(cue), 0))
+        harness.controller.handlePageChanged(0, listOf("page"), true)
+        harness.controller.updateMatchData(SasayakiMatchData(listOf(cue,
+            SasayakiMatch("other", 9.0, 10.0, "other", 1, 0, 5)), 0))
+        harness.engine.reportPosition(7000, 90_000)
+        assertFalse(harness.controller.isPlaying)
+    }
+
+    @Test
+    fun explicitPauseCancelsPageSeekAndLaterManualSeekOwnsItsCompletion() {
+        val cue = SasayakiMatch("page", 4.0, 6.0, "page", 0, 0, 4)
+        val harness = controllerHarness(matchData = SasayakiMatchData(listOf(cue), 0))
+        harness.engine.completeSeeksImmediately = false
+        harness.controller.handlePageChanged(0, listOf("page"), true)
+        harness.controller.pausePlayback(restoreTemporaryPosition = false)
+        harness.engine.callbacks!!.onSeekComplete()
+        assertFalse(harness.controller.isPlaying)
+        harness.controller.handlePageChanged(0, listOf("page"), true)
+        harness.controller.seekTo(5.0)
+        harness.controller.clearPageRange()
+        harness.engine.callbacks!!.onSeekComplete()
+        assertEquals(5.0, harness.controller.currentTime, 0.0)
+    }
+
     private fun controllerHarness(
         matchData: SasayakiMatchData? = null,
         initialPosition: Double = 3.5,
+        getCurrentChapterIndex: () -> Int = { 0 },
         onCue: (SasayakiMatch, Boolean, SasayakiCueRevealSource) -> Unit = { _, _, _ -> },
         onClearCue: () -> Unit = {},
+        onMediaSentenceChanged: (String?) -> Unit = {},
+        initialGainDb: Int = 0,
+        onPlaybackStartRequested: (() -> Unit) -> Unit = { it() },
+        playbackRepository: SasayakiPlaybackRepository = NoOpPlaybackRepository,
     ): ControllerHarness {
-        val bookRoot = temporaryFolder.newFolder("book")
+        val bookRoot = temporaryFolder.newFolder()
         val audioFile = bookRoot.resolve("Sasayaki/sasayaki_audio.m4b").also { file ->
             file.parentFile?.mkdirs()
             file.writeText("audio")
@@ -312,25 +745,27 @@ class SasayakiPlaybackControllerDeferredCommandTest {
         val engine = FakePlaybackEngine()
         val preparer = FakePlaybackPreparer(engine)
         val controller = SasayakiPlaybackController(
-            context = FakeContext(temporaryFolder.newFolder("cache")),
+            context = FakeContext(temporaryFolder.newFolder()),
             bookRoot = bookRoot,
-            playbackRepository = NoOpPlaybackRepository,
+            playbackRepository = playbackRepository,
             bookTitle = "Book",
             bookCoverFile = null,
             matchData = matchData,
             initialPlayback = SasayakiPlaybackData(
                 lastPosition = initialPosition,
                 audioFileName = audioFile.name,
+                volumeGainDb = initialGainDb,
             ),
             persistenceScope = CoroutineScope(Dispatchers.Unconfined),
             persistenceDispatcher = Dispatchers.Unconfined,
-            getCurrentChapterIndex = { 0 },
+            getCurrentChapterIndex = getCurrentChapterIndex,
             onCue = onCue,
             onClearCue = onClearCue,
             playbackPreparer = preparer,
-            onPlaybackStartRequested = { onReady -> onReady() },
+            onPlaybackStartRequested = onPlaybackStartRequested,
             restoreAudioOnCreate = false,
             tickScheduler = NoOpTickScheduler,
+            onMediaSentenceChanged = onMediaSentenceChanged,
         )
         return ControllerHarness(controller = controller, preparer = preparer, engine = engine)
     }
@@ -351,6 +786,8 @@ class SasayakiPlaybackControllerDeferredCommandTest {
 
     private object NoOpPlaybackRepository : SasayakiPlaybackRepository {
         override suspend fun load(): SasayakiPlaybackData? = null
+
+        override suspend fun saveVolumeGainDb(value: Int) = Unit
 
         override suspend fun save(playback: SasayakiPlaybackData) = Unit
     }
@@ -387,6 +824,13 @@ class SasayakiPlaybackControllerDeferredCommandTest {
         override var durationMs: Int = 30_000
         override var currentPositionMs: Int = 0
         var callbacks: SasayakiAudioRestoreCallbacks? = null
+        var completeSeeksImmediately = true
+
+        fun reportPosition(positionMs: Int, durationMs: Int) {
+            currentPositionMs = positionMs
+            this.durationMs = durationMs
+            callbacks!!.onPositionChanged(positionMs, durationMs)
+        }
 
         override fun start(rate: Float) {
             events += "start:$rate"
@@ -396,6 +840,10 @@ class SasayakiPlaybackControllerDeferredCommandTest {
             events += "pause"
         }
 
+        override val volumeGainError = null
+
+        override fun setVolumeGainDb(gainDb: Int) = Unit
+
         override fun setRate(rate: Float) {
             events += "rate:$rate"
         }
@@ -403,7 +851,7 @@ class SasayakiPlaybackControllerDeferredCommandTest {
         override fun seekTo(positionMs: Int) {
             currentPositionMs = positionMs
             events += "seek:$positionMs"
-            callbacks?.onSeekComplete()
+            if (completeSeeksImmediately) callbacks?.onSeekComplete()
         }
 
         override fun release() {
