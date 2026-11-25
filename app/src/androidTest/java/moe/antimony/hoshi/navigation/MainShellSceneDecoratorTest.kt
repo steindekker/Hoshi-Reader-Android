@@ -87,6 +87,7 @@ class MainShellSceneDecoratorTest {
                 when (route) {
                     AppRoute.BooksRoute -> Text("Books content")
                     AppRoute.DictionaryRoute -> Text("Dictionary content")
+                    AppRoute.LiveRoute -> Text("Live content")
                     AppRoute.StatisticsRoute -> Text("Statistics content")
                     AppRoute.StatisticsSettingsRoute -> Text("Statistics settings content")
                     is AppRoute.StatisticsBookRoute -> Text("Statistics book content")
@@ -140,6 +141,7 @@ class MainShellSceneDecoratorTest {
         val currentEntries = when (selectedTab) {
             MainTab.Books -> booksEntries
             MainTab.Dictionary -> dictionaryEntries
+            MainTab.Live -> booksEntries
             MainTab.Statistics -> statisticsEntries
             MainTab.Settings -> settingsEntries
         }
