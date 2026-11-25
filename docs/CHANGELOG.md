@@ -7,6 +7,7 @@ Release notes before v1.3.0 are in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md).
 
 ### Added
 
+- Hide or unhide books from the bookshelf via a book's long-press menu or selection mode. Long-press the **Books** title to toggle showing hidden books; hidden books stay hidden on app launch and are skipped when automatically opening the last read book.
 - Boost or reduce playback volume for individual audiobooks.
 - Sync your library and reading activity with Hoshi on iOS through Google Drive and download books on demand, even on devices without Google Play Services.
 - Show reading progress in pages for the current chapter and the whole book.

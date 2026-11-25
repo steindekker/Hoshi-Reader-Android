@@ -173,7 +173,13 @@
     <string name="bookshelf_covers">Covers</string>
     <string name="bookshelf_cover_mode_show">Show</string>
     <string name="bookshelf_cover_mode_blur">Blur</string>
-    <string name="bookshelf_cover_mode_hide">Hide</string>
+    <string name="bookshelf_cover_mode_hide" comment="Bookshelf cover display mode that hides covers; intentionally matches the Hide book action.">Hide</string>
+    <string name="bookshelf_hide" comment="Context menu action to hide a book from the shelf; intentionally matches the Hide cover mode.">Hide</string>
+    <string name="bookshelf_unhide">Unhide</string>
+    <string name="bookshelf_hide_selected_books">Hide selected books</string>
+    <string name="bookshelf_unhide_selected_books">Unhide selected books</string>
+    <string name="bookshelf_hidden_book">Hidden book</string>
+    <string name="bookshelf_showing_hidden">Showing hidden books</string>
     <string name="bookshelf_import_epub">Import EPUB</string>
     <string name="bookshelf_sync" comment="Bookshelf sync action, intentionally matching the Statistics settings Sync heading.">Sync</string>
     <string name="bookshelf_move">Move</string>

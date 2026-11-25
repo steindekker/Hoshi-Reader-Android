@@ -171,7 +171,13 @@
     <string name="bookshelf_covers">封面</string>
     <string name="bookshelf_cover_mode_show">显示</string>
     <string name="bookshelf_cover_mode_blur">模糊</string>
-    <string name="bookshelf_cover_mode_hide">隐藏</string>
+    <string name="bookshelf_cover_mode_hide" comment="Bookshelf cover display mode that hides covers; intentionally matches the Hide book action.">隐藏</string>
+    <string name="bookshelf_hide" comment="Context menu action to hide a book from the shelf; intentionally matches the Hide cover mode.">隐藏</string>
+    <string name="bookshelf_unhide">取消隐藏</string>
+    <string name="bookshelf_hide_selected_books">隐藏所选书籍</string>
+    <string name="bookshelf_unhide_selected_books">取消隐藏所选书籍</string>
+    <string name="bookshelf_hidden_book">已隐藏书籍</string>
+    <string name="bookshelf_showing_hidden">正在显示已隐藏书籍</string>
     <string name="bookshelf_import_epub">导入 EPUB</string>
     <string name="bookshelf_sync" comment="Bookshelf sync action, intentionally matching the Statistics settings Sync heading.">同步</string>
     <string name="bookshelf_move">移动</string>

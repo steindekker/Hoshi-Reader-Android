@@ -12,6 +12,7 @@ import moe.antimony.hoshi.features.audio.AudioSettingsRepository
 import moe.antimony.hoshi.features.audio.AudioRequestHandler
 import moe.antimony.hoshi.features.audio.LocalAudioRepository
 import moe.antimony.hoshi.features.backup.HoshiBackupRepository
+import moe.antimony.hoshi.features.bookshelf.hidden.HiddenBooksRepository
 import moe.antimony.hoshi.features.dictionary.DictionarySettingsRepository
 import moe.antimony.hoshi.features.reader.ReaderBookDocumentCache
 import moe.antimony.hoshi.features.reader.ReaderPageCountRepository
@@ -66,6 +67,7 @@ internal class HoshiUiDependencies @Inject constructor(
     private val updateSchedulerProvider: Lazy<UpdateScheduler>,
     private val profileRepositoryProvider: Lazy<ProfileRepository>,
     private val profileActivationServiceProvider: Lazy<ProfileActivationService>,
+    private val hiddenBooksRepositoryProvider: Lazy<HiddenBooksRepository>,
 ) {
     val appScope: CoroutineScope get() = appScopeProvider.get()
     val bookRepository: BookRepository get() = bookRepositoryProvider.get()
@@ -97,6 +99,7 @@ internal class HoshiUiDependencies @Inject constructor(
     val updateScheduler: UpdateScheduler get() = updateSchedulerProvider.get()
     val profileRepository: ProfileRepository get() = profileRepositoryProvider.get()
     val profileActivationService: ProfileActivationService get() = profileActivationServiceProvider.get()
+    val hiddenBooksRepository: HiddenBooksRepository get() = hiddenBooksRepositoryProvider.get()
 }
 
 internal val LocalHoshiUiDependencies = staticCompositionLocalOf<HoshiUiDependencies> {

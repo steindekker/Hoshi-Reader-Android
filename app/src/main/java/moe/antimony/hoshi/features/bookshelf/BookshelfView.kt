@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -70,6 +71,8 @@ import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.ReportProblem
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Translate
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import moe.antimony.hoshi.ui.HoshiAlertDialog as AlertDialog
 import moe.antimony.hoshi.ui.HoshiButton as Button
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -117,7 +120,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -142,6 +147,10 @@ import moe.antimony.hoshi.epub.BookRepository
 import moe.antimony.hoshi.epub.BookShelf
 import moe.antimony.hoshi.epub.BookReadingState
 import moe.antimony.hoshi.epub.BookSortOption
+import moe.antimony.hoshi.features.bookshelf.hidden.HiddenBooksViewModel
+import moe.antimony.hoshi.features.bookshelf.hidden.filterVisibleBooks
+import moe.antimony.hoshi.features.bookshelf.hidden.filterVisibleSections
+import moe.antimony.hoshi.features.bookshelf.hidden.shouldUnhideSelectedBooks
 import moe.antimony.hoshi.features.reader.ReaderSettings
 import moe.antimony.hoshi.features.sync.DriveAuthStatus
 import moe.antimony.hoshi.features.sync.SyncDirection
@@ -188,6 +197,8 @@ fun BookshelfView(
     )
     val booksViewModel: BookshelfViewModel = hiltViewModel()
     val uiState by booksViewModel.uiState.collectAsStateWithLifecycle()
+    val hiddenBooksViewModel: HiddenBooksViewModel = hiltViewModel()
+    val hiddenBooksState by hiddenBooksViewModel.uiState.collectAsStateWithLifecycle()
     val profileState by appContainer.profileRepository.state.collectAsStateWithLifecycle()
     var sortMenuExpanded by remember { mutableStateOf(false) }
     var contextMenuTarget by remember { mutableStateOf<BookContextMenuTarget?>(null) }
@@ -298,13 +309,19 @@ fun BookshelfView(
         }
     }
 
+    val visibleBookEntries = remember(uiState.bookEntries, hiddenBooksState.hiddenBookIds, hiddenBooksState.showHiddenBooks) {
+        filterVisibleBooks(uiState.bookEntries, hiddenBooksState.hiddenBookIds, hiddenBooksState.showHiddenBooks)
+    }
+    val visibleSections = remember(uiState.sections, hiddenBooksState.hiddenBookIds, hiddenBooksState.showHiddenBooks) {
+        filterVisibleSections(uiState.sections, hiddenBooksState.hiddenBookIds, hiddenBooksState.showHiddenBooks)
+    }
     Box(modifier = modifier.fillMaxSize()) {
     BooksTab(
         modifier = Modifier.fillMaxSize(),
         layoutSpec = layoutSpec,
-        bookEntries = uiState.bookEntries,
+        bookEntries = visibleBookEntries,
         remoteBookEntries = uiState.remoteBookEntries,
-        sections = uiState.sections,
+        sections = visibleSections,
         bookProgressById = uiState.bookProgressById,
         bookReadingStateById = uiState.bookReadingStateById,
         remoteProgressById = uiState.remoteProgressById,
@@ -315,7 +332,7 @@ fun BookshelfView(
         coverMode = uiState.coverMode,
         hideCollapsedShelfThumbnails = uiState.hideCollapsedShelfThumbnails,
         sortOption = uiState.sortOption,
-        hasLoadedBooks = uiState.hasLoadedBooks,
+        hasLoadedBooks = uiState.hasLoadedBooks && hiddenBooksState.isLoaded,
         isLoading = uiState.isLoading,
         blockingProgressMessage = uiState.blockingProgressMessage,
         shelves = uiState.shelves,
@@ -384,6 +401,14 @@ fun BookshelfView(
             )
         },
         onDownloadBook = { booksViewModel.downloadBooks(listOf(it)) },
+        hiddenBookIds = hiddenBooksState.hiddenBookIds,
+        showHiddenBooks = hiddenBooksState.showHiddenBooks,
+        onToggleShowHiddenBooks = hiddenBooksViewModel::toggleShowHidden,
+        onSetBookHidden = { entry, hidden -> hiddenBooksViewModel.setHidden(entry.metadata.id, hidden) },
+        onSetSelectedBooksHidden = { hidden ->
+            hiddenBooksViewModel.setHidden(uiState.selectedBookIds, hidden)
+            booksViewModel.clearSelection()
+        },
     )
         SnackbarHost(
             hostState = snackbarHostState,
@@ -960,6 +985,11 @@ internal fun BooksTab(
     driveAuthStatus: DriveAuthStatus?,
     onSyncBook: (BookEntry, SyncDirection?) -> Unit,
     onDownloadBook: (BookEntry) -> Unit,
+    hiddenBookIds: Set<String> = emptySet(),
+    showHiddenBooks: Boolean = false,
+    onToggleShowHiddenBooks: () -> Unit = {},
+    onSetBookHidden: (BookEntry, Boolean) -> Unit = { _, _ -> },
+    onSetSelectedBooksHidden: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val fileTaskBlocked = blockingProgressMessage != null
@@ -978,15 +1008,19 @@ internal fun BooksTab(
                 shelves = shelves,
                 isSelecting = isSelecting,
                 selectedCount = selectedBookIds.size,
+                unhideSelectedBooks = shouldUnhideSelectedBooks(selectedBookIds, hiddenBookIds),
+                showHiddenBooks = showHiddenBooks,
                 enabled = !fileTaskBlocked,
                 onStartSelecting = onStartSelecting,
                 onClearSelection = onClearSelection,
                 onMoveSelectedBooks = onMoveSelectedBooks,
                 onCreateShelfForSelectedBooks = onCreateShelfForSelectedBooks,
+                onSetSelectedBooksHidden = onSetSelectedBooksHidden,
                 onDeleteSelectedBooks = onDeleteSelectedBooks,
                 onManageShelves = onManageShelves,
                 onImportFiles = onImportFiles,
                 onImportFolder = onImportFolder,
+                onToggleShowHiddenBooks = onToggleShowHiddenBooks,
             )
         },
     ) { innerPadding ->
@@ -1104,6 +1138,7 @@ internal fun BooksTab(
                                     contentType = { "book" },
                                 ) { entry ->
                                     Box {
+                                        val isBookHidden = entry.metadata.id in hiddenBookIds
                                         BookGridCell(
                                             entry = entry,
                                             progress = bookProgressById[entry.metadata.id] ?: 0.0,
@@ -1113,6 +1148,7 @@ internal fun BooksTab(
                                             layoutSpec = layoutSpec,
                                             isSelecting = isSelecting,
                                             isSelected = entry.metadata.id in selectedBookIds,
+                                            isHidden = isBookHidden,
                                             enabled = !fileTaskBlocked,
                                             onOpen = { onOpenBook(entry) },
                                             onToggleSelected = { onToggleSelectedBook(entry) },
@@ -1142,6 +1178,8 @@ internal fun BooksTab(
                                             syncSettings = syncSettings,
                                             onSyncBook = onSyncBook,
                                             onDownloadBook = onDownloadBook,
+                                            isHidden = isBookHidden,
+                                            onSetBookHidden = onSetBookHidden,
                                         )
                                     }
                                 }
@@ -1219,7 +1257,7 @@ internal fun BooksTab(
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 private fun BooksTopAppBar(
     layoutSpec: MainShellLayoutSpec,
     sortMenuExpanded: Boolean,
@@ -1229,29 +1267,65 @@ private fun BooksTopAppBar(
     shelves: List<BookShelf>,
     isSelecting: Boolean,
     selectedCount: Int,
+    unhideSelectedBooks: Boolean,
+    showHiddenBooks: Boolean,
     enabled: Boolean,
     onStartSelecting: () -> Unit,
     onClearSelection: () -> Unit,
     onMoveSelectedBooks: (String?) -> Unit,
     onCreateShelfForSelectedBooks: () -> Unit,
+    onSetSelectedBooksHidden: (Boolean) -> Unit,
     onDeleteSelectedBooks: () -> Unit,
     onManageShelves: () -> Unit,
     onImportFiles: () -> Unit,
     onImportFolder: () -> Unit,
+    onToggleShowHiddenBooks: () -> Unit,
 ) {
     var moveMenuExpanded by remember { mutableStateOf(false) }
     var importMenuExpanded by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
+    val titleInteraction = remember { MutableInteractionSource() }
     CenterAlignedTopAppBar(
         title = {
-            Text(
-                text = if (isSelecting) {
-                    stringResource(R.string.bookshelf_selected_count_format, selectedCount)
-                } else {
-                    stringResource(R.string.main_tab_books)
-                },
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
+            if (isSelecting) {
+                Text(
+                    text = stringResource(R.string.bookshelf_selected_count_format, selectedCount),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            } else {
+                Row(
+                    modifier = Modifier
+                        .testTag("bookshelf-title")
+                        .combinedClickable(
+                            enabled = enabled,
+                            interactionSource = titleInteraction,
+                            indication = null,
+                            onClick = {},
+                            onLongClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onToggleShowHiddenBooks()
+                            },
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.main_tab_books),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (showHiddenBooks) {
+                        Icon(
+                            imageVector = Icons.Rounded.VisibilityOff,
+                            contentDescription = stringResource(R.string.bookshelf_showing_hidden),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
+            }
         },
         navigationIcon = {
             if (isSelecting) {
@@ -1341,6 +1415,18 @@ private fun BooksTopAppBar(
                             )
                         }
                     }
+                }
+                IconButton(
+                    onClick = { onSetSelectedBooksHidden(!unhideSelectedBooks) },
+                    enabled = enabled && selectedCount > 0,
+                    modifier = Modifier.testTag("bookshelf-hide-selected"),
+                ) {
+                    Icon(
+                        imageVector = if (unhideSelectedBooks) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
+                        contentDescription = stringResource(
+                            if (unhideSelectedBooks) R.string.bookshelf_unhide_selected_books else R.string.bookshelf_hide_selected_books,
+                        ),
+                    )
                 }
                 IconButton(
                     onClick = onDeleteSelectedBooks,
@@ -1480,6 +1566,7 @@ private fun BookGridCell(
     layoutSpec: MainShellLayoutSpec,
     isSelecting: Boolean,
     isSelected: Boolean,
+    isHidden: Boolean = false,
     enabled: Boolean,
     onOpen: () -> Unit,
     onToggleSelected: () -> Unit,
@@ -1507,6 +1594,23 @@ private fun BookGridCell(
                 coverSource = coverSource,
                 coverMode = coverMode,
             )
+            if (isHidden) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .background(hoshiSurfaces.page, RoundedCornerShape(100))
+                        .size(28.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.VisibilityOff,
+                        contentDescription = stringResource(R.string.bookshelf_hidden_book),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
             if (isSelecting) {
                 Icon(
                     imageVector = if (isSelected) {
@@ -1685,6 +1789,8 @@ internal fun BookContextMenu(
     syncSettings: SyncSettings,
     onSyncBook: (BookEntry, SyncDirection?) -> Unit,
     onDownloadBook: (BookEntry) -> Unit,
+    isHidden: Boolean = false,
+    onSetBookHidden: (BookEntry, Boolean) -> Unit = { _, _ -> },
 ) {
     var moveMenuExpanded by remember { mutableStateOf(false) }
     var syncMenuExpanded by remember { mutableStateOf(false) }
@@ -1779,6 +1885,13 @@ internal fun BookContextMenu(
             enabled = entry.metadata.epub != null,
             onClick = {
                 onExportCandidate(entry)
+                onDismiss()
+            },
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(if (isHidden) R.string.bookshelf_unhide else R.string.bookshelf_hide)) },
+            onClick = {
+                onSetBookHidden(entry, !isHidden)
                 onDismiss()
             },
         )

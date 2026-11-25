@@ -46,6 +46,7 @@ import moe.antimony.hoshi.features.bookshelf.BookshelfView
 import moe.antimony.hoshi.features.bookshelf.MainTab
 import moe.antimony.hoshi.features.bookshelf.SettingsDestination
 import moe.antimony.hoshi.features.bookshelf.SettingsTab
+import moe.antimony.hoshi.features.bookshelf.hidden.mostRecentVisibleBookId
 import moe.antimony.hoshi.features.diagnostics.DiagnosticsView
 import moe.antimony.hoshi.features.diagnostics.DiagnosticsRecordKind
 import moe.antimony.hoshi.features.dictionary.DictionarySearchSession
@@ -71,6 +72,7 @@ import moe.antimony.hoshi.features.live.LiveView
 import moe.antimony.hoshi.features.update.AboutAcknowledgementsScreen
 import moe.antimony.hoshi.features.update.AboutDependenciesScreen
 import moe.antimony.hoshi.features.update.AboutScreen
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 private const val ReportIssueUrl = "https://github.com/HuangAntimony/Hoshi-Reader-Android/issues"
@@ -185,10 +187,11 @@ fun AppShell(
                 backStack = booksBackStack,
                 recentBookIdProvider = {
                     runCatching {
-                        bookRepository.loadBookEntries(BookSortOption.Recent)
-                            .firstOrNull()
-                            ?.metadata
-                            ?.id
+                        val hiddenIds = appContainer.hiddenBooksRepository.hiddenBookIds.first()
+                        mostRecentVisibleBookId(
+                            entries = bookRepository.loadBookEntries(BookSortOption.Recent),
+                            hiddenBookIds = hiddenIds,
+                        )
                     }.getOrNull()
                 },
             )?.let { route ->
