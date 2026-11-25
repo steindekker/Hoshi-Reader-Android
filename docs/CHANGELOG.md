@@ -5,6 +5,8 @@ Release notes before v1.3.0 are in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md).
 
 ## [Unreleased]
 
+## [v1.7.0] - 2026-11-25
+
 ### Added
 
 - Hide or unhide books from the bookshelf via a book's long-press menu or selection mode. Long-press the **Books** title to toggle showing hidden books; hidden books stay hidden on app launch and are skipped when automatically opening the last read book.
